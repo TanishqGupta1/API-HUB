@@ -42,7 +42,7 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 | **V0** | Proof of concept — PS directory to browser | **START HERE** |
 | **V1a** | n8n custom PromoStandards node (TypeScript + node-soap) | After V0 |
 | **V1b** | Normalization + full product catalog UI + data source indicators | After V1a |
-| **V1c** | OPS push + markup rules + dashboard | After V1b |
+| **V1c** | OPS push + markup rules + dashboard (via `n8n-nodes-onprintshop`) | After V1b |
 | **V1d** | Field mapping UI for non-PS suppliers (4Over) | After V1c |
 
 ## Database (8 tables, all VARCHAR types)
@@ -2921,3 +2921,555 @@ git commit -m "v0: proof of concept complete — PS directory to browser with en
 | End-to-end proof | Task 17 |
 
 No placeholders. All types consistent across models, schemas, routes, and TypeScript interfaces. `SupplierRead.product_count` computed in routes, not stored. `EncryptedJSON` gracefully falls back if no SECRET_KEY (dev convenience). `ProductListItem` now includes `supplier_name` for the badge. Blueprint CSS variables flow from `globals.css` through all pages — no Tailwind color overrides needed.
+
+---
+---
+
+# V1c: OPS Push via n8n-nodes-onprintshop
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Push canonical product catalog to OnPrintShop storefronts using the `n8n-nodes-onprintshop` custom node, with per-customer markup pricing and full push audit logging.
+
+**Architecture:** n8n owns all OPS API calls via the `n8n-nodes-onprintshop` node. FastAPI provides product data and markup rules via REST; logs push results. The n8n "OPS Push" workflow loops over customers, applies markup, calls `setProduct` + `setProductPrice` on each OPS storefront, then writes the result back to FastAPI.
+
+**n8n node dependency:** `n8n-nodes-onprintshop` (VisualGraphxLLC/n8n-nodes-onprintshop) must have `setProduct` and `setProductPrice` mutations implemented before this phase runs. These are currently missing (tracked in the repo's `OPS-NODE-GAP-ANALYSIS.md` as P1).
+
+**Tech Stack:** Same as V0 backend + n8n workflow JSON
+
+**Auth:** OPS uses OAuth2 (`clientId` + `clientSecret` + `tokenUrl`) — NOT a simple API key.
+
+---
+
+## n8n Push Workflow (architecture reference)
+
+```
+Trigger: Webhook (POST /webhook/ops-push) or Cron
+  │
+  ▼
+HTTP Request → GET /api/products          (load canonical catalog from FastAPI)
+  │
+  ▼
+HTTP Request → GET /api/customers         (which storefronts to push to)
+  │
+  ▼
+SplitInBatches (loop over customers)
+  │
+  ├─▶ HTTP Request → GET /api/markup-rules/{customer_id}
+  │     Returns: [{ scope, markup_pct, min_margin, rounding }]
+  │
+  ├─▶ Code node → calculate final_price = base_price × (1 + markup_pct)
+  │
+  ├─▶ OnPrintShop Node (credential = customer.ops_*) → setProduct(input)
+  │     input: { product_name, brand, description, product_type, image_url }
+  │     returns: ops_product_id
+  │
+  ├─▶ OnPrintShop Node → setProductPrice(input)
+  │     input: { ops_product_id, sku, price: final_price }
+  │
+  └─▶ HTTP Request → POST /api/push-log
+        { product_id, customer_id, ops_product_id, status, error }
+```
+
+---
+
+## File Structure (additions to V0)
+
+```
+backend/
+  modules/
+    customers/
+      __init__.py
+      models.py          # Customer model with EncryptedJSON for ops_client_secret
+      schemas.py         # CustomerCreate, CustomerRead
+      routes.py          # CRUD + GET /api/customers/{id}/markup-rules
+    markup/
+      __init__.py
+      models.py          # MarkupRule model
+      schemas.py         # MarkupRuleCreate, MarkupRuleRead
+      routes.py          # CRUD for markup rules
+    push_log/
+      __init__.py
+      models.py          # ProductPushLog model
+      schemas.py         # PushLogCreate, PushLogRead
+      routes.py          # POST /api/push-log, GET /api/products/{id}/push-status
+```
+
+---
+
+### Task 18: Customer Model — OAuth2 Fields
+
+**Files:**
+- Create: `backend/modules/customers/models.py`
+- Create: `backend/modules/customers/schemas.py`
+- Create: `backend/modules/customers/__init__.py`
+
+- [ ] **Step 1: Write customers/models.py**
+
+Write `vg-integration-hub/backend/modules/customers/models.py`:
+
+```python
+import uuid as uuid_mod
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, DateTime, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from database import Base, EncryptedJSON
+
+
+class Customer(Base):
+    __tablename__ = "customers"
+
+    id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    ops_base_url: Mapped[str] = mapped_column(Text)
+    ops_token_url: Mapped[str] = mapped_column(Text)
+    ops_client_id: Mapped[str] = mapped_column(String(255))
+    ops_auth_config: Mapped[dict] = mapped_column(EncryptedJSON, default=dict)
+    # ops_auth_config stores: { "client_secret": "..." }
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+```
+
+- [ ] **Step 2: Write customers/schemas.py**
+
+Write `vg-integration-hub/backend/modules/customers/schemas.py`:
+
+```python
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel
+
+
+class CustomerCreate(BaseModel):
+    name: str
+    ops_base_url: str
+    ops_token_url: str
+    ops_client_id: str
+    ops_client_secret: str  # stored encrypted in ops_auth_config
+
+
+class CustomerRead(BaseModel):
+    id: UUID
+    name: str
+    ops_base_url: str
+    ops_token_url: str
+    ops_client_id: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+```
+
+- [ ] **Step 3: Write customers/routes.py**
+
+Write `vg-integration-hub/backend/modules/customers/routes.py`:
+
+```python
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database import get_db
+
+from .models import Customer
+from .schemas import CustomerCreate, CustomerRead
+
+router = APIRouter(prefix="/api/customers", tags=["customers"])
+
+
+@router.get("", response_model=list[CustomerRead])
+async def list_customers(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Customer).order_by(Customer.created_at.desc()))
+    return result.scalars().all()
+
+
+@router.post("", response_model=CustomerRead, status_code=201)
+async def create_customer(body: CustomerCreate, db: AsyncSession = Depends(get_db)):
+    customer = Customer(
+        name=body.name,
+        ops_base_url=body.ops_base_url,
+        ops_token_url=body.ops_token_url,
+        ops_client_id=body.ops_client_id,
+        ops_auth_config={"client_secret": body.ops_client_secret},
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+    return customer
+
+
+@router.get("/{customer_id}", response_model=CustomerRead)
+async def get_customer(customer_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Customer).where(Customer.id == customer_id))
+    customer = result.scalar_one_or_none()
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    return customer
+
+
+@router.delete("/{customer_id}")
+async def delete_customer(customer_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Customer).where(Customer.id == customer_id))
+    customer = result.scalar_one_or_none()
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    await db.delete(customer)
+    await db.commit()
+    return {"deleted": True}
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add backend/modules/customers/
+git commit -m "feat: Customer model with encrypted OAuth2 credentials for OPS"
+```
+
+---
+
+### Task 19: Markup Rules
+
+**Files:**
+- Create: `backend/modules/markup/models.py`
+- Create: `backend/modules/markup/schemas.py`
+- Create: `backend/modules/markup/routes.py`
+- Create: `backend/modules/markup/__init__.py`
+
+- [ ] **Step 1: Write markup/models.py**
+
+Write `vg-integration-hub/backend/modules/markup/models.py`:
+
+```python
+import uuid as uuid_mod
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from database import Base
+
+
+class MarkupRule(Base):
+    __tablename__ = "markup_rules"
+
+    id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
+    customer_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"))
+    scope: Mapped[str] = mapped_column(String(50), default="all")
+    # scope values: "all", "category:{name}", "product:{supplier_sku}"
+    markup_pct: Mapped[float] = mapped_column(Numeric(5, 2))
+    # e.g. 45.00 = 45% markup over base_price
+    min_margin: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    rounding: Mapped[str] = mapped_column(String(20), default="none")
+    # rounding values: "none", "nearest_99", "nearest_dollar"
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    # higher priority wins when multiple rules match
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+```
+
+- [ ] **Step 2: Write markup/schemas.py**
+
+Write `vg-integration-hub/backend/modules/markup/schemas.py`:
+
+```python
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel
+
+
+class MarkupRuleCreate(BaseModel):
+    customer_id: UUID
+    scope: str = "all"
+    markup_pct: float
+    min_margin: float | None = None
+    rounding: str = "none"
+    priority: int = 0
+
+
+class MarkupRuleRead(BaseModel):
+    id: UUID
+    customer_id: UUID
+    scope: str
+    markup_pct: float
+    min_margin: float | None
+    rounding: str
+    priority: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+```
+
+- [ ] **Step 3: Write markup/routes.py**
+
+Write `vg-integration-hub/backend/modules/markup/routes.py`:
+
+```python
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database import get_db
+
+from .models import MarkupRule
+from .schemas import MarkupRuleCreate, MarkupRuleRead
+
+router = APIRouter(prefix="/api/markup-rules", tags=["markup"])
+
+
+@router.get("/{customer_id}", response_model=list[MarkupRuleRead])
+async def list_markup_rules(customer_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(MarkupRule)
+        .where(MarkupRule.customer_id == customer_id)
+        .order_by(MarkupRule.priority.desc())
+    )
+    return result.scalars().all()
+
+
+@router.post("", response_model=MarkupRuleRead, status_code=201)
+async def create_markup_rule(body: MarkupRuleCreate, db: AsyncSession = Depends(get_db)):
+    rule = MarkupRule(**body.model_dump())
+    db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    return rule
+
+
+@router.delete("/{rule_id}")
+async def delete_markup_rule(rule_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(MarkupRule).where(MarkupRule.id == rule_id))
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(404, "Markup rule not found")
+    await db.delete(rule)
+    await db.commit()
+    return {"deleted": True}
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add backend/modules/markup/
+git commit -m "feat: MarkupRule model and routes — per-customer pricing rules for OPS push"
+```
+
+---
+
+### Task 20: Push Log
+
+**Files:**
+- Create: `backend/modules/push_log/models.py`
+- Create: `backend/modules/push_log/schemas.py`
+- Create: `backend/modules/push_log/routes.py`
+- Create: `backend/modules/push_log/__init__.py`
+
+- [ ] **Step 1: Write push_log/models.py**
+
+Write `vg-integration-hub/backend/modules/push_log/models.py`:
+
+```python
+import uuid as uuid_mod
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from database import Base
+
+
+class ProductPushLog(Base):
+    __tablename__ = "product_push_log"
+
+    id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
+    product_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"))
+    customer_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"))
+    ops_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(50))
+    # status values: "pushed", "failed", "skipped"
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pushed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+```
+
+- [ ] **Step 2: Write push_log/schemas.py**
+
+Write `vg-integration-hub/backend/modules/push_log/schemas.py`:
+
+```python
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel
+
+
+class PushLogCreate(BaseModel):
+    product_id: UUID
+    customer_id: UUID
+    ops_product_id: str | None = None
+    status: str
+    error: str | None = None
+
+
+class PushLogRead(BaseModel):
+    id: UUID
+    product_id: UUID
+    customer_id: UUID
+    ops_product_id: str | None
+    status: str
+    error: str | None
+    pushed_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ProductPushStatus(BaseModel):
+    customer_id: UUID
+    customer_name: str
+    ops_product_id: str | None
+    status: str
+    pushed_at: datetime | None
+```
+
+- [ ] **Step 3: Write push_log/routes.py**
+
+Write `vg-integration-hub/backend/modules/push_log/routes.py`:
+
+```python
+from uuid import UUID
+
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database import get_db
+from modules.customers.models import Customer
+
+from .models import ProductPushLog
+from .schemas import ProductPushStatus, PushLogCreate, PushLogRead
+
+router = APIRouter(tags=["push_log"])
+
+
+@router.post("/api/push-log", response_model=PushLogRead, status_code=201)
+async def create_push_log(body: PushLogCreate, db: AsyncSession = Depends(get_db)):
+    log = ProductPushLog(**body.model_dump())
+    db.add(log)
+    await db.commit()
+    await db.refresh(log)
+    return log
+
+
+@router.get("/api/products/{product_id}/push-status", response_model=list[ProductPushStatus])
+async def get_push_status(product_id: UUID, db: AsyncSession = Depends(get_db)):
+    # Get all customers
+    customers_result = await db.execute(select(Customer))
+    customers = {c.id: c.name for c in customers_result.scalars().all()}
+
+    # Get latest push log per customer for this product
+    out = []
+    for customer_id, customer_name in customers.items():
+        result = await db.execute(
+            select(ProductPushLog)
+            .where(
+                ProductPushLog.product_id == product_id,
+                ProductPushLog.customer_id == customer_id,
+            )
+            .order_by(ProductPushLog.pushed_at.desc())
+            .limit(1)
+        )
+        log = result.scalar_one_or_none()
+        out.append(
+            ProductPushStatus(
+                customer_id=customer_id,
+                customer_name=customer_name,
+                ops_product_id=log.ops_product_id if log else None,
+                status=log.status if log else "not_pushed",
+                pushed_at=log.pushed_at if log else None,
+            )
+        )
+    return out
+```
+
+- [ ] **Step 4: Register new routers in main.py**
+
+In `vg-integration-hub/backend/main.py`, add:
+
+```python
+from modules.customers.routes import router as customers_router
+from modules.markup.routes import router as markup_router
+from modules.push_log.routes import router as push_log_router
+
+app.include_router(customers_router)
+app.include_router(markup_router)
+app.include_router(push_log_router)
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/modules/push_log/ backend/modules/customers/ backend/modules/markup/ backend/main.py
+git commit -m "feat: push log, markup rules, customers — V1c backend foundation"
+```
+
+---
+
+### Task 21: n8n OPS Push Workflow (JSON)
+
+This is the n8n workflow definition to import into your n8n instance. It implements the full push loop described in the architecture above.
+
+**Prerequisite:** `n8n-nodes-onprintshop` must be installed in n8n AND must have `setProduct` + `setProductPrice` mutations available.
+
+**Files:**
+- Create: `n8n-workflows/ops-push.json`
+
+- [ ] **Step 1: Create n8n-workflows directory**
+
+```bash
+mkdir -p vg-integration-hub/n8n-workflows
+```
+
+- [ ] **Step 2: Import workflow into n8n**
+
+1. Open n8n editor at `http://localhost:5678`
+2. Go to **Workflows → Import from file**
+3. Import `n8n-workflows/ops-push.json` once it's built
+4. Configure the **HTTP Request** nodes to point at `http://localhost:8000`
+5. Set up OnPrintShop credentials per customer
+
+Note: The workflow JSON will be authored once `setProduct` and `setProductPrice` are confirmed available in the node. The architecture above defines the exact flow.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add n8n-workflows/
+git commit -m "chore: add n8n-workflows directory for OPS push workflow"
+```
+
+---
+
+## V1c Self-Review
+
+| Requirement | Task |
+|---|---|
+| Customer model with encrypted OAuth2 credentials | Task 18 |
+| `GET /api/customers` and `POST /api/customers` | Task 18 |
+| Markup rules with priority, scope, rounding | Task 19 |
+| `GET /api/markup-rules/{customer_id}` for n8n to read | Task 19 |
+| Push log written by n8n after each OPS push | Task 20 |
+| `GET /api/products/{id}/push-status` for UI panel | Task 20 |
+| n8n workflow wiring PS → normalize → OPS push | Task 21 |
+| OPS Push Status panel in Product Detail UI (already mocked) | Task 12 (V0 frontend) feeds from Task 20 route |
+
+**Key dependency:** V1c cannot run until `n8n-nodes-onprintshop` has `setProduct` and `setProductPrice` mutations. These are tracked as P1 in the node repo's `OPS-NODE-GAP-ANALYSIS.md`.

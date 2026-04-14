@@ -977,16 +977,91 @@
     <div class="screen" id="s-customers">
       <div class="page-header">
         <div><div class="page-title">Customers</div><div class="page-subtitle">OPS storefront configurations</div></div>
-        <button class="btn btn-primary">+ Add Customer</button>
+        <button class="btn btn-primary" onclick="toggleCustForm()">+ Add Customer</button>
       </div>
+
+      <!-- Add Customer form — OAuth2 fields -->
+      <div id="cust-form" style="display:none;margin-bottom:20px;">
+        <div class="panel" style="border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,77,146,0.07);">
+          <div class="panel-header">
+            <div class="panel-title">New Customer — OPS OAuth2 Credentials</div>
+            <span style="font-size:11px;color:var(--ink-muted);font-family:var(--font-mono);">Credentials are encrypted at rest (Fernet)</span>
+          </div>
+          <div style="padding:20px 24px;display:grid;gap:16px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <label class="field-label">Store Name</label>
+                <input type="text" class="input-control" placeholder="e.g. Acme Corp">
+              </div>
+              <div>
+                <label class="field-label">OPS Base URL</label>
+                <input type="text" class="input-control" placeholder="https://acme.onprintshop.com" style="font-family:var(--font-mono);font-size:12px;">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <label class="field-label">OAuth2 Token URL</label>
+                <input type="text" class="input-control" placeholder="https://acme.onprintshop.com/oauth/token" style="font-family:var(--font-mono);font-size:12px;">
+              </div>
+              <div>
+                <label class="field-label">Client ID</label>
+                <input type="text" class="input-control" placeholder="Client ID from OPS API settings" style="font-family:var(--font-mono);">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <label class="field-label">Client Secret <span style="font-size:10px;font-weight:600;color:var(--green);background:rgba(36,122,82,0.1);padding:2px 7px;border-radius:3px;margin-left:4px;">encrypted</span></label>
+                <input type="password" class="input-control" placeholder="Client Secret from OPS API settings" style="font-family:var(--font-mono);">
+              </div>
+              <div style="display:flex;align-items:flex-end;gap:10px;padding-bottom:1px;">
+                <button class="btn btn-primary" style="flex:1;" onclick="saveCustForm()">Save Customer</button>
+                <button class="btn" onclick="toggleCustForm()" style="border:1.5px solid var(--border);">Cancel</button>
+              </div>
+            </div>
+            <div style="padding:10px 14px;background:var(--blue-pale);border:1px solid rgba(30,77,146,0.15);border-radius:6px;display:flex;align-items:center;gap:10px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span style="font-size:12px;color:var(--blue);">These credentials are used by the <strong>n8n-nodes-onprintshop</strong> node to authenticate with each customer's OPS storefront during the push workflow.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="panel">
         <table>
-          <thead><tr><th>Name</th><th>OPS URL</th><th>Products Pushed</th><th>Markup Rules</th><th>Status</th></tr></thead>
+          <thead><tr><th>Name</th><th>OPS Base URL</th><th>Auth</th><th>Products Pushed</th><th>Markup Rules</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td class="cell-primary">Acme Corp</td><td class="cell-mono" style="font-size:11px;">acme.onprintshop.com/api/graphql</td><td class="cell-mono">1,240</td><td class="cell-mono">4 rules</td><td><span class="badge badge-ok"><span class="badge-dot"></span> Active</span></td></tr>
-            <tr><td class="cell-primary">Phoenix United</td><td class="cell-mono" style="font-size:11px;">phoenix.onprintshop.com/api/graphql</td><td class="cell-mono">0</td><td class="cell-mono">1 rule</td><td><span class="badge badge-ok"><span class="badge-dot"></span> Active</span></td></tr>
-            <tr><td class="cell-primary">Image One</td><td class="cell-mono" style="font-size:11px;">imageone.onprintshop.com/api/graphql</td><td class="cell-mono">3,892</td><td class="cell-mono">6 rules</td><td><span class="badge badge-ok"><span class="badge-dot"></span> Active</span></td></tr>
-            <tr><td class="cell-primary">Bend & Law</td><td class="cell-mono" style="font-size:11px;">bendlaw.onprintshop.com/api/graphql</td><td class="cell-mono">842</td><td class="cell-mono">2 rules</td><td><span style="color:var(--ink-faint);font-size:12px;">Inactive</span></td></tr>
+            <tr>
+              <td class="cell-primary">Acme Corp</td>
+              <td class="cell-mono" style="font-size:11px;">acme.onprintshop.com</td>
+              <td><span style="font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-pale);padding:2px 7px;border-radius:3px;font-family:var(--font-mono);">OAuth2</span></td>
+              <td class="cell-mono">1,240</td>
+              <td class="cell-mono">4 rules</td>
+              <td><span class="badge badge-ok"><span class="badge-dot"></span> Active</span></td>
+            </tr>
+            <tr>
+              <td class="cell-primary">Phoenix United</td>
+              <td class="cell-mono" style="font-size:11px;">phoenix.onprintshop.com</td>
+              <td><span style="font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-pale);padding:2px 7px;border-radius:3px;font-family:var(--font-mono);">OAuth2</span></td>
+              <td class="cell-mono">0</td>
+              <td class="cell-mono">1 rule</td>
+              <td><span class="badge badge-ok"><span class="badge-dot"></span> Active</span></td>
+            </tr>
+            <tr>
+              <td class="cell-primary">Image One</td>
+              <td class="cell-mono" style="font-size:11px;">imageone.onprintshop.com</td>
+              <td><span style="font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-pale);padding:2px 7px;border-radius:3px;font-family:var(--font-mono);">OAuth2</span></td>
+              <td class="cell-mono">3,892</td>
+              <td class="cell-mono">6 rules</td>
+              <td><span class="badge badge-ok"><span class="badge-dot"></span> Active</span></td>
+            </tr>
+            <tr>
+              <td class="cell-primary">Bend & Law</td>
+              <td class="cell-mono" style="font-size:11px;">bendlaw.onprintshop.com</td>
+              <td><span style="font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-pale);padding:2px 7px;border-radius:3px;font-family:var(--font-mono);">OAuth2</span></td>
+              <td class="cell-mono">842</td>
+              <td class="cell-mono">2 rules</td>
+              <td><span style="color:var(--ink-faint);font-size:12px;">Inactive</span></td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -1416,6 +1491,15 @@ function runWf() {
 
 // Init default workflow view
 renderPipe('inv');
+
+// === CUSTOMERS FORM ===
+function toggleCustForm() {
+  const f = document.getElementById('cust-form');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function saveCustForm() {
+  toggleCustForm();
+}
 
 // === CURSOR TRAIL — Blueprint Technical Pen ===
 const trailCanvas = document.createElement('canvas');
