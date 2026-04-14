@@ -1,6 +1,6 @@
 # VG Integration Hub
 
-![VG Integration Hub Dashboard](../docs/screenshot-dashboard.png)
+![VG Integration Hub Dashboard](docs/screenshot-dashboard.png)
 
 A middleware platform connecting 994+ PromoStandards wholesale suppliers to OnPrintShop (OPS) storefronts. Eliminates the $3K/year per-customer API integration fee by automating catalog sync, pricing, and product push through a supplier-agnostic pipeline.
 
