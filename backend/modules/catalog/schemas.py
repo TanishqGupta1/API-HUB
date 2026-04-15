@@ -19,6 +19,7 @@ class VariantRead(BaseModel):
 class ProductRead(BaseModel):
     id: UUID
     supplier_id: UUID
+    supplier_name: str | None = None
     supplier_sku: str
     product_name: str
     brand: str | None
@@ -33,6 +34,8 @@ class ProductRead(BaseModel):
 
 class ProductListRead(BaseModel):
     id: UUID
+    supplier_id: UUID
+    supplier_name: str | None = None
     supplier_sku: str
     product_name: str
     brand: str | None
