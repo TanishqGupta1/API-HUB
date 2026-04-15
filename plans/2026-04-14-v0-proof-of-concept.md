@@ -77,7 +77,7 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 | 6 | API Routes (suppliers, ps_directory, catalog) | PARTIAL | `suppliers/routes.py` exists. **Missing:** `ps_directory/routes.py`, `catalog/routes.py` |
 | 7 | FastAPI Main App | TODO | `backend/main.py` |
 | 8 | Demo Seed Script | TODO | `backend/seed_demo.py` |
-| 9 | Next.js Scaffold + Blueprint Layout | TODO | `frontend/` (entire directory) |
+| 9 | Next.js Scaffold + Blueprint Layout | DONE | `frontend/` (entire directory) |
 | 10 | Suppliers Page + Reveal Form | TODO | `frontend/src/app/suppliers/page.tsx`, `components/suppliers/reveal-form.tsx` |
 | 11 | Products Page (catalog grid) | TODO | `frontend/src/app/products/page.tsx`, `components/products/product-card.tsx` |
 | 12 | Product Detail Page | TODO | `frontend/src/app/products/[id]/page.tsx` |
@@ -91,7 +91,7 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 | 20 | Push Log | TODO | `backend/modules/push_log/models.py`, `schemas.py`, `routes.py`, `__init__.py` |
 | 21 | n8n OPS Push Workflow | TODO | `n8n-workflows/ops-push.json` |
 
-**Summary:** 5 tasks DONE, 1 PARTIAL, 15 TODO.
+**Summary:** 6 tasks DONE, 1 PARTIAL, 14 TODO.
 
 ---
 
@@ -1215,7 +1215,7 @@ git commit -m "feat: demo seed script with supplier, product, and 12 variants"
 
 ---
 
-### Task 9: Next.js Frontend — Scaffold + Blueprint Layout — ⬜ TODO (Phase 1 — parallel with Task 18)
+### Task 9: Next.js Frontend — Scaffold + Blueprint Layout — ✅ DONE (Phase 1 — parallel with Task 18)
 
 **Design system:** Outfit (headings/body) + Fira Code (mono), light mode, paper palette `#f2f0ed`, blueprint blue `#1e4d92`, dot-grid background. This matches `frontend-prototype/index.html` exactly.
 
