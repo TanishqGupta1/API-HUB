@@ -61,6 +61,185 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 ---
 ---
 
+# Task Dependency Map
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+## Task Status
+
+| Task | Description | Status | Files |
+|------|-------------|--------|-------|
+| 1 | Project Setup | DONE | `.env`, `.gitignore`, `docker-compose.yml`, `backend/Dockerfile`, `backend/requirements.txt` |
+| 2 | Database + EncryptedJSON | DONE | `backend/database.py` |
+| 3 | Supplier Model + Schemas | DONE | `backend/modules/suppliers/models.py`, `schemas.py` |
+| 4 | Product + Variant Models | DONE | `backend/modules/catalog/models.py`, `schemas.py` |
+| 5 | PS Directory Client + Supplier Service | DONE | `backend/modules/ps_directory/client.py`, `schemas.py`, `backend/modules/suppliers/service.py` |
+| 6 | API Routes (suppliers, ps_directory, catalog) | PARTIAL | `suppliers/routes.py` exists. **Missing:** `ps_directory/routes.py`, `catalog/routes.py` |
+| 7 | FastAPI Main App | TODO | `backend/main.py` |
+| 8 | Demo Seed Script | TODO | `backend/seed_demo.py` |
+| 9 | Next.js Scaffold + Blueprint Layout | TODO | `frontend/` (entire directory) |
+| 10 | Suppliers Page + Reveal Form | TODO | `frontend/src/app/suppliers/page.tsx`, `components/suppliers/reveal-form.tsx` |
+| 11 | Products Page (catalog grid) | TODO | `frontend/src/app/products/page.tsx`, `components/products/product-card.tsx` |
+| 12 | Product Detail Page | TODO | `frontend/src/app/products/[id]/page.tsx` |
+| 13 | Customers Page | TODO | `frontend/src/app/customers/page.tsx` |
+| 14 | Workflows Page (pipeline visualizer) | TODO | `frontend/src/app/workflows/page.tsx`, `components/workflows/pipeline-view.tsx` |
+| 15 | Sync Jobs Page | TODO | `frontend/src/app/sync/page.tsx` |
+| 16 | Field Mapping Page | TODO | `frontend/src/app/mappings/[supplierId]/page.tsx` |
+| 17 | End-to-End Verification | TODO | No files — manual testing |
+| 18 | Customer Model (OAuth2) | TODO | `backend/modules/customers/models.py`, `schemas.py`, `__init__.py` |
+| 19 | Markup Rules | TODO | `backend/modules/markup/models.py`, `schemas.py`, `routes.py`, `__init__.py` |
+| 20 | Push Log | TODO | `backend/modules/push_log/models.py`, `schemas.py`, `routes.py`, `__init__.py` |
+| 21 | n8n OPS Push Workflow | TODO | `n8n-workflows/ops-push.json` |
+
+**Summary:** 5 tasks DONE, 1 PARTIAL, 15 TODO.
+
+---
+
+## Execution Order
+
+Tasks are grouped into phases. Within each phase, all tasks are **independent** and can be built in parallel by separate agents. Phases must be completed in order — do not start a phase until ALL tasks in the previous phase are done.
+
+---
+
+### Phase 0 — Foundation (DONE)
+
+```
+Task 1: Project Setup         ✅ DONE
+Task 2: Database + EncryptedJSON  ✅ DONE
+```
+
+Nothing to do. All files exist with real code.
+
+---
+
+### Phase 1 — Models + Frontend Scaffold (4 parallel tracks)
+
+**2 tracks DONE, 2 tracks TODO.**
+
+| Track | Task | Status | Depends On | Why Independent |
+|-------|------|--------|------------|-----------------|
+| A | **Task 3:** Supplier Model + Schemas | ✅ DONE | Task 2 | Only needs `Base`, `EncryptedJSON` |
+| B | **Task 4:** Product + Variant Models | ✅ DONE | Task 2 | Only needs `Base` — no supplier FK at model level |
+| C | **Task 9:** Next.js Scaffold + Blueprint Layout | **TODO** | Nothing | Pure frontend — npm, no backend calls |
+| D | **Task 18:** Customer Model (OAuth2) | **TODO** | Task 2 | Only needs `Base`, `EncryptedJSON` |
+
+**START HERE.** Tasks 9 and 18 can run in parallel right now. No blockers.
+
+---
+
+### Phase 2 — Services + V1c Models (3 parallel tracks)
+
+**1 track DONE, 2 tracks TODO.**
+
+| Track | Task | Status | Depends On | Why Independent |
+|-------|------|--------|------------|-----------------|
+| A | **Task 5:** PS Directory Client + Supplier Service | ✅ DONE | Task 3 | Service imports Supplier model |
+| B | **Task 19:** Markup Rules | **TODO** | Task 18 | FK → `customers` table |
+| C | **Task 20:** Push Log | **TODO** | Task 4 + Task 18 | FK → `products` + FK → `customers` |
+
+Tasks 19 and 20 can run in parallel once Task 18 is done.
+
+---
+
+### Phase 3 — Routes + App Assembly (sequential)
+
+**All TODO.** These must be done in order — each imports from the previous.
+
+```
+Task 6: API Routes (ps_directory/routes.py + catalog/routes.py)   ← suppliers/routes.py already exists
+  └→ Task 7: FastAPI Main App (backend/main.py)
+       └→ Task 8: Demo Seed Script (backend/seed_demo.py)
+```
+
+Task 6 is PARTIAL — only `suppliers/routes.py` exists. Still need `ps_directory/routes.py` and `catalog/routes.py`.
+
+---
+
+### Phase 4 — Frontend Pages (7 parallel tracks)
+
+**All TODO.** All pages need **Task 9** (frontend scaffold) + **Task 7** (backend API). Once both exist, every page is independent — dispatch 7 agents:
+
+| Track | Task | API Dependency | Notes |
+|-------|------|---------------|-------|
+| A | **Task 10:** Suppliers Page + Reveal Form | `/api/suppliers`, `/api/ps-directory` | Most complex — progressive reveal 5-section form |
+| B | **Task 11:** Products Page (catalog grid) | `/api/products` | Search + filter + supplier badges |
+| C | **Task 12:** Product Detail Page | `/api/products/{id}` | Variant table + data source badges |
+| D | **Task 13:** Customers Page | `/api/customers` | Simple list + inline add form |
+| E | **Task 14:** Workflows Page | None (mostly static) | Pipeline visualizer — barely needs API |
+| F | **Task 15:** Sync Jobs Page | `/api/sync-jobs` | Filterable table + expandable error log |
+| G | **Task 16:** Field Mapping Page | `/api/suppliers/{id}` | Visual source→target mapping editor |
+
+---
+
+### Phase 5 — Verification + n8n
+
+**All TODO.** Final phase — run after everything above.
+
+```
+Task 17: End-to-End Verification    →  requires ALL of Tasks 1-16
+Task 21: n8n OPS Push Workflow      →  requires Tasks 18, 19, 20 + n8n-nodes-onprintshop node
+```
+
+Task 21 has an **external dependency**: `n8n-nodes-onprintshop` must have `setProduct` and `setProductPrice` mutations (tracked in `OPS-NODE-GAP-ANALYSIS.md`).
+
+---
+
+## Dependency Graph
+
+```
+                    ✅ Task 1: Project Setup
+                              │
+                    ✅ Task 2: Database + EncryptedJSON
+                       ╱      │      ╲            ╲
+              ✅ Task 3   ✅ Task 4   ⬜ Task 9    ⬜ Task 18
+              Supplier     Product    Next.js      Customer
+              Model        Model      Scaffold     Model
+                   │         │         │          ╱      ╲
+              ✅ Task 5      │         │     ⬜ Task 19  ⬜ Task 20
+              PS Client      │         │     Markup      Push Log
+                   ╲         │         │       (needs Task 4 too)
+                  ⬜ Task 6: API Routes │
+                        │              │
+                  ⬜ Task 7: Main App   │
+                     ╱     │           │
+              ⬜ Task 8    │           │
+              Seed         │           │
+                           ╰─────┬─────╯
+                                 │
+                    ┌────────────┼────────────┐
+                    │            │             │
+              ⬜ Tasks 10-11  ⬜ Tasks 12-13  ⬜ Tasks 14-16
+              Suppliers       Product         Workflows
+              Products        Customers       Sync/Mappings
+                    │            │             │
+                    └────────────┼─────────────┘
+                                 │
+                        ⬜ Task 17: E2E Verify
+                        ⬜ Task 21: n8n Workflow
+```
+
+`✅` = Done  `⬜` = Todo
+
+---
+
+## Parallelization Summary
+
+| Phase | Tasks | Parallel Agents | Status |
+|-------|-------|----------------|--------|
+| 0 | 1, 2 | 1 (sequential) | ✅ DONE |
+| 1 | 3, 4, **9**, **18** | 2 remaining | ⬜ **START HERE** |
+| 2 | 5, **19**, **20** | 2 remaining | ⬜ Blocked on Phase 1 |
+| 3 | **6** → **7** → **8** | 1 (sequential) | ⬜ Blocked on Phase 2 |
+| 4 | **10**, **11**, **12**, **13**, **14**, **15**, **16** | 7 | ⬜ Blocked on Phase 3 + Task 9 |
+| 5 | **17**, **21** | 2 | ⬜ Blocked on ALL above |
+
+**Critical path:** Task 18 → Task 19/20 → Task 6 → Task 7 → Task 8 → Tasks 10-16 → Task 17
+
+**Biggest parallelization win:** Phase 4 — all 7 frontend pages are independent of each other.
+
+---
+---
+
 # V0: Proof of Concept — PromoStandards to Browser
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -144,7 +323,7 @@ api-hub/
 
 ---
 
-### Task 1: Project Setup
+### Task 1: Project Setup — ✅ DONE
 
 **Files:** `.gitignore`, `.env`, `docker-compose.yml`, `backend/requirements.txt`, `backend/Dockerfile`
 
@@ -191,7 +370,7 @@ git commit -m "chore: project setup with PostgreSQL and encryption support"
 
 ---
 
-### Task 2: Database + EncryptedJSON
+### Task 2: Database + EncryptedJSON — ✅ DONE
 
 **Files:**
 - Create: `backend/database.py`
@@ -260,7 +439,7 @@ git commit -m "feat: database engine with EncryptedJSON type decorator"
 
 ---
 
-### Task 3: Supplier Model + Schemas
+### Task 3: Supplier Model + Schemas — ✅ DONE
 
 **Files:**
 - Create: `backend/modules/suppliers/models.py`
@@ -345,7 +524,7 @@ git commit -m "feat: Supplier model with encrypted auth_config and schemas"
 
 ---
 
-### Task 4: Product + Variant Models + Schemas
+### Task 4: Product + Variant Models + Schemas — ✅ DONE
 
 **Files:**
 - Create: `backend/modules/catalog/models.py`
@@ -460,7 +639,7 @@ git commit -m "feat: Product and ProductVariant models with schemas"
 
 ---
 
-### Task 5: PromoStandards Directory Client + Supplier Service
+### Task 5: PromoStandards Directory Client + Supplier Service — ✅ DONE
 
 **Files:**
 - Create: `backend/modules/ps_directory/client.py`
@@ -567,10 +746,10 @@ git commit -m "feat: PS directory client and supplier endpoint caching service"
 
 ---
 
-### Task 6: API Routes — Suppliers, PS Directory, Catalog
+### Task 6: API Routes — Suppliers, PS Directory, Catalog — ⬜ PARTIAL (suppliers done, ps_directory + catalog missing)
 
 **Files:**
-- Create: `backend/modules/suppliers/routes.py`
+- ✅ Done: `backend/modules/suppliers/routes.py`
 - Create: `backend/modules/ps_directory/routes.py`
 - Create: `backend/modules/catalog/routes.py`
 
@@ -773,7 +952,7 @@ git commit -m "feat: API routes for suppliers, PS directory, and catalog"
 
 ---
 
-### Task 7: FastAPI Main App
+### Task 7: FastAPI Main App — ⬜ TODO
 
 **Files:**
 - Create: `backend/main.py`
@@ -942,7 +1121,7 @@ git commit -m "feat: FastAPI app with all routes, CORS, auto table creation"
 
 ---
 
-### Task 8: Demo Seed Script
+### Task 8: Demo Seed Script — ⬜ TODO
 
 **Files:**
 - Create: `backend/seed_demo.py`
@@ -1036,7 +1215,7 @@ git commit -m "feat: demo seed script with supplier, product, and 12 variants"
 
 ---
 
-### Task 9: Next.js Frontend — Scaffold + Blueprint Layout
+### Task 9: Next.js Frontend — Scaffold + Blueprint Layout — ⬜ TODO (Phase 1 — parallel with Task 18)
 
 **Design system:** Outfit (headings/body) + Fira Code (mono), light mode, paper palette `#f2f0ed`, blueprint blue `#1e4d92`, dot-grid background. This matches `frontend-prototype/index.html` exactly.
 
@@ -1442,7 +1621,7 @@ git commit -m "feat: Next.js Blueprint design system — Outfit/Fira Code, paper
 
 ---
 
-### Task 10: Suppliers Page — List + Progressive Reveal Form
+### Task 10: Suppliers Page — List + Progressive Reveal Form — ⬜ TODO (Phase 4 — parallel with Tasks 11-16)
 
 **Pattern:** 5 sections that unlock one after another. Section 2 becomes interactive only after Section 1 is complete. This matches the prototype "first this, then that" flow.
 
@@ -1822,7 +2001,7 @@ git commit -m "feat: suppliers page with 5-section progressive reveal form"
 
 ---
 
-### Task 11: Products Page — Catalog Grid with Supplier Badges
+### Task 11: Products Page — Catalog Grid with Supplier Badges — ⬜ TODO (Phase 4 — parallel with Tasks 10, 12-16)
 
 **Files:**
 - Create: `frontend/src/app/products/page.tsx`
@@ -2000,7 +2179,7 @@ git commit -m "feat: product catalog grid with supplier badges, type filter chip
 
 ---
 
-### Task 12: Product Detail Page
+### Task 12: Product Detail Page — ⬜ TODO (Phase 4 — parallel)
 
 Shows full product info: description, variant table (color × size with price + inventory), data source indicators (which PS service each field came from), and OPS push status.
 
@@ -2157,7 +2336,7 @@ git commit -m "feat: product detail page with variant table and data source badg
 
 ---
 
-### Task 13: Customers Page
+### Task 13: Customers Page — ⬜ TODO (Phase 4 — parallel)
 
 Lists OnPrintShop storefronts. Each row shows name, OPS base URL, and push count.
 
@@ -2305,7 +2484,7 @@ git commit -m "feat: customers page with inline add form"
 
 ---
 
-### Task 14: Workflows Page — Pipeline Visualizer
+### Task 14: Workflows Page — Pipeline Visualizer — ⬜ TODO (Phase 4 — parallel)
 
 Shows the active n8n pipeline as animated nodes: PS Source → Normalize → OPS Push. Links to the n8n editor. Status indicator per node (idle / running / error).
 
@@ -2503,7 +2682,7 @@ git commit -m "feat: workflows page with animated pipeline visualizer"
 
 ---
 
-### Task 15: Sync Jobs Page
+### Task 15: Sync Jobs Page — ⬜ TODO (Phase 4 — parallel)
 
 Filterable history of all sync runs. Each row is expandable to show the full error log. Filter by supplier, job type, and status.
 
@@ -2668,7 +2847,7 @@ git commit -m "feat: sync jobs page with status filter and expandable error log"
 
 ---
 
-### Task 16: Field Mapping Page
+### Task 16: Field Mapping Page — ⬜ TODO (Phase 4 — parallel)
 
 Visual editor for mapping supplier-specific field names to the canonical schema. Left column = source fields (from PS response), right column = target fields (canonical). Shows a JSON preview of the active mapping.
 
@@ -2820,7 +2999,7 @@ git commit -m "feat: field mapping editor with JSON preview"
 
 ---
 
-### Task 17: End-to-End Verification
+### Task 17: End-to-End Verification — ⬜ TODO (Phase 5 — after ALL above)
 
 - [ ] **Step 1: Start both services**
 
@@ -2997,7 +3176,7 @@ backend/
 
 ---
 
-### Task 18: Customer Model — OAuth2 Fields
+### Task 18: Customer Model — OAuth2 Fields — ⬜ TODO (Phase 1 — parallel with Task 9)
 
 **Files:**
 - Create: `backend/modules/customers/models.py`
@@ -3134,7 +3313,7 @@ git commit -m "feat: Customer model with encrypted OAuth2 credentials for OPS"
 
 ---
 
-### Task 19: Markup Rules
+### Task 19: Markup Rules — ⬜ TODO (Phase 2 — parallel with Task 20)
 
 **Files:**
 - Create: `backend/modules/markup/models.py`
@@ -3266,7 +3445,7 @@ git commit -m "feat: MarkupRule model and routes — per-customer pricing rules 
 
 ---
 
-### Task 20: Push Log
+### Task 20: Push Log — ⬜ TODO (Phase 2 — parallel with Task 19)
 
 **Files:**
 - Create: `backend/modules/push_log/models.py`
@@ -3425,7 +3604,7 @@ git commit -m "feat: push log, markup rules, customers — V1c backend foundatio
 
 ---
 
-### Task 21: n8n OPS Push Workflow (JSON)
+### Task 21: n8n OPS Push Workflow (JSON) — ⬜ TODO (Phase 5 — external dependency on n8n-nodes-onprintshop)
 
 This is the n8n workflow definition to import into your n8n instance. It implements the full push loop described in the architecture above.
 
