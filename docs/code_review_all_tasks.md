@@ -8,15 +8,15 @@
 
 | # | Severity | Task | Issue | Owner |
 |---|----------|------|-------|-------|
-| 1 | CRITICAL | All | PostgreSQL port mismatch — docker-compose says 5434, .env says 5432 | Vidhi |
-| 2 | CRITICAL | All | `load_dotenv` points to `backend/.env` which doesn't exist | Vidhi |
-| 3 | CRITICAL | 9 | shadcn/ui components not installed — blocks all Phase 4 work | Sinchana |
-| 4 | MODERATE | 20 | N+1 query in push status endpoint | Vidhi |
-| 5 | MODERATE | 20 | Inconsistent route prefix pattern | Vidhi |
-| 6 | MODERATE | 6 | N+1 query in product list endpoint (variant count) | Urvashi |
-| 7 | MINOR | 8 | Imports inside loop body in seed script | Vidhi |
-| 8 | MINOR | 9 | Dashboard page uses hardcoded data, not the API | Sinchana |
-| 9 | MINOR | Docs | Hardcoded local path `/Users/PD/API-HUB` in 4 test doc files | Vidhi |
+| 1 | CRITICAL | Task 1 (Project Setup) | PostgreSQL port mismatch — docker-compose says 5434, .env says 5432 | Vidhi |
+| 2 | CRITICAL | Task 2 (Database) | `load_dotenv` points to `backend/.env` which doesn't exist | Vidhi |
+| 3 | CRITICAL | Task 9 (Next.js Scaffold) | shadcn/ui components not installed — blocks all Phase 4 work | Sinchana |
+| 4 | MODERATE | Task 20 (Push Log) | N+1 query in push status endpoint | Vidhi |
+| 5 | MODERATE | Task 20 (Push Log) | Inconsistent route prefix pattern | Vidhi |
+| 6 | MODERATE | Task 6 (Catalog Routes) | N+1 query in product list endpoint (variant count) | Urvashi |
+| 7 | MINOR | Task 8 (Seed Script) | Imports inside loop body in seed script | Vidhi |
+| 8 | MINOR | Task 9 (Next.js Scaffold) | Dashboard page uses hardcoded data, not the API | Sinchana |
+| 9 | MINOR | Task 18-20 (Docs) | Hardcoded local path `/Users/PD/API-HUB` in 4 test doc files | Vidhi |
 
 ---
 
