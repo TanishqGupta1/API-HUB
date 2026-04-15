@@ -10,10 +10,12 @@ import modules.suppliers.models  # noqa: F401
 import modules.catalog.models  # noqa: F401
 import modules.customers.models  # noqa: F401
 import modules.markup.models  # noqa: F401
+import modules.push_log.models  # noqa: F401
 
 from modules.suppliers.routes import router as suppliers_router
 from modules.customers.routes import router as customers_router
 from modules.markup.routes import router as markup_router
+from modules.push_log.routes import router as push_log_router
 
 
 @asynccontextmanager
@@ -46,6 +48,7 @@ app.add_middleware(
 app.include_router(suppliers_router)
 app.include_router(customers_router)
 app.include_router(markup_router)
+app.include_router(push_log_router)
 
 
 @app.get("/health", tags=["system"])
