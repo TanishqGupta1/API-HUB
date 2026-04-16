@@ -6,11 +6,22 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import Base, engine, get_db
+
+# Import all models so SQLAlchemy registers them before create_all
+import modules.suppliers.models  # noqa: F401
+import modules.catalog.models  # noqa: F401
+import modules.customers.models  # noqa: F401
+import modules.markup.models  # noqa: F401
+import modules.push_log.models  # noqa: F401
+
+from modules.suppliers.models import Supplier
 from modules.catalog.models import Product, ProductVariant
+from modules.suppliers.routes import router as suppliers_router
+from modules.customers.routes import router as customers_router
+from modules.markup.routes import router as markup_router
+from modules.push_log.routes import router as push_log_router
 from modules.catalog.routes import router as catalog_router
 from modules.ps_directory.routes import router as ps_router
-from modules.suppliers.models import Supplier
-from modules.suppliers.routes import router as suppliers_router
 
 
 @asynccontextmanager
@@ -18,26 +29,31 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
+    await engine.dispose()
 
 
 app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Routers
 app.include_router(suppliers_router)
+app.include_router(customers_router)
+app.include_router(markup_router)
+app.include_router(push_log_router)
 app.include_router(ps_router)
 app.include_router(catalog_router)
 
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "api-hub"}
+    return {"status": "ok", "service": "api-hub"}
 
 
 @app.get("/api/stats")
