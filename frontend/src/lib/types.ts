@@ -96,6 +96,8 @@ export interface Customer {
   ops_client_id: string;
   is_active: boolean;
   created_at: string;
+  products_pushed: number;
+  markup_rules_count: number;
 }
 
 /* ─── Sync Jobs ──────────────────────────────────────────────────────────── */
