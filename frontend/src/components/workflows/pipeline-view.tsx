@@ -13,14 +13,14 @@ export interface PipelineNode {
 
 const STATUS_COLOR: Record<NodeStatus, string> = {
   idle:    "var(--ink-muted)",
-  running: "var(--blueprint)",
+  running: "var(--blue)",
   done:    "var(--green)",
   error:   "var(--red)",
 };
 
 const STATUS_BG: Record<NodeStatus, string> = {
-  idle:    "var(--paper-dark)",
-  running: "var(--bp-pale)",
+  idle:    "var(--paper-warm)",
+  running: "var(--blue-pale)",
   done:    "rgba(36,122,82,0.08)",
   error:   "rgba(185,50,50,0.08)",
 };
@@ -46,14 +46,14 @@ function Connector({ leftStatus }: ConnectorProps) {
         {/* Base line */}
         <div
           className="absolute inset-0 rounded"
-          style={{ background: isActive ? "var(--blueprint)" : "var(--border)", opacity: isActive ? 0.4 : 1 }}
+          style={{ background: isActive ? "var(--blue)" : "var(--border)", opacity: isActive ? 0.4 : 1 }}
         />
         {/* Animated travelling dot */}
         {isActive && (
           <div
             className="absolute w-2 h-2 rounded-full"
             style={{
-              background: "var(--blueprint)",
+              background: "var(--blue)",
               top: "50%",
               transform: "translateY(-50%)",
               animation: "travel 1.2s linear infinite",
@@ -63,7 +63,7 @@ function Connector({ leftStatus }: ConnectorProps) {
       </div>
       <div
         className="text-[10px] ml-0.5 shrink-0"
-        style={{ color: isActive ? "var(--blueprint)" : "var(--border)" }}
+        style={{ color: isActive ? "var(--blue)" : "var(--border)" }}
       >
         ▶
       </div>
@@ -156,7 +156,7 @@ export default function PipelineView({ nodes }: Props) {
                 <span
                   className="text-xs px-1.5 py-px rounded"
                   style={{
-                    background: "var(--paper-dark)",
+                    background: "var(--paper-warm)",
                     color: "var(--ink-muted)",
                     fontFamily: "var(--font-mono)",
                   }}

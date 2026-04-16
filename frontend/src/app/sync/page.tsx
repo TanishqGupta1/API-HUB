@@ -29,9 +29,9 @@ function fmtStarted(iso: string): string {
 function StatusBadge({ status }: { status: string }) {
   const cfg: Record<string, { color: string; bg: string; dot: string }> = {
     completed: { color: "var(--green)",     bg: "rgba(36,122,82,0.1)",    dot: "var(--green)"     },
-    running:   { color: "var(--blueprint)", bg: "var(--bp-pale)",         dot: "var(--blueprint)" },
+    running:   { color: "var(--blue)", bg: "var(--blue-pale)",         dot: "var(--blue)" },
     failed:    { color: "var(--red)",       bg: "rgba(185,50,50,0.1)",    dot: "var(--red)"       },
-    pending:   { color: "var(--ink-muted)", bg: "var(--paper-dark)",      dot: "var(--ink-muted)" },
+    pending:   { color: "var(--ink-muted)", bg: "var(--paper-warm)",      dot: "var(--ink-muted)" },
   };
   const s = cfg[status] ?? cfg.pending;
   return (
@@ -56,7 +56,7 @@ function SkeletonRow() {
     <tr style={{ borderTop: "1px solid var(--border)" }}>
       {[120, 80, 100, 60, 60, 110, 90].map((w, i) => (
         <td key={i} className="px-5 py-4">
-          <div className="h-3 rounded animate-pulse" style={{ width: w, background: "var(--paper-dark)" }} />
+          <div className="h-3 rounded animate-pulse" style={{ width: w, background: "var(--paper-warm)" }} />
         </td>
       ))}
     </tr>
@@ -130,7 +130,7 @@ export default function SyncJobsPage() {
               borderColor: "var(--border)",
               background: "white",
               color: filterSupplier ? "var(--ink)" : "var(--ink-muted)",
-              fontFamily: "var(--font-sans)",
+              fontFamily: "var(--font-head)",
               minWidth: 160,
             }}
           >
@@ -148,7 +148,7 @@ export default function SyncJobsPage() {
               borderColor: "var(--border)",
               background: "white",
               color: filterStatus ? "var(--ink)" : "var(--ink-muted)",
-              fontFamily: "var(--font-sans)",
+              fontFamily: "var(--font-head)",
               minWidth: 140,
             }}
           >
