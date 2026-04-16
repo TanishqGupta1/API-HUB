@@ -20,5 +20,7 @@ class CustomerRead(BaseModel):
     ops_client_id: str
     is_active: bool
     created_at: datetime
+    products_pushed: int = 0
+    markup_rules_count: int = 0
 
     model_config = {"from_attributes": True}
