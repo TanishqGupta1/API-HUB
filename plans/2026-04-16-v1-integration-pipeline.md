@@ -737,26 +737,74 @@ OPS API (via backend proxy)     Frontend
 
 ---
 
-## Team Assignment
+## Team Assignment — Current Sprint
 
-| Phase | Tasks | Suggested Owner | Rationale |
-|-------|-------|----------------|-----------|
-| V0 Cleanup (0.1-0.3) | Bug fixes + shadcn | Any dev | Quick fixes |
-| V0 Cleanup (0.4-0.6) | Frontend pages | Sinchana / Urvashi | Frontend work |
-| **V1f Task 20** | **Terminology + sidebar rename** | **Sinchana** | **She built the layout/sidebar** |
-| **V1f Task 21** | **Simplified supplier form** | **Sinchana** | **She built the original reveal-form** |
-| **V1f Task 22** | **Dashboard real API** | **Urvashi** | **Quick frontend wire-up** |
-| **V1g Task 23** | **OPS Storefront Config page** | **Tanishq + Vidhi** | **New backend module + OPS API proxy — senior work, not intern-assignable** |
-| V1a Tasks 1-2 | Schema + PS schemas | Intern | Model changes |
-| V1a Tasks 3-5 | SOAP client + normalizer + routes | Tanishq / Senior | Core pipeline |
-| V1b Task 7 | Alphabroder | Anyone | Just a DB row |
-| V1b Task 8 | S&S REST adapter | Urvashi | She built the API routes |
-| V1c Tasks 9-10 | n8n node mutations | Tanishq / Senior | TypeScript + OPS GraphQL |
-| V1c Tasks 11-13 | Markup engine + push workflow + images | Tanishq / Senior | Core business logic |
-| V1d Tasks 14-16 | 4Over adapter | Vidhi | She built field mapping UI |
-| V1e Tasks 17-19 | n8n workflows + dashboard | Any dev | n8n JSON + minor frontend |
+> Detailed task files with full code and step-by-step instructions: [`plans/tasks/`](tasks/)
 
-**Key insight:** V1f Tasks 20-22 run in parallel with V1a. Interns do frontend UX while Tanishq builds the SOAP pipeline. No one blocks anyone.
+### Sinchana — 4 tasks ([full details](tasks/sinchana-tasks.md))
+
+| Task | What | Phase | Priority |
+|------|------|-------|----------|
+| **0.3** | Install shadcn/ui | V0 Cleanup | **DO FIRST** — blocks all frontend |
+| **20** | Terminology + sidebar rename (all jargon → business language) | V1f | After 0.3 |
+| **21** | Rewrite supplier form from 5 steps to 3 | V1f | After 20 |
+| **2** | PromoStandards response Pydantic schemas | V1a | Parallel with Urvashi's Task 1 |
+
+### Urvashi — 5 tasks ([full details](tasks/urvashi-tasks.md))
+
+| Task | What | Phase | Priority |
+|------|------|-------|----------|
+| **0.1** | Fix PostgreSQL port (5434→5432) | V0 Cleanup | **DO FIRST** — backend broken |
+| **0.2** | Fix load_dotenv path (backend/.env → repo root) | V0 Cleanup | Right after 0.1 |
+| **22** | Wire dashboard to real /api/stats + /api/sync-jobs | V1f | After 0.1+0.2 |
+| **1** | Schema updates (unique constraints, ProductImage, category) | V1a | Parallel with Sinchana's Task 2 |
+| **5** | Sync trigger endpoints (POST /api/sync/{id}/products) | V1a | After Tasks 1+2+3+4 all merged |
+
+### Vidhi — 3 tasks ([full details](tasks/vidhi-tasks.md))
+
+| Task | What | Phase | Priority |
+|------|------|-------|----------|
+| **0.4** | Customers (Storefronts) page — list + add form | V0 Cleanup | After Sinchana's 0.3 |
+| **0.5** | Workflows page — pipeline visualizer | V0 Cleanup | After 0.4 |
+| **3** | WSDL Resolver (resolver.py) — maps PS service types to WSDL URLs | V1a | Parallel with Tasks 1+2 |
+
+### Tanishq — 3 tasks + PR reviews ([full details](tasks/tanishq-tasks.md))
+
+| Task | What | Phase | Priority |
+|------|------|-------|----------|
+| **3b** | SOAP Client (client.py) — zeep integration, the complex part | V1a | After Tasks 2+3 merged |
+| **4** | Normalizer — PS data → DB upserts | V1a | After Tasks 1+2+3 merged |
+| **6** | E2E Verification — real SanMar data test | V1a | After Task 5 + SanMar creds |
+
+Plus: review all intern PRs, chase Christian for credentials.
+
+### Sprint Execution Timeline
+
+```
+Week 1: V0 Cleanup (all interns) + V1f (Sinchana, Urvashi)
+         Tanishq reviews PRs, starts Task 3b when Tasks 2+3 are merged
+
+         Sinchana: 0.3 → 20 → 21 → 2
+         Urvashi:  0.1 → 0.2 → 22 → 1
+         Vidhi:    0.4 → 0.5 → 3
+         Tanishq:  reviews → 3b
+
+Week 2: V1a core pipeline
+         Tanishq: 4 (normalizer, needs 1+2+3 done)
+         Urvashi: 5 (sync routes, needs 4 done)
+         Tanishq: 6 (E2E verify, needs 5 + SanMar creds)
+```
+
+### Future phases (not assigned yet)
+
+| Phase | Tasks | Notes |
+|-------|-------|-------|
+| V1b Task 7 | Alphabroder (zero code) | Anyone — just a DB row |
+| V1b Task 8 | S&S REST adapter | Urvashi |
+| V1c Tasks 9-13 | OPS Push (n8n node + markup + workflow) | Tanishq — TypeScript + core logic |
+| V1d Tasks 14-16 | 4Over adapter | Vidhi |
+| V1e Tasks 17-19 | n8n workflows + dashboard | Any dev |
+| V1g Task 23 | OPS Storefront Config | Tanishq + Vidhi — after V1c works |
 
 ---
 
