@@ -1,3 +1,4 @@
+from typing import Optional
 import uuid as uuid_mod
 from datetime import datetime, timezone
 
@@ -16,7 +17,7 @@ class MarkupRule(Base):
     # scope values: "all", "category:{name}", "product:{supplier_sku}"
     markup_pct: Mapped[float] = mapped_column(Numeric(5, 2))
     # e.g. 45.00 = 45% markup over base_price
-    min_margin: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    min_margin: Mapped[Optional[float]] = mapped_column(Numeric(5, 2), nullable=True)
     rounding: Mapped[str] = mapped_column(String(20), default="none")
     # rounding values: "none", "nearest_99", "nearest_dollar"
     priority: Mapped[int] = mapped_column(Integer, default=0)

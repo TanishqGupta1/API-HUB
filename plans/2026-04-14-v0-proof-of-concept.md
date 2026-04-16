@@ -67,7 +67,7 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 
 ## Task Status
 
-> Last updated: 2026-04-15. Reflects merged PRs #1 (Urvashi), #2 (Sinchana), #3 (Vidhi).
+> Last updated: 2026-04-16. Reflects merged PRs #1 (Urvashi), #2 (Sinchana), #3 (Vidhi) + Vidhi Tasks 15, 16 frontend completed.
 
 | Task | Description | Status | Done By | Files |
 |------|-------------|--------|---------|-------|
@@ -85,15 +85,15 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 | 12 | Product Detail Page | ✅ DONE | PR #4 Sinchana | `frontend/src/app/products/[id]/page.tsx` |
 | 13 | Customers Page | ⬜ TODO | — | `frontend/src/app/customers/page.tsx` |
 | 14 | Workflows Page (pipeline visualizer) | ⬜ TODO | — | `frontend/src/app/workflows/page.tsx`, `components/workflows/pipeline-view.tsx` |
-| 15 | Sync Jobs Page | ⬜ TODO | — | `frontend/src/app/sync/page.tsx` |
-| 16 | Field Mapping Page | ⬜ TODO | — | `frontend/src/app/mappings/[supplierId]/page.tsx` |
+| 15 | Sync Jobs Page | ✅ DONE | Vidhi | `frontend/src/app/sync/page.tsx` |
+| 16 | Field Mapping Page | ✅ DONE | Vidhi | `frontend/src/app/mappings/page.tsx` (supplier picker) + `mappings/[supplierId]/page.tsx` (editor + live JSON preview), `PUT /api/suppliers/{id}/mappings` backend endpoint |
 | 17 | End-to-End Verification | ⬜ TODO | — | No files — manual testing |
 | 18 | Customer Model (OAuth2) | ✅ DONE | PR #3 Vidhi | `backend/modules/customers/` — models, schemas, routes |
 | 19 | Markup Rules | ✅ DONE | PR #3 Vidhi | `backend/modules/markup/` — models, schemas, routes |
 | 20 | Push Log | ✅ DONE | PR #3 Vidhi | `backend/modules/push_log/` — models, schemas, routes |
 | 21 | n8n OPS Push Workflow | ⬜ TODO | — | `n8n-workflows/ops-push.json` |
 
-**Summary: 14 tasks DONE, 7 tasks TODO.** All backend is complete. Remaining work is frontend pages (10-16), E2E verification (17), and n8n workflow (21).
+**Summary: 19 tasks DONE, 1 PARTIAL, 2 TODO.** Backend complete. Frontend pages 10, 11, 12 (Sinchana), 15, 16 (Vidhi) done. Remaining: Task 13 (Customers page), 14 (Workflows page), 17 (E2E verification), 21 (n8n workflow).
 
 ---
 

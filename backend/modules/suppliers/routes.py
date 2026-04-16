@@ -87,3 +87,16 @@ async def delete_supplier(supplier_id: UUID, db: AsyncSession = Depends(get_db))
 @router.get("/{supplier_id}/endpoints")
 async def get_supplier_endpoints(supplier_id: UUID, db: AsyncSession = Depends(get_db)):
     return await get_cached_endpoints(db, supplier_id)
+
+
+@router.put("/{supplier_id}/mappings")
+async def save_supplier_mappings(
+    supplier_id: UUID, body: dict, db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Supplier).where(Supplier.id == supplier_id))
+    supplier = result.scalar_one_or_none()
+    if not supplier:
+        raise HTTPException(404, "Supplier not found")
+    supplier.field_mappings = body
+    await db.commit()
+    return {"saved": True, "supplier_id": str(supplier_id), "mappings": body}

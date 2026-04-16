@@ -1,3 +1,4 @@
+from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
@@ -8,7 +9,7 @@ class MarkupRuleCreate(BaseModel):
     customer_id: UUID
     scope: str = "all"
     markup_pct: float
-    min_margin: float | None = None
+    min_margin: Optional[float] = None
     rounding: str = "none"
     priority: int = 0
 
@@ -18,7 +19,7 @@ class MarkupRuleRead(BaseModel):
     customer_id: UUID
     scope: str
     markup_pct: float
-    min_margin: float | None
+    min_margin: Optional[float]
     rounding: str
     priority: int
     created_at: datetime

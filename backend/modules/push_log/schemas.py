@@ -1,3 +1,4 @@
+from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
@@ -7,9 +8,9 @@ from pydantic import BaseModel
 class PushLogCreate(BaseModel):
     product_id: UUID
     customer_id: UUID
-    ops_product_id: str | None = None
+    ops_product_id: Optional[str] = None
     status: str
-    error: str | None = None
+    error: Optional[str] = None
 
 
 class PushLogRead(BaseModel):
@@ -19,10 +20,9 @@ class PushLogRead(BaseModel):
     supplier_name: str | None = None
     customer_id: UUID
     customer_name: str | None = None
-
-    ops_product_id: str | None
+    ops_product_id: Optional[str]
     status: str
-    error: str | None
+    error: Optional[str]
     pushed_at: datetime
 
     model_config = {"from_attributes": True}
@@ -31,6 +31,6 @@ class PushLogRead(BaseModel):
 class ProductPushStatus(BaseModel):
     customer_id: UUID
     customer_name: str
-    ops_product_id: str | None
+    ops_product_id: Optional[str]
     status: str
-    pushed_at: datetime | None
+    pushed_at: Optional[datetime]

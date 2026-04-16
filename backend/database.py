@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
@@ -30,7 +30,7 @@ class EncryptedJSON(TypeDecorator):
     impl = Text
     cache_ok = True
 
-    def process_bind_param(self, value: Any, dialect: Any) -> str | None:
+    def process_bind_param(self, value: Any, dialect: Any) -> Optional[str]:
         if value is None:
             return None
         if not SECRET_KEY:

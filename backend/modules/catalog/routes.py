@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,9 +17,9 @@ router = APIRouter(prefix="/api/products", tags=["catalog"])
 
 @router.get("", response_model=list[ProductListRead])
 async def list_products(
-    supplier_id: UUID | None = None,
-    brand: str | None = None,
-    search: str | None = None,
+    supplier_id: Optional[UUID] = None,
+    brand: Optional[str] = None,
+    search: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
