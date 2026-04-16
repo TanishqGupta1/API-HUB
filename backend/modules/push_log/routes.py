@@ -13,6 +13,37 @@ from .schemas import ProductPushStatus, PushLogCreate, PushLogRead
 router = APIRouter(tags=["push_log"])
 
 
+@router.get("/api/push-log", response_model=list[PushLogRead])
+async def list_push_logs(limit: int = 20, db: AsyncSession = Depends(get_db)):
+    from modules.catalog.models import Product
+    from modules.suppliers.models import Supplier
+
+    result = await db.execute(
+        select(
+            ProductPushLog, 
+            Product.product_name, 
+            Customer.name.label("customer_name"),
+            Supplier.name.label("supplier_name")
+        )
+        .join(Product, ProductPushLog.product_id == Product.id)
+        .join(Customer, ProductPushLog.customer_id == Customer.id)
+        .join(Supplier, Product.supplier_id == Supplier.id)
+        .order_by(ProductPushLog.pushed_at.desc())
+        .limit(limit)
+    )
+    rows = result.all()
+    out = []
+    for log, prod_name, cust_name, supp_name in rows:
+        data = PushLogRead.model_validate(log)
+        data.product_name = prod_name
+        data.customer_name = cust_name
+        data.supplier_name = supp_name
+        out.append(data)
+    return out
+
+
+
+
 @router.post("/api/push-log", response_model=PushLogRead, status_code=201)
 async def create_push_log(body: PushLogCreate, db: AsyncSession = Depends(get_db)):
     log = ProductPushLog(**body.model_dump())

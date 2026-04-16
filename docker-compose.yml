@@ -10,10 +10,24 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vg_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vg_user} -d ${POSTGRES_DB:-vg_hub}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  api:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_URL=postgresql+asyncpg://${POSTGRES_USER:-vg_user}:${POSTGRES_PASSWORD:-vg_pass}@postgres:5432/${POSTGRES_DB:-vg_hub}
+      - SECRET_KEY=${SECRET_KEY:-y0uR_s3cr3t_k3y_h3r3}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 
 volumes:
   pgdata:

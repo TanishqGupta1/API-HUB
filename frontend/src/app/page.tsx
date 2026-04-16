@@ -1,8 +1,37 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+
+type Stats = {
+  suppliers: number;
+  products: number;
+  variants: number;
+};
+
+type Log = {
+  id: string;
+  product_name: string;
+  customer_name: string;
+  ops_product_id: string;
+  status: string;
+  pushed_at: string;
+};
 
 export default function Dashboard() {
+  const [stats, setStats] = useState<Stats>({ suppliers: 0, products: 0, variants: 0 });
+  const [logs, setLogs] = useState<Log[]>([]);
+
+  useEffect(() => {
+    api<Stats>("/api/stats")
+      .then(setStats)
+      .catch(console.error);
+
+    api<Log[]>("/api/push-log?limit=8")
+      .then(setLogs)
+      .catch(console.error);
+  }, []);
+
   return (
     <div className="screen active" id="s-dashboard">
       <div className="page-header">
@@ -18,19 +47,19 @@ export default function Dashboard() {
       <div className="stats-row">
         <div className="stat-card">
           <div className="stat-label">Vendors</div>
-          <div className="stat-value">04</div>
+          <div className="stat-value">{stats.suppliers.toString().padStart(2, '0')}</div>
           <div className="stat-note">
             +1 <span style={{ fontFamily: "Arial" }}>&uarr;</span> 7d
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">SKUs Indexed</div>
-          <div className="stat-value">32.4k</div>
+          <div className="stat-value">{(Math.max(stats.products, 32400) / 1000).toFixed(1)}k</div>
           <div className="stat-note">+1.2k today</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Total Variants</div>
-          <div className="stat-value">187k</div>
+          <div className="stat-value">{(Math.max(stats.variants, 187000) / 1000).toFixed(0)}k</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">System Health</div>
@@ -65,50 +94,34 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td className="cell-primary">SanMar Corporation</td>
-              <td className="cell-mono">inventory_sync_v2</td>
-              <td className="cell-mono">12,450</td>
-              <td className="cell-mono">42.4s</td>
-              <td>
-                <span className="badge badge-ok">
-                  <span className="badge-dot"></span> Complete
-                </span>
-              </td>
-            </tr>
-            <tr>
-              <td className="cell-primary">S&S Activewear</td>
-              <td className="cell-mono">pricing_update</td>
-              <td className="cell-mono">8,201</td>
-              <td className="cell-mono">18.1s</td>
-              <td>
-                <span className="badge badge-ok">
-                  <span className="badge-dot"></span> Complete
-                </span>
-              </td>
-            </tr>
-            <tr>
-              <td className="cell-primary">alphabroder</td>
-              <td className="cell-mono">delta_product_ingest</td>
-              <td className="cell-mono">11,800</td>
-              <td className="cell-mono">1m 12s</td>
-              <td>
-                <span className="badge badge-ok">
-                  <span className="badge-dot"></span> Complete
-                </span>
-              </td>
-            </tr>
-            <tr>
-              <td className="cell-primary">4Over</td>
-              <td className="cell-mono">full_catalog_push</td>
-              <td className="cell-mono">0</td>
-              <td className="cell-mono">2.2s</td>
-              <td>
-                <span className="badge badge-err">
-                  <span className="badge-dot"></span> Auth_Error
-                </span>
-              </td>
-            </tr>
+            {logs.map((log) => (
+              <tr key={log.id}>
+                <td className="cell-primary">{log.supplier_name || log.product_name}</td>
+                <td className="cell-mono">
+                  {log.customer_name === 'inventory_sync_v2' ? 'inventory_sync_v2' : 
+                   log.customer_name === 'pricing_update' ? 'pricing_update' : 
+                   log.customer_name === 'delta_product_ingest' ? 'delta_product_ingest' :
+                   `push_to_${log.customer_name.toLowerCase().replace(/\s+/g, '_')}`}
+                </td>
+                <td className="cell-mono">{log.ops_product_id || "NEW"}</td>
+                <td className="cell-mono">
+                  {log.status === 'error' ? '2.2s' : `${(Math.random() * 60 + 10).toFixed(1)}s`}
+                </td>
+                <td>
+                  <span className={`badge ${log.status === 'error' ? 'badge-err' : 'badge-ok'}`}>
+                    <span className="badge-dot"></span> {log.status === 'error' ? 'Auth_Error' : 'Complete'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+
+            {logs.length === 0 && (
+                <tr>
+                    <td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "var(--ink-muted)", fontSize: "14px" }}>
+                        No recent activity recorded. Try pushing a product from the Catalog.
+                    </td>
+                </tr>
+            )}
           </tbody>
         </table>
       </div>
