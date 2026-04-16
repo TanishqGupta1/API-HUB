@@ -1,3 +1,4 @@
+from typing import Optional
 import uuid as uuid_mod
 from datetime import datetime, timezone
 
@@ -18,6 +19,6 @@ class SyncJob(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     records_processed: Mapped[int] = mapped_column(Integer, default=0)
-    error_log: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_log: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

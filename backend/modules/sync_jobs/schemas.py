@@ -1,3 +1,4 @@
+from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
@@ -11,9 +12,9 @@ class SyncJobRead(BaseModel):
     job_type: str
     status: str
     started_at: datetime
-    finished_at: datetime | None
+    finished_at: Optional[datetime]
     records_processed: int
-    error_log: str | None
+    error_log: Optional[str]
 
     model_config = {"from_attributes": True}
 
