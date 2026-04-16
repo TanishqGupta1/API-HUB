@@ -80,9 +80,9 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 | 7 | FastAPI Main App | ✅ DONE | PR #1 Urvashi | `backend/main.py` — all 6 routers registered, `/health`, `/api/stats` |
 | 8 | Demo Seed Script | ✅ DONE | PR #1 Urvashi | `backend/seed_demo.py` — 3 suppliers, 3 products, variants |
 | 9 | Next.js Scaffold + Blueprint Layout | ✅ DONE | PR #2 Sinchana | `frontend/` — layout, globals.css, dashboard page, Sidebar, api.ts, types.ts |
-| 10 | Suppliers Page + Reveal Form | ⬜ TODO | — | `frontend/src/app/suppliers/page.tsx`, `components/suppliers/reveal-form.tsx` |
-| 11 | Products Page (catalog grid) | ⬜ TODO | — | `frontend/src/app/products/page.tsx`, `components/products/product-card.tsx` |
-| 12 | Product Detail Page | ⬜ TODO | — | `frontend/src/app/products/[id]/page.tsx` |
+| 10 | Suppliers Page + Reveal Form | ✅ DONE | PR #4 Sinchana | `frontend/src/app/suppliers/page.tsx`, `components/suppliers/reveal-form.tsx` |
+| 11 | Products Page (catalog grid) | ✅ DONE | PR #4 Sinchana | `frontend/src/app/products/page.tsx`, `components/products/product-card.tsx` |
+| 12 | Product Detail Page | ✅ DONE | PR #4 Sinchana | `frontend/src/app/products/[id]/page.tsx` |
 | 13 | Customers Page | ⬜ TODO | — | `frontend/src/app/customers/page.tsx` |
 | 14 | Workflows Page (pipeline visualizer) | ⬜ TODO | — | `frontend/src/app/workflows/page.tsx`, `components/workflows/pipeline-view.tsx` |
 | 15 | Sync Jobs Page | ⬜ TODO | — | `frontend/src/app/sync/page.tsx` |
