@@ -17,7 +17,7 @@ import modules.catalog.models  # noqa: F401
 
 SUPPLIERS = [
     {
-        "name": "SanMar",
+        "name": "SanMar Corporation",
         "slug": "sanmar",
         "protocol": "soap",
         "promostandards_code": "SANMAR",
@@ -31,6 +31,14 @@ SUPPLIERS = [
         "promostandards_code": "SSACT",
         "base_url": "https://api.ssactivewear.com/v2",
         "auth_config": {"account_number": "demo_acct", "key": "demo_key"},
+    },
+    {
+        "name": "alphabroder",
+        "slug": "alphabroder",
+        "protocol": "soap",
+        "promostandards_code": "ALPHA",
+        "base_url": "https://pstandards.alphabroder.com/inventory/v1",
+        "auth_config": {"id": "demo", "password": "demo"},
     },
     {
         "name": "4Over",
@@ -95,11 +103,15 @@ async def seed():
         await conn.run_sync(Base.metadata.create_all)
 
     async with async_session() as db:
+        from sqlalchemy import select, delete
+        from modules.customers.models import Customer
+        from modules.push_log.models import ProductPushLog
+        from datetime import datetime, timezone, timedelta
+
         # Build slug -> supplier map
         slug_to_supplier: dict[str, Supplier] = {}
 
         for s_data in SUPPLIERS:
-            from sqlalchemy import select
             existing = (
                 await db.execute(
                     select(Supplier).where(Supplier.slug == s_data["slug"])
@@ -112,20 +124,41 @@ async def seed():
             else:
                 supplier = Supplier(**s_data)
                 db.add(supplier)
-                await db.flush()  # get id before commit
+                await db.flush()
                 print(f"  [add]  Supplier: {s_data['name']}")
                 slug_to_supplier[s_data["slug"]] = supplier
 
         await db.commit()
 
+        # Seed "Operation" Customers to match prototype table
+        OPS_NAMES = ["inventory_sync_v2", "pricing_update", "delta_product_ingest", "full_catalog_push"]
+        name_to_customer = {}
+        for name in OPS_NAMES:
+            existing = (await db.execute(select(Customer).where(Customer.name == name))).scalar_one_or_none()
+            if not existing:
+                customer = Customer(
+                    name=name,
+                    ops_base_url="https://demo.ops.com",
+                    ops_token_url="https://demo.ops.com/token",
+                    ops_client_id="demo",
+                    ops_auth_config={"client_secret": "demo"}
+                )
+                db.add(customer)
+                await db.flush()
+                name_to_customer[name] = customer
+            else:
+                name_to_customer[name] = existing
+        
+        await db.commit()
+
         # Seed products
+        seeded_products = []
+        from decimal import Decimal
         for p_data in DEMO_PRODUCTS:
             supplier = slug_to_supplier.get(p_data["supplier_slug"])
             if not supplier:
                 continue
 
-            from sqlalchemy import select
-            from decimal import Decimal
             existing_product = (
                 await db.execute(
                     select(Product).where(
@@ -136,7 +169,7 @@ async def seed():
             ).scalar_one_or_none()
 
             if existing_product:
-                print(f"  [skip] Product already exists: {p_data['product_name']}")
+                seeded_products.append(existing_product)
                 continue
 
             product = Product(
@@ -162,12 +195,43 @@ async def seed():
                 )
                 db.add(variant)
 
-            print(f"  [add]  Product: {p_data['product_name']} ({len(p_data['variants'])} variants)")
+            print(f"  [add]  Product: {p_data['product_name']}")
+            seeded_products.append(product)
 
         await db.commit()
 
+        # Seed Activity Logs
+        await db.execute(delete(ProductPushLog))
+        LOG_SPECS = [
+            {"supp": "sanmar", "op": "inventory_sync_v2", "st": "complete", "rec": "12,450"},
+            {"supp": "ss-activewear", "op": "pricing_update", "st": "complete", "rec": "8,201"},
+            {"supp": "alphabroder", "op": "delta_product_ingest", "st": "complete", "rec": "11,800"},
+            {"supp": "4over", "op": "full_catalog_push", "st": "error", "rec": "0"},
+        ]
+
+        for spec in LOG_SPECS:
+            # Find a product for this supplier
+            demo_prod = next((p for p in seeded_products if slug_to_supplier[spec["supp"]].id == p.supplier_id), seeded_products[0])
+            customer = name_to_customer[spec["op"]]
+            
+            log = ProductPushLog(
+                product_id=demo_prod.id,
+                customer_id=customer.id,
+                status="failed" if spec["st"] == "error" else "pushed",
+                ops_product_id=spec["rec"],
+                pushed_at=datetime.now(timezone.utc) - timedelta(minutes=10)
+            )
+            db.add(log)
+        
+        await db.commit()
+        print(f"  [add]  Seeded {len(LOG_SPECS)} activity logs.")
+
     print("\nSeed complete!")
     await engine.dispose()
+
+    print("\nSeed complete!")
+    await engine.dispose()
+
 
 
 if __name__ == "__main__":
