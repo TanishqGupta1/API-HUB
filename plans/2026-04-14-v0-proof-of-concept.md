@@ -67,31 +67,33 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 
 ## Task Status
 
-| Task | Description | Status | Files |
-|------|-------------|--------|-------|
-| 1 | Project Setup | DONE | `.env`, `.gitignore`, `docker-compose.yml`, `backend/Dockerfile`, `backend/requirements.txt` |
-| 2 | Database + EncryptedJSON | DONE | `backend/database.py` |
-| 3 | Supplier Model + Schemas | DONE | `backend/modules/suppliers/models.py`, `schemas.py` |
-| 4 | Product + Variant Models | DONE | `backend/modules/catalog/models.py`, `schemas.py` |
-| 5 | PS Directory Client + Supplier Service | DONE | `backend/modules/ps_directory/client.py`, `schemas.py`, `backend/modules/suppliers/service.py` |
-| 6 | API Routes (suppliers, ps_directory, catalog) | PARTIAL | `suppliers/routes.py` exists. **Missing:** `ps_directory/routes.py`, `catalog/routes.py` |
-| 7 | FastAPI Main App | TODO | `backend/main.py` |
-| 8 | Demo Seed Script | TODO | `backend/seed_demo.py` |
-| 9 | Next.js Scaffold + Blueprint Layout | DONE | `frontend/` (entire directory) |
-| 10 | Suppliers Page + Reveal Form | TODO | `frontend/src/app/suppliers/page.tsx`, `components/suppliers/reveal-form.tsx` |
-| 11 | Products Page (catalog grid) | TODO | `frontend/src/app/products/page.tsx`, `components/products/product-card.tsx` |
-| 12 | Product Detail Page | TODO | `frontend/src/app/products/[id]/page.tsx` |
-| 13 | Customers Page | TODO | `frontend/src/app/customers/page.tsx` |
-| 14 | Workflows Page (pipeline visualizer) | TODO | `frontend/src/app/workflows/page.tsx`, `components/workflows/pipeline-view.tsx` |
-| 15 | Sync Jobs Page | TODO | `frontend/src/app/sync/page.tsx` |
-| 16 | Field Mapping Page | TODO | `frontend/src/app/mappings/[supplierId]/page.tsx` |
-| 17 | End-to-End Verification | TODO | No files — manual testing |
-| 18 | Customer Model (OAuth2) | TODO | `backend/modules/customers/models.py`, `schemas.py`, `__init__.py` |
-| 19 | Markup Rules | TODO | `backend/modules/markup/models.py`, `schemas.py`, `routes.py`, `__init__.py` |
-| 20 | Push Log | TODO | `backend/modules/push_log/models.py`, `schemas.py`, `routes.py`, `__init__.py` |
-| 21 | n8n OPS Push Workflow | TODO | `n8n-workflows/ops-push.json` |
+> Last updated: 2026-04-15. Reflects merged PRs #1 (Urvashi), #2 (Sinchana), #3 (Vidhi).
 
-**Summary:** 6 tasks DONE, 1 PARTIAL, 14 TODO.
+| Task | Description | Status | Done By | Files |
+|------|-------------|--------|---------|-------|
+| 1 | Project Setup | ✅ DONE | — | `.env`, `.gitignore`, `docker-compose.yml`, `backend/Dockerfile`, `backend/requirements.txt` |
+| 2 | Database + EncryptedJSON | ✅ DONE | — | `backend/database.py` |
+| 3 | Supplier Model + Schemas | ✅ DONE | — | `backend/modules/suppliers/models.py`, `schemas.py` |
+| 4 | Product + Variant Models | ✅ DONE | — | `backend/modules/catalog/models.py`, `schemas.py` |
+| 5 | PS Directory Client + Supplier Service | ✅ DONE | — | `backend/modules/ps_directory/client.py`, `schemas.py`, `backend/modules/suppliers/service.py` |
+| 6 | API Routes (suppliers, ps_directory, catalog) | ✅ DONE | PR #1 Urvashi | `suppliers/routes.py`, `ps_directory/routes.py`, `catalog/routes.py` |
+| 7 | FastAPI Main App | ✅ DONE | PR #1 Urvashi | `backend/main.py` — all 6 routers registered, `/health`, `/api/stats` |
+| 8 | Demo Seed Script | ✅ DONE | PR #1 Urvashi | `backend/seed_demo.py` — 3 suppliers, 3 products, variants |
+| 9 | Next.js Scaffold + Blueprint Layout | ✅ DONE | PR #2 Sinchana | `frontend/` — layout, globals.css, dashboard page, Sidebar, api.ts, types.ts |
+| 10 | Suppliers Page + Reveal Form | ⬜ TODO | — | `frontend/src/app/suppliers/page.tsx`, `components/suppliers/reveal-form.tsx` |
+| 11 | Products Page (catalog grid) | ⬜ TODO | — | `frontend/src/app/products/page.tsx`, `components/products/product-card.tsx` |
+| 12 | Product Detail Page | ⬜ TODO | — | `frontend/src/app/products/[id]/page.tsx` |
+| 13 | Customers Page | ⬜ TODO | — | `frontend/src/app/customers/page.tsx` |
+| 14 | Workflows Page (pipeline visualizer) | ⬜ TODO | — | `frontend/src/app/workflows/page.tsx`, `components/workflows/pipeline-view.tsx` |
+| 15 | Sync Jobs Page | ⬜ TODO | — | `frontend/src/app/sync/page.tsx` |
+| 16 | Field Mapping Page | ⬜ TODO | — | `frontend/src/app/mappings/[supplierId]/page.tsx` |
+| 17 | End-to-End Verification | ⬜ TODO | — | No files — manual testing |
+| 18 | Customer Model (OAuth2) | ✅ DONE | PR #3 Vidhi | `backend/modules/customers/` — models, schemas, routes |
+| 19 | Markup Rules | ✅ DONE | PR #3 Vidhi | `backend/modules/markup/` — models, schemas, routes |
+| 20 | Push Log | ✅ DONE | PR #3 Vidhi | `backend/modules/push_log/` — models, schemas, routes |
+| 21 | n8n OPS Push Workflow | ⬜ TODO | — | `n8n-workflows/ops-push.json` |
+
+**Summary: 14 tasks DONE, 7 tasks TODO.** All backend is complete. Remaining work is frontend pages (10-16), E2E verification (17), and n8n workflow (21).
 
 ---
 
@@ -101,63 +103,22 @@ Tasks are grouped into phases. Within each phase, all tasks are **independent** 
 
 ---
 
-### Phase 0 — Foundation (DONE)
+### Phases 0-3 — ✅ ALL DONE
 
-```
-Task 1: Project Setup         ✅ DONE
-Task 2: Database + EncryptedJSON  ✅ DONE
-```
+| Phase | Tasks | Status |
+|-------|-------|--------|
+| 0 — Foundation | Task 1 (setup), Task 2 (database) | ✅ DONE |
+| 1 — Models + Scaffold | Task 3 (supplier), Task 4 (product), Task 9 (Next.js), Task 18 (customer) | ✅ DONE |
+| 2 — Services + V1c Models | Task 5 (PS client), Task 19 (markup), Task 20 (push log) | ✅ DONE |
+| 3 — Routes + App Assembly | Task 6 (routes), Task 7 (main.py), Task 8 (seed) | ✅ DONE |
 
-Nothing to do. All files exist with real code.
-
----
-
-### Phase 1 — Models + Frontend Scaffold (4 parallel tracks)
-
-**2 tracks DONE, 2 tracks TODO.**
-
-| Track | Task | Status | Depends On | Why Independent |
-|-------|------|--------|------------|-----------------|
-| A | **Task 3:** Supplier Model + Schemas | ✅ DONE | Task 2 | Only needs `Base`, `EncryptedJSON` |
-| B | **Task 4:** Product + Variant Models | ✅ DONE | Task 2 | Only needs `Base` — no supplier FK at model level |
-| C | **Task 9:** Next.js Scaffold + Blueprint Layout | **TODO** | Nothing | Pure frontend — npm, no backend calls |
-| D | **Task 18:** Customer Model (OAuth2) | **TODO** | Task 2 | Only needs `Base`, `EncryptedJSON` |
-
-**START HERE.** Tasks 9 and 18 can run in parallel right now. No blockers.
+**Completed by:** PR #1 Urvashi (Tasks 6-8), PR #2 Sinchana (Task 9), PR #3 Vidhi (Tasks 18-20)
 
 ---
 
-### Phase 2 — Services + V1c Models (3 parallel tracks)
+### Phase 4 — Frontend Pages (7 parallel tracks) ← START HERE
 
-**1 track DONE, 2 tracks TODO.**
-
-| Track | Task | Status | Depends On | Why Independent |
-|-------|------|--------|------------|-----------------|
-| A | **Task 5:** PS Directory Client + Supplier Service | ✅ DONE | Task 3 | Service imports Supplier model |
-| B | **Task 19:** Markup Rules | **TODO** | Task 18 | FK → `customers` table |
-| C | **Task 20:** Push Log | **TODO** | Task 4 + Task 18 | FK → `products` + FK → `customers` |
-
-Tasks 19 and 20 can run in parallel once Task 18 is done.
-
----
-
-### Phase 3 — Routes + App Assembly (sequential)
-
-**All TODO.** These must be done in order — each imports from the previous.
-
-```
-Task 6: API Routes (ps_directory/routes.py + catalog/routes.py)   ← suppliers/routes.py already exists
-  └→ Task 7: FastAPI Main App (backend/main.py)
-       └→ Task 8: Demo Seed Script (backend/seed_demo.py)
-```
-
-Task 6 is PARTIAL — only `suppliers/routes.py` exists. Still need `ps_directory/routes.py` and `catalog/routes.py`.
-
----
-
-### Phase 4 — Frontend Pages (7 parallel tracks)
-
-**All TODO.** All pages need **Task 9** (frontend scaffold) + **Task 7** (backend API). Once both exist, every page is independent — dispatch 7 agents:
+All prerequisites are met: backend API is running (Task 7 ✅) and frontend scaffold exists (Task 9 ✅). All 7 pages are independent — can dispatch 7 agents in parallel:
 
 | Track | Task | API Dependency | Notes |
 |-------|------|---------------|-------|
@@ -173,11 +134,9 @@ Task 6 is PARTIAL — only `suppliers/routes.py` exists. Still need `ps_director
 
 ### Phase 5 — Verification + n8n
 
-**All TODO.** Final phase — run after everything above.
-
 ```
-Task 17: End-to-End Verification    →  requires ALL of Tasks 1-16
-Task 21: n8n OPS Push Workflow      →  requires Tasks 18, 19, 20 + n8n-nodes-onprintshop node
+Task 17: End-to-End Verification    →  requires ALL of Tasks 10-16
+Task 21: n8n OPS Push Workflow      →  requires n8n-nodes-onprintshop setProduct + setProductPrice
 ```
 
 Task 21 has an **external dependency**: `n8n-nodes-onprintshop` must have `setProduct` and `setProductPrice` mutations (tracked in `OPS-NODE-GAP-ANALYSIS.md`).
@@ -191,18 +150,18 @@ Task 21 has an **external dependency**: `n8n-nodes-onprintshop` must have `setPr
                               │
                     ✅ Task 2: Database + EncryptedJSON
                        ╱      │      ╲            ╲
-              ✅ Task 3   ✅ Task 4   ⬜ Task 9    ⬜ Task 18
+              ✅ Task 3   ✅ Task 4   ✅ Task 9    ✅ Task 18
               Supplier     Product    Next.js      Customer
               Model        Model      Scaffold     Model
                    │         │         │          ╱      ╲
-              ✅ Task 5      │         │     ⬜ Task 19  ⬜ Task 20
+              ✅ Task 5      │         │     ✅ Task 19  ✅ Task 20
               PS Client      │         │     Markup      Push Log
-                   ╲         │         │       (needs Task 4 too)
-                  ⬜ Task 6: API Routes │
+                   ╲         │         │
+                  ✅ Task 6: API Routes │
                         │              │
-                  ⬜ Task 7: Main App   │
+                  ✅ Task 7: Main App   │
                      ╱     │           │
-              ⬜ Task 8    │           │
+              ✅ Task 8    │           │
               Seed         │           │
                            ╰─────┬─────╯
                                  │
@@ -226,11 +185,11 @@ Task 21 has an **external dependency**: `n8n-nodes-onprintshop` must have `setPr
 
 | Phase | Tasks | Parallel Agents | Status |
 |-------|-------|----------------|--------|
-| 0 | 1, 2 | 1 (sequential) | ✅ DONE |
-| 1 | 3, 4, **9**, **18** | 2 remaining | ⬜ **START HERE** |
-| 2 | 5, **19**, **20** | 2 remaining | ⬜ Blocked on Phase 1 |
-| 3 | **6** → **7** → **8** | 1 (sequential) | ⬜ Blocked on Phase 2 |
-| 4 | **10**, **11**, **12**, **13**, **14**, **15**, **16** | 7 | ⬜ Blocked on Phase 3 + Task 9 |
+| 0 | 1, 2 | — | ✅ DONE |
+| 1 | 3, 4, 9, 18 | — | ✅ DONE |
+| 2 | 5, 19, 20 | — | ✅ DONE |
+| 3 | 6, 7, 8 | — | ✅ DONE |
+| 4 | **10**, **11**, **12**, **13**, **14**, **15**, **16** | 7 | ⬜ **START HERE** |
 | 5 | **17**, **21** | 2 | ⬜ Blocked on ALL above |
 
 **Critical path:** Task 18 → Task 19/20 → Task 6 → Task 7 → Task 8 → Tasks 10-16 → Task 17
@@ -746,12 +705,12 @@ git commit -m "feat: PS directory client and supplier endpoint caching service"
 
 ---
 
-### Task 6: API Routes — Suppliers, PS Directory, Catalog — ⬜ PARTIAL (suppliers done, ps_directory + catalog missing)
+### Task 6: API Routes — Suppliers, PS Directory, Catalog — ✅ DONE (PR #1 Urvashi)
 
 **Files:**
-- ✅ Done: `backend/modules/suppliers/routes.py`
-- Create: `backend/modules/ps_directory/routes.py`
-- Create: `backend/modules/catalog/routes.py`
+- `backend/modules/suppliers/routes.py`
+- `backend/modules/ps_directory/routes.py`
+- `backend/modules/catalog/routes.py`
 
 - [ ] **Step 1: Write suppliers/routes.py**
 
@@ -952,7 +911,7 @@ git commit -m "feat: API routes for suppliers, PS directory, and catalog"
 
 ---
 
-### Task 7: FastAPI Main App — ⬜ TODO
+### Task 7: FastAPI Main App — ✅ DONE (PR #1 Urvashi)
 
 **Files:**
 - Create: `backend/main.py`
@@ -1121,7 +1080,7 @@ git commit -m "feat: FastAPI app with all routes, CORS, auto table creation"
 
 ---
 
-### Task 8: Demo Seed Script — ⬜ TODO
+### Task 8: Demo Seed Script — ✅ DONE (PR #1 Urvashi)
 
 **Files:**
 - Create: `backend/seed_demo.py`
@@ -3176,7 +3135,7 @@ backend/
 
 ---
 
-### Task 18: Customer Model — OAuth2 Fields — ⬜ TODO (Phase 1 — parallel with Task 9)
+### Task 18: Customer Model — OAuth2 Fields — ✅ DONE (PR #3 Vidhi)
 
 **Files:**
 - Create: `backend/modules/customers/models.py`
@@ -3313,7 +3272,7 @@ git commit -m "feat: Customer model with encrypted OAuth2 credentials for OPS"
 
 ---
 
-### Task 19: Markup Rules — ⬜ TODO (Phase 2 — parallel with Task 20)
+### Task 19: Markup Rules — ✅ DONE (PR #3 Vidhi)
 
 **Files:**
 - Create: `backend/modules/markup/models.py`
@@ -3445,7 +3404,7 @@ git commit -m "feat: MarkupRule model and routes — per-customer pricing rules 
 
 ---
 
-### Task 20: Push Log — ⬜ TODO (Phase 2 — parallel with Task 19)
+### Task 20: Push Log — ✅ DONE (PR #3 Vidhi)
 
 **Files:**
 - Create: `backend/modules/push_log/models.py`
