@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import PipelineView, { type NodeStatus, type PipelineNode } from "@/components/workflows/pipeline-view";
+import { api } from "@/lib/api";
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ const SEED_PIPELINES: Pipeline[] = [
     nodes: [
       { id: "ps-fetch",   label: "PS Fetch",   sublabel: "ProductData",     status: "done",    duration: "4m 12s" },
       { id: "ps-media",   label: "PS Media",   sublabel: "MediaContent",    status: "done",    duration: "6m 50s" },
-      { id: "normalize",  label: "Normalize",  sublabel: "Canonical schema", status: "running" },
+      { id: "normalize",  label: "Normalize",  sublabel: "Canonical schema", status: "done",    duration: "2m 08s" },
       { id: "ops-push",   label: "OPS Push",   sublabel: "Storefront API",  status: "idle"    },
     ],
     lastRun: {
@@ -294,22 +295,30 @@ export default function WorkflowsPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [triggerError, setTriggerError] = useState<string | null>(null);
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const failCountRef = useRef(0);
 
-  // Poll /api/workflows/status every 5 s while any pipeline is running
+  // Poll /api/workflows/status every 5 s while any pipeline is running.
+  // Auto-stops after 3 consecutive failures (backend not up yet).
   useEffect(() => {
     const anyRunning = pipelines.some(isRunning);
     if (anyRunning && !pollRef.current) {
+      failCountRef.current = 0;
       pollRef.current = setInterval(async () => {
         try {
-          const updated = await fetch("/api/workflows/status").then((r) => r.json()) as Pipeline[];
+          const updated = await api<Pipeline[]>("/api/workflows/status");
+          failCountRef.current = 0;
           setPipelines(updated);
           if (!updated.some(isRunning)) {
             clearInterval(pollRef.current!);
             pollRef.current = null;
           }
         } catch {
-          // Backend not yet wired — silently skip
+          failCountRef.current += 1;
+          if (failCountRef.current >= 3) {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+          }
         }
       }, 5000);
     }
@@ -319,13 +328,13 @@ export default function WorkflowsPage() {
         pollRef.current = null;
       }
     };
-  }, [pipelines]);
+  }, [pipelines]); // eslint-disable-line
 
   async function handleTrigger(id: string) {
     setTriggering(id);
     setTriggerError(null);
     try {
-      await fetch(`/api/workflows/${id}/trigger`, { method: "POST" });
+      await api(`/api/workflows/${id}/trigger`, { method: "POST" });
       // Optimistically flip all nodes in this pipeline to running state
       setPipelines((prev) =>
         prev.map((p) =>
@@ -356,9 +365,8 @@ export default function WorkflowsPage() {
   async function handleToggle(id: string) {
     setToggling(id);
     try {
-      await fetch(`/api/workflows/${id}`, {
+      await api(`/api/workflows/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: !pipelines.find((p) => p.id === id)?.enabled }),
       });
       setPipelines((prev) =>
