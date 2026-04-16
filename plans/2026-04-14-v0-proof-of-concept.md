@@ -92,8 +92,9 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 | 19 | Markup Rules | ✅ DONE | PR #3 Vidhi | `backend/modules/markup/` — models, schemas, routes |
 | 20 | Push Log | ✅ DONE | PR #3 Vidhi | `backend/modules/push_log/` — models, schemas, routes |
 | 21 | n8n OPS Push Workflow | ⬜ TODO | — | `n8n-workflows/ops-push.json` |
+| 22 | API Registry | ✅ DONE | PR #6 Sinchana | `frontend/src/app/api-registry/page.tsx` |
 
-**Summary: 14 tasks DONE, 7 tasks TODO.** All backend is complete. Remaining work is frontend pages (10-16), E2E verification (17), and n8n workflow (21).
+**Summary: 15 tasks DONE, 7 tasks TODO.** All backend is complete. Remaining work is frontend pages (13-16), E2E verification (17), and n8n workflow (21).
 
 ---
 

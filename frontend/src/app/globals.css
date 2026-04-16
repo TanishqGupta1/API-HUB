@@ -477,20 +477,6 @@ tbody tr:hover {
       transition: all 0.3s;
     }
 
-    .reveal-section.done .reveal-num {
-      background: var(--green);
-      border-color: var(--green);
-    }
-
-    .reveal-content {
-      flex: 1;
-      background: white;
-      border: 1.5px solid var(--border);
-      border-radius: 10px;
-      padding: 24px;
-      box-shadow: 3px 4px 0 var(--shadow);
-      transition: all 0.3s;
-    }
 
     .reveal-section.locked .reveal-content {
       box-shadow: none;
@@ -743,3 +729,103 @@ tbody tr:hover {
       flex: 1;
     }
 
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* API Registry Styles */
+.api-list {
+  display: grid;
+  gap: 32px;
+}
+
+.api-category {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--blue);
+}
+
+.api-entry {
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  position: relative;
+  box-shadow: 3px 4px 0 var(--shadow);
+  transition: all 0.2s;
+  margin-bottom: 16px;
+}
+
+.api-entry:hover {
+  border-color: var(--blue);
+  box-shadow: 6px 8px 0 var(--shadow);
+}
+
+.api-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.method {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 4px;
+  min-width: 64px;
+  text-align: center;
+  color: white !important;
+}
+
+.m-get {
+  background: var(--green) !important;
+}
+
+.m-post {
+  background: var(--blue) !important;
+}
+
+.path {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.api-desc {
+  font-size: 13px;
+  color: var(--ink-muted);
+  margin-bottom: 20px;
+}
+
+.api-blueprint {
+  background: var(--paper-warm);
+  border-radius: 6px;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--blue-dark);
+  white-space: pre;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.api-blueprint-label {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+}
