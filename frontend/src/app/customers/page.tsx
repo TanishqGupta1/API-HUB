@@ -29,7 +29,7 @@ function SkeletonRow() {
     <tr style={{ borderTop: "1px solid var(--border)" }}>
       {[160, 180, 70, 80, 90, 70].map((w, i) => (
         <td key={i} className="px-5 py-4">
-          <div className="h-3 rounded animate-pulse" style={{ width: w, background: "var(--paper-dark)" }} />
+          <div className="h-3 rounded animate-pulse" style={{ width: w, background: "var(--paper-warm)" }} />
         </td>
       ))}
     </tr>
@@ -40,7 +40,7 @@ function OAuth2Badge() {
   return (
     <span
       className="text-xs font-semibold px-2 py-0.5 rounded"
-      style={{ background: "var(--bp-pale)", color: "var(--blueprint)", fontFamily: "var(--font-mono)" }}
+      style={{ background: "var(--blue-pale)", color: "var(--blue)", fontFamily: "var(--font-mono)" }}
     >
       OAuth2
     </span>
@@ -171,8 +171,8 @@ export default function CustomersPage() {
         {!showAdd && (
           <button
             onClick={() => { setShowAdd(true); setSaveError(null); setFormErrors({}); }}
-            className="px-5 py-2.5 rounded-md text-sm font-semibold"
-            style={{ background: "var(--blueprint)", color: "white" }}
+            className="px-5 py-2.5 rounded-md text-sm font-semibold text-white"
+            style={{ backgroundColor: "#1e4d92" }}
           >
             + Add Customer
           </button>
@@ -207,8 +207,8 @@ export default function CustomersPage() {
 
           <div className="flex gap-3">
             <button onClick={handleSave} disabled={saving}
-              className="px-5 py-2 rounded-md text-sm font-semibold"
-              style={{ background: "var(--blueprint)", color: "white", opacity: saving ? 0.6 : 1 }}>
+              className="px-5 py-2 rounded-md text-sm font-semibold text-white"
+              style={{ backgroundColor: "#1e4d92", opacity: saving ? 0.6 : 1 }}>
               {saving ? "Saving…" : "Save Customer"}
             </button>
             <button onClick={() => setShowAdd(false)} className="text-sm px-4 py-2"
@@ -259,7 +259,7 @@ export default function CustomersPage() {
                 {/* OPS Base URL */}
                 <td className="px-5 py-4">
                   <a href={c.ops_base_url} target="_blank" rel="noopener noreferrer"
-                    className="text-sm hover:underline" style={{ color: "var(--blueprint)" }}>
+                    className="text-sm hover:underline" style={{ color: "var(--blue)" }}>
                     {hostname(c.ops_base_url)}
                   </a>
                 </td>
@@ -300,7 +300,7 @@ export default function CustomersPage() {
                       onClick={() => handleToggle(c)}
                       disabled={toggling === c.id}
                       className="text-xs"
-                      style={{ color: "var(--blueprint)", opacity: toggling === c.id ? 0.5 : 1 }}
+                      style={{ color: "var(--blue)", opacity: toggling === c.id ? 0.5 : 1 }}
                     >
                       {toggling === c.id ? "…" : c.is_active ? "Deactivate" : "Activate"}
                     </button>

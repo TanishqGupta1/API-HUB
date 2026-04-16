@@ -143,9 +143,9 @@ function PipelineCard({ pipeline: p, onTrigger, onToggle, triggering, toggling }
     <div
       className="rounded-lg border overflow-hidden transition-shadow"
       style={{
-        borderColor: active ? "var(--blueprint)" : "var(--border)",
+        borderColor: active ? "var(--blue)" : "var(--border)",
         background: "white",
-        boxShadow: active ? "0 0 0 1px var(--blueprint)20" : "none",
+        boxShadow: active ? "0 0 0 1px var(--blue)20" : "none",
       }}
     >
       {/* Card header */}
@@ -159,7 +159,7 @@ function PipelineCard({ pipeline: p, onTrigger, onToggle, triggering, toggling }
             {active && (
               <span
                 className="text-xs px-1.5 py-px rounded font-semibold animate-pulse"
-                style={{ background: "var(--bp-pale)", color: "var(--blueprint)", fontFamily: "var(--font-mono)" }}
+                style={{ background: "var(--blue-pale)", color: "var(--blue)", fontFamily: "var(--font-mono)" }}
               >
                 running
               </span>
@@ -172,7 +172,7 @@ function PipelineCard({ pipeline: p, onTrigger, onToggle, triggering, toggling }
           {/* Schedule badge */}
           <span
             className="text-xs px-2 py-0.5 rounded font-semibold"
-            style={{ background: "var(--bp-pale)", color: "var(--blueprint)", fontFamily: "var(--font-mono)" }}
+            style={{ background: "var(--blue-pale)", color: "var(--blue)", fontFamily: "var(--font-mono)" }}
           >
             {p.schedule}
           </span>
@@ -184,7 +184,7 @@ function PipelineCard({ pipeline: p, onTrigger, onToggle, triggering, toggling }
             title={p.enabled ? "Disable workflow" : "Enable workflow"}
             className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
             style={{
-              background: p.enabled ? "var(--blueprint)" : "var(--paper-dark)",
+              background: p.enabled ? "var(--blue)" : "var(--paper-warm)",
               opacity: toggling ? 0.5 : 1,
             }}
           >
@@ -200,7 +200,7 @@ function PipelineCard({ pipeline: p, onTrigger, onToggle, triggering, toggling }
             disabled={triggering || !p.enabled || active}
             className="text-xs px-3 py-1.5 rounded font-semibold"
             style={{
-              background: p.enabled && !active ? "var(--blueprint)" : "var(--paper-dark)",
+              background: p.enabled && !active ? "var(--blue)" : "var(--paper-warm)",
               color: p.enabled && !active ? "white" : "var(--ink-muted)",
               opacity: triggering ? 0.6 : 1,
               cursor: !p.enabled || active ? "not-allowed" : "pointer",
@@ -240,7 +240,7 @@ function PipelineCard({ pipeline: p, onTrigger, onToggle, triggering, toggling }
           <button
             onClick={() => setShowHistory((s) => !s)}
             className="text-xs"
-            style={{ color: "var(--blueprint)" }}
+            style={{ color: "var(--blue)" }}
           >
             {showHistory ? "Hide history ▲" : "Run history ▼"}
           </button>
@@ -392,7 +392,7 @@ export default function WorkflowsPage() {
             {activeCount > 0 && (
               <span
                 className="ml-2 text-xs font-semibold px-1.5 py-px rounded"
-                style={{ background: "var(--bp-pale)", color: "var(--blueprint)", fontFamily: "var(--font-mono)" }}
+                style={{ background: "var(--blue-pale)", color: "var(--blue)", fontFamily: "var(--font-mono)" }}
               >
                 {activeCount} running
               </span>
@@ -404,7 +404,7 @@ export default function WorkflowsPage() {
           target="_blank"
           rel="noopener noreferrer"
           className="px-4 py-2 rounded-md text-sm font-semibold border"
-          style={{ borderColor: "var(--blueprint)", color: "var(--blueprint)" }}
+          style={{ borderColor: "var(--blue)", color: "var(--blue)" }}
         >
           Open n8n Editor ↗
         </a>
@@ -438,7 +438,7 @@ export default function WorkflowsPage() {
       <div className="mt-6 flex flex-wrap gap-4 px-1">
         {(["idle", "running", "done", "error"] as const).map((s) => {
           const colors: Record<string, string> = {
-            idle: "var(--ink-muted)", running: "var(--blueprint)", done: "var(--green)", error: "var(--red)",
+            idle: "var(--ink-muted)", running: "var(--blue)", done: "var(--green)", error: "var(--red)",
           };
           return (
             <div key={s} className="flex items-center gap-1.5 text-xs" style={{ color: "var(--ink-muted)" }}>
