@@ -175,7 +175,7 @@ export default function RootLayout({
                 </svg>
                 API Registry
               </Link>
-              <Link href="/suppliers/new" className="nav-item">
+              <Link href="/suppliers?new=true" className="nav-item">
                 <svg
                   className="nav-icon"
                   viewBox="0 0 24 24"
