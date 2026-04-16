@@ -83,7 +83,7 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 | 10 | Suppliers Page + Reveal Form | ✅ DONE | PR #4 Sinchana | `frontend/src/app/suppliers/page.tsx`, `components/suppliers/reveal-form.tsx` |
 | 11 | Products Page (catalog grid) | ✅ DONE | PR #4 Sinchana | `frontend/src/app/products/page.tsx`, `components/products/product-card.tsx` |
 | 12 | Product Detail Page | ✅ DONE | PR #4 Sinchana | `frontend/src/app/products/[id]/page.tsx` |
-| 13 | Customers Page | ✅ DONE | Vidhi | `frontend/src/app/customers/page.tsx` — table with OAuth2 badge, markup rule count, Add Customer form |
+| 13 | Customers Page | ⬜ TODO | — | `frontend/src/app/customers/page.tsx` |
 | 14 | Workflows Page (pipeline visualizer) | ⬜ TODO | — | `frontend/src/app/workflows/page.tsx`, `components/workflows/pipeline-view.tsx` |
 | 15 | Sync Jobs Page | ✅ DONE | Vidhi | `frontend/src/app/sync/page.tsx` |
 | 16 | Field Mapping Page | ✅ DONE | Vidhi | `frontend/src/app/mappings/page.tsx` (supplier picker) + `mappings/[supplierId]/page.tsx` (editor + live JSON preview), `PUT /api/suppliers/{id}/mappings` backend endpoint |
@@ -93,7 +93,7 @@ VisualGraphx Integration Hub — pulls product catalogs from 994+ PromoStandards
 | 20 | Push Log | ✅ DONE | PR #3 Vidhi | `backend/modules/push_log/` — models, schemas, routes |
 | 21 | n8n OPS Push Workflow | ⬜ TODO | — | `n8n-workflows/ops-push.json` |
 
-**Summary: 20 tasks DONE, 1 PARTIAL, 1 TODO.** Backend complete. Tasks 10-16 frontend done. Remaining: Task 14 (Workflows page), 17 (E2E verification), 21 (n8n workflow).
+**Summary: 19 tasks DONE, 1 PARTIAL, 2 TODO.** Backend complete. Frontend pages 10, 11, 12 (Sinchana), 15, 16 (Vidhi) done. Remaining: Task 13 (Customers page), 14 (Workflows page), 17 (E2E verification), 21 (n8n workflow).
 
 ---
 
