@@ -13,6 +13,7 @@ import modules.catalog.models  # noqa: F401
 import modules.customers.models  # noqa: F401
 import modules.markup.models  # noqa: F401
 import modules.push_log.models  # noqa: F401
+import modules.sync_jobs.models  # noqa: F401
 
 from modules.suppliers.models import Supplier
 from modules.catalog.models import Product, ProductVariant
@@ -22,6 +23,7 @@ from modules.markup.routes import router as markup_router
 from modules.push_log.routes import router as push_log_router
 from modules.catalog.routes import router as catalog_router
 from modules.ps_directory.routes import router as ps_router
+from modules.sync_jobs.routes import router as sync_jobs_router
 
 
 @asynccontextmanager
@@ -49,6 +51,7 @@ app.include_router(markup_router)
 app.include_router(push_log_router)
 app.include_router(ps_router)
 app.include_router(catalog_router)
+app.include_router(sync_jobs_router)
 
 
 @app.get("/health")
