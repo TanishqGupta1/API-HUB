@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -8,9 +9,9 @@ class PSCompany(BaseModel):
 
 
 class PSEndpoint(BaseModel):
-    Name: str | None = None
-    ServiceType: str | None = None
-    Version: str | None = None
-    Status: str | None = None
-    ProductionURL: str | None = None
-    TestURL: str | None = None
+    Name: Optional[str] = None
+    ServiceType: Optional[str] = None
+    Version: Optional[str] = None
+    Status: Optional[str] = None
+    ProductionURL: Optional[str] = None
+    TestURL: Optional[str] = None
