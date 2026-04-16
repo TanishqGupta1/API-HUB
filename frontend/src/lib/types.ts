@@ -56,6 +56,7 @@ export interface Variant {
 export interface Product {
   id: string;
   supplier_id: string;
+  supplier_name: string;
   supplier_sku: string;
   product_name: string;
   brand: string | null;
@@ -66,9 +67,18 @@ export interface Product {
   variants: Variant[];
 }
 
+export interface ProductPushStatus {
+  customer_id: string;
+  customer_name: string;
+  status: "pushed" | "failed" | "not_pushed";
+  pushed_at: string | null;
+  ops_product_id: string | null;
+}
+
 export interface ProductListItem {
   id: string;
   supplier_id: string;
+  supplier_name: string;
   supplier_sku: string;
   product_name: string;
   brand: string | null;
@@ -82,7 +92,8 @@ export interface Customer {
   id: string;
   name: string;
   ops_base_url: string;
-  ops_api_key: string;
+  ops_token_url: string;
+  ops_client_id: string;
   is_active: boolean;
   created_at: string;
 }
