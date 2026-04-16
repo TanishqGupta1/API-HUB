@@ -100,6 +100,27 @@ export interface Customer {
   markup_rules_count: number;
 }
 
+/* ─── Markup Rules ───────────────────────────────────────────────────────── */
+export interface MarkupRule {
+  id: string;
+  customer_id: string;
+  scope: string;
+  markup_pct: number;
+  min_margin: number | null;
+  rounding: string;
+  priority: number;
+  created_at: string;
+}
+
+export interface MarkupRuleCreate {
+  customer_id: string;
+  scope: string;
+  markup_pct: number;
+  min_margin?: number | null;
+  rounding: string;
+  priority: number;
+}
+
 /* ─── Sync Jobs ──────────────────────────────────────────────────────────── */
 export type SyncStatus = "pending" | "running" | "completed" | "failed";
 export type JobType = "full" | "delta" | "inventory" | "pricing" | "images";

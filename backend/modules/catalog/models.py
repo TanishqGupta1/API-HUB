@@ -1,3 +1,4 @@
+from typing import Optional
 import uuid as uuid_mod
 from datetime import datetime
 from decimal import Decimal
@@ -15,11 +16,11 @@ class Product(Base):
     supplier_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("suppliers.id"))
     supplier_sku: Mapped[str] = mapped_column(String(255))
     product_name: Mapped[str] = mapped_column(String(500))
-    brand: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brand: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     product_type: Mapped[str] = mapped_column(String(50), default="apparel")
-    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_synced: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_synced: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     variants: Mapped[list["ProductVariant"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
@@ -33,11 +34,11 @@ class ProductVariant(Base):
     product_id: Mapped[uuid_mod.UUID] = mapped_column(
         ForeignKey("products.id", ondelete="CASCADE")
     )
-    color: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    size: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    sku: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    base_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
-    inventory: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    warehouse: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    color: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    sku: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    base_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    inventory: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    warehouse: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     product: Mapped["Product"] = relationship(back_populates="variants")

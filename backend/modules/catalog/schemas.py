@@ -1,3 +1,4 @@
+from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
@@ -6,12 +7,12 @@ from pydantic import BaseModel
 
 class VariantRead(BaseModel):
     id: UUID
-    color: str | None
-    size: str | None
-    sku: str | None
-    base_price: float | None
-    inventory: int | None
-    warehouse: str | None
+    color: Optional[str]
+    size: Optional[str]
+    sku: Optional[str]
+    base_price: Optional[float]
+    inventory: Optional[int]
+    warehouse: Optional[str]
 
     model_config = {"from_attributes": True}
 
@@ -19,14 +20,14 @@ class VariantRead(BaseModel):
 class ProductRead(BaseModel):
     id: UUID
     supplier_id: UUID
-    supplier_name: str | None = None
+    supplier_name: Optional[str] = None
     supplier_sku: str
     product_name: str
-    brand: str | None
-    description: str | None
+    brand: Optional[str]
+    description: Optional[str]
     product_type: str
-    image_url: str | None
-    last_synced: datetime | None
+    image_url: Optional[str]
+    last_synced: Optional[datetime]
     variants: list[VariantRead] = []
 
     model_config = {"from_attributes": True}
@@ -35,12 +36,12 @@ class ProductRead(BaseModel):
 class ProductListRead(BaseModel):
     id: UUID
     supplier_id: UUID
-    supplier_name: str | None = None
+    supplier_name: Optional[str] = None
     supplier_sku: str
     product_name: str
-    brand: str | None
+    brand: Optional[str]
     product_type: str
-    image_url: str | None
+    image_url: Optional[str]
     variant_count: int = 0
 
     model_config = {"from_attributes": True}

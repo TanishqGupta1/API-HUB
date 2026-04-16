@@ -1,3 +1,4 @@
+from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
@@ -8,8 +9,8 @@ class SupplierCreate(BaseModel):
     name: str
     slug: str
     protocol: str
-    promostandards_code: str | None = None
-    base_url: str | None = None
+    promostandards_code: Optional[str] = None
+    base_url: Optional[str] = None
     auth_config: dict = {}
 
 
@@ -18,8 +19,8 @@ class SupplierRead(BaseModel):
     name: str
     slug: str
     protocol: str
-    promostandards_code: str | None
-    base_url: str | None
+    promostandards_code: Optional[str]
+    base_url: Optional[str]
     auth_config: dict
     is_active: bool
     created_at: datetime

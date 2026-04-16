@@ -3,7 +3,7 @@
 > Source of truth for what is actually implemented in the codebase.
 > The master plan lives in `plans/2026-04-14-v0-proof-of-concept.md` — do not edit that file here.
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ---
 
@@ -26,14 +26,14 @@ Last updated: 2026-04-15
 | 13 | Customers Page | ❌ TODO |
 | 14 | Workflows Page (pipeline visualizer) | ❌ TODO |
 | 15 | Sync Jobs Page | ❌ TODO |
-| 16 | Field Mapping Page | ❌ TODO |
+| 16 | Field Mapping Page | ✅ DONE |
 | 17 | End-to-End Verification | ❌ TODO |
 | 18 | Customer Model (OAuth2) | ✅ DONE |
-| 19 | Markup Rules | ❌ TODO |
-| 20 | Push Log | ❌ TODO |
+| 19 | Markup Rules | ✅ DONE |
+| 20 | Push Log | ✅ DONE |
 | 21 | n8n OPS Push Workflow | ❌ TODO |
 
-**Summary: 8 DONE · 1 PARTIAL · 12 TODO**
+**Summary: 12 DONE · 1 PARTIAL · 8 TODO**
 
 ---
 
@@ -41,11 +41,9 @@ Last updated: 2026-04-15
 
 | Task | Can start because... |
 |------|----------------------|
-| **Task 19 — Markup Rules** | Task 18 done — `customers` table exists for the FK |
-| **Task 20 — Push Log** | Tasks 4 + 18 done — `products` + `customers` tables exist |
 | **Task 9 — Next.js Scaffold** | Pure frontend, no backend dependency |
-
-Tasks 19 and 20 can be built in parallel.
+| **Task 17 — E2E Verification** | Requires Tasks 1–16 all done; Task 6 still partial |
+| **Task 21 — n8n OPS Push Workflow** | Backend ready (18, 19, 20 done); blocked on n8n-nodes-onprintshop external dependency |
 
 ---
 
@@ -97,6 +95,7 @@ Tasks 19 and 20 can be built in parallel.
 - `auth_config` — **EncryptedJSON** — stores credentials (username/password, API key, OAuth tokens, whatever the supplier uses). Encrypted at rest.
 - `endpoint_cache` — JSONB column that caches the list of API endpoints from the PromoStandards directory so we don't hit their API on every request
 - `endpoint_cache_updated_at` — when the cache was last refreshed (used for 24h TTL)
+- `field_mappings` — JSONB column that stores the field mapping config for this supplier (e.g. `{"productTitle": "product_name"}`)
 - `is_active` — soft toggle to disable a supplier without deleting it
 - `created_at` — timestamp
 
@@ -175,6 +174,7 @@ What it provides:
 - `PUT /api/suppliers/{id}` — update a supplier
 - `DELETE /api/suppliers/{id}` — delete a supplier
 - `GET /api/suppliers/{id}/endpoints` — fetch (and cache) PS directory endpoints for this supplier
+- `PUT /api/suppliers/{id}/mappings` — save field mappings for a supplier ✅ Added in Task 16
 
 **Still missing:**
 - `backend/modules/ps_directory/routes.py` — `GET /api/ps-directory/companies` and `GET /api/ps-directory/companies/{code}/endpoints`
@@ -193,8 +193,6 @@ What it provides:
 - Registered the suppliers router.
 - Added `GET /health` — a simple health check endpoint that returns `{"status": "ok"}`. Used by Docker and monitoring to know the app is running.
 
-**Note:** ps_directory and catalog routers will be added here once Task 6 is complete.
-
 ---
 
 ### Task 8 — Demo Seed Script
@@ -212,38 +210,125 @@ What it provides:
 
 **How to run:**
 ```bash
-cd backend && source .venv/bin/activate
+cd backend && source venv/bin/activate
 python seed_demo.py
 ```
 
 ---
 
-### Task 18 — Customer Model (OAuth2) — Done in this session
+### Task 16 — Field Mapping Page ✅ DONE (2026-04-16)
 
-**Files:** `backend/modules/customers/models.py`, `schemas.py`, `routes.py`, `__init__.py`
+**Files:**
+- `frontend/src/app/mappings/page.tsx` — supplier picker (lists all suppliers, links to editor)
+- `frontend/src/app/mappings/[supplierId]/page.tsx` — mapping editor with live JSON preview
+- `backend/modules/suppliers/models.py` — added `field_mappings` JSONB column
+- `backend/modules/suppliers/routes.py` — added `PUT /api/suppliers/{id}/mappings` endpoint
 
 **What was done:**
 
-`models.py` — defines the `customers` table. A "customer" in this system is an OnPrintShop storefront that products get pushed into:
+Frontend — two-page UI:
+1. `/mappings` — lists all suppliers as cards. Each card shows name, slug, protocol, PromoStandards code. "Configure Mappings" button opens the editor for that supplier.
+2. `/mappings/[supplierId]` — side-by-side editor. Left column: type the supplier's raw field name. Right column: shows the canonical field name (read-only). Live JSON preview updates in real time as you type. Save button calls the backend.
+
+Backend:
+- Added `field_mappings` JSONB column to `suppliers` table to persist mappings
+- Added `PUT /api/suppliers/{id}/mappings` endpoint — accepts a JSON object like `{"productTitle": "product_name"}` and saves it to the supplier row
+- Returns `{"saved": true, "supplier_id": "...", "mappings": {...}}`
+
+**11 canonical fields supported:** `product_name`, `supplier_sku`, `brand`, `description`, `product_type`, `color`, `size`, `base_price`, `inventory`, `image_url`, `warehouse`
+
+**Why:** Different suppliers name their fields differently. This mapping tells n8n how to translate raw supplier data into the platform's standard format before pushing to OPS.
+
+---
+
+### Task 18 — Customer Model (OAuth2) ✅ DONE (2026-04-16)
+
+**Files:** `backend/modules/customers/models.py`, `schemas.py`, `routes.py`, `__init__.py`, `frontend/src/app/customers/page.tsx`
+
+**What was done:**
+
+`models.py` — defines the `customers` table. A "customer" is an OnPrintShop storefront that products get pushed into:
 - `id` — UUID primary key
-- `name` — storefront name (e.g. "Acme Corp Store")
-- `ops_base_url` — the OPS GraphQL API URL for this storefront
+- `name` — storefront name (e.g. "Acme Corp")
+- `ops_base_url` — the OPS GraphQL API URL
 - `ops_token_url` — the OAuth2 token endpoint URL
-- `ops_client_id` — the OAuth2 client ID (not secret, safe to store plain)
-- `ops_auth_config` — **EncryptedJSON** — stores `{"client_secret": "..."}`. The secret is encrypted at rest, never returned by the API.
+- `ops_client_id` — the OAuth2 client ID (stored plain)
+- `ops_auth_config` — **EncryptedJSON** — stores `{"client_secret": "..."}`. Write-only: never returned by the API.
 - `is_active`, `created_at`
 
-`schemas.py`:
-- `CustomerCreate` — takes `ops_client_secret` as a plain field. The route saves it encrypted inside `ops_auth_config`, never storing it as a plain column.
-- `CustomerRead` — returned by the API. Does NOT include `ops_client_secret` or `ops_auth_config` — the secret is write-only.
-
 `routes.py` — full CRUD:
-- `GET /api/customers` — list all customers
-- `POST /api/customers` — create a customer (secret goes in encrypted)
+- `GET /api/customers` — list all customers (secret never returned)
+- `POST /api/customers` — create a customer (encrypts secret before saving)
 - `GET /api/customers/{id}` — get one customer
 - `DELETE /api/customers/{id}` — delete a customer
 
-**Why this matters:** Each OPS storefront has its own OAuth2 credentials. When n8n pushes products, it needs to authenticate as that specific storefront. These credentials must be encrypted — same pattern as supplier `auth_config`.
+Frontend — customers page with:
+- Table: Name | OPS Base URL | Auth (OAuth2 badge) | Products Pushed | Markup Rules count | Status
+- "+ Add Customer" inline form with all OAuth2 fields (Store Name, Base URL, Token URL, Client ID, Client Secret)
+- Markup rule count fetched live per customer from `/api/markup-rules/{id}`
+
+**Why:** Each OPS storefront has its own OAuth2 credentials. Credentials must be encrypted — same Fernet pattern as supplier `auth_config`.
+
+---
+
+### Task 19 — Markup Rules ✅ DONE (2026-04-16)
+
+**Files:** `backend/modules/markup/models.py`, `schemas.py`, `routes.py`, `__init__.py`, `frontend/src/app/markup/page.tsx`
+
+**What was done:**
+
+`models.py` — defines `markup_rules` table:
+- `id` — UUID primary key
+- `customer_id` — FK to `customers` (CASCADE delete)
+- `scope` — what the rule applies to: `"all"`, `"category:T-Shirts"`, `"product:PC61"`, `"supplier:SanMar"`
+- `markup_pct` — markup percentage (e.g. `45.00` = 45%)
+- `min_margin` — optional minimum margin floor
+- `rounding` — `"none"`, `"nearest_99"`, `"nearest_dollar"`
+- `priority` — higher number = higher priority when multiple rules match
+- `created_at`
+
+`routes.py`:
+- `GET /api/markup-rules/{customer_id}` — list rules ordered by priority descending
+- `POST /api/markup-rules` — create a rule
+- `DELETE /api/markup-rules/{rule_id}` — delete a rule
+
+Frontend — full Markup Rules page matching demo HTML:
+- Customer dropdown in header (auto-loads from API, auto-selects first)
+- Subtitle shows "Pricing configuration for {customer name}"
+- **Panel 1: Active Rules table** — Priority (blue number + highest/lowest label) | Scope badge | Target | Markup % | Min Margin | Rounding | Delete button
+- **Panel 2: Pricing Preview** — editable base price input, one row per rule showing `$base → $marked-up → $rounded`, highest priority rule highlighted in blue with "✓ Applied" badge, others dimmed
+- **Add Rule modal** — scope type select, conditional target input, all fields, saves via POST
+
+**Why:** Different customers want different markup percentages. The scope+priority system allows layered pricing: e.g. 45% for a specific product, 40% for a category, 30% for everything else.
+
+---
+
+### Task 20 — Push Log ✅ DONE (2026-04-16)
+
+**Files:** `backend/modules/push_log/models.py`, `schemas.py`, `routes.py`, `__init__.py`
+
+**What was done:**
+
+`models.py` — defines `product_push_log` table:
+- `id` — UUID primary key
+- `product_id` — FK to `products` (CASCADE delete)
+- `customer_id` — FK to `customers` (CASCADE delete)
+- `ops_product_id` — ID assigned by OPS after a successful push (`null` on failure)
+- `status` — `"pushed"`, `"failed"`, or `"skipped"`
+- `error` — error message if status is `"failed"`, otherwise `null`
+- `pushed_at` — UTC timestamp of the push attempt
+
+`routes.py`:
+- `POST /api/push-log` — called by n8n after each push attempt to record the result
+- `GET /api/products/{product_id}/push-status` — returns the **latest** push status per customer (not full history — always shows current state)
+
+**Test results (all passed):**
+- POST — log successful push ✅
+- POST — log failed push with error message ✅
+- GET — returns latest status correctly ✅
+- GET — updates after re-push ✅
+
+**Why:** Complete audit trail of every push attempt. The team can see which products were pushed to which storefronts and why any push may have failed.
 
 ---
 
@@ -254,6 +339,7 @@ python seed_demo.py
 | `python-dotenv` used but was missing from deps | `requirements.txt` | ✅ Added `python-dotenv>=1.0.0` |
 | `main.py` only registers suppliers router | `backend/main.py` | Will add ps_directory + catalog routers when Task 6 completes |
 | No `ProductImage` model | `backend/modules/catalog/` | Plan lists `product_images` table; current impl uses single `image_url` on `Product` instead |
+| `Customer` type had wrong `ops_api_key` field | `frontend/src/lib/types.ts` | ✅ Fixed to `ops_token_url` + `ops_client_id` |
 
 ---
 
@@ -266,10 +352,10 @@ backend/
   seed_demo.py               ✅  Demo data — 3 suppliers, 3 products, 10 variants
   requirements.txt           ✅  All Python deps including python-dotenv
   modules/
-    suppliers/               ✅  Model, schemas, full CRUD routes, endpoint cache service
+    suppliers/               ✅  Model, schemas, full CRUD routes, endpoint cache service, field mappings endpoint
     ps_directory/            ✅  Client + schemas  |  ❌ routes.py missing
     catalog/                 ✅  Models + schemas  |  ❌ routes.py missing
     customers/               ✅  Model, schemas, full CRUD routes, __init__
-    markup/                  ❌  Not started (Task 19)
-    push_log/                ❌  Not started (Task 20)
+    markup/                  ✅  Model, schemas, full CRUD routes, __init__
+    push_log/                ✅  Model, schemas, routes, __init__
 ```
