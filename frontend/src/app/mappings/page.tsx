@@ -20,10 +20,10 @@ export default function MappingsIndexPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--ink)" }}>
-        Field Mappings
+        Data Configuration
       </h1>
       <p className="text-sm mb-6" style={{ color: "var(--ink-muted)" }}>
-        Select a supplier to configure how its fields map to the canonical schema.
+        Select a supplier to configure how its data maps to the business schema.
       </p>
 
       {loading && (
@@ -76,7 +76,7 @@ export default function MappingsIndexPage() {
               className="px-4 py-2 rounded-md text-xs font-semibold"
               style={{ background: "var(--blue)", color: "white", textDecoration: "none" }}
             >
-              Configure Mappings
+              Configure Data
             </Link>
           </div>
         ))}

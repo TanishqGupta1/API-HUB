@@ -159,7 +159,7 @@ export default function MarkupPage() {
       {/* PAGE HEADER */}
       <div className="page-header">
         <div>
-          <div className="page-title">Markup Rules</div>
+          <div className="page-title">Pricing Rules</div>
           <div className="page-subtitle">
             {selectedCustomer
               ? `Pricing configuration for ${selectedCustomer.name}`
@@ -218,9 +218,9 @@ export default function MarkupPage() {
         {!rulesLoading && !error && rules.length === 0 && (
           <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--ink-muted)" }}>
             <div style={{ fontSize: "32px", marginBottom: "12px" }}>$</div>
-            <div style={{ fontWeight: 600, marginBottom: "6px" }}>No markup rules configured</div>
+            <div style={{ fontWeight: 600, marginBottom: "6px" }}>No pricing rules configured</div>
             <div style={{ fontSize: "13px" }}>
-              Select a customer and add markup rules to control pricing margins.
+              Select a storefront and add pricing rules to control margins.
             </div>
           </div>
         )}
@@ -267,7 +267,7 @@ export default function MarkupPage() {
                         style={{ padding: "4px 10px", fontSize: "12px" }}
                         onClick={() => handleDelete(rule.id)}
                       >
-                        Delete
+                        Remove
                       </button>
                     </td>
                   </tr>
@@ -374,7 +374,7 @@ export default function MarkupPage() {
         }}>
           <div className="panel" style={{ width: "480px", margin: 0, maxHeight: "90vh", overflowY: "auto" }}>
             <div className="panel-header">
-              <div className="panel-title">Add Markup Rule</div>
+              <div className="panel-title">Add Pricing Rule</div>
               <button
                 className="btn btn-ghost"
                 style={{ padding: "4px 12px", fontSize: "12px" }}

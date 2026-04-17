@@ -243,7 +243,7 @@ function SuppliersContent() {
                       fontFamily: "var(--font-mono)",
                     }}
                   >
-                    _QUERYING_ENDPOINT_REGISTRY...
+                    Connecting...
                   </td>
                 </tr>
               )}

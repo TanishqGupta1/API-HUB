@@ -42,7 +42,36 @@
 
   --font-head: 'Outfit', sans-serif;
   --font-mono: 'Fira Code', monospace;
+
+  /* shadcn/ui variables */
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 222.2 47.4% 11.2%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border-ui: 214.3 31.8% 91.4%;
+  --input-ui: 214.3 31.8% 91.4%;
+  --ring: 222.2 84.4% 4.9%;
+  --radius: 0.5rem;
 }
+
+@layer base {
+  * {
+    border-color: hsl(var(--border-ui));
+  }
+}
+
 
 * {
   margin: 0;
@@ -477,20 +506,6 @@ tbody tr:hover {
       transition: all 0.3s;
     }
 
-    .reveal-section.done .reveal-num {
-      background: var(--green);
-      border-color: var(--green);
-    }
-
-    .reveal-content {
-      flex: 1;
-      background: white;
-      border: 1.5px solid var(--border);
-      border-radius: 10px;
-      padding: 24px;
-      box-shadow: 3px 4px 0 var(--shadow);
-      transition: all 0.3s;
-    }
 
     .reveal-section.locked .reveal-content {
       box-shadow: none;
@@ -743,3 +758,103 @@ tbody tr:hover {
       flex: 1;
     }
 
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* API Registry Styles */
+.api-list {
+  display: grid;
+  gap: 32px;
+}
+
+.api-category {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--blue);
+}
+
+.api-entry {
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  position: relative;
+  box-shadow: 3px 4px 0 var(--shadow);
+  transition: all 0.2s;
+  margin-bottom: 16px;
+}
+
+.api-entry:hover {
+  border-color: var(--blue);
+  box-shadow: 6px 8px 0 var(--shadow);
+}
+
+.api-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.method {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 4px;
+  min-width: 64px;
+  text-align: center;
+  color: white !important;
+}
+
+.m-get {
+  background: var(--green) !important;
+}
+
+.m-post {
+  background: var(--blue) !important;
+}
+
+.path {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.api-desc {
+  font-size: 13px;
+  color: var(--ink-muted);
+  margin-bottom: 20px;
+}
+
+.api-blueprint {
+  background: var(--paper-warm);
+  border-radius: 6px;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--blue-dark);
+  white-space: pre;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.api-blueprint-label {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+}

@@ -62,11 +62,11 @@ export default function FieldMappingPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--ink)" }}>
-        Field Mappings
+        Data Configuration
       </h1>
       <p className="text-sm mb-6" style={{ color: "var(--ink-muted)" }}>
         {supplier
-          ? `${supplier.name} — map supplier fields to canonical schema`
+          ? `${supplier.name} — map supplier data to business schema`
           : "Loading…"}
       </p>
 
@@ -123,7 +123,7 @@ export default function FieldMappingPage() {
               className="px-5 py-2 rounded-md text-sm font-semibold"
               style={{ background: "var(--blue)", color: "white" }}
             >
-              Save Mappings
+              Save Configuration
             </button>
             {saved && (
               <span

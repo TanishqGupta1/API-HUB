@@ -64,8 +64,8 @@ export default function ProductDetailPage() {
   if (loading) {
     return (
       <div className="py-10 text-center text-[#888894] text-[14px]">
-        <div className="font-mono mb-2">_FETCHING_METRICS...</div>
-        Loading product datasheet...
+        <div className="font-mono mb-2">Loading dashboard...</div>
+        Accessing product data...
       </div>
     );
   }
@@ -108,7 +108,7 @@ export default function ProductDetailPage() {
                        bg-[#1e4d92] text-white shadow-[0_4px_0_#143566] transition-all
                        hover:-translate-y-px hover:shadow-[0_5px_0_#143566] disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {pushing ? "Pushing..." : "Push to OPS"}
+            {pushing ? "Publishing..." : "Publish to Store"}
           </button>
           <button
             onClick={fetchData}
@@ -281,17 +281,17 @@ export default function ProductDetailPage() {
         </table>
       </div>
 
-      {/* ── OPS Push Status ────────────────────────────── */}
+      {/* ── Storefront Publish Status ────────────────────────────── */}
       <div className="bg-white border border-[#cfccc8] rounded-lg shadow-[4px_6px_0_rgba(30,77,146,0.08)] overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 bg-[#ebe8e3] border-b border-[#cfccc8]">
           <div className="text-[14px] font-bold uppercase tracking-[0.05em] text-[#1e1e24]">
-            OPS Push Status
+            Storefront Publish Status
           </div>
         </div>
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              {["Storefront / Customer", "Status", "Pushed", "OPS Product ID", "Action"].map((h) => (
+              {["Storefront", "Status", "Pushed", "Store Product ID", "Action"].map((h) => (
                 <th
                   key={h}
                   className="text-left px-6 py-3 text-[10px] font-bold uppercase tracking-[0.1em] text-[#888894] border-b border-[#cfccc8]"
@@ -311,12 +311,12 @@ export default function ProductDetailPage() {
                   {s.status === "pushed" ? (
                     <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1 rounded-full bg-[#f0f9f4] text-[#247a52]">
                       <span className="w-1.5 h-1.5 rounded-full bg-[#247a52]" />
-                      Pushed
+                      Published
                     </span>
                   ) : s.status === "failed" ? (
                     <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1 rounded-full bg-[#fdf2f2] text-[#b93232]">
                       <span className="w-1.5 h-1.5 rounded-full bg-[#b93232]" />
-                      Auth_Error
+                      Connection Failed
                     </span>
                   ) : (
                     <span className="text-[12px] text-[#b4b4bc]">Not pushed</span>

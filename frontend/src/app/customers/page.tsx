@@ -165,8 +165,8 @@ export default function CustomersPage() {
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h1 className="text-3xl font-bold" style={{ color: "var(--ink)" }}>Customers</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--ink-muted)" }}>OPS storefront configurations</p>
+          <h1 className="text-3xl font-bold" style={{ color: "var(--ink)" }}>Storefronts</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--ink-muted)" }}>OnPrintShop storefront configurations</p>
         </div>
         {!showAdd && (
           <button
@@ -174,7 +174,7 @@ export default function CustomersPage() {
             className="px-5 py-2.5 rounded-md text-sm font-semibold text-white"
             style={{ backgroundColor: "#1e4d92" }}
           >
-            + Add Customer
+            + Add Storefront
           </button>
         )}
       </div>
@@ -187,12 +187,12 @@ export default function CustomersPage() {
         <div className="rounded-lg border p-6 mb-6" style={{ borderColor: "var(--border)", background: "white" }}>
           <div className="text-xs font-semibold uppercase tracking-widest mb-5"
             style={{ color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
-            New Customer — OAuth2
+            New Storefront — OAuth2
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-4">
             <Field label="Store Name"      field="name"             placeholder="Acme Corp"                    value={form.name}             onChange={setField("name")}             error={formErrors.name} />
-            <Field label="OPS Base URL"    field="ops_base_url"     placeholder="https://acme.onprintshop.com" value={form.ops_base_url}    onChange={setField("ops_base_url")}    error={formErrors.ops_base_url} type="url" />
+            <Field label="Storefront URL"  field="ops_base_url"     placeholder="https://acme.onprintshop.com" value={form.ops_base_url}    onChange={setField("ops_base_url")}    error={formErrors.ops_base_url} type="url" />
             <Field label="Token URL"       field="ops_token_url"    placeholder="https://acme.onprintshop.com/oauth/token" value={form.ops_token_url}   onChange={setField("ops_token_url")}   error={formErrors.ops_token_url} type="url" />
             <Field label="Client ID"       field="ops_client_id"    placeholder="client_id"                    value={form.ops_client_id}   onChange={setField("ops_client_id")}   error={formErrors.ops_client_id} />
             <Field label="Client Secret"   field="ops_client_secret" placeholder="••••••••"                   value={form.ops_client_secret} onChange={setField("ops_client_secret")} error={formErrors.ops_client_secret} type="password" />
@@ -209,7 +209,7 @@ export default function CustomersPage() {
             <button onClick={handleSave} disabled={saving}
               className="px-5 py-2 rounded-md text-sm font-semibold text-white"
               style={{ backgroundColor: "#1e4d92", opacity: saving ? 0.6 : 1 }}>
-              {saving ? "Saving…" : "Save Customer"}
+              {saving ? "Saving…" : "Save Storefront"}
             </button>
             <button onClick={() => setShowAdd(false)} className="text-sm px-4 py-2"
               style={{ color: "var(--ink-muted)" }}>
@@ -223,7 +223,7 @@ export default function CustomersPage() {
       {fetchError && (
         <div className="rounded-lg border px-4 py-3 mb-5 text-sm"
           style={{ borderColor: "var(--red)", color: "var(--red)", background: "rgba(185,50,50,0.06)" }}>
-          Failed to load customers: {fetchError}
+          Failed to load storefronts: {fetchError}
         </div>
       )}
 
@@ -232,7 +232,7 @@ export default function CustomersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Name", "OPS Base URL", "Auth", "Products Pushed", "Markup Rules", "Status"].map((h) => (
+              {["Name", "Storefront URL", "Auth", "Products Published", "Pricing Rules", "Status"].map((h) => (
                 <th key={h} className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide"
                   style={{ color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
                   {h}
@@ -323,10 +323,10 @@ export default function CustomersPage() {
                 <td colSpan={7} className="px-5 py-16 text-center">
                   <div className="text-3xl mb-3">🏪</div>
                   <div className="text-sm font-semibold mb-1" style={{ color: "var(--ink)" }}>
-                    No customers configured
+                    No storefronts configured
                   </div>
                   <div className="text-xs" style={{ color: "var(--ink-muted)" }}>
-                    Add an OnPrintShop storefront to start pushing products.
+                    Add an OnPrintShop storefront to start publishing products.
                   </div>
                 </td>
               </tr>
