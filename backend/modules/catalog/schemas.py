@@ -17,6 +17,16 @@ class VariantRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProductImageRead(BaseModel):
+    id: UUID
+    url: str
+    image_type: str
+    color: Optional[str]
+    sort_order: int
+
+    model_config = {"from_attributes": True}
+
+
 class ProductRead(BaseModel):
     id: UUID
     supplier_id: UUID
@@ -24,11 +34,14 @@ class ProductRead(BaseModel):
     supplier_sku: str
     product_name: str
     brand: Optional[str]
+    category: Optional[str]
     description: Optional[str]
     product_type: str
     image_url: Optional[str]
+    ops_product_id: Optional[str]
     last_synced: Optional[datetime]
     variants: list[VariantRead] = []
+    images: list[ProductImageRead] = []
 
     model_config = {"from_attributes": True}
 
@@ -40,6 +53,7 @@ class ProductListRead(BaseModel):
     supplier_sku: str
     product_name: str
     brand: Optional[str]
+    category: Optional[str]
     product_type: str
     image_url: Optional[str]
     variant_count: int = 0

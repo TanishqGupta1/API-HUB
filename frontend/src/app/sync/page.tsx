@@ -71,15 +71,18 @@ export default function SyncJobsPage() {
   const [fetchError, setFetchError]   = useState<string | null>(null);
   const [filterSupplier, setFilterSupplier] = useState("");
   const [filterStatus,   setFilterStatus]   = useState("");
+  const [filterJobType,  setFilterJobType]  = useState("");
   const [expandedError,  setExpandedError]  = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function fetchJobs(quiet = false) {
     if (!quiet) setLoading(true);
     setFetchError(null);
     const params = new URLSearchParams();
     if (filterStatus)   params.set("status",   filterStatus);
+    if (filterJobType)  params.set("job_type", filterJobType);
     if (filterSupplier) params.set("supplier_name", filterSupplier);
     try {
       const data = await api<SyncJob[]>(`/api/sync-jobs${params.size ? `?${params}` : ""}`);
@@ -91,7 +94,7 @@ export default function SyncJobsPage() {
     }
   }
 
-  useEffect(() => { fetchJobs(); }, [filterStatus, filterSupplier]); // eslint-disable-line
+  useEffect(() => { fetchJobs(); }, [filterStatus, filterJobType, filterSupplier]); // eslint-disable-line
 
   // Poll every 5 s while any job is running
   useEffect(() => {
@@ -106,10 +109,24 @@ export default function SyncJobsPage() {
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
   }, [jobs]); // eslint-disable-line
 
+  // Background auto-refresh every 30s (independent of running-job poll)
+  useEffect(() => {
+    refreshRef.current = setInterval(() => fetchJobs(true), 30000);
+    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
+  }, [filterStatus, filterJobType, filterSupplier]); // eslint-disable-line
+
   // Supplier options derived from data
   const supplierNames = Array.from(new Set(jobs.map((j) => j.supplier_name))).sort();
 
   const STATUSES = ["completed", "running", "failed", "pending"];
+  const JOB_TYPES = [
+    { value: "full_sync", label: "Full Refresh" },
+    { value: "full", label: "Full Refresh" },
+    { value: "delta", label: "Recent Changes" },
+    { value: "inventory", label: "Inventory" },
+    { value: "pricing", label: "Pricing" },
+    { value: "images", label: "Images" },
+  ];
 
   return (
     <div>
@@ -137,6 +154,24 @@ export default function SyncJobsPage() {
             <option value="">All Suppliers</option>
             {supplierNames.map((s) => (
               <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+
+          <select
+            value={filterJobType}
+            onChange={(e) => setFilterJobType(e.target.value)}
+            className="text-sm px-3 py-2 rounded-md border outline-none"
+            style={{
+              borderColor: "var(--border)",
+              background: "white",
+              color: filterJobType ? "var(--ink)" : "var(--ink-muted)",
+              fontFamily: "var(--font-head)",
+              minWidth: 150,
+            }}
+          >
+            <option value="">All Job Types</option>
+            {JOB_TYPES.map((j) => (
+              <option key={j.value} value={j.value}>{j.label}</option>
             ))}
           </select>
 
