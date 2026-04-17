@@ -12,9 +12,11 @@ type Stats = {
 type Log = {
   id: string;
   product_name: string;
+  supplier_name: string;
   customer_name: string;
   ops_product_id: string;
   status: string;
+  error?: string;
   pushed_at: string;
 };
 
@@ -46,7 +48,7 @@ export default function Dashboard() {
 
       <div className="stats-row">
         <div className="stat-card">
-          <div className="stat-label">Vendors</div>
+          <div className="stat-label">Suppliers</div>
           <div className="stat-value">{stats.suppliers.toString().padStart(2, '0')}</div>
           <div className="stat-note">
             +1 <span style={{ fontFamily: "Arial" }}>&uarr;</span> 7d
@@ -98,9 +100,9 @@ export default function Dashboard() {
               <tr key={log.id}>
                 <td className="cell-primary">{log.supplier_name || log.product_name}</td>
                 <td className="cell-mono">
-                  {log.customer_name === 'inventory_sync_v2' ? 'inventory_sync_v2' : 
+                  {log.customer_name === 'inventory_sync_v2' ? 'Inventory Update' : 
                    log.customer_name === 'pricing_update' ? 'pricing_update' : 
-                   log.customer_name === 'delta_product_ingest' ? 'delta_product_ingest' :
+                   log.customer_name === 'delta_product_ingest' ? 'Product Sync' :
                    `push_to_${log.customer_name.toLowerCase().replace(/\s+/g, '_')}`}
                 </td>
                 <td className="cell-mono">{log.ops_product_id || "NEW"}</td>
@@ -109,7 +111,7 @@ export default function Dashboard() {
                 </td>
                 <td>
                   <span className={`badge ${log.status === 'error' ? 'badge-err' : 'badge-ok'}`}>
-                    <span className="badge-dot"></span> {log.status === 'error' ? 'Auth_Error' : 'Complete'}
+                    <span className="badge-dot"></span> {log.status === 'error' ? 'Connection Failed' : 'Complete'}
                   </span>
                 </td>
               </tr>

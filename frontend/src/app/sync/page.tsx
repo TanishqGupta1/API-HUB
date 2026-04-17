@@ -116,8 +116,8 @@ export default function SyncJobsPage() {
       {/* Header row */}
       <div className="flex justify-between items-start mb-5">
         <div>
-          <h1 className="text-3xl font-bold" style={{ color: "var(--ink)" }}>Sync Jobs</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--ink-muted)" }}>n8n workflow execution history</p>
+          <h1 className="text-3xl font-bold" style={{ color: "var(--ink)" }}>Data Updates</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--ink-muted)" }}>Execution history of your data pipelines</p>
         </div>
 
         {/* Dropdown filters */}
@@ -207,7 +207,9 @@ export default function SyncJobsPage() {
 
                   {/* Job Type */}
                   <td className="px-5 py-4" style={{ color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
-                    {j.job_type}
+                    {j.job_type === 'delta' ? 'Recent Changes' : 
+                     (j.job_type as string === 'full' || j.job_type as string === 'full_sync') ? 'Full Refresh' : 
+                     j.job_type}
                   </td>
 
                   {/* Status */}
@@ -283,12 +285,12 @@ export default function SyncJobsPage() {
                 <td colSpan={7} className="px-5 py-16 text-center">
                   <div className="text-3xl mb-3">📋</div>
                   <div className="text-sm font-semibold mb-1" style={{ color: "var(--ink)" }}>
-                    {filterStatus || filterSupplier ? "No jobs match these filters" : "No sync jobs yet"}
+                    {filterStatus || filterSupplier ? "No jobs match these filters" : "No updates yet"}
                   </div>
                   <div className="text-xs" style={{ color: "var(--ink-muted)" }}>
                     {filterStatus || filterSupplier
                       ? "Try changing the filters above."
-                      : "Jobs appear here after a pipeline run is triggered."}
+                      : "No sync history yet. Activate a supplier to see data updates here."}
                   </div>
                 </td>
               </tr>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-// import CursorTrail from "@/components/CursorTrail";
+import CursorTrail from "@/components/CursorTrail";
 import SidebarNav from "@/components/SidebarNav";
 
 export const metadata: Metadata = {
@@ -23,7 +23,7 @@ export default function RootLayout({
             {children}
           </div>
         </div>
-        {/* <CursorTrail /> */}
+        <CursorTrail />
       </body>
     </html>
   );

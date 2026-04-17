@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const NAV_SECTIONS = [
   {
-    label: "Orchestration",
+    label: "Products",
     items: [
       {
         href: "/",
@@ -29,7 +29,7 @@ const NAV_SECTIONS = [
       },
       {
         href: "/products",
-        label: "Catalog",
+        label: "Product Catalog",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -40,11 +40,11 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    label: "Management",
+    label: "Configuration",
     items: [
       {
         href: "/customers",
-        label: "Customers",
+        label: "Storefronts",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
@@ -53,7 +53,7 @@ const NAV_SECTIONS = [
       },
       {
         href: "/markup",
-        label: "Markup Rules",
+        label: "Pricing Rules",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="1" x2="12" y2="23" />
@@ -73,7 +73,7 @@ const NAV_SECTIONS = [
       },
       {
         href: "/sync",
-        label: "Sync Jobs",
+        label: "Data Updates",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
@@ -82,7 +82,7 @@ const NAV_SECTIONS = [
       },
       {
         href: "/mappings",
-        label: "Field Mapping",
+        label: "Data Configuration",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
@@ -101,15 +101,6 @@ const NAV_SECTIONS = [
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
             <line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
-          </svg>
-        ),
-      },
-      {
-        href: "/suppliers/new",
-        label: "Add Supplier",
-        icon: (
-          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
           </svg>
         ),
       },

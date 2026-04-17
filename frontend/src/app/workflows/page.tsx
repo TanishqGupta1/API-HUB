@@ -32,14 +32,14 @@ const SEED_PIPELINES: Pipeline[] = [
   {
     id: "full-sync",
     name: "Full Catalog Sync",
-    description: "ProductData + MediaContent → normalize → push to OPS",
+    description: "Product Information + Media assets → standardize → publish to Store",
     schedule: "Daily at 02:00",
     enabled: true,
     nodes: [
-      { id: "ps-fetch",   label: "PS Fetch",   sublabel: "ProductData",     status: "done",    duration: "4m 12s" },
-      { id: "ps-media",   label: "PS Media",   sublabel: "MediaContent",    status: "done",    duration: "6m 50s" },
-      { id: "normalize",  label: "Normalize",  sublabel: "Canonical schema", status: "done",    duration: "2m 08s" },
-      { id: "ops-push",   label: "OPS Push",   sublabel: "Storefront API",  status: "idle"    },
+      { id: "ps-fetch",   label: "Supplier Data", sublabel: "Metadata",        status: "done",    duration: "4m 12s" },
+      { id: "ps-media",   label: "Media",         sublabel: "Images & Assets", status: "done",    duration: "6m 50s" },
+      { id: "standardize", label: "Standardize",  sublabel: "Business schema", status: "done",    duration: "2m 08s" },
+      { id: "store-publish", label: "Store Publish", sublabel: "Storefront API",  status: "idle"    },
     ],
     lastRun: {
       id: "run-1",
@@ -57,13 +57,13 @@ const SEED_PIPELINES: Pipeline[] = [
   {
     id: "inventory",
     name: "Inventory Delta",
-    description: "Inventory service → compute delta → update OPS stock levels",
+    description: "Inventory updates → compute changes → sync storefront stock levels",
     schedule: "Every hour",
     enabled: true,
     nodes: [
-      { id: "inv-fetch", label: "INV Fetch",   sublabel: "Inventory svc",  status: "idle" },
-      { id: "delta",     label: "Delta Check", sublabel: "Compare cache",   status: "idle" },
-      { id: "inv-push",  label: "OPS Update",  sublabel: "Stock levels",    status: "idle" },
+      { id: "inv-fetch", label: "Update Check", sublabel: "Inventory source", status: "idle" },
+      { id: "delta",     label: "Difference",   sublabel: "Compare changes",  status: "idle" },
+      { id: "inv-push",  label: "Store Sync",   sublabel: "Stock levels",     status: "idle" },
     ],
     lastRun: {
       id: "run-inv-1",
@@ -81,13 +81,13 @@ const SEED_PIPELINES: Pipeline[] = [
   {
     id: "pricing",
     name: "Pricing Update",
-    description: "Fetch latest pricing from PS → apply markup rules → sync to OPS",
+    description: "Fetch latest supplier pricing → apply pricing rules → sync to Store",
     schedule: "Every 6 hours",
     enabled: false,
     nodes: [
-      { id: "price-fetch",  label: "PS Pricing",   sublabel: "PricingAndConfig", status: "idle" },
-      { id: "markup",       label: "Markup Rules",  sublabel: "Per-customer",     status: "idle" },
-      { id: "price-push",   label: "OPS Pricing",  sublabel: "Update variants",  status: "idle" },
+      { id: "price-fetch",  label: "Pricing Data", sublabel: "Configurations", status: "idle" },
+      { id: "markup",       label: "Pricing Rules", sublabel: "Per-storefront",  status: "idle" },
+      { id: "price-push",   label: "Store Pricing", sublabel: "Update variants", status: "idle" },
     ],
     lastRun: null,
     recentRuns: [],
