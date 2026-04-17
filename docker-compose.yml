@@ -28,6 +28,31 @@ services:
       postgres:
         condition: service_healthy
 
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_FUNCTION_ALLOW_EXTERNAL=*
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-nodes-onprintshop:/opt/custom-nodes/n8n-nodes-onprintshop
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        mkdir -p /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop
+        cp -r /opt/custom-nodes/n8n-nodes-onprintshop/package.json /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop/
+        cp -r /opt/custom-nodes/n8n-nodes-onprintshop/dist /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop/
+        echo '{"name":"installed-nodes","version":"1.0.0","dependencies":{"n8n-nodes-onprintshop":"*"}}' > /home/node/.n8n/nodes/package.json
+        exec n8n start
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:
+  n8n_data:
