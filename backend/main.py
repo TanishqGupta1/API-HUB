@@ -81,11 +81,9 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     products = (await db.execute(select(func.count()).select_from(Product))).scalar()
     variants = (await db.execute(select(func.count()).select_from(ProductVariant))).scalar()
     
-    # Matching prototype high-fidelity numbers for demo
-    # Baseline: 32.4k SKUs, 187k Total Variants
     return {
-        "suppliers": suppliers, 
-        "products": products + 32400, 
-        "variants": variants + 187000
+        "suppliers": suppliers,
+        "products": products,
+        "variants": variants,
     }
 

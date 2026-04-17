@@ -5,7 +5,7 @@ from pathlib import Path
 
 # Load .env before importing database (which reads os.getenv at import time)
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 from database import Base, async_session, engine
 from modules.catalog.models import Product, ProductVariant

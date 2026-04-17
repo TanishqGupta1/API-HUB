@@ -9,27 +9,32 @@ type Stats = {
   variants: number;
 };
 
-type Log = {
+type SyncJob = {
   id: string;
-  product_name: string;
-  customer_name: string;
-  ops_product_id: string;
+  supplier_name: string;
+  job_type: string;
   status: string;
-  pushed_at: string;
+  records_processed: number;
+  started_at: string;
+  finished_at: string | null;
+  error_log: string | null;
+};
+
+const JOB_TYPE_LABELS: Record<string, string> = {
+  inventory: "Inventory Update",
+  delta: "Product Sync",
+  full_sync: "Full Refresh",
+  pricing: "Pricing Update",
+  push_to_ops: "Published to Store",
 };
 
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats>({ suppliers: 0, products: 0, variants: 0 });
-  const [logs, setLogs] = useState<Log[]>([]);
+  const [jobs, setJobs] = useState<SyncJob[]>([]);
 
   useEffect(() => {
-    api<Stats>("/api/stats")
-      .then(setStats)
-      .catch(console.error);
-
-    api<Log[]>("/api/push-log?limit=8")
-      .then(setLogs)
-      .catch(console.error);
+    api<Stats>("/api/stats").then(setStats).catch(console.error);
+    api<SyncJob[]>("/api/sync-jobs?limit=5").then(setJobs).catch(console.error);
   }, []);
 
   return (
@@ -38,7 +43,7 @@ export default function Dashboard() {
         <div>
           <div className="page-title">Operational Overview</div>
           <div className="page-subtitle">
-            Drafting live sync metrics from 4 primary data sources
+            Live sync metrics from active suppliers
           </div>
         </div>
         <button className="btn btn-ghost">Export Report</button>
@@ -46,33 +51,36 @@ export default function Dashboard() {
 
       <div className="stats-row">
         <div className="stat-card">
-          <div className="stat-label">Vendors</div>
-          <div className="stat-value">{stats.suppliers.toString().padStart(2, '0')}</div>
-          <div className="stat-note">
-            +1 <span style={{ fontFamily: "Arial" }}>&uarr;</span> 7d
-          </div>
+          <div className="stat-label">Suppliers</div>
+          <div className="stat-value">{stats.suppliers.toString().padStart(2, "0")}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">SKUs Indexed</div>
-          <div className="stat-value">{(Math.max(stats.products, 32400) / 1000).toFixed(1)}k</div>
-          <div className="stat-note">+1.2k today</div>
+          <div className="stat-value">
+            {stats.products >= 1000
+              ? `${(stats.products / 1000).toFixed(1)}k`
+              : stats.products}
+          </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Total Variants</div>
-          <div className="stat-value">{(Math.max(stats.variants, 187000) / 1000).toFixed(0)}k</div>
+          <div className="stat-value">
+            {stats.variants >= 1000
+              ? `${(stats.variants / 1000).toFixed(0)}k`
+              : stats.variants}
+          </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">System Health</div>
           <div className="stat-value">
-            98<span style={{ fontSize: "18px" }}>%</span>
+            <span style={{ fontSize: "14px", color: "var(--ink-muted)" }}>—</span>
           </div>
-          <div className="stat-note">Uptime stable</div>
         </div>
       </div>
 
       <div className="panel">
         <div className="panel-header">
-          <div className="panel-title">Recent Pipeline Activity</div>
+          <div className="panel-title">Recent Data Updates</div>
           <div
             style={{
               fontFamily: "var(--font-mono)",
@@ -89,38 +97,52 @@ export default function Dashboard() {
               <th>Supplier</th>
               <th>Operation</th>
               <th>Records</th>
-              <th>Duration</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
-            {logs.map((log) => (
-              <tr key={log.id}>
-                <td className="cell-primary">{log.supplier_name || log.product_name}</td>
+            {jobs.map((job) => (
+              <tr key={job.id}>
+                <td className="cell-primary">{job.supplier_name}</td>
                 <td className="cell-mono">
-                  {log.customer_name === 'inventory_sync_v2' ? 'inventory_sync_v2' : 
-                   log.customer_name === 'pricing_update' ? 'pricing_update' : 
-                   log.customer_name === 'delta_product_ingest' ? 'delta_product_ingest' :
-                   `push_to_${log.customer_name.toLowerCase().replace(/\s+/g, '_')}`}
+                  {JOB_TYPE_LABELS[job.job_type] ?? job.job_type}
                 </td>
-                <td className="cell-mono">{log.ops_product_id || "NEW"}</td>
-                <td className="cell-mono">
-                  {log.status === 'error' ? '2.2s' : `${(Math.random() * 60 + 10).toFixed(1)}s`}
-                </td>
+                <td className="cell-mono">{job.records_processed}</td>
                 <td>
-                  <span className={`badge ${log.status === 'error' ? 'badge-err' : 'badge-ok'}`}>
-                    <span className="badge-dot"></span> {log.status === 'error' ? 'Auth_Error' : 'Complete'}
+                  <span
+                    className={`badge ${
+                      job.status === "failed"
+                        ? "badge-err"
+                        : job.status === "running"
+                        ? "badge-warn"
+                        : "badge-ok"
+                    }`}
+                  >
+                    <span className="badge-dot"></span>{" "}
+                    {job.status === "failed"
+                      ? "Connection Failed"
+                      : job.status === "running"
+                      ? "Running"
+                      : "Complete"}
                   </span>
                 </td>
               </tr>
             ))}
 
-            {logs.length === 0 && (
-                <tr>
-                    <td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "var(--ink-muted)", fontSize: "14px" }}>
-                        No recent activity recorded. Try pushing a product from the Catalog.
-                    </td>
-                </tr>
+            {jobs.length === 0 && (
+              <tr>
+                <td
+                  colSpan={4}
+                  style={{
+                    padding: "40px",
+                    textAlign: "center",
+                    color: "var(--ink-muted)",
+                    fontSize: "14px",
+                  }}
+                >
+                  No sync history yet. Activate a supplier to see updates here.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

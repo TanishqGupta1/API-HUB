@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 from cryptography.fernet import Fernet
 from sqlalchemy import Text, TypeDecorator

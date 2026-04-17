@@ -56,7 +56,7 @@ Last updated: 2026-04-16
 **Files:** `docker-compose.yml`, `backend/Dockerfile`, `backend/requirements.txt`
 
 **What was done:**
-- `docker-compose.yml` — sets up a PostgreSQL 16 container. Maps port 5434 on your Mac to 5432 inside the container (avoids conflict if you already have Postgres running locally). Includes a health check so other services wait until the DB is ready.
+- `docker-compose.yml` — sets up a PostgreSQL 16 container. Maps port 5432 on the host to 5432 inside the container. Includes a health check so other services wait until the DB is ready.
 - `backend/Dockerfile` — Python 3.12 image for the FastAPI backend. Used when running the backend inside Docker.
 - `backend/requirements.txt` — all Python dependencies: FastAPI, SQLAlchemy (async), asyncpg (Postgres driver), Pydantic, httpx (HTTP client for PS API), cryptography (Fernet encryption), python-dotenv (loads `.env` file).
 
