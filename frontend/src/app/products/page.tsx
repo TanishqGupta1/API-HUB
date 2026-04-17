@@ -35,7 +35,7 @@ export default function ProductsPage() {
       <div className="flex items-end justify-between mb-10 pb-5 border-b-2 border-[#1e1e24]">
         <div>
           <div className="text-[32px] font-extrabold tracking-[-0.04em] leading-none text-[#1e1e24]">
-            Technical Index
+            Product Catalog
           </div>
           <div className="text-[13px] text-[#888894] mt-2 font-normal">
             32.4k products indexed across 4 normalized schemas
@@ -95,7 +95,7 @@ export default function ProductsPage() {
 
         {/* Result count */}
         <div className="ml-auto font-mono text-[11px] text-[#888894]">
-          {loading ? "_QUERYING_INDEX..." : `${products.length.toLocaleString()} results`}
+          {loading ? "Loading products..." : `${products.length.toLocaleString()} results`}
         </div>
       </div>
 
@@ -103,12 +103,12 @@ export default function ProductsPage() {
       <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
         {loading ? (
           <div className="col-span-full py-10 text-center text-[#888894] text-[14px]">
-            <div className="font-mono mb-2">_QUERYING_INDEX...</div>
-            <span>Loading catalog from normalized data source</span>
+            <div className="font-mono mb-2">Loading products...</div>
+            <span>Syncing items from your connected data sources</span>
           </div>
         ) : products.length === 0 ? (
           <div className="col-span-full py-10 text-center text-[#888894] text-[14px]">
-            No products found. Adjust filters or connect a supplier.
+            <p>No products yet. Connect a supplier to start syncing products.</p>
           </div>
         ) : (
           products.map((p) => <ProductCard key={p.id} product={p} />)

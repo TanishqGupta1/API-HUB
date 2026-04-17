@@ -3,17 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const NAV_SECTIONS = [
+const NAV_ITEMS = [
   {
-    label: "Products",
+    section: "Products",
     items: [
       {
         href: "/",
         label: "Dashboard",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-            <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
           </svg>
         ),
       },
@@ -22,8 +24,9 @@ const NAV_SECTIONS = [
         label: "Suppliers",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" />
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
           </svg>
         ),
       },
@@ -32,22 +35,26 @@ const NAV_SECTIONS = [
         label: "Product Catalog",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
           </svg>
         ),
       },
     ],
   },
   {
-    label: "Configuration",
+    section: "Configuration",
     items: [
       {
         href: "/customers",
         label: "Storefronts",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
           </svg>
         ),
       },
@@ -66,7 +73,8 @@ const NAV_SECTIONS = [
         label: "Workflows",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+            <polyline points="23 4 23 10 17 10" />
+            <polyline points="1 20 1 14 7 14" />
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
           </svg>
         ),
@@ -76,7 +84,8 @@ const NAV_SECTIONS = [
         label: "Data Updates",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
           </svg>
         ),
       },
@@ -85,14 +94,15 @@ const NAV_SECTIONS = [
         label: "Data Configuration",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
           </svg>
         ),
       },
     ],
   },
   {
-    label: "Actions",
+    section: "Actions",
     items: [
       {
         href: "/api-registry",
@@ -100,7 +110,8 @@ const NAV_SECTIONS = [
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-            <line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
         ),
       },
@@ -108,12 +119,14 @@ const NAV_SECTIONS = [
   },
 ];
 
-export default function Sidebar() {
+export default function SidebarNav() {
   const pathname = usePathname();
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
-    return pathname === href || pathname.startsWith(href + "/");
+    // Strip query params for comparison
+    const base = href.split("?")[0];
+    return pathname.startsWith(base);
   };
 
   return (
@@ -123,31 +136,23 @@ export default function Sidebar() {
         <div className="sidebar-subtitle">Blueprint v0.3 | Universal Connector</div>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        {NAV_SECTIONS.map((section) => (
-          <div className="nav-group" key={section.label}>
-            <div className="nav-section">{section.label}</div>
-            {section.items.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`nav-item${isActive(item.href) ? " active" : ""}`}
-              >
-                {item.icon}
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        ))}
-      </div>
+      {NAV_ITEMS.map((group) => (
+        <div className="nav-group" key={group.section}>
+          <div className="nav-section">{group.section}</div>
+          {group.items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`nav-item${isActive(item.href) ? " active" : ""}`}
+            >
+              {item.icon}
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      ))}
 
-      <div
-        style={{
-          marginTop: "auto",
-          padding: "24px",
-          borderTop: "1px dashed var(--border)",
-        }}
-      >
+      <div style={{ marginTop: "auto", padding: "24px", borderTop: "1px dashed var(--border)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--green)" }} />
           <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase" }}>
