@@ -1,15 +1,30 @@
 "use client";
 
-import PipelineView, { type PipelineNode } from "@/components/workflows/pipeline-view";
+import PipelineView, { type PipelineNode, type NodeIcon } from "@/components/workflows/pipeline-view";
 
 const N8N_URL = process.env.NEXT_PUBLIC_N8N_URL ?? "http://localhost:5678";
 
 const PIPELINE_NODES: PipelineNode[] = [
-  { id: "supplier",  label: "Supplier",       sublabel: "Source data",     status: "idle" },
-  { id: "fetch",     label: "Fetch Data",      sublabel: "SOAP / REST",     status: "idle" },
-  { id: "normalize", label: "Normalize",       sublabel: "Canonical schema",status: "idle" },
-  { id: "store",     label: "Store in DB",     sublabel: "PostgreSQL",      status: "idle" },
-  { id: "publish",   label: "Publish to Store",sublabel: "OnPrintShop",     status: "idle" },
+  {
+    id: "supplier", label: "Supplier", sublabel: "Source data", status: "idle",
+    icon: "supplier",
+  },
+  {
+    id: "fetch", label: "Fetch Data", sublabel: "SOAP / REST", status: "idle",
+    icon: "fetch",
+  },
+  {
+    id: "normalize", label: "Normalize", sublabel: "Canonical schema", status: "idle",
+    icon: "normalize",
+  },
+  {
+    id: "store", label: "Store in DB", sublabel: "PostgreSQL", status: "idle",
+    icon: "store",
+  },
+  {
+    id: "publish", label: "Publish to Store", sublabel: "OnPrintShop", status: "idle",
+    icon: "publish",
+  },
 ];
 
 export default function WorkflowsPage() {
