@@ -66,7 +66,10 @@ async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Product)
         .where(Product.id == product_id)
-        .options(selectinload(Product.variants))
+        .options(
+            selectinload(Product.variants),
+            selectinload(Product.images),
+        )
     )
     product = result.scalar_one_or_none()
     if not product:
@@ -75,4 +78,5 @@ async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
     supplier = await db.get(Supplier, product.supplier_id)
     data = ProductRead.model_validate(product)
     data.supplier_name = supplier.name if supplier else None
+    data.images = sorted(data.images, key=lambda i: i.sort_order)
     return data

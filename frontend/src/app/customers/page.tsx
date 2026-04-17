@@ -44,6 +44,21 @@ function validateForm(f: FormState) {
   return errors;
 }
 
+function OAuth2Badge() {
+  return (
+    <Badge
+      style={{
+        background: "var(--blue-pale)",
+        color: "var(--blue)",
+        border: "none",
+        fontFamily: "var(--font-mono)",
+      }}
+    >
+      OAuth2
+    </Badge>
+  );
+}
+
 // ─── types ───────────────────────────────────────────────────────────────────
 
 type FormState = {
@@ -331,8 +346,10 @@ export default function CustomersPage() {
             <TableRow>
               <TableHead>Store Name</TableHead>
               <TableHead>OPS URL</TableHead>
+              <TableHead>Auth</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Products Pushed</TableHead>
+              <TableHead>Pricing Rules</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -342,7 +359,7 @@ export default function CustomersPage() {
             {loading &&
               [1, 2, 3].map((i) => (
                 <TableRow key={i}>
-                  {[200, 180, 80, 100, 120].map((w, j) => (
+                  {[200, 180, 70, 80, 100, 90, 120].map((w, j) => (
                     <TableCell key={j}>
                       <div
                         className="h-3 rounded animate-pulse"
@@ -374,6 +391,10 @@ export default function CustomersPage() {
                   </TableCell>
 
                   <TableCell>
+                    <OAuth2Badge />
+                  </TableCell>
+
+                  <TableCell>
                     {c.is_active ? (
                       <Badge
                         className="gap-1"
@@ -396,6 +417,12 @@ export default function CustomersPage() {
 
                   <TableCell style={{ fontFamily: "var(--font-mono)" }}>
                     {c.products_pushed > 0 ? c.products_pushed.toLocaleString() : "—"}
+                  </TableCell>
+
+                  <TableCell style={{ color: "var(--ink-muted)" }}>
+                    {c.markup_rules_count === 0
+                      ? "—"
+                      : `${c.markup_rules_count} ${c.markup_rules_count === 1 ? "rule" : "rules"}`}
                   </TableCell>
 
                   <TableCell>
@@ -430,7 +457,7 @@ export default function CustomersPage() {
             {/* Empty state */}
             {!loading && customers.length === 0 && !fetchError && (
               <TableRow>
-                <TableCell colSpan={5} className="py-16 text-center">
+                <TableCell colSpan={7} className="py-16 text-center">
                   <div className="text-sm font-semibold mb-1" style={{ color: "var(--ink)" }}>
                     No storefronts added.
                   </div>

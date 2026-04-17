@@ -22,6 +22,7 @@ class SupplierRead(BaseModel):
     promostandards_code: Optional[str]
     base_url: Optional[str]
     auth_config: dict
+    field_mappings: Optional[dict] = None
     is_active: bool
     created_at: datetime
     product_count: int = 0
