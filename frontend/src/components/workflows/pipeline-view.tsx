@@ -1,12 +1,14 @@
 "use client";
 
 export type NodeStatus = "idle" | "running" | "done" | "error";
+export type NodeIcon = "supplier" | "fetch" | "normalize" | "store" | "publish";
 
 export interface PipelineNode {
   id: string;
   label: string;
   sublabel: string;
   status: NodeStatus;
+  icon?: NodeIcon;
   /** e.g. "1m 42s" — shown when status is done or error */
   duration?: string;
 }
@@ -32,23 +34,86 @@ const STATUS_LABEL: Record<NodeStatus, string> = {
   error:   "error",
 };
 
+// ─── SVG icons matching Blueprint theme ──────────────────────────────────────
+
+function IconSupplier({ color }: { color: string }) {
+  // Truck — wholesale supplier delivering products
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="3" width="15" height="13" rx="1"/>
+      <path d="M16 8h4l3 5v3h-7V8z"/>
+      <circle cx="5.5" cy="18.5" r="2.5"/>
+      <circle cx="18.5" cy="18.5" r="2.5"/>
+    </svg>
+  );
+}
+
+function IconFetch({ color }: { color: string }) {
+  // Download arrow — pulling data from API
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+  );
+}
+
+function IconNormalize({ color }: { color: string }) {
+  // Funnel — raw data in, clean standard data out
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+    </svg>
+  );
+}
+
+function IconStore({ color }: { color: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="5" rx="9" ry="3"/>
+      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+    </svg>
+  );
+}
+
+function IconPublish({ color }: { color: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>
+  );
+}
+
+function NodeIconComponent({ icon, status }: { icon?: NodeIcon; status: NodeStatus }) {
+  const color = STATUS_COLOR[status];
+  switch (icon) {
+    case "supplier":  return <IconSupplier color={color} />;
+    case "fetch":     return <IconFetch color={color} />;
+    case "normalize": return <IconNormalize color={color} />;
+    case "store":     return <IconStore color={color} />;
+    case "publish":   return <IconPublish color={color} />;
+    default:          return null;
+  }
+}
+
+// ─── Connector ────────────────────────────────────────────────────────────────
+
 interface ConnectorProps {
-  /** The node on the left side of this connector */
   leftStatus: NodeStatus;
 }
 
-/** Animated connector arrow between two nodes */
 function Connector({ leftStatus }: ConnectorProps) {
   const isActive = leftStatus === "running";
   return (
     <div className="flex items-center shrink-0 px-1" style={{ width: 52 }}>
       <div className="relative flex-1 flex items-center" style={{ height: 2 }}>
-        {/* Base line */}
         <div
           className="absolute inset-0 rounded"
           style={{ background: isActive ? "var(--blue)" : "var(--border)", opacity: isActive ? 0.4 : 1 }}
         />
-        {/* Animated travelling dot */}
         {isActive && (
           <div
             className="absolute w-2 h-2 rounded-full"
@@ -86,6 +151,8 @@ function Connector({ leftStatus }: ConnectorProps) {
   );
 }
 
+// ─── PipelineView ─────────────────────────────────────────────────────────────
+
 interface Props {
   nodes: PipelineNode[];
 }
@@ -95,7 +162,6 @@ export default function PipelineView({ nodes }: Props) {
     <div className="flex items-center overflow-x-auto py-6 px-2">
       {nodes.map((node, i) => (
         <div key={node.id} className="flex items-center shrink-0">
-          {/* Node card */}
           <div
             className="rounded-xl border px-5 py-4 min-w-[148px] text-center transition-all duration-300"
             style={{
@@ -109,10 +175,16 @@ export default function PipelineView({ nodes }: Props) {
                   : "none",
             }}
           >
-            {/* Status indicator */}
+            {/* Icon */}
+            {node.icon && (
+              <div className="flex justify-center mb-3">
+                <NodeIconComponent icon={node.icon} status={node.status} />
+              </div>
+            )}
+
+            {/* Status indicator dot / spinner */}
             <div className="flex justify-center mb-2.5">
               {node.status === "running" ? (
-                /* Spinning ring for running */
                 <div
                   className="w-3 h-3 rounded-full border-2"
                   style={{
@@ -122,7 +194,6 @@ export default function PipelineView({ nodes }: Props) {
                   }}
                 />
               ) : (
-                /* Static dot for idle / done / error */
                 <span
                   className="w-2.5 h-2.5 rounded-full inline-block"
                   style={{
@@ -134,7 +205,9 @@ export default function PipelineView({ nodes }: Props) {
             </div>
 
             {/* Label */}
-            <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{node.label}</div>
+            <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+              {node.label}
+            </div>
 
             {/* Sub-label */}
             <div
@@ -144,7 +217,7 @@ export default function PipelineView({ nodes }: Props) {
               {node.sublabel}
             </div>
 
-            {/* Status + optional duration */}
+            {/* Status badge + duration */}
             <div className="mt-2 flex items-center justify-center gap-1.5">
               <span
                 className="text-xs font-semibold"
@@ -167,7 +240,6 @@ export default function PipelineView({ nodes }: Props) {
             </div>
           </div>
 
-          {/* Connector arrow */}
           {i < nodes.length - 1 && <Connector leftStatus={node.status} />}
         </div>
       ))}
