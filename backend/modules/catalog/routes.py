@@ -61,6 +61,29 @@ async def list_products(
     return out
 
 
+@router.get("/summary", response_model=dict)
+async def get_variant_summary(
+    supplier_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Returns unique colors and sizes for all products of a supplier."""
+    query = (
+        select(ProductVariant.color, ProductVariant.size)
+        .join(Product)
+        .where(Product.supplier_id == supplier_id)
+    )
+    result = await db.execute(query)
+    rows = result.all()
+    
+    colors = sorted(list(set(r.color for r in rows if r.color)))
+    sizes = sorted(list(set(r.size for r in rows if r.size)))
+    
+    return {
+        "colors": colors,
+        "sizes": sizes
+    }
+
+
 @router.get("/{product_id}", response_model=ProductRead)
 async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(

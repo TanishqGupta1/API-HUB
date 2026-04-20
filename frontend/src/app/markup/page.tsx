@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { Customer, MarkupRule, MarkupRuleCreate } from "@/lib/types";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -216,12 +217,21 @@ export default function MarkupPage() {
         )}
 
         {!rulesLoading && !error && rules.length === 0 && (
-          <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--ink-muted)" }}>
-            <div style={{ fontSize: "32px", marginBottom: "12px" }}>$</div>
-            <div style={{ fontWeight: 600, marginBottom: "6px" }}>No pricing rules configured</div>
-            <div style={{ fontSize: "13px" }}>
-              Select a storefront and add pricing rules to control margins.
-            </div>
+          <div className="py-20 px-8">
+            <EmptyState
+              title="No Pricing Rules"
+              description="Define your first markup rule to control margins for this storefront. Rules are applied by priority."
+              action={{
+                label: "Add Pricing Rule",
+                onClick: () => { resetForm(); setShowModal(true); },
+              }}
+              icon={
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="1" x2="12" y2="23" />
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+              }
+            />
           </div>
         )}
 

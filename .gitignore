@@ -10,3 +10,6 @@ node_modules/
 .DS_Store
 **/.DS_Store
 Screenshot 2026-04-14 at 6.44.44 PM.png
+dist/
+build/
+out/

@@ -9,3 +9,5 @@ zeep>=4.3.0
 lxml>=5.3.0
 cryptography>=43.0.0
 python-dotenv>=1.0.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

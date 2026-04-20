@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -307,9 +308,21 @@ export default function CustomersPage() {
 
             {!loading && customers.length === 0 && !fetchError && (
               <TableRow>
-                <TableCell colSpan={7} className="py-16 text-center">
-                  <div className="text-sm font-semibold mb-1" style={{ color: "var(--ink)" }}>No storefronts added.</div>
-                  <div className="text-xs" style={{ color: "var(--ink-muted)" }}>Add your OnPrintShop storefront to start publishing products.</div>
+                <TableCell colSpan={7} className="py-16">
+                  <EmptyState
+                    title="No Storefronts"
+                    description="You haven't connected any OnPrintShop storefronts yet. Connect your first store to start publishing products."
+                    action={{
+                      label: "Connect Storefront",
+                      onClick: () => { setShowForm(true); setSaveError(null); setFormErrors({}); },
+                    }}
+                    icon={
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                        <polyline points="9 22 9 12 15 12 15 22" />
+                      </svg>
+                    }
+                  />
                 </TableCell>
               </TableRow>
             )}

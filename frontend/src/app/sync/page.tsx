@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SyncJob } from "@/lib/types";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -227,9 +228,8 @@ export default function SyncJobsPage() {
             {loading && [1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
 
             {!loading && jobs.map((j) => (
-              <>
+              <React.Fragment key={j.id}>
                 <tr
-                  key={j.id}
                   className="transition-colors"
                   style={{ borderTop: "1px solid var(--border)" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "var(--paper)")}
@@ -311,22 +311,30 @@ export default function SyncJobsPage() {
                     </td>
                   </tr>
                 )}
-              </>
+              </React.Fragment>
             ))}
 
             {/* Empty state */}
             {!loading && jobs.length === 0 && !fetchError && (
               <tr>
-                <td colSpan={7} className="px-5 py-16 text-center">
-                  <div className="text-3xl mb-3">📋</div>
-                  <div className="text-sm font-semibold mb-1" style={{ color: "var(--ink)" }}>
-                    {filterStatus || filterSupplier ? "No jobs match these filters" : "No updates yet"}
-                  </div>
-                  <div className="text-xs" style={{ color: "var(--ink-muted)" }}>
-                    {filterStatus || filterSupplier
-                      ? "Try changing the filters above."
-                      : "No sync history yet. Activate a supplier to see data updates here."}
-                  </div>
+                <td colSpan={7} className="px-5 py-16">
+                  <EmptyState
+                    title={filterStatus || filterSupplier ? "No match found" : "No updates yet"}
+                    description={
+                      filterStatus || filterSupplier
+                        ? "Try adjusting your filters to see more sync activity."
+                        : "No sync history detected. Connect a supplier and trigger your first data sync to see logs here."
+                    }
+                    icon={
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16m14-2V8a2 2 0 0 0-2-2h-4" />
+                        <path d="M18 14l-4 4-2-2" />
+                        <path d="M10 9l-1 0 1 0" />
+                        <path d="M10 13l-1 0 1 0" />
+                        <path d="M10 17l-1 0 1 0" />
+                      </svg>
+                    }
+                  />
                 </td>
               </tr>
             )}
@@ -343,3 +351,5 @@ export default function SyncJobsPage() {
     </div>
   );
 }
+
+import React from "react";

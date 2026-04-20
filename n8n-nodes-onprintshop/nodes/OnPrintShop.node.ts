@@ -5472,6 +5472,55 @@ export class OnPrintShop implements INodeType {
 						if (responseData && responseData.data && responseData.data.setQuote) returnData.push(responseData.data.setQuote);
 						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
 					}
+					if (operation === 'setProductCategory') {
+						const input = JSON.parse(this.getNodeParameter('setProductCategory_input', i) as string);
+						const mutation = `mutation setProductCategory ($input: SetProductCategoryInput!) { setProductCategory (input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setProductCategory) returnData.push(responseData.data.setProductCategory);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setAssignOptions') {
+						const input = JSON.parse(this.getNodeParameter('setAssignOptions_input', i) as string);
+						const mutation = `mutation setAssignOptions ($input: SetAssignOptionsInput!) { setAssignOptions (input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setAssignOptions) returnData.push(responseData.data.setAssignOptions);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setProductSize') {
+						const input = JSON.parse(this.getNodeParameter('setProductSize_input', i) as string);
+						const mutation = `mutation setProductSize ($input: SetProductSizeInput!) { setProductSize (input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setProductSize) returnData.push(responseData.data.setProductSize);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setProductPages') {
+						const input = JSON.parse(this.getNodeParameter('setProductPages_input', i) as string);
+						const mutation = `mutation setProductPages ($input: SetProductPagesInput!) { setProductPages (input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setProductPages) returnData.push(responseData.data.setProductPages);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setMasterOptionAttributes') {
+						const input = JSON.parse(this.getNodeParameter('setMasterOptionAttributes_input', i) as string);
+						const mutation = `mutation setMasterOptionAttributes ($input: SetMasterOptionAttributesInput!) { setMasterOptionAttributes (input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setMasterOptionAttributes) returnData.push(responseData.data.setMasterOptionAttributes);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setMasterOptionAttributePrice') {
+						const input = JSON.parse(this.getNodeParameter('setMasterOptionAttributePrice_input', i) as string);
+						const mutation = `mutation setMasterOptionAttributePrice ($input: SetMasterOptionAttributePriceInput!) { setMasterOptionAttributePrice (input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setMasterOptionAttributePrice) returnData.push(responseData.data.setMasterOptionAttributePrice);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setProductOptionRules') {
+						const input = JSON.parse(this.getNodeParameter('setProductOptionRules_input', i) as string);
+						const mutation = `mutation setProductOptionRules ($input: SetProductOptionRulesInput!) { setProductOptionRules (input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setProductOptionRules) returnData.push(responseData.data.setProductOptionRules);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
 					if (operation === 'setProductDesign') {
 						const order_product_id = this.getNodeParameter('setProductDesign_order_product_id', i) as number;
 						const ziflow_link = this.getNodeParameter('setProductDesign_ziflow_link', i) as string;
@@ -8232,6 +8281,80 @@ export class OnPrintShop implements INodeType {
 						throw new NodeOperationError(
 							this.getNode(),
 							'Unexpected response format from API',
+						);
+					}
+				}
+
+				if (resource === 'mutation') {
+					const variables: IDataObject = {};
+					let mutationName = operation;
+					let inputParamName = `${operation}_input`;
+
+					// Special cases for input parameter names defined in the UI properties
+					if (operation === 'updateOrderStatus') {
+						inputParamName = 'updateOrderStatusInput';
+						const statusType = this.getNodeParameter('statusUpdateType', i) as string;
+						if (statusType === 'order') {
+							variables.orders_id = this.getNodeParameter('orders_id', i);
+						} else {
+							variables.orders_products_id = this.getNodeParameter('orders_products_id', i);
+						}
+					} else if (operation === 'setOrderProduct') {
+						variables.order_product_id = this.getNodeParameter('setOrderProduct_order_product_id', i);
+						const w = this.getNodeParameter('setOrderProduct_width', i);
+						const h = this.getNodeParameter('setOrderProduct_height', i);
+						if (w) variables.width = w;
+						if (h) variables.height = h;
+					} else if (operation === 'setBatch') {
+						variables.batch_id = this.getNodeParameter('setBatch_batch_id', i);
+					}
+
+					// Fetch the JSON input object
+					try {
+						const inputData = this.getNodeParameter(inputParamName, i) as any;
+						variables.input = typeof inputData === 'string' ? JSON.parse(inputData) : inputData;
+					} catch (e) {
+						// Fallback if parameter doesn't exist or is invalid
+						variables.input = {};
+					}
+
+					// Dynamic GraphQL Mutation Generation
+					// This translates the operation name (e.g. setProduct) into a GraphQL mutation string
+					const mutation = `
+						mutation ${mutationName} ($input: ${mutationName.charAt(0).toUpperCase() + mutationName.slice(1)}Input!, $orders_id: Int, $orders_products_id: Int, $order_product_id: Int, $batch_id: Int, $width: Float, $height: Float) {
+							${mutationName} (input: $input, orders_id: $orders_id, orders_products_id: $orders_products_id, order_product_id: $order_product_id, batch_id: $batch_id, width: $width, height: $height) {
+								result
+								message
+								id
+							}
+						}
+					`;
+
+					const responseData = await this.helpers.request({
+						method: 'POST',
+						url: `${baseUrl}/api/`,
+						headers: {
+							'Authorization': `Bearer ${accessToken}`,
+							'Content-Type': 'application/json',
+						},
+						body: {
+							query: mutation.trim(),
+							variables,
+						},
+						json: true,
+					});
+
+					if (responseData && responseData.data) {
+						returnData.push(responseData.data[mutationName]);
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(
+							this.getNode(),
+							`GraphQL Error: ${JSON.stringify(responseData.errors)}`,
+						);
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Unexpected response format from mutation API',
 						);
 					}
 				}

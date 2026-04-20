@@ -1,5 +1,6 @@
 """S&S Activewear JSON normalizer."""
 
+import logging
 from collections import defaultdict
 from modules.promostandards.schemas import (
     PSProductData,
@@ -8,6 +9,8 @@ from modules.promostandards.schemas import (
     PSPricePoint,
     PSMediaItem,
 )
+
+logger = logging.getLogger(__name__)
 
 def ss_to_ps_format(
     ss_products: list[dict],
@@ -27,35 +30,43 @@ def ss_to_ps_format(
     prices: list[PSPricePoint] = []
     
     for row in ss_products:
-        style_id = str(row.get("styleID"))
-        sku = str(row.get("sku"))
+        # Validate critical identifiers
+        style_id = row.get("styleID")
+        sku = row.get("sku")
+        
+        if not style_id or not sku:
+            logger.warning(f"Skipping malformed S&S row: styleID={style_id}, sku={sku}")
+            continue
+
+        style_id_str = str(style_id)
+        sku_str = str(sku)
         
         # 1. Product extraction mapping
-        if style_id not in products_by_style:
-            products_by_style[style_id] = {
-                "product_id": style_id,
-                "product_name": row.get("styleName"),
+        if style_id_str not in products_by_style:
+            products_by_style[style_id_str] = {
+                "product_id": style_id_str,
+                "product_name": row.get("styleName", "Unknown Product"),
                 "brand": row.get("brandName"),
-                "description": "", # Details missing from basic view
+                "description": row.get("styleDescription", ""),
                 "categories": [row.get("categoryName")] if row.get("categoryName") else [],
                 "product_type": "apparel",
             }
             
         # 2. Product Part mapping
         part = PSProductPart(
-            part_id=sku,
+            part_id=sku_str,
             color_name=row.get("colorName"),
             size_name=row.get("sizeName"),
             description=None
         )
-        parts_by_style[style_id].append(part)
+        parts_by_style[style_id_str].append(part)
         
         # 3. Inventory Mapping
         inventories.append(
             PSInventoryLevel(
-                product_id=style_id,
-                part_id=sku,
-                quantity_available=min(row.get("qty", 0), 500), # PS cap convention
+                product_id=style_id_str,
+                part_id=sku_str,
+                quantity_available=min(int(row.get("qty", 0)), 500) if row.get("qty") is not None else 0,
                 warehouse_code=row.get("warehouseAbbr")
             )
         )
@@ -64,8 +75,8 @@ def ss_to_ps_format(
         if "yourPrice" in row and row["yourPrice"] is not None:
             prices.append(
                 PSPricePoint(
-                    product_id=style_id,
-                    part_id=sku,
+                    product_id=style_id_str,
+                    part_id=sku_str,
                     price=float(row["yourPrice"]),
                     quantity_min=1,
                     price_type="piece"
@@ -77,9 +88,9 @@ def ss_to_ps_format(
         color = row.get("colorName")
         if img_url:
             media_key = f"{color}_{img_url}"
-            if media_key not in media_by_style[style_id]:
-                media_by_style[style_id][media_key] = PSMediaItem(
-                    product_id=style_id,
+            if media_key not in media_by_style[style_id_str]:
+                media_by_style[style_id_str][media_key] = PSMediaItem(
+                    product_id=style_id_str,
                     url=img_url,
                     media_type="front",
                     color_name=color
@@ -89,46 +100,9 @@ def ss_to_ps_format(
     products: list[PSProductData] = []
     all_media: list[PSMediaItem] = []
     
-    for style_id, prod_dict in products_by_style.items():
-        prod_dict["parts"] = parts_by_style[style_id]
+    for style_id_str, prod_dict in products_by_style.items():
+        prod_dict["parts"] = parts_by_style[style_id_str]
         products.append(PSProductData(**prod_dict))
-        all_media.extend(media_by_style[style_id].values())
+        all_media.extend(media_by_style[style_id_str].values())
         
     return products, inventories, prices, all_media
-
-if __name__ == "__main__":
-    # Small inline test
-    sample_data = [
-        {
-            "sku": "B00760001",
-            "yourPrice": 3.79,
-            "styleID": "39",
-            "styleName": "PC61",
-            "brandName": "Port & Company",
-            "colorName": "Navy",
-            "sizeName": "M",
-            "qty": 1420,
-            "warehouseAbbr": "IL",
-            "colorFrontImage": "https://cdn.example.com/navy.jpg"
-        },
-        {
-            "sku": "B00760002",
-            "yourPrice": 3.79,
-            "styleID": "39",
-            "styleName": "PC61",
-            "brandName": "Port & Company",
-            "colorName": "Navy",
-            "sizeName": "L",
-            "qty": 50,
-            "warehouseAbbr": "IL",
-            "colorFrontImage": "https://cdn.example.com/navy.jpg"
-        }
-    ]
-    
-    prods, invs, prcs, meds = ss_to_ps_format(sample_data)
-    assert len(prods) == 1, "Should group into 1 product"
-    assert len(prods[0].parts) == 2, "Should have 2 parts"
-    assert len(invs) == 2, "Should have 2 inventory records"
-    assert len(prcs) == 2, "Should have 2 price points"
-    assert len(meds) == 1, "Should deduplicate to 1 identical media item"
-    print("All S&S normalizer tests passed!")

@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { PSCompany, Supplier } from "@/lib/types";
 import RevealForm from "@/components/suppliers/reveal-form";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /* ── Demo product baselines per supplier slug ── */
 const PROD_BASELINE: Record<string, number> = {
@@ -217,16 +218,23 @@ function SuppliersContent() {
 
               {!loading && suppliers.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={6}
-                    style={{
-                      padding: "40px",
-                      textAlign: "center",
-                      color: "var(--ink-muted)",
-                      fontSize: "14px",
-                    }}
-                  >
-                    No suppliers connected. Click &quot;+ Connect New&quot; to begin.
+                  <td colSpan={6} className="py-16">
+                    <EmptyState
+                      title="No Suppliers Connected"
+                      description="Connect your first supplier (SanMar, S&S, 4Over) to start indexing product data into your catalog."
+                      action={{
+                        label: "Connect New Supplier",
+                        onClick: openForm,
+                      }}
+                      icon={
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="16 16 12 12 8 16" />
+                          <line x1="12" y1="12" x2="12" y2="21" />
+                          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
+                          <polyline points="16 16 12 12 8 16" />
+                        </svg>
+                      }
+                    />
                   </td>
                 </tr>
               )}

@@ -94,6 +94,19 @@ DEMO_PRODUCTS = [
             {"color": "Smoke", "size": "M",  "sku": "AA1070-SMK-M",  "base_price": "8.50", "inventory": 200},
         ],
     },
+    {
+        "supplier_slug": "4over",
+        "supplier_sku": "BC-14PT-GLS",
+        "product_name": "Premium Glossy Business Cards",
+        "brand": "4Over",
+        "description": "Standard 14pt Glossy cards, high-quality offset printing.",
+        "product_type": "print",
+        "image_url": None,
+        "variants": [
+            {"color": "CMYK Full Color", "size": "3.5x2", "sku": "4O-BC-01", "base_price": "15.00", "inventory": 1000},
+            {"color": "Black & White", "size": "3.5x2", "sku": "4O-BC-02", "base_price": "10.00", "inventory": 1000},
+        ],
+    },
 ]
 
 
