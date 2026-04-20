@@ -11,6 +11,7 @@ Each file explains what the task built and shows the exact commands to test it.
 | [Task_19_Markup_Rules.md](Task_19_Markup_Rules.md) | Markup Rules | ✅ Tested |
 | [Task_20_Push_Log.md](Task_20_Push_Log.md) | Push Log | ✅ Tested |
 | [Task_16_Field_Mapping.md](Task_16_Field_Mapping.md) | Field Mapping Page | ✅ Tested |
+| [Task_14_4Over_HMAC_Client.md](Task_14_4Over_HMAC_Client.md) | 4Over REST + HMAC Client | ✅ Tested (9/9 unit tests; E2E blocked on sandbox creds) |
 
 ## Before Running Any Tests
 
