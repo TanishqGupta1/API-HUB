@@ -30,7 +30,7 @@ SUPPLIERS = [
         "protocol": "rest",
         "promostandards_code": "SSACT",
         "base_url": "https://api.ssactivewear.com/v2",
-        "auth_config": {"account_number": "demo_acct", "key": "demo_key"},
+        "auth_config": {"account_number": "demo_acct", "api_key": "demo_key"},
     },
     {
         "name": "Alphabroder",
