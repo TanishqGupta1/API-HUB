@@ -55,6 +55,7 @@ class ProductListRead(BaseModel):
     product_name: str
     brand: Optional[str]
     category: Optional[str]
+    category_id: Optional[UUID] = None
     product_type: str
     image_url: Optional[str]
     variant_count: int = 0
