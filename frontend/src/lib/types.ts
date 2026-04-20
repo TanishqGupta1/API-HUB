@@ -99,6 +99,16 @@ export interface ProductListItem {
   variant_count: number;
 }
 
+/* ─── Category (hierarchical) ────────────────────────────────────────────── */
+export interface Category {
+  id: string;
+  supplier_id: string;
+  external_id: string;
+  name: string;
+  parent_id: string | null;
+  sort_order: number;
+}
+
 /* ─── Customer ───────────────────────────────────────────────────────────── */
 export interface Customer {
   id: string;
