@@ -55,6 +55,7 @@ def apply_markup(base_price: Optional[Decimal], rule: Optional[Any]) -> Optional
     if rule is None:
         return Decimal(base_price).quantize(CENT, rounding=ROUND_HALF_UP)
 
+    # str() coercion keeps float→Decimal round-trips exact (avoids Decimal(0.1))
     base = Decimal(str(base_price))
     markup_pct = Decimal(str(rule.markup_pct))
     price = base * (Decimal("1") + markup_pct / HUNDRED)
