@@ -1,158 +1,106 @@
 # Sinchana — Sprint Tasks
 
-**Status:** 4/4 V1a/V1f sprint tasks shipped. Three new tasks added below for V1c + V1g.
-**Branch:** `sinchana-sprint-v1` (merged) → start `sinchana-sprint-v2`
+**Sprint:** Storefront UI redesign
+**Spec:** `docs/superpowers/specs/2026-04-20-storefront-ui-redesign-design.md`
+**Implementation plan:** `docs/superpowers/plans/2026-04-20-storefront-ui-redesign.md`
+**Branch:** cut from `main` as `sinchana/storefront-<slug>` per task. One PR per task.
 
 ---
 
-## ✅ Completed
+## Overview
 
-- **Task 0.3** — shadcn/ui installed (`frontend/components.json` + 7 UI components present)
-- **Task 20** — Terminology + sidebar rename (no `_QUERYING_`, `Vendors`, `SOAP`, `WSDL` visible in UI)
-- **Task 21** — Simplified supplier form rewritten as 3-step flow (`frontend/src/components/suppliers/reveal-form.tsx`)
-- **Task 2** — PS response Pydantic schemas (`backend/modules/promostandards/schemas.py` — PSProductData, PSProductPart, PSInventoryLevel, PSPricePoint, PSMediaItem)
+You own grid, category navigation, filter UI, and final polish. **All 8 tasks run in parallel** — they touch disjoint files. Ship in any order. If a task needs code from Vidhi or Urvashi that hasn't shipped yet, write a local stub with the interface below and move on.
+
+## Files you own (nobody else writes these)
+
+- `frontend/src/components/storefront/left-rail.tsx` — NEW
+- `frontend/src/components/storefront/mobile-filter-sheet.tsx` — NEW
+- `frontend/src/components/storefront/filter-chip-bar.tsx` — NEW
+- `frontend/src/components/storefront/storefront-product-card.tsx` — EDIT
+- `frontend/src/app/storefront/vg/page.tsx` — REWRITE
+- `frontend/src/app/storefront/vg/category/[category_id]/page.tsx` — REWRITE
+- `frontend/src/lib/types.ts` — EDIT (extend `ProductListItem`)
+- `frontend/.gitignore` — EDIT (add `*.tsbuildinfo`)
+- `frontend/src/components/storefront/category-nav.tsx` — DELETE
+
+## Integration contracts (other people's files you import)
+
+If you import a file that hasn't been shipped yet, create a local stub with the signature below. Replace with their real component via rebase when their PR merges.
+
+| Imported from | Component | Interface |
+|---|---|---|
+| Vidhi 7 | `useSearch()` from `@/components/storefront/search-context` | returns `{ query: string; setQuery: (q: string) => void }` |
+| Urvashi 2 | backend `GET /api/products` response | new fields on `ProductListItem`: `price_min`, `price_max`, `total_inventory`, `category_id` (all optional) |
+| Urvashi 4 | no direct import (route group is orthogonal) | — |
+
+If Vidhi hasn't shipped SearchContext yet, stub at top of your page:
+```ts
+const useSearch = () => ({ query: "", setQuery: () => {} }); // replaced by Vidhi 7
+```
 
 ---
 
-## Pending Tasks
+## Tasks
 
-### Task 8a: S&S Activewear → PSProductData Mapping
+1. **Plan Task 8 — LeftRail**
+   - Collapsible 260px/48px tree, sticky under top bar, per-category count.
+   - localStorage key: `vg-rail-collapsed`.
+   - Props: `categories: Category[]`, `counts: Record<string, number>`. No data fetch inside.
+   - Acceptance: active route = blueprint blue fill; nested categories indent 14px per level.
 
-**Priority:** Start anytime. Parallel with Urvashi's Task 8 REST client.
-**File to create:** `backend/modules/rest_connector/ss_normalizer.py`
-**Depends on:** V1a Task 2 (your PS schemas — already done) and Urvashi's Task 8 client (in progress)
+2. **Plan Task 10 — MobileFilterSheet**
+   - Floating Filter FAB at `< 768px` bottom-right; opens bottom sheet wrapping `<LeftRail>`.
+   - Escape + backdrop click close; `role="dialog" aria-modal="true"`.
+   - Acceptance: FAB invisible on desktop (Tailwind `md:hidden`).
 
-### What this does
-S&S Activewear returns JSON (not SOAP XML). Your job is the mapping layer: take S&S JSON and emit the same `PSProductData` / `PSProductPart` / `PSInventoryLevel` / `PSPricePoint` / `PSMediaItem` models you already defined in Task 2. The normalizer from V1a Task 4 (Tanishq) consumes these unchanged — no DB work here.
+3. **Plan Task 12 — FilterChipBar**
+   - Props: `inStockOnly`, `onInStockChange`, `sort`, `onSortChange`, `query` (display only).
+   - Active chip = blueprint blue fill with `×`; inactive = white border.
+   - Right side: sort select + Clear all link.
 
-### S&S API response shape (reference)
-`GET https://api.ssactivewear.com/V2/Products/` returns:
-```json
-[
-  {
-    "sku": "B00760001",
-    "yourPrice": 3.79,
-    "styleID": 39,
-    "styleName": "PC61",
-    "brandName": "Port & Company",
-    "colorName": "Navy",
-    "sizeName": "M",
-    "qty": 1420,
-    "warehouseAbbr": "IL",
-    "colorFrontImage": "https://cdn.ssactivewear.com/..."
-  }
-]
-```
+4. **Plan Task 13 — StorefrontProductCard upgrades**
+   - Add price band (min–max) and OUT badge top-right when `total_inventory <= 0`.
+   - Extend `ProductListItem` in `frontend/src/lib/types.ts`:
+     ```ts
+     price_min: number | null;
+     price_max: number | null;
+     total_inventory: number | null;
+     category_id: string | null;
+     ```
+   - If Urvashi 2 not shipped, backend returns null for new fields — card handles gracefully (no band, no badge).
 
-Each row is a part-level SKU. You group by `styleID` to form `PSProductData`, and each row becomes one `PSProductPart` + `PSInventoryLevel` + `PSPricePoint` + `PSMediaItem`.
+5. **Plan Task 11 — Rewrite `/storefront/vg/page.tsx`**
+   - Page renders grid + `<FilterChipBar>` only. Chrome comes from layout (Vidhi 5/9).
+   - Client-side filter: name/sku/brand via `useSearch()`; in-stock via FilterChipBar; sort name A-Z / Z-A / most variants.
+   - Acceptance: empty state when filters exclude all.
 
-### Function signature
+6. **Plan Task 19 — Rewrite category page** (`app/storefront/vg/category/[category_id]/page.tsx`)
+   - Same layout as Task 11, adds breadcrumb at top.
+   - Products fetched with `?supplier_id=<vg>&category_id=<id>` (server resolves descendants).
 
-```python
-def ss_to_ps_format(
-    ss_products: list[dict],
-) -> tuple[
-    list[PSProductData],
-    list[PSInventoryLevel],
-    list[PSPricePoint],
-    list[PSMediaItem],
-]:
-    """Group S&S part rows by styleID → emit PS-format typed models."""
-```
+7. **Plan Task 20 — Dead code + a11y + gitignore**
+   - `git rm frontend/src/components/storefront/category-nav.tsx`.
+   - Grep for leftover imports: `grep -rn "category-nav" frontend/src || true`.
+   - Add `*.tsbuildinfo` to `frontend/.gitignore`.
+   - Lighthouse Accessibility audit on `/storefront/vg` and any PDP URL. Fix anything below 90 (alt attrs, contrast).
 
-### Steps
-
-- [ ] **Step 1:** Create `backend/modules/rest_connector/__init__.py` (empty) if Urvashi hasn't already.
-- [ ] **Step 2:** Create `ss_normalizer.py` with the mapping logic. Group by `styleID`, aggregate parts, dedupe images by URL.
-- [ ] **Step 3:** Write a small inline test with 3–5 sample S&S rows that asserts the grouping produces exactly 1 `PSProductData` with correct parts.
-- [ ] **Step 4:** Commit: `feat: S&S JSON → PSProductData mapping (reuses V1a schemas)`
+8. **Housekeeping follow-up (from PR #19 review)**
+   - Grep `frontend/src/app` for any inline `style={{...}}` block > 5 lines. Convert to Tailwind utilities when obvious. Flag unclear cases in PR description — do not invent.
 
 ---
 
-### Task 10a: n8n Node — UI Field Definitions for 7 Missing Mutations
+## Rules
 
-**Priority:** Unblocked — can start now.
-**File:** `api-hub/n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts`
-**Depends on:** Nothing (field definitions are declarative)
+- Follow plan's code blocks verbatim for Tasks 8, 10, 12.
+- Blueprint tokens only: paper `#f2f0ed`, ink `#1e1e24`, blueprint `#1e4d92`, muted `#888894`, border `#cfccc8`.
+- No Co-Authored-By lines in commits.
+- One PR per task. PR title = `feat(storefront): <task name>`.
 
-### What this does
-The OnPrintShop n8n node currently has 4 of 11 required product mutations. Your job is to add the **UI field definitions** for the remaining 7 — the dropdowns, text inputs, and parameter schemas that show up in the n8n editor. Tanishq will wire the GraphQL execution logic in Task 10b.
+## Running locally
 
-### Mutations needing UI fields
-
-| Operation | Description | Key input fields |
-|-----------|-------------|------------------|
-| `setProductCategory` | Assign product to OPS category | `product_id`, `category_id` |
-| `setAssignOptions` | Link option groups to product | `product_id`, `option_group_ids[]` |
-| `setProductSize` | Set product dimensions | `product_id`, `width`, `height`, `depth`, `weight`, `unit` |
-| `setProductPages` | Set page count (print products) | `product_id`, `page_count` |
-| `setMasterOptionAttributes` | Define option attributes | `option_group_id`, `attributes[]` |
-| `setMasterOptionAttributePrice` | Price per option attribute | `attribute_id`, `price` |
-| `setProductOptionRules` | Inter-option rules | `product_id`, `rules[]` |
-
-**Exact `input` field shapes come from the OPS Postman collection** (blocker: Tanishq is chasing Christian). Until that arrives, scaffold with best-guess field names and `placeholder: "TBD — see Postman collection"` in descriptions.
-
-### Steps
-
-- [ ] **Step 1:** Read how the existing `setProduct` and `setProductPrice` UI fields are defined in `OnPrintShop.node.ts` (search for `displayOptions` and `resource: 'product'`). Follow that pattern.
-- [ ] **Step 2:** Add option entries to the `operation` dropdown for each of the 7 new mutations. Place them under `resource: 'product'`.
-- [ ] **Step 3:** For each operation, add the parameter field definitions with `displayOptions.show.operation` set to the matching operation name.
-- [ ] **Step 4:** Run `npm run build` in `n8n-nodes-onprintshop/` — must compile cleanly.
-- [ ] **Step 5:** Restart n8n (`docker compose restart n8n`) and verify each new operation appears in the OnPrintShop node's dropdown.
-- [ ] **Step 6:** Commit: `feat: scaffold UI fields for 7 missing OPS product mutations (execution logic pending)`
-
----
-
-### Task 23a: Scaffold OPS Storefront Config Page (Frontend)
-
-**Priority:** Start after Task 10a or in parallel.
-**Files to create:**
-- `frontend/src/app/products/configure/page.tsx`
-- `frontend/src/components/products/category-assign.tsx`
-- `frontend/src/components/products/options-mapping.tsx`
-- `frontend/src/components/products/pricing-preview.tsx`
-
-### What this does
-Build the frontend shell for V1g Task 23 — the page where users map synced products to OPS categories, options, and pricing rules. Three sections (Categories / Options / Pricing) with mocked data for now. The backend module (`ops_config`) is blocked on OPS credentials, so you're building the UI against stub data that Tanishq will wire later.
-
-### Page layout
+```bash
+docker compose up -d postgres n8n
+cd backend && source .venv/bin/activate && uvicorn main:app --port 8000 &
+cd frontend && npm run dev &
+# http://localhost:3000/storefront/vg
 ```
-┌─────────────────────────────────────────┐
-│ Storefront Product Setup                │
-│ ─────────────────────────────────────   │
-│ [Tab: Categories] [Options] [Pricing]   │
-│                                         │
-│ <TabContent for active tab>             │
-└─────────────────────────────────────────┘
-```
-
-Use shadcn `<Tabs>`. Each tab hosts one of the three components.
-
-### Components
-
-**`category-assign.tsx`**
-- Fetches (stubbed) `GET /api/ops/{customer_id}/categories` — use hardcoded sample until backend exists: `[{id: "c1", name: "T-Shirts"}, {id: "c2", name: "Polos"}]`
-- Table of synced products with a category dropdown per row
-- "Save Mapping" button (no-op for now — logs to console)
-
-**`options-mapping.tsx`**
-- Stubbed OPS master options: Color, Size, Material
-- Side-by-side list: supplier option values (left) ↔ OPS option attributes (right)
-- Drag-or-dropdown mapping UI (use shadcn `<Select>` per row for simplicity)
-
-**`pricing-preview.tsx`**
-- Product picker (dropdown of synced products)
-- Shows: base price → markup applied → rounded → final display price
-- Read-only preview — changes happen on the existing Pricing Rules page
-
-### Steps
-- [ ] **Step 1:** Add "Product Setup" link to sidebar (edit `components/Sidebar.tsx` — place under "Configuration" section, route `/products/configure`).
-- [ ] **Step 2:** Scaffold `page.tsx` with shadcn Tabs + three empty component imports.
-- [ ] **Step 3:** Build each of the three components with stub data. Include empty states and loading skeletons.
-- [ ] **Step 4:** Verify `npm run dev` renders the page cleanly at `/products/configure`.
-- [ ] **Step 5:** Commit: `feat: scaffold Storefront Product Setup page (Categories / Options / Pricing tabs with stub data)`
-
-### Notes
-- Do NOT hit any OPS API or `/api/ops/*` endpoint yet. Those endpoints don't exist.
-- Use `TODO(ops-config)` comments wherever you stub data so Tanishq can grep for them later.
-- Keep the visual design consistent with existing Blueprint design tokens (Outfit font, blueprint blue `#1e4d92`, paper `#f2f0ed`).

@@ -1,14 +1,16 @@
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel
 
+Protocol = Literal["soap", "rest", "hmac", "ops_graphql", "promostandards"]
+
 
 class SupplierCreate(BaseModel):
     name: str
     slug: str
-    protocol: str
+    protocol: Protocol
     promostandards_code: Optional[str] = None
     base_url: Optional[str] = None
     auth_config: dict = {}

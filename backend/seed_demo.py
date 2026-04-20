@@ -49,6 +49,17 @@ SUPPLIERS = [
         "base_url": "https://api.4over.com",
         "auth_config": {"api_key": "demo_4over_key"},
     },
+    {
+        "name": "Visual Graphics OPS",
+        "slug": "vg-ops",
+        "protocol": "ops_graphql",
+        "base_url": "https://vg.onprintshop.com",
+        "auth_config": {
+            "n8n_credential_id": "PLACEHOLDER_CREDENTIAL_ID",
+            "store_url": "https://vg.onprintshop.com",
+        },
+        "is_active": False,  # flip to True once Christian provides real OPS OAuth creds
+    },
 ]
 
 DEMO_PRODUCTS = [

@@ -1,165 +1,104 @@
 # Urvashi — Sprint Tasks
 
-**Status:** 4/5 V0/V1a sprint tasks shipped. Task 5 (sync routes) still pending — blocked on Vidhi's Task 3 + Tanishq's Tasks 3b + 4. Three new tasks added below for V1b + V1c.
-**Branch:** `urvashi-sprint-v1` (mostly merged) → `urvashi-sprint-v2` for new work
+**Sprint:** Storefront UI redesign
+**Spec:** `docs/superpowers/specs/2026-04-20-storefront-ui-redesign-design.md`
+**Implementation plan:** `docs/superpowers/plans/2026-04-20-storefront-ui-redesign.md`
+**Branch:** cut from `main` as `urvashi/storefront-<slug>` per task. One PR per task.
 
 ---
 
-## ✅ Completed
+## Overview
 
-- **Task 0.1** — Postgres port reverted to `5432:5432` in `docker-compose.yml`
-- **Task 0.2** — `load_dotenv` path fixed in `backend/database.py` and `seed_demo.py`
-- **Task 22** — Dashboard wired to `/api/stats` + `/api/sync-jobs` (also covers V0.6)
-- **Task 1** — Schema updates: `UniqueConstraint`s on Product + Variant, `category`, `ops_product_id`, `ProductImage` model
+Backend aggregates + one route migration. **All 4 tasks run in parallel** — they touch disjoint files (schemas.py isn't touched by anyone else; routes.py isn't touched by anyone else; route migration only moves admin pages, not storefront). Ship in any order.
 
----
+## Files you own (nobody else writes these)
 
-## Pending Tasks
+- `backend/modules/catalog/schemas.py` — EDIT (extend `ProductListRead` + `ProductRead`)
+- `backend/modules/catalog/routes.py` — EDIT (aggregate query rewrite)
+- `frontend/src/app/(admin)/layout.tsx` — NEW (admin chrome)
+- `frontend/src/app/layout.tsx` — EDIT (slim root)
+- Moved directories (`git mv` under `(admin)/`):
+  - `frontend/src/app/page.tsx` → `(admin)/page.tsx`
+  - `frontend/src/app/suppliers/**` → `(admin)/suppliers/**`
+  - `frontend/src/app/customers/**` → `(admin)/customers/**`
+  - `frontend/src/app/markup/**` → `(admin)/markup/**`
+  - `frontend/src/app/workflows/**` → `(admin)/workflows/**`
+  - `frontend/src/app/sync/**` → `(admin)/sync/**`
+  - `frontend/src/app/mappings/**` → `(admin)/mappings/**`
+  - `frontend/src/app/api-registry/**` → `(admin)/api-registry/**`
+  - `frontend/src/app/products/**` → `(admin)/products/**`
 
-### Task 5: Sync Trigger Endpoints *(BLOCKED — waiting on Vidhi T3 + Tanishq T3b/T4)*
+## Integration contracts
 
-**Priority:** Start as soon as Tanishq's Task 4 (normalizer) is merged. You can draft the route file now against the expected imports; it just won't run until the upstream pieces land.
-**Files:**
-- Create: `backend/modules/promostandards/routes.py`
-- Modify: `backend/main.py` — one import + one `include_router` call
-
-### What this does
-FastAPI endpoints n8n calls to trigger syncs. Returns `202 Accepted` with a job ID; actual SOAP work runs as a background task.
-
-### Endpoints
-```
-POST /api/sync/{supplier_id}/products
-POST /api/sync/{supplier_id}/inventory
-POST /api/sync/{supplier_id}/pricing
-GET  /api/sync/{supplier_id}/status
-```
-
-*(Full reference implementation was included in the v1 sprint plan — see the archived version of this file or the V1 plan at `plans/2026-04-16-v1-integration-pipeline.md` Task 5. Code unchanged.)*
-
-### Steps
-- [x] Confirm Vidhi's `resolver.py` exists. Tanishq's `client.py` + `normalizer.py` still pending — routes drafted against expected imports (lazy-loaded inside background tasks).
-- [x] Create routes.py importing from `.client`, `.normalizer`, `.resolver`.
-- [x] Register router in `main.py`.
-- [x] Verify `http://localhost:8000/docs` shows the sync endpoints (all 4 live; `GET /status` works end-to-end against seeded SanMar).
-- [ ] Commit: `feat: sync trigger endpoints — POST /api/sync/{supplier_id}/products|inventory|pricing`
-
-**Blockers surfaced during live testing (flag to teammates):**
-- Vidhi T3 bug: `resolver.py` reads `ep["ServiceType"]` + `ep["ProductionURL"]`, but the PS directory actually returns nested `ep["Service"]["ServiceType"]["Name"]` + `ep["URL"]`. Confirmed against SanMar's live endpoint cache. Resolver needs to read the nested path.
-- Tanishq T3b/T4 still not merged — `client.py` + `normalizer.py` missing. Routes lazy-import them, so the app boots cleanly; background tasks will ImportError until these land.
+No imports from Sinchana or Vidhi. Your work is standalone. Sinchana + Vidhi depend on your schema fields existing, but they handle null/missing fields gracefully (their stubs). You do not need to wait for them.
 
 ---
 
-### Task 7: Alphabroder Supplier Row
+## Tasks
 
-**Priority:** 10 minutes of work, do anytime.
-**File:** via API call — but also add to `backend/seed_demo.py` so future fresh setups include it.
+1. **Plan Task 1 — Add aggregate fields to `ProductListRead` and `category_id` to both read schemas**
+   - Open `backend/modules/catalog/schemas.py`.
+   - In `ProductListRead` add:
+     ```py
+     category_id: Optional[UUID] = None
+     price_min: Optional[Decimal] = None
+     price_max: Optional[Decimal] = None
+     total_inventory: Optional[int] = None
+     ```
+   - In `ProductRead` add, right after `category`:
+     ```py
+     category_id: Optional[UUID] = None
+     ```
+   - `Decimal` + `UUID` imports already present. This combines Plan Tasks 1 + 3 into one PR because both touch the same file.
+   - Acceptance: `/api/products` and `/api/products/{id}` responses include the new fields (null until Task 2 computes them).
 
-### What this does
-Alphabroder is PromoStandards-compliant. No code needed — just create a DB row. Demonstrates the "suppliers are config, not code" principle.
+2. **Plan Task 2 — Compute aggregates in `list_products`**
+   - Open `backend/modules/catalog/routes.py`.
+   - Replace the per-product variant-count loop with a single aggregate query grouped by `product_id`, yielding `variant_count`, `price_min`, `price_max`, `total_inventory`.
+   - Plan file has the full replacement block — copy verbatim.
+   - Acceptance: one DB round trip per `/api/products` call; each response row populated with real min/max/sum.
 
-### Steps
-- [x] **Step 1:** Alphabroder already present in `seed_demo.py`; updated to match spec — proper case name, placeholder credentials, `is_active=False`. Kept `protocol="soap"` for consistency with SanMar's seed entry (sync routes accept both "soap" and "promostandards").
-- [x] **Step 2:** Row updated in live DB via script against `async_session` (seed script skips existing rows). Verified via `GET /api/suppliers` and `POST /api/sync/.../products` returns 409 "not active" as expected.
-- [x] **Step 3:** Commit: `feat: add Alphabroder supplier row (PromoStandards, zero code)`
+3. **Plan Task 4 — Route group migration**
+   - Create `frontend/src/app/(admin)/layout.tsx`:
+     ```tsx
+     import Sidebar from "@/components/Sidebar";
 
----
-
-### Task 8: S&S Activewear REST Adapter
-
-**Priority:** After Task 7. Independent of V1a — has its own protocol path.
-**Files to create:**
-- `backend/modules/rest_connector/__init__.py`
-- `backend/modules/rest_connector/client.py` (the `RESTConnectorClient` class)
-
-**Coordination:** Sinchana owns the S&S → PSProductData mapping (Task 8a, `ss_normalizer.py`). You own the HTTP client.
-
-### What this does
-S&S Activewear API: `https://api.ssactivewear.com/V2`, HTTP Basic Auth (account number + API key from `supplier.auth_config`).
-
-### Class skeleton
-```python
-import httpx
-
-class RESTConnectorClient:
-    def __init__(self, base_url: str, auth_config: dict):
-        self.base_url = base_url.rstrip("/")
-        self.auth = (auth_config["account_number"], auth_config["api_key"])
-
-    async def get_products(self) -> list[dict]:
-        async with httpx.AsyncClient(auth=self.auth, timeout=60.0) as c:
-            r = await c.get(f"{self.base_url}/Products/")
-            r.raise_for_status()
-            return r.json()
-
-    async def get_styles(self) -> list[dict]: ...
-    async def get_categories(self) -> list[dict]: ...
-```
-
-### Sync route branching
-In `modules/promostandards/routes.py` (Task 5), add a `supplier.protocol` branch:
-```python
-if supplier.protocol == "promostandards":
-    # existing SOAP path
-elif supplier.protocol == "rest":
-    client = RESTConnectorClient(supplier.auth_config["base_url"], supplier.auth_config)
-    raw = await client.get_products()
-    ps_products, inv, price, media = ss_to_ps_format(raw)  # Sinchana's mapper
-    await upsert_products(db, supplier_id, ps_products, inv, price, media)
-```
-
-### Steps
-- [ ] Implement `RESTConnectorClient` with 3 methods.
-- [ ] Coordinate with Sinchana on the fixture JSON she'll use for testing `ss_to_ps_format`.
-- [ ] Extend the sync route (Task 5) with the `rest` branch — hand-merge with Vidhi's 4Over branch (Task 16) to avoid conflicts.
-- [ ] Commit: `feat: S&S Activewear REST client with HTTP Basic Auth`
+     export default function AdminLayout({ children }: { children: React.ReactNode }) {
+       return (
+         <div className="flex min-h-screen bg-[#f2f0ed] text-[#1e1e24]">
+           <Sidebar />
+           <main className="flex-1 px-8 py-8 ml-[260px]">{children}</main>
+         </div>
+       );
+     }
+     ```
+     (Copy the actual wrapper markup from the current `app/layout.tsx` so admin chrome matches exactly.)
+   - Slim `frontend/src/app/layout.tsx` to plain html/body/globals.css — admin chrome moves into `(admin)/layout.tsx`.
+   - Move 9 directories with `git mv` (list in "Files you own" above).
+   - Acceptance: `/`, `/suppliers`, `/workflows`, etc. return 200 with admin sidebar still rendering. `/storefront/vg` unaffected because `storefront/` is outside the `(admin)` group.
 
 ---
 
-### Task 11: Markup Rule Execution Engine
+## Rules
 
-**Priority:** Unblocked — start anytime. Independent of all sync work.
-**File to create:** `backend/modules/markup/engine.py`
-**Endpoint to add:** `GET /api/push/{customer_id}/product/{product_id}/payload`
+- Task 2 is ONE aggregate `select()` with `func.count / min / max / sum`. No per-product subqueries.
+- Task 4 uses `git mv` to preserve history — not `mv`.
+- Schema changes are additive (all new fields optional with `= None`).
+- No Co-Authored-By lines in commits.
+- One PR per task. PR title = `feat(backend): ...` or `refactor(frontend): route group (admin)`.
 
-### What this does
-Applies customer-specific markup rules to a product's variants and returns the final OPS-ready payload. n8n calls this endpoint before invoking `setProduct` on each product.
+## Running locally
 
-### Rule resolution order (first match wins, sorted by `priority desc`)
-1. `scope = "product:{supplier_sku}"` — product-level override
-2. `scope = "category:{category_name}"`
-3. `scope = "all"` — global default
+```bash
+docker compose up -d postgres
+cd backend && source .venv/bin/activate && uvicorn main:app --port 8000
 
-### Calculation
-```python
-markup_price = base_price * (1 + markup_pct / 100)
-if min_margin and markup_price < base_price * (1 + min_margin / 100):
-    markup_price = base_price * (1 + min_margin / 100)
-if rounding == "nearest_99":
-    markup_price = floor(markup_price) + Decimal("0.99")
-elif rounding == "nearest_dollar":
-    markup_price = Decimal(round(markup_price))
+# Task 1/2 check:
+VG_ID=$(curl -s http://localhost:8000/api/suppliers | python3 -c 'import sys,json; print([s["id"] for s in json.load(sys.stdin) if s["slug"]=="vg-ops"][0])')
+curl -s "http://localhost:8000/api/products?supplier_id=$VG_ID&limit=3" | python3 -m json.tool | grep -E 'price_|inventory|category_id'
+
+# Task 4 check:
+cd frontend && npm run dev
+for p in / /suppliers /workflows /storefront/vg; do curl -sI "http://localhost:3000$p" | head -1; done
+# all 200
 ```
-
-### Function signature
-```python
-async def calculate_price(
-    db: AsyncSession, customer_id: UUID, product_id: UUID
-) -> dict:
-    """Return {product: {...}, variants: [{sku, color, size, final_price, ...}], ...}"""
-```
-
-### Endpoint response shape
-```json
-{
-  "product": {"supplier_sku": "PC61", "name": "...", "brand": "...", "category": "T-Shirts"},
-  "variants": [{"sku": "PC61-NVY-M", "color": "Navy", "size": "M", "base_price": 3.99, "final_price": 5.99}],
-  "images": [{"url": "...", "image_type": "front"}]
-}
-```
-
-### Steps
-- [ ] **Step 1:** Write the rule resolution logic (query `markup_rules` table, order by priority desc, first match wins).
-- [ ] **Step 2:** Write `calculate_price` — load product + variants + images + applicable rule, apply math, return the dict.
-- [ ] **Step 3:** Add the route to `backend/modules/markup/routes.py` (or a new `backend/modules/ops_push/routes.py` if Vidhi creates it for Task 13).
-- [ ] **Step 4:** Write a pytest with 3 scenarios: global rule only, category override, product override. Verify precedence.
-- [ ] **Step 5:** Commit: `feat: markup engine + push payload endpoint for n8n OPS push`

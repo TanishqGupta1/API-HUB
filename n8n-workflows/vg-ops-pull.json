@@ -1,0 +1,252 @@
+{
+  "id": "vg-ops-pull-001",
+  "name": "VG OPS → Hub (Categories + Products)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "9a1b1111-0001-0000-0000-000000000001",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 320]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/suppliers",
+        "options": {}
+      },
+      "id": "9a1b1111-0002-0000-0000-000000000002",
+      "name": "Get Suppliers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n's HTTP Request node may return the array as a single item (json=array)\n// or split it into one item per element (each json=supplier). Handle both.\nconst items = $input.all();\nconst list = items.flatMap((i) => {\n  const j = i.json;\n  if (Array.isArray(j)) return j;\n  // Sometimes the response is wrapped: { data: [...] } or { body: [...] }\n  if (j && Array.isArray(j.data)) return j.data;\n  if (j && Array.isArray(j.body)) return j.body;\n  return j && typeof j === 'object' ? [j] : [];\n});\nconst vg = list.find((s) => s && s.slug === 'vg-ops');\nif (!vg) {\n  throw new Error(`VG OPS supplier not found. Saw ${list.length} suppliers: ${list.map(s => s?.slug).join(',')}`);\n}\nif (!vg.is_active) {\n  throw new Error(\"VG OPS supplier is_active=false. Flip it: UPDATE suppliers SET is_active=true WHERE slug='vg-ops';\");\n}\nreturn [{ json: { vg_sid: vg.id, vg_name: vg.name } }];"
+      },
+      "id": "9a1b1111-0003-0000-0000-000000000003",
+      "name": "Resolve VG SID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 320]
+    },
+    {
+      "parameters": {
+        "resource": "product",
+        "operation": "getManyCategories",
+        "returnAll": true,
+        "limit": 100,
+        "queryParametersManyCategories": {},
+        "additionalFields": {}
+      },
+      "id": "9a1b1111-0004-0000-0000-000000000004",
+      "name": "OPS: Get Categories",
+      "type": "n8n-nodes-onprintshop.onPrintShop",
+      "typeVersion": 1,
+      "position": [900, 220],
+      "credentials": {
+        "onPrintShopApi": {
+          "id": "",
+          "name": "VG OnPrintShop"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n's OnPrintShop node flattens the GraphQL response: one item per category.\n// Each json has: category_id, parent_id (-1 for root), category_name, sort_order,\n// status (0=inactive), category_url, category_image, short_description.\nconst rows = $input.all().flatMap((item) => {\n  const j = item.json ?? {};\n  if (Array.isArray(j)) return j;\n  const nested = j?.data?.product_category?.product_category;\n  if (Array.isArray(nested)) return nested;\n  return [j];\n});\n\nconst parentOf = (c) => {\n  const raw = c.parent_id ?? c.parent_category_id ?? c.parentId;\n  if (raw === undefined || raw === null) return null;\n  const s = String(raw);\n  // OPS uses -1 for \"no parent\" (root-level category).\n  if (s === '-1' || s === '0') return null;\n  return s;\n};\n\nreturn rows\n  .filter((c) => c && (c.category_id ?? c.categoryId ?? c.id))\n  .map((c) => ({\n    json: {\n      external_id: String(c.category_id ?? c.categoryId ?? c.id),\n      name: c.category_name ?? c.name ?? 'Unnamed',\n      parent_external_id: parentOf(c),\n      sort_order: Number(c.sort_order ?? c.display_order ?? 0),\n    },\n  }));"
+      },
+      "id": "9a1b1111-0005-0000-0000-000000000005",
+      "name": "Shape Categories",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://host.docker.internal:8000/api/ingest/{{ $('Resolve VG SID').item.json.vg_sid }}/categories",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $items().map(i => i.json) }}",
+        "options": {}
+      },
+      "id": "9a1b1111-0006-0000-0000-000000000006",
+      "name": "POST /ingest/categories",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 220]
+    },
+    {
+      "parameters": {
+        "resource": "product",
+        "operation": "getManyDetailed",
+        "returnAll": true,
+        "limit": 100,
+        "additionalFields": {}
+      },
+      "id": "9a1b1111-0007-0000-0000-000000000007",
+      "name": "OPS: Get Products Detailed",
+      "type": "n8n-nodes-onprintshop.onPrintShop",
+      "typeVersion": 1,
+      "position": [900, 420],
+      "credentials": {
+        "onPrintShopApi": {
+          "id": "",
+          "name": "VG OnPrintShop"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build category map from the prior Shape Categories node.\nconst catItems = $('Shape Categories').all();\nconst catMap = new Map(catItems.map((i) => [i.json.external_id, i.json.name]));\n\n// Flatten any OPS response shape:\n//  A) { data: { products_details: { products: [...] } } }\n//  B) flat product objects per item\nconst flatProducts = $input.all().flatMap((item) => {\n  const j = item.json ?? {};\n  const nested = j?.data?.products_details?.products;\n  if (Array.isArray(nested)) return nested;\n  if (Array.isArray(j)) return j;\n  if (j && typeof j === 'object' && (j.products_id || j.product_id || j.id)) return [j];\n  return [];\n});\n\nreturn flatProducts.map((p) => {\n  const catExt = p.default_category_id ? String(p.default_category_id) : null;\n  const variants = (p.product_size ?? []).map((s) => ({\n    part_id: String(s.product_size_id ?? s.size_id ?? ''),\n    color: s.product_default_color ?? s.color ?? null,\n    size: s.product_size_label ?? s.size_label ?? null,\n    sku: s.product_size_sku ?? String(s.product_size_id ?? ''),\n    base_price: null,\n    inventory: null,\n    warehouse: null,\n  }));\n\n  const images = [];\n  if (p.small_image) images.push({ url: p.small_image, image_type: 'front', color: null, sort_order: 0 });\n  if (p.large_image && p.large_image !== p.small_image) {\n    images.push({ url: p.large_image, image_type: 'back', color: null, sort_order: 1 });\n  }\n\n  return {\n    json: {\n      supplier_sku: p.products_sku ?? String(p.products_id ?? p.product_id ?? ''),\n      product_name: p.products_title ?? p.product_name ?? 'Untitled',\n      brand: p.brand_name ?? null,\n      description: p.products_description ?? p.description ?? null,\n      product_type: 'apparel',\n      image_url: p.small_image ?? p.large_image ?? null,\n      ops_product_id: String(p.products_id ?? p.product_id ?? ''),\n      category_external_id: catExt,\n      category_name: catExt ? (catMap.get(catExt) ?? null) : null,\n      variants,\n      images,\n    },\n  };\n});"
+      },
+      "id": "9a1b1111-0008-0000-0000-000000000008",
+      "name": "Shape Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://host.docker.internal:8000/api/ingest/{{ $('Resolve VG SID').item.json.vg_sid }}/products",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $items().map(i => i.json) }}",
+        "options": {}
+      },
+      "id": "9a1b1111-0009-0000-0000-000000000009",
+      "name": "POST /ingest/products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Get Suppliers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Suppliers": {
+      "main": [
+        [
+          {
+            "node": "Resolve VG SID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve VG SID": {
+      "main": [
+        [
+          {
+            "node": "OPS: Get Categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPS: Get Categories": {
+      "main": [
+        [
+          {
+            "node": "Shape Categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Categories": {
+      "main": [
+        [
+          {
+            "node": "POST /ingest/categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /ingest/categories": {
+      "main": [
+        [
+          {
+            "node": "OPS: Get Products Detailed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPS: Get Products Detailed": {
+      "main": [
+        [
+          {
+            "node": "Shape Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Products": {
+      "main": [
+        [
+          {
+            "node": "POST /ingest/products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "vg-ops-pull-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
