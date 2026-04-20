@@ -33,12 +33,13 @@ SUPPLIERS = [
         "auth_config": {"account_number": "demo_acct", "key": "demo_key"},
     },
     {
-        "name": "alphabroder",
+        "name": "Alphabroder",
         "slug": "alphabroder",
         "protocol": "soap",
         "promostandards_code": "ALPHA",
         "base_url": "https://pstandards.alphabroder.com/inventory/v1",
-        "auth_config": {"id": "demo", "password": "demo"},
+        "auth_config": {"id": "PLACEHOLDER_USER", "password": "PLACEHOLDER_PASS"},
+        "is_active": False,  # flip to True when Christian provides real creds
     },
     {
         "name": "4Over",
