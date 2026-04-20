@@ -1,20 +1,24 @@
 # Vidhi — Sprint Tasks
 
-**Status:** 2/3 V0 tasks shipped. Task 3 (resolver) still pending. Three new V1c/V1d tasks added below.
-**Branch:** `vidhi-sprint-v1` (mostly merged) → start `vidhi-sprint-v2` after Task 3
+**Status:** 6/6 tasks shipped ✅ Sprint complete.
+**Branch:** `Vidhi` — all completed work pushed to remote
 
 ---
 
 ## ✅ Completed
 
-- **Task 0.4** — Customers (Storefronts) page with list + OAuth2 credential form (`frontend/src/app/customers/page.tsx`)
-- **Task 0.5** — Workflows page with animated pipeline visualizer (`frontend/src/components/workflows/pipeline-view.tsx`)
+- **Task 0.4** — Customers (Storefronts) page with list + OAuth2 credential form (`frontend/src/app/customers/page.tsx`) — commit `e1156ec`
+- **Task 0.5** — Workflows page with animated pipeline visualizer (`frontend/src/components/workflows/pipeline-view.tsx`) — commit `8985dc6`
+- **Task 3** — WSDL Resolver (`backend/modules/promostandards/resolver.py`) — commit `4b18c15` — all 9 tests passed
+- **Task 13** — OPS Image Pipeline (`backend/modules/ops_push/image_pipeline.py` + `routes.py`) — commit `ce9837d` — E2E tested: download → resize 800×800 → WebP q85 → served at `GET /api/push/image/{image_id}/processed`
+- **Task 14** — 4Over REST + HMAC Client (`backend/modules/rest_connector/fourover_client.py`) — all 9 unit tests passed (signature format + MockTransport request verification). E2E against real 4Over sandbox blocked on Christian's credentials.
+- **Task 15** — 4Over Normalizer (`backend/modules/rest_connector/fourover_normalizer.py`) — commit `44033bb` — all 7 unit tests passed + 9 Task 14 regression tests still passing. Extends `PSProductPart` with a backward-compatible `attributes: dict[str, str] = {}` field for 4Over's print-specific variant axes. Reads the user's saved Field Mapping config from `supplier.field_mappings["mapping"]`.
 
 ---
 
 ## Pending Tasks
 
-### Task 3: WSDL Resolver *(CARRIED OVER — START HERE)*
+### Task 3: WSDL Resolver *(✅ COMPLETED — commit `4b18c15`)*
 
 **Priority:** **DO THIS FIRST.** Blocks Tanishq's SOAP client (Task 3b) which blocks every V1a downstream task.
 **File to create:** `backend/modules/promostandards/resolver.py`
@@ -24,8 +28,8 @@ PromoStandards directory returns endpoint lists where each endpoint has a `Servi
 
 ### Steps
 
-- [ ] **Step 1:** The `backend/modules/promostandards/` directory already exists (Sinchana created it for Task 2). Confirm with `ls backend/modules/promostandards/` — you should see `__init__.py` and `schemas.py`.
-- [ ] **Step 2:** Create `backend/modules/promostandards/resolver.py`:
+- [x] **Step 1:** The `backend/modules/promostandards/` directory already exists (Sinchana created it for Task 2). Confirm with `ls backend/modules/promostandards/` — you should see `__init__.py` and `schemas.py`.
+- [x] **Step 2:** Create `backend/modules/promostandards/resolver.py`:
 
 ```python
 """Resolve WSDL URLs from cached PromoStandards directory endpoints."""
@@ -62,7 +66,7 @@ def resolve_wsdl_url(endpoint_cache: list[dict], service_type: str) -> str | Non
     return None
 ```
 
-- [ ] **Step 3:** Sanity-check:
+- [x] **Step 3:** Sanity-check:
 ```bash
 cd backend && source .venv/bin/activate
 python -c "
@@ -79,11 +83,11 @@ print('resolver OK')
 "
 ```
 
-- [ ] **Step 4:** Commit: `feat: WSDL resolver — maps PS ServiceType strings to ProductionURL with alias normalization`
+- [x] **Step 4:** Commit: `feat: WSDL resolver — maps PS ServiceType strings to ProductionURL with alias normalization` — commit `4b18c15` ✅
 
 ---
 
-### Task 13: Image Pipeline
+### Task 13: Image Pipeline *(✅ COMPLETED — commit `ce9837d`)*
 
 **Priority:** After Task 3. Independent of all SOAP work.
 **Files to create:**
@@ -111,7 +115,7 @@ Loads the `ProductImage` row, calls `process_image(image.url)`, returns the WebP
 
 ### Steps
 
-- [ ] **Step 1:** Create `backend/modules/ops_push/__init__.py` (empty) and `image_pipeline.py`:
+- [x] **Step 1:** Create `backend/modules/ops_push/__init__.py` (empty) and `image_pipeline.py`:
 ```python
 from io import BytesIO
 import httpx
@@ -128,18 +132,19 @@ async def process_image(source_url: str) -> bytes:
     return out.getvalue()
 ```
 
-- [ ] **Step 2:** Create `routes.py` with the endpoint. Stream the bytes via FastAPI `Response(content=..., media_type="image/webp")`. Cache headers: `Cache-Control: public, max-age=86400`.
-- [ ] **Step 3:** Register the router in `backend/main.py`.
-- [ ] **Step 4:** Manual test:
+- [x] **Step 2:** Create `routes.py` with the endpoint. Stream the bytes via FastAPI `Response(content=..., media_type="image/webp")`. Cache headers: `Cache-Control: public, max-age=86400`.
+- [x] **Step 3:** Register the router in `backend/main.py`.
+- [x] **Step 4:** Manual test:
 ```bash
 curl -o test.webp http://localhost:8000/api/push/image/{some_image_id}/processed
 file test.webp  # should say "RIFF ... WEBP"
 ```
-- [ ] **Step 5:** Commit: `feat: OPS image pipeline — download, resize 800×800, WebP q85`
+Verified: `file` output → `RIFF (little-endian) data, Web/P image, VP8 encoding, 100x100`. Also tested live in Chrome — returned WebP pig image ✅
+- [x] **Step 5:** Commit: `feat: OPS image pipeline — download, resize 800×800, WebP q85` — commit `ce9837d` ✅
 
 ---
 
-### Task 14: 4Over REST + HMAC Client
+### Task 14: 4Over REST + HMAC Client *(✅ COMPLETED)*
 
 **Priority:** After Task 3. Blocked on Christian providing 4Over sandbox credentials for E2E — but the client code can be written and unit-tested independently against sample fixtures.
 **File to create:** `backend/modules/rest_connector/fourover_client.py`
@@ -178,14 +183,14 @@ class FourOverClient:
 ```
 
 ### Steps
-- [ ] **Step 1:** Create `rest_connector/__init__.py` if it doesn't exist (Urvashi may already have).
-- [ ] **Step 2:** Implement the class + 4 methods using httpx `AsyncClient`.
-- [ ] **Step 3:** Write a pytest with a mocked httpx transport to verify the signature header format against a known input/output fixture.
-- [ ] **Step 4:** Commit: `feat: 4Over REST+HMAC client with SHA-256 request signing`
+- [x] **Step 1:** Created `rest_connector/__init__.py` (directory didn't exist yet — Urvashi hadn't started Task 8).
+- [x] **Step 2:** Implemented the class + 4 methods using httpx `AsyncClient`. Added input validation in the constructor, an injectable `timestamp` parameter on `_sign()` for deterministic testing, and an optional `http_client` parameter on every method so tests can pass a `MockTransport`-backed client.
+- [x] **Step 3:** Wrote `backend/test_fourover_client.py` with 9 tests covering: known-vector HMAC-SHA256 signature check, determinism, method/path sensitivity, constructor validation, trailing-slash stripping, signed request via `httpx.MockTransport`, UUID embedded in options path, POST body for quote, and 401 error propagation. All 9 pass.
+- [x] **Step 4:** Commit: `feat: 4Over REST+HMAC client with SHA-256 request signing`
 
 ---
 
-### Task 15: 4Over Normalizer (Reuses Field Mapping UI)
+### Task 15: 4Over Normalizer (Reuses Field Mapping UI) *(✅ COMPLETED — commit `44033bb`)*
 
 **Priority:** After Task 14.
 **File to create:** `backend/modules/rest_connector/fourover_normalizer.py`
@@ -197,11 +202,11 @@ class FourOverClient:
 The existing upsert logic (from Tanishq's Task 4 normalizer) consumes `PSProductData`. Outputting the same shape means the DB layer works unchanged for all 4 supplier types.
 
 ### Steps
-- [ ] **Step 1:** Check how the Field Mapping UI stores config — inspect `api-hub/frontend/src/app/mappings/[supplierId]/page.tsx` and find the backend endpoint/table it writes to. Document the schema.
-- [ ] **Step 2:** If no backend mapping table exists yet, create one (`field_mappings` table: `supplier_id`, `source_field`, `target_field`, `transform`). Add model + route to a new `mappings` module or extend `suppliers` module.
-- [ ] **Step 3:** Build `normalize_4over(raw_products, field_mappings) -> list[PSProductData]`. Handle paper/coating/fold as custom options mapped to the `PSProductPart` description field (or extend `PSProductPart` with an `attributes: dict` if cleaner).
-- [ ] **Step 4:** Unit-test with 3 sample 4Over products and a known mapping config.
-- [ ] **Step 5:** Commit: `feat: 4Over → PSProductData normalizer using Field Mapping config`
+- [x] **Step 1:** Checked how the Field Mapping UI stores config. Frontend PUTs `{mapping: {source: target}}` to `/api/suppliers/{id}/mappings`. Backend stores the body verbatim in `supplier.field_mappings` (JSONB column on `suppliers` table — already exists at `models.py:26`, route at `routes.py:92`).
+- [x] **Step 2:** No new mapping table needed — `Supplier.field_mappings` JSONB column already in place. The normalizer reads `field_mappings["mapping"]` directly.
+- [x] **Step 3:** Built `normalize_4over(raw_products, field_mapping, *, variants_key="variants") -> list[PSProductData]` in `backend/modules/rest_connector/fourover_normalizer.py`. Chose the cleaner "extend `PSProductPart` with `attributes: dict[str, str] = {}`" path — default empty dict keeps Sinchana's SanMar normalizer fully backward-compatible. Unmapped variant fields (coating, paper_weight, fold, finish) are packed into `attributes` so nothing is silently dropped.
+- [x] **Step 4:** Wrote `backend/test_fourover_normalizer.py` with 7 offline tests: happy path with 3 realistic 4Over products + full mapping, attributes packing for unmapped fields, silent skip for products missing a mapped SKU, partial-mapping graceful defaults, empty input, SanMar-style `PSProductPart` regression guard on the new schema field, and type validation. All 7 pass. Task 14's 9 client tests still pass too (ran both).
+- [x] **Step 5:** Commit: `feat: 4Over → PSProductData normalizer using Field Mapping config` — commit `44033bb` ✅
 
 ### Note
 Task 16 (sync route HMAC branch) is Urvashi's — you coordinate by agreeing on the `PSProductData` output shape.

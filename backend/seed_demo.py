@@ -30,15 +30,16 @@ SUPPLIERS = [
         "protocol": "rest",
         "promostandards_code": "SSACT",
         "base_url": "https://api.ssactivewear.com/v2",
-        "auth_config": {"account_number": "demo_acct", "key": "demo_key"},
+        "auth_config": {"account_number": "demo_acct", "api_key": "demo_key"},
     },
     {
-        "name": "alphabroder",
+        "name": "Alphabroder",
         "slug": "alphabroder",
         "protocol": "soap",
         "promostandards_code": "ALPHA",
         "base_url": "https://pstandards.alphabroder.com/inventory/v1",
-        "auth_config": {"id": "demo", "password": "demo"},
+        "auth_config": {"id": "PLACEHOLDER_USER", "password": "PLACEHOLDER_PASS"},
+        "is_active": False,  # flip to True when Christian provides real creds
     },
     {
         "name": "4Over",
@@ -241,10 +242,6 @@ async def seed():
 
     print("\nSeed complete!")
     await engine.dispose()
-
-    print("\nSeed complete!")
-    await engine.dispose()
-
 
 
 if __name__ == "__main__":

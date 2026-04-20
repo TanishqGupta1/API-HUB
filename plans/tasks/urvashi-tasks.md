@@ -54,19 +54,9 @@ GET  /api/sync/{supplier_id}/status
 Alphabroder is PromoStandards-compliant. No code needed — just create a DB row. Demonstrates the "suppliers are config, not code" principle.
 
 ### Steps
-- [ ] **Step 1:** Add Alphabroder to `seed_demo.py` `SUPPLIERS` list:
-```python
-{
-    "name": "Alphabroder",
-    "slug": "alphabroder",
-    "protocol": "promostandards",
-    "promostandards_code": "ALPHA",
-    "auth_config": {"id": "PLACEHOLDER_USER", "password": "PLACEHOLDER_PASS"},
-    "is_active": False,  # flip to True when Christian provides real creds
-}
-```
-- [ ] **Step 2:** Re-run `python seed_demo.py` — verify the row exists via `curl http://localhost:8000/api/suppliers`.
-- [ ] **Step 3:** Commit: `feat: add Alphabroder supplier row (PromoStandards, zero code)`
+- [x] **Step 1:** Alphabroder already present in `seed_demo.py`; updated to match spec — proper case name, placeholder credentials, `is_active=False`. Kept `protocol="soap"` for consistency with SanMar's seed entry (sync routes accept both "soap" and "promostandards").
+- [x] **Step 2:** Row updated in live DB via script against `async_session` (seed script skips existing rows). Verified via `GET /api/suppliers` and `POST /api/sync/.../products` returns 409 "not active" as expected.
+- [x] **Step 3:** Commit: `feat: add Alphabroder supplier row (PromoStandards, zero code)`
 
 ---
 

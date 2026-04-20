@@ -12,11 +12,17 @@ class PSProductPart(BaseModel):
 
     SanMar calls these 'parts' — one 'PC61 Essential Tee' product has
     parts like 'Navy/M', 'Navy/L', 'White/S'.
+
+    The optional ``attributes`` dict is used by the 4Over normalizer to carry
+    print-specific axes (coating, paper_weight, fold, etc.) that don't fit
+    naturally into ``color_name`` / ``size_name``. SanMar's SOAP normalizer
+    never sets it, so defaulting to an empty dict is backward-compatible.
     """
     part_id: str
     color_name: str | None = None
     size_name: str | None = None
     description: str | None = None
+    attributes: dict[str, str] = {}
 
 
 class PSProductData(BaseModel):
