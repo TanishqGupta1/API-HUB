@@ -12,6 +12,7 @@ Each file explains what the task built and shows the exact commands to test it.
 | [Task_20_Push_Log.md](Task_20_Push_Log.md) | Push Log | ✅ Tested |
 | [Task_16_Field_Mapping.md](Task_16_Field_Mapping.md) | Field Mapping Page | ✅ Tested |
 | [Task_14_4Over_HMAC_Client.md](Task_14_4Over_HMAC_Client.md) | 4Over REST + HMAC Client | ✅ Tested (9/9 unit tests; E2E blocked on sandbox creds) |
+| [Task_15_4Over_Normalizer.md](Task_15_4Over_Normalizer.md) | 4Over Normalizer (raw JSON → PSProductData) | ✅ Tested (7/7 unit tests + 9 Task 14 regression tests) |
 
 ## Before Running Any Tests
 

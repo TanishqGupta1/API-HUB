@@ -1,6 +1,6 @@
 # Vidhi — Sprint Tasks
 
-**Status:** 5/6 tasks shipped. Task 15 remaining.
+**Status:** 6/6 tasks shipped ✅ Sprint complete.
 **Branch:** `Vidhi` — all completed work pushed to remote
 
 ---
@@ -12,6 +12,7 @@
 - **Task 3** — WSDL Resolver (`backend/modules/promostandards/resolver.py`) — commit `4b18c15` — all 9 tests passed
 - **Task 13** — OPS Image Pipeline (`backend/modules/ops_push/image_pipeline.py` + `routes.py`) — commit `ce9837d` — E2E tested: download → resize 800×800 → WebP q85 → served at `GET /api/push/image/{image_id}/processed`
 - **Task 14** — 4Over REST + HMAC Client (`backend/modules/rest_connector/fourover_client.py`) — all 9 unit tests passed (signature format + MockTransport request verification). E2E against real 4Over sandbox blocked on Christian's credentials.
+- **Task 15** — 4Over Normalizer (`backend/modules/rest_connector/fourover_normalizer.py`) — commit `44033bb` — all 7 unit tests passed + 9 Task 14 regression tests still passing. Extends `PSProductPart` with a backward-compatible `attributes: dict[str, str] = {}` field for 4Over's print-specific variant axes. Reads the user's saved Field Mapping config from `supplier.field_mappings["mapping"]`.
 
 ---
 
@@ -189,7 +190,7 @@ class FourOverClient:
 
 ---
 
-### Task 15: 4Over Normalizer (Reuses Field Mapping UI)
+### Task 15: 4Over Normalizer (Reuses Field Mapping UI) *(✅ COMPLETED — commit `44033bb`)*
 
 **Priority:** After Task 14.
 **File to create:** `backend/modules/rest_connector/fourover_normalizer.py`
@@ -201,11 +202,11 @@ class FourOverClient:
 The existing upsert logic (from Tanishq's Task 4 normalizer) consumes `PSProductData`. Outputting the same shape means the DB layer works unchanged for all 4 supplier types.
 
 ### Steps
-- [ ] **Step 1:** Check how the Field Mapping UI stores config — inspect `api-hub/frontend/src/app/mappings/[supplierId]/page.tsx` and find the backend endpoint/table it writes to. Document the schema.
-- [ ] **Step 2:** If no backend mapping table exists yet, create one (`field_mappings` table: `supplier_id`, `source_field`, `target_field`, `transform`). Add model + route to a new `mappings` module or extend `suppliers` module.
-- [ ] **Step 3:** Build `normalize_4over(raw_products, field_mappings) -> list[PSProductData]`. Handle paper/coating/fold as custom options mapped to the `PSProductPart` description field (or extend `PSProductPart` with an `attributes: dict` if cleaner).
-- [ ] **Step 4:** Unit-test with 3 sample 4Over products and a known mapping config.
-- [ ] **Step 5:** Commit: `feat: 4Over → PSProductData normalizer using Field Mapping config`
+- [x] **Step 1:** Checked how the Field Mapping UI stores config. Frontend PUTs `{mapping: {source: target}}` to `/api/suppliers/{id}/mappings`. Backend stores the body verbatim in `supplier.field_mappings` (JSONB column on `suppliers` table — already exists at `models.py:26`, route at `routes.py:92`).
+- [x] **Step 2:** No new mapping table needed — `Supplier.field_mappings` JSONB column already in place. The normalizer reads `field_mappings["mapping"]` directly.
+- [x] **Step 3:** Built `normalize_4over(raw_products, field_mapping, *, variants_key="variants") -> list[PSProductData]` in `backend/modules/rest_connector/fourover_normalizer.py`. Chose the cleaner "extend `PSProductPart` with `attributes: dict[str, str] = {}`" path — default empty dict keeps Sinchana's SanMar normalizer fully backward-compatible. Unmapped variant fields (coating, paper_weight, fold, finish) are packed into `attributes` so nothing is silently dropped.
+- [x] **Step 4:** Wrote `backend/test_fourover_normalizer.py` with 7 offline tests: happy path with 3 realistic 4Over products + full mapping, attributes packing for unmapped fields, silent skip for products missing a mapped SKU, partial-mapping graceful defaults, empty input, SanMar-style `PSProductPart` regression guard on the new schema field, and type validation. All 7 pass. Task 14's 9 client tests still pass too (ran both).
+- [x] **Step 5:** Commit: `feat: 4Over → PSProductData normalizer using Field Mapping config` — commit `44033bb` ✅
 
 ### Note
 Task 16 (sync route HMAC branch) is Urvashi's — you coordinate by agreeing on the `PSProductData` output shape.
