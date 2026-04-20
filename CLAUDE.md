@@ -73,6 +73,7 @@ docker compose up -d n8n                      # n8n editor on :5678
 ```
 POSTGRES_URL=postgresql+asyncpg://vg_user:vg_pass@localhost:5432/vg_hub
 SECRET_KEY=<fernet-key>
+INGEST_SHARED_SECRET=<random-32>    # n8n → FastAPI ingest auth header
 ```
 
 `frontend/.env.local`:
