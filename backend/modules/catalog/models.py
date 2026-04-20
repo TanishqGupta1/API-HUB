@@ -9,6 +9,24 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
 
+class Category(Base):
+    __tablename__ = "categories"
+    __table_args__ = (
+        UniqueConstraint("supplier_id", "external_id", name="uq_category_supplier_external"),
+    )
+
+    id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
+    supplier_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("suppliers.id"))
+    external_id: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(255))
+    parent_id: Mapped[Optional[uuid_mod.UUID]] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    products: Mapped[list["Product"]] = relationship(back_populates="category_ref")
+
+
 class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
@@ -21,6 +39,9 @@ class Product(Base):
     product_name: Mapped[str] = mapped_column(String(500))
     brand: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    category_id: Mapped[Optional[uuid_mod.UUID]] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     product_type: Mapped[str] = mapped_column(String(50), default="apparel")
     image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -33,6 +54,7 @@ class Product(Base):
     images: Mapped[list["ProductImage"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )
+    category_ref: Mapped[Optional["Category"]] = relationship(back_populates="products")
 
 
 class ProductVariant(Base):
