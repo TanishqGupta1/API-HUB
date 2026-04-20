@@ -1,18 +1,42 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import type { Product, Customer, ProductPushStatus } from "@/lib/types";
+import type {
+  Customer,
+  Product,
+  ProductImage,
+  ProductPushStatus,
+  Supplier,
+} from "@/lib/types";
+
+const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
+
+const DEFAULT_DATA_SOURCES: Array<[string, string]> = [
+  ["product_name", "PS Product Data v2 → productName"],
+  ["brand", "PS Product Data v2 → brandName"],
+  ["base_price", "PS Pricing v1 → partPrice"],
+  ["inventory", "PS Inventory v2 → quantityAvailable"],
+  ["images", "PS Media v1.1 → url"],
+];
+
+function pickImageForTab(images: ProductImage[], tab: string): ProductImage | null {
+  if (!images.length) return null;
+  const match = images.find((img) => img.image_type.toLowerCase() === tab);
+  return match ?? null;
+}
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [product, setProduct] = useState<Product | null>(null);
+  const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [pushStatuses, setPushStatuses] = useState<ProductPushStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [pushing, setPushing] = useState<string | null>(null);
+  const [activeImageTab, setActiveImageTab] = useState<string>("front");
 
   const fetchData = async () => {
     try {
@@ -24,6 +48,12 @@ export default function ProductDetailPage() {
       setProduct(p);
       setCustomers(c);
       setPushStatuses(s);
+      try {
+        const sup = await api<Supplier>(`/api/suppliers/${p.supplier_id}`);
+        setSupplier(sup);
+      } catch (err) {
+        console.warn("supplier fetch failed", err);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -32,6 +62,31 @@ export default function ProductDetailPage() {
   };
 
   useEffect(() => { fetchData(); }, [id]);
+
+  const imageTabs = useMemo(() => {
+    if (!product) return [] as Array<{ key: string; available: boolean }>;
+    const present = new Set(
+      (product.images ?? []).map((img) => img.image_type.toLowerCase())
+    );
+    return IMAGE_TAB_ORDER.map((key) => ({ key, available: present.has(key) }));
+  }, [product]);
+
+  const activeImage = useMemo(() => {
+    if (!product) return null;
+    const match = pickImageForTab(product.images ?? [], activeImageTab);
+    if (match) return match.url;
+    if (activeImageTab === "front" && product.image_url) return product.image_url;
+    return null;
+  }, [product, activeImageTab]);
+
+  const dataSourceRows: Array<[string, string]> = useMemo(() => {
+    const mappings = supplier?.field_mappings;
+    if (!mappings || Object.keys(mappings).length === 0) return DEFAULT_DATA_SOURCES;
+    return Object.entries(mappings).map(([source, target]) => [
+      String(target),
+      `${supplier?.protocol ?? "source"} → ${source}`,
+    ]);
+  }, [supplier]);
 
   const handlePush = async (customerId?: string) => {
     if (!product) return;
@@ -122,17 +177,17 @@ export default function ProductDetailPage() {
       </div>
 
       {/* ── Two-column datasheet ─────────────────────────── */}
-      <div className="grid grid-cols-[320px_1fr] gap-8 mb-10">
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-8 mb-10">
 
         {/* Left — image viewer */}
         <div>
           <div className="relative bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] h-[300px]
                           flex items-center justify-center mb-3
                           shadow-[4px_5px_0_rgba(30,77,146,0.08)] overflow-hidden">
-            {product.image_url ? (
+            {activeImage ? (
               <img
-                src={product.image_url}
-                alt={product.product_name}
+                src={activeImage}
+                alt={`${product.product_name} (${activeImageTab})`}
                 className="w-full h-full object-contain p-5"
               />
             ) : (
@@ -140,7 +195,11 @@ export default function ProductDetailPage() {
                 <div className="text-[10px] uppercase text-[#b4b4bc] tracking-[0.1em] font-bold">
                   Blueprint Detail View
                 </div>
-                <div className="text-[9px] text-[#b4b4bc] mt-1">IMAGE_NOT_FOUND</div>
+                <div className="text-[9px] text-[#b4b4bc] mt-1">
+                  {product.images?.length
+                    ? `No ${activeImageTab.toUpperCase()} image yet`
+                    : "IMAGE_NOT_FOUND"}
+                </div>
               </div>
             )}
             <div className="absolute bottom-2 right-2 text-[9px] bg-black/40 text-white px-2 py-0.5 rounded-full font-semibold">
@@ -149,19 +208,28 @@ export default function ProductDetailPage() {
           </div>
           {/* Thumbnail strip */}
           <div className="grid grid-cols-4 gap-2">
-            {["FRONT", "BACK", "SWATCH", "DETAIL"].map((label, i) => (
-              <div
-                key={label}
-                className={`h-[60px] flex items-center justify-center rounded-md cursor-pointer
-                  border text-[8px] font-bold
-                  ${i === 0
-                    ? "border-[#1e4d92] text-[#1e4d92] bg-[#ebe8e3]"
-                    : "border-[#cfccc8] text-[#b4b4bc] bg-[#ebe8e3] hover:border-[#1e4d92]"
-                  }`}
-              >
-                {label}
-              </div>
-            ))}
+            {imageTabs.map(({ key, available }) => {
+              const isActive = activeImageTab === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveImageTab(key)}
+                  disabled={!available && key !== "front"}
+                  className={`h-[60px] flex items-center justify-center rounded-md
+                    border text-[8px] font-bold uppercase transition-colors
+                    ${isActive
+                      ? "border-[#1e4d92] text-[#1e4d92] bg-[#ebe8e3]"
+                      : available
+                        ? "border-[#cfccc8] text-[#484852] bg-[#ebe8e3] hover:border-[#1e4d92] cursor-pointer"
+                        : "border-[#cfccc8] text-[#b4b4bc] bg-[#ebe8e3] cursor-not-allowed opacity-70"
+                    }`}
+                  title={available ? `View ${key} image` : `No ${key} image available`}
+                >
+                  {key}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -208,20 +276,35 @@ export default function ProductDetailPage() {
 
           {/* Data sources panel */}
           <div className="bg-[rgba(30,77,146,0.05)] border border-[rgba(30,77,146,0.15)] rounded-lg p-4">
-            <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#1e4d92] mb-3">
-              ℹ Data Sources
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#1e4d92]">
+                ℹ Data Sources
+              </div>
+              {supplier?.field_mappings && Object.keys(supplier.field_mappings).length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/mappings/${product.supplier_id}`)}
+                  className="text-[10px] font-semibold text-[#1e4d92] underline-offset-2 hover:underline"
+                >
+                  Configured ({Object.keys(supplier.field_mappings).length}) →
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/mappings/${product.supplier_id}`)}
+                  className="text-[10px] font-semibold text-[#888894] underline-offset-2 hover:underline"
+                >
+                  Not configured → map fields
+                </button>
+              )}
             </div>
             <div className="grid gap-[5px] text-[12px]">
-              {[
-                ["product_name", "PS Product Data v2 → productName"],
-                ["brand", "PS Product Data v2 → brandName"],
-                ["base_price", "PS Pricing v1 → partPrice"],
-                ["inventory", "PS Inventory v2 → quantityAvailable"],
-                ["images", "PS Media v1.1 → url"],
-              ].map(([field, source]) => (
-                <div key={field} className="flex justify-between">
+              {dataSourceRows.map(([field, source]) => (
+                <div key={field} className="flex justify-between gap-4">
                   <span className="text-[#484852] font-medium">{field}</span>
-                  <span className="font-mono text-[11px] text-[#888894]">{source}</span>
+                  <span className="font-mono text-[11px] text-[#888894] truncate" title={source}>
+                    {source}
+                  </span>
                 </div>
               ))}
             </div>
@@ -237,7 +320,8 @@ export default function ProductDetailPage() {
           </div>
           <span className="font-mono text-[11px] text-[#888894]">LIVE_INVENTORY_SYNC</span>
         </div>
-        <table className="w-full border-collapse">
+        <div className="overflow-x-auto">
+        <table className="w-full border-collapse min-w-[640px]">
           <thead>
             <tr>
               {["Color", "Size", "SKU", "Price", "Inventory", "Warehouse"].map((h) => (
@@ -279,6 +363,7 @@ export default function ProductDetailPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* ── Storefront Publish Status ────────────────────────────── */}
@@ -288,7 +373,8 @@ export default function ProductDetailPage() {
             Storefront Publish Status
           </div>
         </div>
-        <table className="w-full border-collapse">
+        <div className="overflow-x-auto">
+        <table className="w-full border-collapse min-w-[640px]">
           <thead>
             <tr>
               {["Storefront", "Status", "Pushed", "Store Product ID", "Action"].map((h) => (
@@ -350,6 +436,7 @@ export default function ProductDetailPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

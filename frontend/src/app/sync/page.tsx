@@ -207,8 +207,8 @@ export default function SyncJobsPage() {
       )}
 
       {/* Table */}
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--border)", background: "white" }}>
-        <table className="w-full text-sm">
+      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: "var(--border)", background: "white" }}>
+        <table className="w-full text-sm min-w-[720px]">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border)" }}>
               {["Supplier", "Job Type", "Status", "Records", "Duration", "Started", "Error"].map((h) => (

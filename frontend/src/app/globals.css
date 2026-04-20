@@ -228,26 +228,16 @@ body::before {
 }
 
 .main {
-  flex: 1;
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
-  padding: 48px 64px;
+  padding: clamp(24px, 4vw, 48px) clamp(20px, 5vw, 64px);
   position: relative;
 }
 
-.main-ruler {
-  position: sticky;
-  top: -48px;
-  left: -64px;
-  width: calc(100% + 128px);
-  height: 24px;
-  background: repeating-linear-gradient(to right,
-      var(--border-strong) 0px,
-      var(--border-strong) 1px,
-      transparent 1px,
-      transparent 32px);
-  opacity: 0.3;
-  margin-bottom: 24px;
-  z-index: 5;
+.main > * {
+  max-width: 100%;
 }
 
 /* === PAGE HEADER === */
@@ -312,7 +302,7 @@ body::before {
 /* === STAT CARDS === */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 24px;
   margin-bottom: 48px;
 }
@@ -368,8 +358,12 @@ body::before {
   border: 1.5px solid var(--border);
   border-radius: 8px;
   box-shadow: 4px 6px 0 var(--shadow);
-  overflow: hidden;
+  overflow-x: auto;
   margin-bottom: 32px;
+}
+
+.panel > table {
+  min-width: 640px;
 }
 
 .panel-header {

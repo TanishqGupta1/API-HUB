@@ -19,7 +19,6 @@ export default function RootLayout({
         <div className="shell">
           <SidebarNav />
           <div className="main">
-            <div className="main-ruler"></div>
             {children}
           </div>
         </div>

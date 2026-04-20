@@ -12,6 +12,7 @@ export interface Supplier {
   promostandards_code: string | null;
   base_url: string | null;
   auth_config: Record<string, string>;
+  field_mappings: Record<string, string> | null;
   is_active: boolean;
   created_at: string;
   product_count: number;
@@ -53,6 +54,14 @@ export interface Variant {
   warehouse: string | null;
 }
 
+export interface ProductImage {
+  id: string;
+  url: string;
+  image_type: string;
+  color: string | null;
+  sort_order: number;
+}
+
 export interface Product {
   id: string;
   supplier_id: string;
@@ -60,11 +69,14 @@ export interface Product {
   supplier_sku: string;
   product_name: string;
   brand: string | null;
+  category: string | null;
   description: string | null;
   product_type: string;
   image_url: string | null;
+  ops_product_id: string | null;
   last_synced: string | null;
   variants: Variant[];
+  images: ProductImage[];
 }
 
 export interface ProductPushStatus {
