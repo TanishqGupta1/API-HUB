@@ -43,7 +43,7 @@
 **Files:**
 - Create: `frontend/src/lib/storefront-url.ts`
 
-- [ ] **Step 1: Create file**
+- [x] **Step 1: Create file**
 
 ```ts
 export type SortKey = "name" | "price_asc" | "price_desc" | "newest";
@@ -87,12 +87,12 @@ export function countActive(f: StorefrontFilters): number {
 }
 ```
 
-- [ ] **Step 2: TSC**
+- [x] **Step 2: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: clean.
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add frontend/src/lib/storefront-url.ts
@@ -106,7 +106,7 @@ git add frontend/src/lib/storefront-url.ts
 **Files:**
 - Modify: `frontend/src/components/storefront/search-context.tsx`
 
-- [ ] **Step 1: Replace file body**
+- [x] **Step 1: Replace file body**
 
 ```tsx
 "use client";
@@ -170,17 +170,17 @@ export function useSearch() {
 }
 ```
 
-- [ ] **Step 2: TSC**
+- [x] **Step 2: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: clean. Legacy callers using `query` / `setQuery` keep working.
 
-- [ ] **Step 3: Smoke**
+- [x] **Step 3: Smoke**
 
 Run: `curl -sI http://localhost:3000/storefront/vg | head -1`
 Expected: `HTTP/1.1 200 OK`.
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add frontend/src/components/storefront/search-context.tsx
@@ -196,7 +196,7 @@ git add frontend/src/components/storefront/search-context.tsx
 **Files:**
 - Create: `frontend/src/components/storefront/breadcrumb-bar.tsx`
 
-- [ ] **Step 1: Create file**
+- [x] **Step 1: Create file**
 
 ```tsx
 "use client";
@@ -279,12 +279,12 @@ export function deriveSegments(
 }
 ```
 
-- [ ] **Step 2: TSC**
+- [x] **Step 2: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: clean.
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add frontend/src/components/storefront/breadcrumb-bar.tsx
@@ -299,7 +299,7 @@ git add frontend/src/components/storefront/breadcrumb-bar.tsx
 - Create: `frontend/src/components/storefront/filter-button.tsx`
 - Create: `frontend/src/components/storefront/active-filter-chips.tsx`
 
-- [ ] **Step 1: Create `active-filter-chips.tsx`**
+- [x] **Step 1: Create `active-filter-chips.tsx`**
 
 ```tsx
 "use client";
@@ -352,7 +352,7 @@ function Chip({ label, onClear }: { label: string; onClear: () => void }) {
 }
 ```
 
-- [ ] **Step 2: Create `filter-button.tsx`**
+- [x] **Step 2: Create `filter-button.tsx`**
 
 ```tsx
 "use client";
@@ -440,12 +440,12 @@ export function FilterButton() {
 }
 ```
 
-- [ ] **Step 3: TSC**
+- [x] **Step 3: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: clean.
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add frontend/src/components/storefront/filter-button.tsx frontend/src/components/storefront/active-filter-chips.tsx
@@ -459,7 +459,7 @@ git add frontend/src/components/storefront/filter-button.tsx frontend/src/compon
 **Files:**
 - Modify: `frontend/src/components/storefront/left-rail.tsx`
 
-- [ ] **Step 1: Replace file body**
+- [x] **Step 1: Replace file body**
 
 Open current `left-rail.tsx`, preserve the tree-building logic and `Row` subcomponent, and wrap the nav in a new collapsible-overlay container. Full replacement:
 
@@ -586,12 +586,12 @@ export function LeftRail({ categories, counts }: LeftRailProps) {
 }
 ```
 
-- [ ] **Step 2: TSC**
+- [x] **Step 2: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: clean.
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add frontend/src/components/storefront/left-rail.tsx
@@ -605,7 +605,7 @@ git add frontend/src/components/storefront/left-rail.tsx
 **Files:**
 - Modify: `frontend/src/components/storefront/top-bar.tsx`
 
-- [ ] **Step 1: Replace file body**
+- [x] **Step 1: Replace file body**
 
 ```tsx
 "use client";
@@ -676,12 +676,12 @@ export function TopBar({ categories }: TopBarProps) {
 }
 ```
 
-- [ ] **Step 2: TSC**
+- [x] **Step 2: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: might fail because `StorefrontShell` still calls `<TopBar />` with no props. Task 7 fixes.
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add frontend/src/components/storefront/top-bar.tsx
@@ -697,7 +697,7 @@ git add frontend/src/components/storefront/top-bar.tsx
 **Files:**
 - Modify: `frontend/src/components/storefront/storefront-shell.tsx`
 
-- [ ] **Step 1: Replace file body**
+- [x] **Step 1: Replace file body**
 
 ```tsx
 "use client";
@@ -794,17 +794,17 @@ export function StorefrontShell({
 }
 ```
 
-- [ ] **Step 2: TSC**
+- [x] **Step 2: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: clean.
 
-- [ ] **Step 3: Smoke**
+- [x] **Step 3: Smoke**
 
 Run: `curl -sI http://localhost:3000/storefront/vg | head -1`
 Expected: `HTTP/1.1 200 OK`. Open in browser — TopBar sticky, breadcrumb bar below, main area scrolls independently, LeftRail stays slim.
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add frontend/src/components/storefront/storefront-shell.tsx
@@ -820,7 +820,7 @@ git add frontend/src/components/storefront/storefront-shell.tsx
 **Files:**
 - Modify: `frontend/src/app/storefront/vg/page.tsx`
 
-- [ ] **Step 1: Rewrite page**
+- [x] **Step 1: Rewrite page**
 
 ```tsx
 "use client";
@@ -910,16 +910,16 @@ export default function StorefrontGridPage() {
 }
 ```
 
-- [ ] **Step 2: TSC**
+- [x] **Step 2: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: clean.
 
-- [ ] **Step 3: Smoke**
+- [x] **Step 3: Smoke**
 
 Browser: visit `/storefront/vg`, click Filter → toggle In stock → URL gains `?stock=in`, chip appears. Click category in TopBar dropdown → URL gains `?category=<uuid>`, breadcrumb updates, grid filters. Back button returns.
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add frontend/src/app/storefront/vg/page.tsx
@@ -933,7 +933,7 @@ git add frontend/src/app/storefront/vg/page.tsx
 **Files:**
 - Modify: `frontend/src/app/storefront/vg/category/[category_id]/page.tsx`
 
-- [ ] **Step 1: Replace file body**
+- [x] **Step 1: Replace file body**
 
 ```tsx
 import { redirect } from "next/navigation";
@@ -948,16 +948,16 @@ export default async function CategoryPage({
 }
 ```
 
-- [ ] **Step 2: TSC**
+- [x] **Step 2: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: clean.
 
-- [ ] **Step 3: Smoke**
+- [x] **Step 3: Smoke**
 
 `curl -sI "http://localhost:3000/storefront/vg/category/<uuid>" | head -3` — expect `307` or `308` to `/storefront/vg?category=<uuid>`.
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add frontend/src/app/storefront/vg/category/[category_id]/page.tsx
@@ -971,7 +971,7 @@ git add frontend/src/app/storefront/vg/category/[category_id]/page.tsx
 **Files:**
 - Modify: `frontend/src/app/storefront/vg/product/[product_id]/page.tsx`
 
-- [ ] **Step 1: Find layout.tsx for storefront/vg**
+- [x] **Step 1: Find layout.tsx for storefront/vg**
 
 The shell mounts via `frontend/src/app/storefront/vg/layout.tsx`. PDP is client-side and needs the product name available to the shell. Easiest route: keep PDP as-is but let shell derive trailing segment from `usePathname()` + `useProductName()` context.
 
@@ -979,12 +979,12 @@ Simpler approach used here: render PDPLayout with breadcrumb inside the page; th
 
 If `PDPLayout` already has breadcrumb, no change needed. Otherwise add the parent category chain.
 
-- [ ] **Step 2: Verify current PDPLayout**
+- [x] **Step 2: Verify current PDPLayout**
 
 Run: `grep -n "breadcrumb\|Breadcrumb" frontend/src/components/storefront/pdp-layout.tsx`
 If match exists, Task 10 is a no-op on the file. Note "verified" in stage commit.
 
-- [ ] **Step 3: Stage (noop allowed)**
+- [x] **Step 3: Stage (noop allowed)**
 
 ```bash
 # If nothing changed, skip. Otherwise:
@@ -1001,23 +1001,23 @@ git add frontend/src/app/storefront/vg/product/\[product_id\]/page.tsx frontend/
 **Files:**
 - Delete: `frontend/src/components/storefront/filter-chip-bar.tsx`
 
-- [ ] **Step 1: Verify no consumers**
+- [x] **Step 1: Verify no consumers**
 
 Run: `grep -rn "filter-chip-bar\|FilterChipBar" frontend/src 2>/dev/null`
 Expected: no matches after Task 8.
 
-- [ ] **Step 2: Delete**
+- [x] **Step 2: Delete**
 
 ```bash
 rm frontend/src/components/storefront/filter-chip-bar.tsx
 ```
 
-- [ ] **Step 3: TSC**
+- [x] **Step 3: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: clean.
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add -A frontend/src/components/storefront/filter-chip-bar.tsx
@@ -1028,12 +1028,12 @@ git add -A frontend/src/components/storefront/filter-chip-bar.tsx
 
 ### Task 12: End-to-end smoke + plan checkbox update
 
-- [ ] **Step 1: TSC**
+- [x] **Step 1: TSC**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: clean.
 
-- [ ] **Step 2: Dev smokes**
+- [x] **Step 2: Dev smokes**
 
 ```bash
 curl -sI http://localhost:3000/storefront/vg | head -1
@@ -1041,7 +1041,7 @@ curl -sI "http://localhost:3000/storefront/vg?category=$(docker compose exec -T 
 ```
 Expected: both `200 OK`.
 
-- [ ] **Step 3: Browser spot checks**
+- [x] **Step 3: Browser spot checks**
 
 Visit each, verify:
 - `/storefront/vg` — TopBar + BreadcrumbBar stick on scroll; LeftRail slim; Filter button top-right; no chips visible.
@@ -1049,11 +1049,11 @@ Visit each, verify:
 - Pick category in TopBar → URL updates, breadcrumb shows `Catalog › <name>`; back chevron returns.
 - Hover LeftRail → overlay expands 240px with tree; move away → collapses.
 
-- [ ] **Step 4: Tick plan checkboxes**
+- [x] **Step 4: Tick plan checkboxes**
 
 Open this file and mark every `- [ ]` → `- [x]` across Tasks 1-12.
 
-- [ ] **Step 5: Stage**
+- [x] **Step 5: Stage**
 
 ```bash
 git add docs/superpowers/plans/2026-04-21-storefront-chrome-nav-redesign.md

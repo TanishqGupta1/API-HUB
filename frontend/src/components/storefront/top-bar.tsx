@@ -2,9 +2,14 @@
 
 import Link from "next/link";
 import { useSearch } from "./search-context";
+import type { Category } from "@/lib/types";
 
-export function TopBar() {
-  const { query, setQuery } = useSearch();
+interface TopBarProps {
+  categories: Category[];
+}
+
+export function TopBar({ categories }: TopBarProps) {
+  const { filters, setQuery, setFilter } = useSearch();
 
   return (
     <header className="sticky top-0 z-30 h-[60px] bg-white border-b border-[#cfccc8] flex items-center px-6 gap-6">
@@ -28,7 +33,7 @@ export function TopBar() {
           </svg>
           <input
             type="text"
-            value={query}
+            value={filters.q}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search products…"
             className="w-full pl-10 pr-4 py-2 bg-[#f9f7f4] border border-[#cfccc8] rounded-md
@@ -38,11 +43,21 @@ export function TopBar() {
         </div>
       </div>
 
+      <select
+        value={filters.category ?? ""}
+        onChange={(e) => setFilter("category", e.target.value || null)}
+        className="h-8 px-2 border border-[#cfccc8] rounded-md bg-white text-[12px] text-[#1e1e24] max-w-[220px]"
+      >
+        <option value="">All categories</option>
+        {categories.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+
       <div className="ml-auto shrink-0">
-        <Link
-          href="/"
-          className="text-[12px] font-semibold text-[#484852] hover:text-[#1e4d92]"
-        >
+        <Link href="/" className="text-[12px] font-semibold text-[#484852] hover:text-[#1e4d92]">
           ← Admin
         </Link>
       </div>
