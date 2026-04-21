@@ -102,6 +102,10 @@ body::before {
 }
 
 /* === LAYOUT === */
+.screen {
+  width: 100%;
+}
+
 .shell {
   display: flex;
   height: 100vh;
