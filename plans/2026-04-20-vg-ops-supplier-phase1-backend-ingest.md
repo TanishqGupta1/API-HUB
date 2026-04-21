@@ -43,7 +43,7 @@
 - Create: `backend/tests/conftest.py`
 - Modify: `backend/requirements.txt`
 
-- [ ] **Step 1: Add test dependencies**
+- [x] **Step 1: Add test dependencies**
 
 Edit `backend/requirements.txt`, append:
 
@@ -53,7 +53,7 @@ pytest-asyncio>=0.23
 httpx>=0.27
 ```
 
-- [ ] **Step 2: Install**
+- [x] **Step 2: Install**
 
 ```bash
 cd backend && source .venv/bin/activate && pip install -r requirements.txt
@@ -61,7 +61,7 @@ cd backend && source .venv/bin/activate && pip install -r requirements.txt
 
 Expected: successful install; `pytest --version` prints 8.x.
 
-- [ ] **Step 3: Write the conftest**
+- [x] **Step 3: Write the conftest**
 
 Create `backend/tests/__init__.py` (empty) and `backend/tests/conftest.py`:
 
@@ -161,7 +161,7 @@ asyncio_mode = auto
 pythonpath = .
 ```
 
-- [ ] **Step 4: Verify harness loads**
+- [x] **Step 4: Verify harness loads**
 
 Run:
 ```bash
@@ -172,7 +172,7 @@ pytest --collect-only
 
 Expected: "collected 0 items" (no tests yet) with no errors. If import fails, stop and fix before proceeding.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd .. && git add backend/tests/__init__.py backend/tests/conftest.py backend/pytest.ini backend/requirements.txt
@@ -185,7 +185,7 @@ git commit -m "test: async pytest harness with DB rollback fixture"
 - Create: `backend/modules/catalog/ingest.py` (stub only — router + dependency)
 - Create: `backend/tests/test_catalog_ingest.py`
 
-- [ ] **Step 1: Write failing auth tests**
+- [x] **Step 1: Write failing auth tests**
 
 Create `backend/tests/test_catalog_ingest.py`:
 
@@ -226,7 +226,7 @@ async def test_ingest_accepts_correct_secret_empty_body(client: AsyncClient, see
     assert body["status"] == "completed"
 ```
 
-- [ ] **Step 2: Run — must fail**
+- [x] **Step 2: Run — must fail**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py -v
@@ -234,7 +234,7 @@ pytest backend/tests/test_catalog_ingest.py -v
 
 Expected: 3 failures, all 404 (endpoint not registered).
 
-- [ ] **Step 3: Write minimal ingest.py**
+- [x] **Step 3: Write minimal ingest.py**
 
 Create `backend/modules/catalog/ingest.py`:
 
@@ -318,7 +318,7 @@ async def ingest_products(
     return IngestResult(sync_job_id=job.id, records_processed=len(batch), status="completed")
 ```
 
-- [ ] **Step 4: Wire into main.py**
+- [x] **Step 4: Wire into main.py**
 
 Edit `backend/main.py`. Add import near the other routers:
 
@@ -332,7 +332,7 @@ And register after `catalog_router`:
 app.include_router(catalog_ingest_router)
 ```
 
-- [ ] **Step 5: Run — must pass**
+- [x] **Step 5: Run — must pass**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py -v
@@ -340,7 +340,7 @@ pytest backend/tests/test_catalog_ingest.py -v
 
 Expected: 3 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/modules/catalog/ingest.py backend/main.py backend/tests/test_catalog_ingest.py
@@ -357,7 +357,7 @@ git commit -m "feat(catalog): ingest router skeleton with X-Ingest-Secret auth"
 - Modify: `backend/modules/suppliers/schemas.py`
 - Create: `backend/tests/test_suppliers_protocol.py`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Create `backend/tests/test_suppliers_protocol.py`:
 
@@ -384,7 +384,7 @@ def test_unknown_protocol_rejected():
         SupplierCreate(name="x", slug="x", protocol="carrier_pigeon")
 ```
 
-- [ ] **Step 2: Run — must fail on test_unknown_protocol_rejected (no validation yet) and test_ops_graphql test may pass trivially since field is `str`**
+- [x] **Step 2: Run — must fail on test_unknown_protocol_rejected (no validation yet) and test_ops_graphql test may pass trivially since field is `str`**
 
 ```bash
 pytest backend/tests/test_suppliers_protocol.py -v
@@ -392,7 +392,7 @@ pytest backend/tests/test_suppliers_protocol.py -v
 
 Expected: `test_unknown_protocol_rejected` fails (any string currently accepted). The others may pass for now; they're guard-rails.
 
-- [ ] **Step 3: Tighten the schema**
+- [x] **Step 3: Tighten the schema**
 
 Edit `backend/modules/suppliers/schemas.py`. Replace the file contents:
 
@@ -433,7 +433,7 @@ class SupplierRead(BaseModel):
 
 Note: `promostandards` is included because `_load_active_supplier` in the sync routes currently treats `soap` and `promostandards` as synonyms. The DB column stays VARCHAR per CLAUDE.md — only the Pydantic layer is tightened.
 
-- [ ] **Step 4: Run — all pass**
+- [x] **Step 4: Run — all pass**
 
 ```bash
 pytest backend/tests/test_suppliers_protocol.py -v
@@ -441,7 +441,7 @@ pytest backend/tests/test_suppliers_protocol.py -v
 
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/modules/suppliers/schemas.py backend/tests/test_suppliers_protocol.py
@@ -455,7 +455,7 @@ The current working tree already contains `ProductIngest`, `VariantIngest`, `Ima
 **Files:**
 - Modify: `backend/modules/catalog/schemas.py` (verify / reconcile)
 
-- [ ] **Step 1: Read the current schema file**
+- [x] **Step 1: Read the current schema file**
 
 ```bash
 cat backend/modules/catalog/schemas.py
@@ -523,7 +523,7 @@ class IngestResult(BaseModel):
 
 If any are missing or differ, edit the file to match exactly.
 
-- [ ] **Step 2: Smoke test the imports**
+- [x] **Step 2: Smoke test the imports**
 
 Add to `backend/tests/test_catalog_ingest.py`:
 
@@ -546,7 +546,7 @@ def test_ingest_schemas_importable():
     assert v.base_price is None
 ```
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py::test_ingest_schemas_importable -v
@@ -554,7 +554,7 @@ pytest backend/tests/test_catalog_ingest.py::test_ingest_schemas_importable -v
 
 Expected: passed.
 
-- [ ] **Step 4: Commit (only if you had to edit)**
+- [x] **Step 4: Commit (only if you had to edit)**
 
 ```bash
 git add backend/modules/catalog/schemas.py backend/tests/test_catalog_ingest.py
@@ -573,7 +573,7 @@ The current working tree already defines `Category` in `backend/modules/catalog/
 - Modify: `backend/modules/catalog/models.py` (verify)
 - Modify: `backend/main.py` (ensure `Category` is imported before `create_all` runs)
 
-- [ ] **Step 1: Verify model presence**
+- [x] **Step 1: Verify model presence**
 
 ```bash
 grep -n "class Category" backend/modules/catalog/models.py
@@ -610,7 +610,7 @@ category_id: Mapped[Optional[uuid_mod.UUID]] = mapped_column(
 category_ref: Mapped[Optional["Category"]] = relationship(back_populates="products")
 ```
 
-- [ ] **Step 2: Add model roundtrip test**
+- [x] **Step 2: Add model roundtrip test**
 
 Append to `backend/tests/test_catalog_ingest.py`:
 
@@ -635,7 +635,7 @@ async def test_category_model_roundtrip(db, seed_supplier):
     assert child.parent_id == root.id
 ```
 
-- [ ] **Step 3: Run — must pass (schema already created by autouse fixture)**
+- [x] **Step 3: Run — must pass (schema already created by autouse fixture)**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py::test_category_model_roundtrip -v
@@ -643,7 +643,7 @@ pytest backend/tests/test_catalog_ingest.py::test_category_model_roundtrip -v
 
 Expected: passed.
 
-- [ ] **Step 4: Commit (only if you edited the model)**
+- [x] **Step 4: Commit (only if you edited the model)**
 
 ```bash
 git add backend/modules/catalog/models.py backend/tests/test_catalog_ingest.py
@@ -662,7 +662,7 @@ For each of the four endpoints, the TDD rhythm is: failing test → minimal impl
 - Modify: `backend/modules/catalog/ingest.py`
 - Modify: `backend/tests/test_catalog_ingest.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Append to `backend/tests/test_catalog_ingest.py`:
 
@@ -725,7 +725,7 @@ async def test_ingest_categories_rejects_inactive_supplier(client, inactive_supp
     assert r.status_code == 409
 ```
 
-- [ ] **Step 2: Run — must fail**
+- [x] **Step 2: Run — must fail**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py -k categories -v
@@ -733,7 +733,7 @@ pytest backend/tests/test_catalog_ingest.py -k categories -v
 
 Expected: failures because the endpoint receives a plain `list` but doesn't actually upsert.
 
-- [ ] **Step 3: Implement the endpoint**
+- [x] **Step 3: Implement the endpoint**
 
 Replace the placeholder in `backend/modules/catalog/ingest.py` — add import and endpoint:
 
@@ -815,7 +815,7 @@ async def ingest_categories(
     )
 ```
 
-- [ ] **Step 4: Run — all pass**
+- [x] **Step 4: Run — all pass**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py -k categories -v
@@ -823,7 +823,7 @@ pytest backend/tests/test_catalog_ingest.py -k categories -v
 
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/modules/catalog/ingest.py backend/tests/test_catalog_ingest.py
@@ -836,7 +836,7 @@ git commit -m "feat(ingest): POST /api/ingest/{supplier_id}/categories with idem
 - Modify: `backend/modules/catalog/ingest.py`
 - Modify: `backend/tests/test_catalog_ingest.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Append to `backend/tests/test_catalog_ingest.py`:
 
@@ -943,7 +943,7 @@ async def test_ingest_products_links_category_by_external_id(client, seed_suppli
     assert p.category_id is not None
 ```
 
-- [ ] **Step 2: Run — must fail**
+- [x] **Step 2: Run — must fail**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py -k products -v
@@ -951,7 +951,7 @@ pytest backend/tests/test_catalog_ingest.py -k products -v
 
 Expected: failures (endpoint body not implemented yet).
 
-- [ ] **Step 3: Implement the endpoint**
+- [x] **Step 3: Implement the endpoint**
 
 In `backend/modules/catalog/ingest.py`, add:
 
@@ -1056,7 +1056,7 @@ async def ingest_products(
     )
 ```
 
-- [ ] **Step 4: Run — all pass**
+- [x] **Step 4: Run — all pass**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py -k products -v
@@ -1064,7 +1064,7 @@ pytest backend/tests/test_catalog_ingest.py -k products -v
 
 Expected: all products tests pass (including the earlier empty-body test).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/modules/catalog/ingest.py backend/tests/test_catalog_ingest.py
@@ -1077,7 +1077,7 @@ git commit -m "feat(ingest): POST /api/ingest/{supplier_id}/products upsert with
 - Modify: `backend/modules/catalog/ingest.py`
 - Modify: `backend/tests/test_catalog_ingest.py`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Append:
 
@@ -1139,7 +1139,7 @@ async def test_ingest_inventory_skips_unknown_parts(client, seed_supplier):
     assert r.json()["records_processed"] == 1
 ```
 
-- [ ] **Step 2: Run — must fail**
+- [x] **Step 2: Run — must fail**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py -k inventory -v
@@ -1147,7 +1147,7 @@ pytest backend/tests/test_catalog_ingest.py -k inventory -v
 
 Expected: failures (endpoint missing).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `backend/modules/catalog/ingest.py`:
 
@@ -1199,7 +1199,7 @@ async def ingest_inventory(
 
 Note: matches variants by `sku == part_id`. If the product-side ingest stores `part_id` on `sku`, this works. That is the convention used in Task 7's seed test.
 
-- [ ] **Step 4: Run — pass**
+- [x] **Step 4: Run — pass**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py -k inventory -v
@@ -1207,7 +1207,7 @@ pytest backend/tests/test_catalog_ingest.py -k inventory -v
 
 Expected: 2 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/modules/catalog/ingest.py backend/tests/test_catalog_ingest.py
@@ -1220,7 +1220,7 @@ git commit -m "feat(ingest): POST /api/ingest/{supplier_id}/inventory"
 - Modify: `backend/modules/catalog/ingest.py`
 - Modify: `backend/tests/test_catalog_ingest.py`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Append:
 
@@ -1259,7 +1259,7 @@ async def test_ingest_pricing_updates_base_price(client, seed_supplier, db):
     assert row.variants[0].base_price == Decimal("19.95")
 ```
 
-- [ ] **Step 2: Run — must fail**
+- [x] **Step 2: Run — must fail**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py -k pricing -v
@@ -1267,7 +1267,7 @@ pytest backend/tests/test_catalog_ingest.py -k pricing -v
 
 Expected: 1 failure (endpoint missing).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `backend/modules/catalog/ingest.py`:
 
@@ -1313,7 +1313,7 @@ async def ingest_pricing(
     )
 ```
 
-- [ ] **Step 4: Run**
+- [x] **Step 4: Run**
 
 ```bash
 pytest backend/tests/test_catalog_ingest.py -k pricing -v
@@ -1321,7 +1321,7 @@ pytest backend/tests/test_catalog_ingest.py -k pricing -v
 
 Expected: passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/modules/catalog/ingest.py backend/tests/test_catalog_ingest.py
@@ -1337,7 +1337,7 @@ git commit -m "feat(ingest): POST /api/ingest/{supplier_id}/pricing"
 **Files:**
 - Modify: `backend/seed_demo.py`
 
-- [ ] **Step 1: Add VG OPS entry**
+- [x] **Step 1: Add VG OPS entry**
 
 Edit the `SUPPLIERS` list in `backend/seed_demo.py`. Append:
 
@@ -1355,7 +1355,7 @@ Edit the `SUPPLIERS` list in `backend/seed_demo.py`. Append:
 },
 ```
 
-- [ ] **Step 2: Run the seeder**
+- [x] **Step 2: Run the seeder**
 
 ```bash
 cd backend && source .venv/bin/activate && python seed_demo.py
@@ -1363,7 +1363,7 @@ cd backend && source .venv/bin/activate && python seed_demo.py
 
 Expected: "  [add]  Supplier: Visual Graphics OPS" printed; "Seed complete!" at end.
 
-- [ ] **Step 3: Verify via API**
+- [x] **Step 3: Verify via API**
 
 ```bash
 curl http://localhost:8000/api/suppliers | jq '.[] | select(.slug=="vg-ops")'
@@ -1371,7 +1371,7 @@ curl http://localhost:8000/api/suppliers | jq '.[] | select(.slug=="vg-ops")'
 
 Expected: the VG row with `"protocol":"ops_graphql"`, `"is_active":false`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/seed_demo.py
@@ -1384,7 +1384,7 @@ git commit -m "feat(seed): add Visual Graphics OPS supplier row (ops_graphql, in
 - Create: `api-hub/.env.example`
 - Modify: `api-hub/CLAUDE.md`
 
-- [ ] **Step 1: Document the env var**
+- [x] **Step 1: Document the env var**
 
 Create `api-hub/.env.example`:
 
@@ -1397,7 +1397,7 @@ SECRET_KEY=<fernet-key>
 INGEST_SHARED_SECRET=<random-32-chars>
 ```
 
-- [ ] **Step 2: Append a line to CLAUDE.md under the Environment section**
+- [x] **Step 2: Append a line to CLAUDE.md under the Environment section**
 
 Edit `api-hub/CLAUDE.md`. Under the existing `.env` block, add after `SECRET_KEY=<fernet-key>`:
 
@@ -1405,7 +1405,7 @@ Edit `api-hub/CLAUDE.md`. Under the existing `.env` block, add after `SECRET_KEY
 INGEST_SHARED_SECRET=<random-32>    # n8n → FastAPI ingest auth header
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add api-hub/.env.example api-hub/CLAUDE.md
@@ -1418,7 +1418,7 @@ git commit -m "docs: document INGEST_SHARED_SECRET for n8n → FastAPI ingest"
 
 After Task 11, run the full suite and do an end-to-end curl check.
 
-- [ ] **Full test run**
+- [x] **Full test run**
 
 ```bash
 cd backend && source .venv/bin/activate
@@ -1427,7 +1427,7 @@ pytest -v
 
 Expected: all tests pass; no warnings about deprecated Pydantic v1 syntax.
 
-- [ ] **End-to-end curl**
+- [x] **End-to-end curl**
 
 Start the app:
 
@@ -1467,7 +1467,7 @@ curl "http://localhost:8000/api/products?supplier_id=$VG_ID"
 
 Expected: the last call returns the Test Hat with `variant_count: 1` and the category wired.
 
-- [ ] **Restore VG inactive**
+- [x] **Restore VG inactive**
 
 ```bash
 curl -X POST "http://localhost:8000/api/suppliers/$VG_ID" \
@@ -1475,7 +1475,7 @@ curl -X POST "http://localhost:8000/api/suppliers/$VG_ID" \
   -d '{"is_active": false}'
 ```
 
-- [ ] **Final commit (none expected — this step is verification only)**
+- [x] **Final commit (none expected — this step is verification only)**
 
 ---
 
