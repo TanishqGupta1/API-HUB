@@ -1,9 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PipelineView, { type PipelineNode } from "@/components/workflows/pipeline-view";
 import { api } from "@/lib/api";
+import type { JobType, SyncJob, SyncStatus } from "@/lib/types";
 
 const N8N_URL = process.env.NEXT_PUBLIC_N8N_URL ?? "http://localhost:5678";
+
+const PIPELINE_NODES: PipelineNode[] = [
+  { id: "supplier",  label: "Supplier",          sublabel: "Source data",       status: "idle", icon: "supplier"  },
+  { id: "fetch",     label: "Fetch Data",        sublabel: "SOAP / REST",       status: "idle", icon: "fetch"     },
+  { id: "normalize", label: "Normalize",         sublabel: "Canonical schema",  status: "idle", icon: "normalize" },
+  { id: "store",     label: "Store in DB",       sublabel: "PostgreSQL",        status: "idle", icon: "store"     },
+  { id: "publish",   label: "Publish to Store",  sublabel: "OnPrintShop",       status: "idle", icon: "publish"   },
+];
 
 interface WorkflowSummary {
   id: string;
@@ -75,9 +85,55 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// ─── Cron workflow definitions ───────────────────────────────────────────────
+
+const CRON_WORKFLOWS: { type: JobType; title: string; description: string; schedule: string }[] = [
+  { type: "inventory", title: "Inventory Sync", description: "Stock levels and warehouse availability",  schedule: "every 15 min" },
+  { type: "pricing",   title: "Pricing Sync",   description: "Supplier base prices and tier breaks",    schedule: "hourly"       },
+  { type: "delta",     title: "Delta Sync",     description: "Changed products since last run",         schedule: "every 2 h"    },
+  { type: "full",      title: "Full Sync",      description: "Complete product catalog refresh",        schedule: "nightly"      },
+  { type: "images",    title: "Image Sync",     description: "Product imagery and color swatches",      schedule: "daily"        },
+];
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+const STATUS_STYLE: Record<SyncStatus | "never", { color: string; bg: string; label: string }> = {
+  running:   { color: "var(--blue)",       bg: "var(--blue-pale)",         label: "Running"   },
+  completed: { color: "var(--green)",      bg: "rgba(36,122,82,0.1)",      label: "Healthy"   },
+  failed:    { color: "var(--red)",        bg: "rgba(185,50,50,0.1)",      label: "Failed"    },
+  pending:   { color: "var(--ink-muted)",  bg: "var(--paper-warm)",        label: "Queued"    },
+  never:     { color: "var(--ink-muted)",  bg: "var(--paper-warm)",        label: "Not run"   },
+};
+
+type LatestByType = Partial<Record<JobType, SyncJob>>;
+
+function pickLatestByType(jobs: SyncJob[]): LatestByType {
+  const out: LatestByType = {};
+  for (const j of jobs) {
+    const existing = out[j.job_type];
+    if (!existing || j.started_at > existing.started_at) {
+      out[j.job_type] = j;
+    }
+  }
+  return out;
+}
+
+// ─── page ────────────────────────────────────────────────────────────────────
+
 export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
   const [executions, setExecutions] = useState<Record<string, ExecutionSummary[]>>({});
+  const [latest, setLatest] = useState<LatestByType>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<string | null>(null);
@@ -116,6 +172,12 @@ export default function WorkflowsPage() {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    api<SyncJob[]>("/api/sync-jobs?limit=100")
+      .then((jobs) => setLatest(pickLatestByType(jobs)))
+      .catch(() => setLatest({}));
+  }, []);
+
   async function trigger(workflowId: string) {
     setTriggering(workflowId);
     setMessage(null);
@@ -134,6 +196,14 @@ export default function WorkflowsPage() {
       setTriggering(null);
     }
   }
+
+  const runningTypes = new Set(
+    Object.values(latest).filter((j): j is SyncJob => !!j && j.status === "running").map((j) => j.job_type),
+  );
+
+  const liveNodes: PipelineNode[] = runningTypes.size
+    ? PIPELINE_NODES.map((n, i) => (i === 1 || i === 2 ? { ...n, status: "running" } : n))
+    : PIPELINE_NODES;
 
   return (
     <div className="flex flex-col gap-6 pb-12">
@@ -154,6 +224,75 @@ export default function WorkflowsPage() {
         >
           Open n8n editor ↗
         </a>
+      </div>
+
+      {/* Pipeline diagram */}
+      <div
+        className="rounded-lg border"
+        style={{ borderColor: "var(--border)", background: "white" }}
+      >
+        <PipelineView nodes={liveNodes} />
+      </div>
+
+      {/* Cron workflow cards */}
+      <div>
+        <div
+          className="text-xs font-semibold uppercase tracking-widest mb-3"
+          style={{ color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}
+        >
+          Scheduled Workflows
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {CRON_WORKFLOWS.map((wf) => {
+            const job = latest[wf.type];
+            const style = STATUS_STYLE[job ? job.status : "never"];
+            return (
+              <div
+                key={wf.type}
+                className="rounded-lg border px-4 py-3"
+                style={{ borderColor: "var(--border)", background: "white" }}
+              >
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                    {wf.title}
+                  </div>
+                  <span
+                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0"
+                    style={{ background: style.bg, color: style.color }}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{
+                        background: style.color,
+                        animation: job?.status === "running" ? "pulse-dot 1.2s ease-in-out infinite" : "none",
+                      }}
+                    />
+                    {style.label}
+                  </span>
+                </div>
+
+                <p className="text-xs mb-2" style={{ color: "var(--ink-muted)" }}>
+                  {wf.description}
+                </p>
+
+                <div
+                  className="flex items-center justify-between text-[11px]"
+                  style={{ color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}
+                >
+                  <span>{wf.schedule}</span>
+                  <span>
+                    {loading
+                      ? "…"
+                      : job
+                      ? `last run ${timeAgo(job.started_at)}`
+                      : "—"}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {message && (
@@ -304,6 +443,13 @@ export default function WorkflowsPage() {
           );
         })
       )}
+
+      <style jsx>{`
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%       { opacity: 0.4; transform: scale(1.4); }
+        }
+      `}</style>
     </div>
   );
 }

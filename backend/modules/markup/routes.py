@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from modules.catalog.ingest import require_ingest_secret
 
 from .engine import calculate_price
 from .models import MarkupRule
@@ -17,6 +18,7 @@ push_router = APIRouter(prefix="/api/push", tags=["markup"])
 @push_router.get(
     "/{customer_id}/product/{product_id}/payload",
     response_model=PushPayload,
+    dependencies=[Depends(require_ingest_secret)],
 )
 async def push_payload(
     customer_id: UUID, product_id: UUID, db: AsyncSession = Depends(get_db)
