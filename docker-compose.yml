@@ -47,27 +47,31 @@ services:
       - -c
       - |
         mkdir -p /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop
-        cp -r /opt/custom-nodes/n8n-nodes-onprintshop/package.json /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop/
-        cp -r /opt/custom-nodes/n8n-nodes-onprintshop/dist /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop/
+        cd /opt/custom-nodes/n8n-nodes-onprintshop
+        npm install
+        npm run build
+        cp -r package.json /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop/
+        cp -r dist /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop/
+        cd /home/node
         echo '{"name":"installed-nodes","version":"1.0.0","dependencies":{"n8n-nodes-onprintshop":"*"}}' > /home/node/.n8n/nodes/package.json
         exec n8n start
     depends_on:
       postgres:
         condition: service_healthy
 
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - WATCHPACK_POLLING=true
-    volumes:
-      - ./frontend:/app
-      - frontend_node_modules:/app/node_modules
-      - frontend_next:/app/.next
-    depends_on:
-      - api
+#   frontend:
+#     build: ./frontend
+#     ports:
+#       - "3000:3000"
+#     environment:
+#       - NEXT_PUBLIC_API_URL=http://localhost:8000
+#       - WATCHPACK_POLLING=true
+#     volumes:
+#       - ./frontend:/app
+#       - frontend_node_modules:/app/node_modules
+#       - frontend_next:/app/.next
+#     depends_on:
+#       - api
 
 volumes:
   pgdata:
