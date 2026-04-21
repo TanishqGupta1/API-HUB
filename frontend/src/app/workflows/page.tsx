@@ -1,6 +1,6 @@
 "use client";
 
-import PipelineView, { type PipelineNode, type NodeIcon } from "@/components/workflows/pipeline-view";
+import PipelineView, { type PipelineNode } from "@/components/workflows/pipeline-view";
 
 const N8N_URL = process.env.NEXT_PUBLIC_N8N_URL ?? "http://localhost:5678";
 
@@ -38,8 +38,8 @@ export default function WorkflowsPage() {
           href={N8N_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border"
-          style={{ borderColor: "var(--blue)", color: "var(--blue)", textDecoration: "none" }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border no-underline"
+          style={{ borderColor: "var(--blue)", color: "var(--blue)" }}
         >
           Open n8n Editor ↗
         </a>

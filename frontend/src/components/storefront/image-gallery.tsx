@@ -41,6 +41,8 @@ export function ImageGallery({ images, fallbackUrl, alt }: ImageGalleryProps) {
   useEffect(() => {
     if (list.length <= 1) return;
     function onKey(e: KeyboardEvent) {
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (e.key === "ArrowLeft")  setActiveIdx(i => (i - 1 + list.length) % list.length);
       if (e.key === "ArrowRight") setActiveIdx(i => (i + 1) % list.length);
     }
@@ -51,7 +53,7 @@ export function ImageGallery({ images, fallbackUrl, alt }: ImageGalleryProps) {
   return (
     <div className="flex flex-col gap-3">
       <div className="aspect-square bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] overflow-hidden flex items-center justify-center">
-        <a href={active.url} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center">
+        <a href={active.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${alt} full size`} className="w-full h-full flex items-center justify-center">
           <img
             src={active.url}
             alt={alt}
