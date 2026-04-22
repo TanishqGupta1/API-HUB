@@ -97,6 +97,31 @@
         "operation": "getManyDetailed",
         "returnAll": true,
         "limit": 100,
+        "productFieldsManyDetailed": [
+          "product_id",
+          "product_name",
+          "main_sku",
+          "status",
+          "default_category_id",
+          "small_image",
+          "large_image",
+          "externalCatalogue"
+        ],
+        "productSizeFields": [
+          "size_id",
+          "size_title",
+          "size_width",
+          "size_height"
+        ],
+        "productAdditionalOptionsFields": [
+          "product_additional_option_id",
+          "master_option_id",
+          "option_key",
+          "title",
+          "options_type",
+          "required",
+          "attributes"
+        ],
         "additionalFields": {}
       },
       "id": "9a1b1111-0007-0000-0000-000000000007",
@@ -113,7 +138,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build category map from the prior Shape Categories node.\nconst catItems = $('Shape Categories').all();\nconst catMap = new Map(catItems.map((i) => [i.json.external_id, i.json.name]));\n\n// Flatten any OPS response shape:\n//  A) { data: { products_details: { products: [...] } } }\n//  B) flat product objects per item\nconst flatProducts = $input.all().flatMap((item) => {\n  const j = item.json ?? {};\n  const nested = j?.data?.products_details?.products;\n  if (Array.isArray(nested)) return nested;\n  if (Array.isArray(j)) return j;\n  if (j && typeof j === 'object' && (j.products_id || j.product_id || j.id)) return [j];\n  return [];\n});\n\nreturn flatProducts.map((p) => {\n  const catExt = p.default_category_id ? String(p.default_category_id) : null;\n  const variants = (p.product_size ?? []).map((s) => ({\n    part_id: String(s.product_size_id ?? s.size_id ?? ''),\n    color: s.product_default_color ?? s.color ?? null,\n    size: s.product_size_label ?? s.size_label ?? null,\n    sku: s.product_size_sku ?? String(s.product_size_id ?? ''),\n    base_price: null,\n    inventory: null,\n    warehouse: null,\n  }));\n\n  const images = [];\n  if (p.small_image) images.push({ url: p.small_image, image_type: 'front', color: null, sort_order: 0 });\n  if (p.large_image && p.large_image !== p.small_image) {\n    images.push({ url: p.large_image, image_type: 'back', color: null, sort_order: 1 });\n  }\n\n  return {\n    json: {\n      supplier_sku: p.products_sku ?? String(p.products_id ?? p.product_id ?? ''),\n      product_name: p.products_title ?? p.product_name ?? 'Untitled',\n      brand: p.brand_name ?? null,\n      description: p.products_description ?? p.description ?? null,\n      product_type: 'apparel',\n      image_url: p.small_image ?? p.large_image ?? null,\n      ops_product_id: String(p.products_id ?? p.product_id ?? ''),\n      category_external_id: catExt,\n      category_name: catExt ? (catMap.get(catExt) ?? null) : null,\n      variants,\n      images,\n    },\n  };\n});"
+        "jsCode": "// Build category map from the prior Shape Categories node.\nconst catItems = $('Shape Categories').all();\nconst catMap = new Map(catItems.map((i) => [i.json.external_id, i.json.name]));\n\n// Flatten any OPS response shape:\n//  A) { data: { products_details: { products: [...] } } }\n//  B) flat product objects per item\nconst flatProducts = $input.all().flatMap((item) => {\n  const j = item.json ?? {};\n  const nested = j?.data?.products_details?.products;\n  if (Array.isArray(nested)) return nested;\n  if (Array.isArray(j)) return j;\n  if (j && typeof j === 'object' && (j.products_id || j.product_id || j.id)) return [j];\n  return [];\n});\n\nreturn flatProducts.map((p) => {\n  const catExt = p.default_category_id ? String(p.default_category_id) : null;\n  const variants = (p.product_size ?? []).map((s) => ({\n    part_id: String(s.product_size_id ?? s.size_id ?? ''),\n    color: s.product_default_color ?? s.color ?? null,\n    size: s.product_size_label ?? s.size_label ?? null,\n    sku: s.product_size_sku ?? String(s.product_size_id ?? ''),\n    base_price: null,\n    inventory: null,\n    warehouse: null,\n  }));\n\n  const images = [];\n  if (p.small_image) images.push({ url: p.small_image, image_type: 'front', color: null, sort_order: 0 });\n  if (p.large_image && p.large_image !== p.small_image) {\n    images.push({ url: p.large_image, image_type: 'back', color: null, sort_order: 1 });\n  }\n\n  const options = (p.product_additional_options ?? [])\n    .map((o, i) => {\n      const key = o.option_key ?? o.optionKey ?? '';\n      const title = o.title ?? o.option_title ?? o.optionTitle ?? key ?? 'Option';\n      return {\n        option_key: String(key),\n        title: String(title),\n        options_type: o.options_type ?? o.optionsType ?? null,\n        sort_order: Number(o.sort_order ?? o.sortOrder ?? i),\n        master_option_id: o.master_option_id != null ? Number(o.master_option_id) : null,\n        ops_option_id: o.product_additional_option_id != null ? Number(o.product_additional_option_id) : null,\n        required: Boolean(o.required),\n        attributes: o.attributes ?? [],\n      };\n    })\n    .filter((o) => o.option_key);\n\n  return {\n    json: {\n      supplier_sku: p.products_sku ?? p.main_sku ?? String(p.products_id ?? p.product_id ?? ''),\n      product_name: p.products_title ?? p.product_name ?? 'Untitled',\n      brand: p.brand_name ?? null,\n      description: p.products_description ?? p.description ?? null,\n      product_type: 'apparel',\n      image_url: p.small_image ?? p.large_image ?? null,\n      ops_product_id: String(p.products_id ?? p.product_id ?? ''),\n      external_catalogue: p.externalCatalogue != null ? Number(p.externalCatalogue) : null,\n      category_external_id: catExt,\n      category_name: catExt ? (catMap.get(catExt) ?? null) : null,\n      variants,\n      images,\n      options,\n    },\n  };\n});"
       },
       "id": "9a1b1111-0008-0000-0000-000000000008",
       "name": "Shape Products",

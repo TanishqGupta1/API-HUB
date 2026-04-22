@@ -9,6 +9,7 @@ so every supplier protocol (SanMar SOAP, S&S REST, 4Over HMAC, VG OPS
 GraphQL) feeds the same payload format.
 """
 import os
+import json
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -21,11 +22,19 @@ from database import get_db
 from modules.suppliers.models import Supplier
 from modules.sync_jobs.models import SyncJob
 
-from .models import Category, Product, ProductImage, ProductVariant
+from .models import (
+    Category,
+    Product,
+    ProductImage,
+    ProductOption,
+    ProductOptionAttribute,
+    ProductVariant,
+)
 from .schemas import (
     CategoryIngest,
     IngestResult,
     InventoryIngest,
+    OptionIngest,
     PriceIngest,
     ProductIngest,
 )
@@ -77,6 +86,87 @@ async def _finish_sync_job(db: AsyncSession, job: SyncJob, records: int) -> None
     job.records_processed = records
     job.finished_at = datetime.now(timezone.utc)
     await db.commit()
+
+
+def _normalize_attributes(raw: object) -> list[dict]:
+    """Return attribute dicts from raw value.
+
+    OPS sometimes returns attributes as a JSON string.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    if isinstance(raw, list):
+        return [x for x in raw if isinstance(x, dict)]
+    return []
+
+
+async def _upsert_options(
+    db: AsyncSession, product_id: UUID, options: list[OptionIngest]
+) -> None:
+    """Upsert product_options by (product_id, option_key).
+
+    Attributes are delete-and-reinsert per option (titles can change between syncs).
+    """
+    for opt in options:
+        stmt = (
+            pg_insert(ProductOption)
+            .values(
+                product_id=product_id,
+                option_key=opt.option_key,
+                title=opt.title,
+                options_type=opt.options_type,
+                sort_order=opt.sort_order,
+                master_option_id=opt.master_option_id,
+                ops_option_id=opt.ops_option_id,
+                required=opt.required,
+                status=1,
+            )
+            .on_conflict_do_update(
+                index_elements=["product_id", "option_key"],
+                set_={
+                    "title": opt.title,
+                    "options_type": opt.options_type,
+                    "sort_order": opt.sort_order,
+                    "master_option_id": opt.master_option_id,
+                    "ops_option_id": opt.ops_option_id,
+                    "required": opt.required,
+                },
+            )
+            .returning(ProductOption.id)
+        )
+        option_id = (await db.execute(stmt)).scalar_one()
+
+        await db.execute(
+            ProductOptionAttribute.__table__.delete().where(
+                ProductOptionAttribute.product_option_id == option_id
+            )
+        )
+
+        raw_attrs = opt.attributes
+        if isinstance(raw_attrs, list):
+            attrs = [a.model_dump() for a in raw_attrs]
+        else:
+            attrs = _normalize_attributes(raw_attrs)
+
+        for attr in attrs:
+            title = attr.get("title")
+            if not title:
+                continue
+            db.add(
+                ProductOptionAttribute(
+                    product_option_id=option_id,
+                    title=str(title),
+                    sort_order=int(attr.get("sort_order") or 0),
+                    ops_attribute_id=attr.get("ops_attribute_id"),
+                    status=1,
+                )
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +283,7 @@ async def ingest_products(
             product_type=item.product_type,
             image_url=item.image_url,
             ops_product_id=item.ops_product_id,
+            external_catalogue=item.external_catalogue,
             last_synced=now,
         ).on_conflict_do_update(
             index_elements=["supplier_id", "supplier_sku"],
@@ -205,6 +296,7 @@ async def ingest_products(
                 "product_type": item.product_type,
                 "image_url": item.image_url,
                 "ops_product_id": item.ops_product_id,
+                "external_catalogue": item.external_catalogue,
                 "last_synced": now,
             },
         ).returning(Product.id)
@@ -246,6 +338,9 @@ async def ingest_products(
                 },
             )
             await db.execute(image_stmt)
+
+        if item.options:
+            await _upsert_options(db, product_id, item.options)
 
     await _finish_sync_job(db, job, len(batch))
     return IngestResult(

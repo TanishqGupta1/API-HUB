@@ -1,106 +1,211 @@
 # Sinchana — Sprint Tasks
 
-**Sprint:** Storefront UI redesign
-**Spec:** `docs/superpowers/specs/2026-04-20-storefront-ui-redesign-design.md`
-**Implementation plan:** `docs/superpowers/plans/2026-04-20-storefront-ui-redesign.md`
-**Branch:** cut from `main` as `sinchana/storefront-<slug>` per task. One PR per task.
+**Sprint:** OPS Push Pipeline + V1f UX Overhaul  
+**Spec:** `docs/superpowers/specs/2026-04-22-remaining-tasks-design.md`  
+**Branch per task:** `sinchana/<task-slug>` → one PR per task
 
 ---
 
 ## Overview
 
-You own grid, category navigation, filter UI, and final polish. **All 8 tasks run in parallel** — they touch disjoint files. Ship in any order. If a task needs code from Vidhi or Urvashi that hasn't shipped yet, write a local stub with the interface below and move on.
+4 sprint tasks + 2 SanMar tasks. Tasks 2, 3, 4 are already done — verified against codebase. Real work is Task 1 (quick type addition) and SanMar Task 1 (error handling branch in n8n workflow JSON).
 
-## Files you own (nobody else writes these)
+---
 
-- `frontend/src/components/storefront/left-rail.tsx` — NEW
-- `frontend/src/components/storefront/mobile-filter-sheet.tsx` — NEW
-- `frontend/src/components/storefront/filter-chip-bar.tsx` — NEW
-- `frontend/src/components/storefront/storefront-product-card.tsx` — EDIT
-- `frontend/src/app/storefront/vg/page.tsx` — REWRITE
-- `frontend/src/app/storefront/vg/category/[category_id]/page.tsx` — REWRITE
-- `frontend/src/lib/types.ts` — EDIT (extend `ProductListItem`)
-- `frontend/.gitignore` — EDIT (add `*.tsbuildinfo`)
-- `frontend/src/components/storefront/category-nav.tsx` — DELETE
+## Task 1 — `ProductPushLogRead` TypeScript Type ⚡ FIRST
 
-## Integration contracts (other people's files you import)
+**File:** `frontend/src/lib/types.ts`  
+**Effort:** XS — append at end of file (line 203)
 
-If you import a file that hasn't been shipped yet, create a local stub with the signature below. Replace with their real component via rebase when their PR merges.
+`types.ts` currently ends at line 203 with `FieldMapping`. Append after the last interface:
 
-| Imported from | Component | Interface |
-|---|---|---|
-| Vidhi 7 | `useSearch()` from `@/components/storefront/search-context` | returns `{ query: string; setQuery: (q: string) => void }` |
-| Urvashi 2 | backend `GET /api/products` response | new fields on `ProductListItem`: `price_min`, `price_max`, `total_inventory`, `category_id` (all optional) |
-| Urvashi 4 | no direct import (route group is orthogonal) | — |
-
-If Vidhi hasn't shipped SearchContext yet, stub at top of your page:
 ```ts
-const useSearch = () => ({ query: "", setQuery: () => {} }); // replaced by Vidhi 7
+/* ─── Push Log ───────────────────────────────────────────────────────────── */
+export interface ProductPushLogRead {
+  id: string;
+  product_id: string;
+  product_name: string | null;
+  customer_id: string;
+  customer_name: string | null;
+  supplier_name: string | null;
+  ops_product_id: string | null;
+  status: "pushed" | "failed" | "skipped";
+  error: string | null;
+  pushed_at: string;
+}
 ```
 
----
+Note: backend `PushLogRead` schema has `product_name`, `customer_name`, `supplier_name` as optional joined fields — include them so the PushHistory component can display them without extra API calls.
 
-## Tasks
+Ship as a standalone PR. Vidhi's PushHistory component imports this type.
 
-1. **Plan Task 8 — LeftRail**
-   - Collapsible 260px/48px tree, sticky under top bar, per-category count.
-   - localStorage key: `vg-rail-collapsed`.
-   - Props: `categories: Category[]`, `counts: Record<string, number>`. No data fetch inside.
-   - Acceptance: active route = blueprint blue fill; nested categories indent 14px per level.
-
-2. **Plan Task 10 — MobileFilterSheet**
-   - Floating Filter FAB at `< 768px` bottom-right; opens bottom sheet wrapping `<LeftRail>`.
-   - Escape + backdrop click close; `role="dialog" aria-modal="true"`.
-   - Acceptance: FAB invisible on desktop (Tailwind `md:hidden`).
-
-3. **Plan Task 12 — FilterChipBar**
-   - Props: `inStockOnly`, `onInStockChange`, `sort`, `onSortChange`, `query` (display only).
-   - Active chip = blueprint blue fill with `×`; inactive = white border.
-   - Right side: sort select + Clear all link.
-
-4. **Plan Task 13 — StorefrontProductCard upgrades**
-   - Add price band (min–max) and OUT badge top-right when `total_inventory <= 0`.
-   - Extend `ProductListItem` in `frontend/src/lib/types.ts`:
-     ```ts
-     price_min: number | null;
-     price_max: number | null;
-     total_inventory: number | null;
-     category_id: string | null;
-     ```
-   - If Urvashi 2 not shipped, backend returns null for new fields — card handles gracefully (no band, no badge).
-
-5. **Plan Task 11 — Rewrite `/storefront/vg/page.tsx`**
-   - Page renders grid + `<FilterChipBar>` only. Chrome comes from layout (Vidhi 5/9).
-   - Client-side filter: name/sku/brand via `useSearch()`; in-stock via FilterChipBar; sort name A-Z / Z-A / most variants.
-   - Acceptance: empty state when filters exclude all.
-
-6. **Plan Task 19 — Rewrite category page** (`app/storefront/vg/category/[category_id]/page.tsx`)
-   - Same layout as Task 11, adds breadcrumb at top.
-   - Products fetched with `?supplier_id=<vg>&category_id=<id>` (server resolves descendants).
-
-7. **Plan Task 20 — Dead code + a11y + gitignore**
-   - `git rm frontend/src/components/storefront/category-nav.tsx`.
-   - Grep for leftover imports: `grep -rn "category-nav" frontend/src || true`.
-   - Add `*.tsbuildinfo` to `frontend/.gitignore`.
-   - Lighthouse Accessibility audit on `/storefront/vg` and any PDP URL. Fix anything below 90 (alt attrs, contrast).
-
-8. **Housekeeping follow-up (from PR #19 review)**
-   - Grep `frontend/src/app` for any inline `style={{...}}` block > 5 lines. Convert to Tailwind utilities when obvious. Flag unclear cases in PR description — do not invent.
+**Acceptance:** `import type { ProductPushLogRead } from "@/lib/types"` compiles without error in Vidhi's component.
 
 ---
 
-## Rules
+## ✅ Task 2 — Sync Dashboard Health View — DONE
 
-- Follow plan's code blocks verbatim for Tasks 8, 10, 12.
-- Blueprint tokens only: paper `#f2f0ed`, ink `#1e1e24`, blueprint `#1e4d92`, muted `#888894`, border `#cfccc8`.
-- No Co-Authored-By lines in commits.
-- One PR per task. PR title = `feat(storefront): <task name>`.
+`frontend/src/app/(admin)/sync/page.tsx` already has:
+- Filters by supplier, job type, status (lines 72–74)
+- Auto-refresh every 5s while any job is running (line 103) + background refresh every 30s (line 114)
+- Human-readable `JOB_TYPE_LABELS` map in `frontend/src/app/(admin)/page.tsx` (line 31)
 
-## Running locally
+`frontend/src/app/(admin)/page.tsx` already has per-supplier health badges with green/amber/red thresholds and expandable error messages.
 
+No action needed.
+
+---
+
+## ✅ Task 3 — Terminology Overhaul — DONE
+
+Sidebar (`SidebarNav.tsx`) already uses: "Storefronts", "Pricing Rules", "Data Configuration", "Data Updates", "Product Catalog", sections "Products" and "Configuration".
+
+Grep across all admin pages for `_QUERYING`, `Auth_Error`, `Technical Index`, `Push to OPS`, `Sync Jobs`, `Markup Rules`, `Field Mapping` returns zero results — all already replaced.
+
+Empty states already present on every page (products, customers/storefronts, sync, markup/pricing rules).
+
+No action needed.
+
+---
+
+## ✅ Task 4 — Simplified Supplier Form — DONE
+
+`frontend/src/components/suppliers/reveal-form.tsx` already has the full 3-step flow: Choose supplier (with popular grid + search + custom toggle) → Connect account (API username/password + test connection) → Activate (schedule dropdown + activate button).
+
+SanMar is in the popular suppliers grid. The **only issue** is SanMar's protocol is set to `"promostandards"` instead of `"sftp"` — that's being fixed by Urvashi in her Task 8 (`reveal-form.tsx` line 14).
+
+No action needed from Sinchana on this task.
+
+---
+
+## SanMar SFTP Tasks
+
+**Spec:** `docs/superpowers/specs/2026-04-22-sanmar-sftp-integration-design.md`
+
+---
+
+### SanMar Task 1 — Error Handling Branch in Workflow JSON (W4)
+
+**File:** `n8n-workflows/sanmar-sftp-pull.json`  
+**Effort:** S  
+**No backend changes. No blockers — can start now.**
+
+The workflow currently has no error handling on the `POST /ingest/products` HTTP node (`http-002`). If a batch fails, the loop silently dies.
+
+**How n8n error branches work in JSON:** Each node can have `onError: "continueErrorOutput"` set, which enables an error output pin. Connect a new Code node to that error output.
+
+**Step 1 — open `sanmar-sftp-pull.json` and find the `http-002` node:**
+```json
+{
+  "id": "http-002",
+  "name": "POST /ingest/products",
+  "type": "n8n-nodes-base.httpRequest",
+  ...
+}
+```
+
+**Step 2 — add `"onError": "continueErrorOutput"` to the http-002 node parameters.**
+
+**Step 3 — add the Format Error Code node** (new entry in the `nodes` array):
+```json
+{
+  "id": "code-error-001",
+  "name": "Format Error",
+  "type": "n8n-nodes-base.code",
+  "typeVersion": 2,
+  "position": [1400, 400],
+  "parameters": {
+    "jsCode": "const err = $input.first().json;\nreturn [{ json: {\n  event: 'sanmar_ingest_error',\n  batch_error: err.message || JSON.stringify(err),\n  timestamp: new Date().toISOString()\n}}];"
+  }
+}
+```
+
+**Step 4 — add the connection** from http-002's error output to Format Error. In the `connections` object, find the `"POST /ingest/products"` key and add an error output entry:
+```json
+"POST /ingest/products": {
+  "main": [[{ "node": "...", "type": "main", "index": 0 }]],
+  "error": [[{ "node": "Format Error", "type": "main", "index": 0 }]]
+}
+```
+
+**Step 5 — add a Log Error HTTP node** after Format Error, posting the error to push-log:
+```json
+{
+  "id": "http-error-log",
+  "name": "Log Error",
+  "type": "n8n-nodes-base.httpRequest",
+  "typeVersion": 4.2,
+  "position": [1600, 400],
+  "parameters": {
+    "method": "POST",
+    "url": "http://host.docker.internal:8000/api/push-log",
+    "sendHeaders": true,
+    "headerParameters": {
+      "parameters": [
+        { "name": "Content-Type", "value": "application/json" }
+      ]
+    },
+    "sendBody": true,
+    "bodyParameters": {
+      "parameters": [
+        { "name": "status", "value": "failed" },
+        { "name": "error", "value": "={{ $json.batch_error }}" }
+      ]
+    }
+  }
+}
+```
+
+Connect Format Error → Log Error in the `connections` object.
+
+**Step 6 — import and verify in n8n:**
 ```bash
-docker compose up -d postgres n8n
-cd backend && source .venv/bin/activate && uvicorn main:app --port 8000 &
-cd frontend && npm run dev &
-# http://localhost:3000/storefront/vg
+docker cp n8n-workflows/sanmar-sftp-pull.json api-hub-n8n-1:/tmp/sanmar-sftp-pull.json
+docker exec api-hub-n8n-1 n8n import:workflow --input=/tmp/sanmar-sftp-pull.json
 ```
+
+Open n8n at `http://localhost:5678` → find the SanMar SFTP workflow → confirm the error branch node appears connected to the POST /ingest node.
+
+**Acceptance:** Workflow editor shows Format Error node connected to the error output of POST /ingest/products. Workflow imports without errors.
+
+---
+
+### SanMar Task 2 — Frontend E2E Verify (E2)
+
+**Requires:**
+- Tanishq: P1 (SanMar DB row), P2 (SFTP cred in n8n), P3 (env var), E1 (full workflow run)
+- Urvashi Task 9: ✅ already done — products API already supports no-supplier filter
+
+**Code change required** — update storefront to show all products, not just `vg-ops` supplier:
+
+In `frontend/src/app/storefront/vg/page.tsx`, the current fetch (lines 19–23):
+```ts
+const sups = await api<{ id: string; slug: string }[]>("/api/suppliers");
+const vg = sups.find((s) => s.slug === "vg-ops");
+if (!vg) return;
+const rows = await api<ProductListItem[]>(`/api/products?supplier_id=${vg.id}&limit=500`);
+```
+
+Replace with:
+```ts
+const rows = await api<ProductListItem[]>(`/api/products?limit=500`);
+```
+
+Remove the `sups` and `vg` variables entirely. The products API already supports no `supplier_id` (Urvashi Task 9 confirmed done).
+
+Then open `http://localhost:3000/storefront/vg`. Confirm:
+- SanMar products visible (brand badge shows "SanMar" in blue)
+- Product images load (not broken — check browser network tab)
+- Variant picker shows real colors + sizes
+- Price block shows pricing
+- Product detail page (`/storefront/vg/product/<id>`) loads without errors
+
+If anything is broken after the code change, create a GitHub issue with a screenshot and the product ID.
+
+---
+
+## Files You Own
+
+- `frontend/src/lib/types.ts` — MODIFY (Task 1, append ProductPushLogRead)
+- `n8n-workflows/sanmar-sftp-pull.json` — MODIFY (SanMar Task 1, error branch)
+- `frontend/src/app/storefront/vg/page.tsx` — MODIFY (SanMar Task 2, remove supplier filter)

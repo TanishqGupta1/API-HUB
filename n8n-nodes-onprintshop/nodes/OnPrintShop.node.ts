@@ -3023,6 +3023,13 @@ export class OnPrintShop implements INodeType {
 						default: 0,
 						description: 'All store filter',
 					},
+					{
+						displayName: 'External Catalogue',
+						name: 'externalCatalogue',
+						type: 'number',
+						default: 0,
+						description: 'Filter by external catalogue (0 or 1)',
+					},
 				],
 			},
 		// Product: Get Detailed - Fields Selection
@@ -3086,6 +3093,7 @@ export class OnPrintShop implements INodeType {
 				{ name: 'Product Hire Designer Cost', value: 'product_hire_designer_cost' },
 				{ name: 'Product Minimum Price', value: 'product_minimum_price' },
 				{ name: 'Product Start Price', value: 'product_start_price' },
+				{ name: 'External Catalogue', value: 'externalCatalogue' },
 			],
 				default: [
 					'product_id',
@@ -3204,74 +3212,81 @@ export class OnPrintShop implements INodeType {
 					default: 0,
 					description: 'All store filter',
 				},
-			],
-		},
-		// Product: Get Many Detailed - Fields Selection
-			{
+				{
+					displayName: 'External Catalogue',
+					name: 'externalCatalogue',
+					type: 'number',
+					default: 0,
+					description: 'Filter by external catalogue (0 or 1)',
+				},
+				],
+				},
+				// Product: Get Many Detailed - Fields Selection
+				{
 				displayName: 'Product Fields',
 				name: 'productFieldsManyDetailed',
 				type: 'multiOptions',
 				displayOptions: {
-					show: {
-						resource: ['product'],
-						operation: ['getManyDetailed'],
-					},
+				show: {
+					resource: ['product'],
+					operation: ['getManyDetailed'],
+				},
 				},
 				options: [
-					{ name: '🔘 Select All Fields', value: 'SELECT_ALL' },
-					{ name: '🔘 Deselect All Fields', value: 'DESELECT_ALL' },
-					{ name: '─────────────────────────────', value: 'SEPARATOR' },
-					{ name: 'Product ID', value: 'product_id' },
-					{ name: 'Status', value: 'status' },
-					{ name: 'Sort Order', value: 'sort_order' },
-					{ name: 'Product Name', value: 'product_name' },
-					{ name: 'Kit Type ID', value: 'kit_type_id' },
-					{ name: 'Kit Products', value: 'kit_products' },
-					{ name: 'Associate Option ID', value: 'associate_option_id' },
-					{ name: 'Associate Option Key', value: 'associate_option_key' },
-					{ name: 'Associate Attribute ID', value: 'associate_attribute_id' },
-					{ name: 'Associate Attribute Key', value: 'associate_attribute_key' },
-					{ name: 'Associate Size ID', value: 'associate_size_id' },
-					{ name: 'Associate Multiplier', value: 'associate_multiplier' },
-					{ name: 'Associate Status', value: 'associate_status' },
-					{ name: 'Associate Calculation Type', value: 'associate_calculation_type' },
-					{ name: 'Default Category ID', value: 'default_category_id' },
-					{ name: 'Associated Category IDs', value: 'associated_category_ids' },
-					{ name: 'Default Category Name', value: 'default_category_name' },
-					{ name: 'Associated Category Names', value: 'associated_category_names' },
-					{ name: 'Small Image', value: 'small_image' },
-					{ name: 'Large Image', value: 'large_image' },
-					{ name: 'Product URL', value: 'product_url' },
-					{ name: 'Long Description', value: 'long_description' },
-					{ name: 'Predefined Product Type', value: 'predefined_product_type' },
-					{ name: 'All Store', value: 'all_store' },
-					{ name: 'Products Internal Name', value: 'products_internal_name' },
-					{ name: 'Search Keywords', value: 'search_keywords' },
-					{ name: 'Short Description', value: 'short_description' },
-					{ name: 'Long Description Two', value: 'long_description_two' },
-					{ name: 'SEO Page Title', value: 'seo_page_title' },
-					{ name: 'SEO Page Description', value: 'seo_page_description' },
-					{ name: 'Schema Markup', value: 'schema_markup' },
-					{ name: 'SEO Page Metatags', value: 'seo_page_metatags' },
-					{ name: 'Main SKU', value: 'main_sku' },
-					{ name: 'Default Production Days', value: 'default_production_days' },
-					{ name: 'Product Cut Off Time', value: 'product_cut_off_time' },
-					{ name: 'Products Draw Area Margins', value: 'products_draw_area_margins' },
-					{ name: 'Products Draw Cutting Margins', value: 'products_draw_cutting_margins' },
-					{ name: 'Product Pages', value: 'productpages' },
-					{ name: 'Custom Size Restrict Data', value: 'custom_size_restrict_data' },
-					{ name: 'Product Default Quantity Interval', value: 'product_default_quantity_interval' },
-					{ name: 'Custom Cross Check Height Width', value: 'custom_cross_check_height_width' },
-					{ name: 'Custom Size Info', value: 'custom_size_info' },
-					{ name: 'Product Setup Cost', value: 'product_setup_cost' },
-					{ name: 'Product Hire Designer Cost', value: 'product_hire_designer_cost' },
-					{ name: 'Product Minimum Price', value: 'product_minimum_price' },
-					{ name: 'Product Start Price', value: 'product_start_price' },
-					{ name: '─────────────────────────────', value: 'SEPARATOR2' },
-					{ name: 'Product Size (nested)', value: 'product_size' },
-					{ name: 'Product Additional Options (nested)', value: 'product_additional_options' },
-				],
-				default: [
+				{ name: '🔘 Select All Fields', value: 'SELECT_ALL' },
+				{ name: '🔘 Deselect All Fields', value: 'DESELECT_ALL' },
+				{ name: '─────────────────────────────', value: 'SEPARATOR' },
+				{ name: 'Product ID', value: 'product_id' },
+				{ name: 'Status', value: 'status' },
+				{ name: 'Sort Order', value: 'sort_order' },
+				{ name: 'Product Name', value: 'product_name' },
+				{ name: 'Kit Type ID', value: 'kit_type_id' },
+				{ name: 'Kit Products', value: 'kit_products' },
+				{ name: 'Associate Option ID', value: 'associate_option_id' },
+				{ name: 'Associate Option Key', value: 'associate_option_key' },
+				{ name: 'Associate Attribute ID', value: 'associate_attribute_id' },
+				{ name: 'Associate Attribute Key', value: 'associate_attribute_key' },
+				{ name: 'Associate Size ID', value: 'associate_size_id' },
+				{ name: 'Associate Multiplier', value: 'associate_multiplier' },
+				{ name: 'Associate Status', value: 'associate_status' },
+				{ name: 'Associate Calculation Type', value: 'associate_calculation_type' },
+				{ name: 'Default Category ID', value: 'default_category_id' },
+				{ name: 'Associated Category IDs', value: 'associated_category_ids' },
+				{ name: 'Default Category Name', value: 'default_category_name' },
+				{ name: 'Associated Category Names', value: 'associated_category_names' },
+				{ name: 'Small Image', value: 'small_image' },
+				{ name: 'Large Image', value: 'large_image' },
+				{ name: 'Product URL', value: 'product_url' },
+				{ name: 'Long Description', value: 'long_description' },
+				{ name: 'Predefined Product Type', value: 'predefined_product_type' },
+				{ name: 'All Store', value: 'all_store' },
+				{ name: 'Products Internal Name', value: 'products_internal_name' },
+				{ name: 'Search Keywords', value: 'search_keywords' },
+				{ name: 'Short Description', value: 'short_description' },
+				{ name: 'Long Description Two', value: 'long_description_two' },
+				{ name: 'SEO Page Title', value: 'seo_page_title' },
+				{ name: 'SEO Page Description', value: 'seo_page_description' },
+				{ name: 'Schema Markup', value: 'schema_markup' },
+				{ name: 'SEO Page Metatags', value: 'seo_page_metatags' },
+				{ name: 'Main SKU', value: 'main_sku' },
+				{ name: 'Default Production Days', value: 'default_production_days' },
+				{ name: 'Product Cut Off Time', value: 'product_cut_off_time' },
+				{ name: 'Products Draw Area Margins', value: 'products_draw_area_margins' },
+				{ name: 'Products Draw Cutting Margins', value: 'products_draw_cutting_margins' },
+				{ name: 'Product Pages', value: 'productpages' },
+				{ name: 'Custom Size Restrict Data', value: 'custom_size_restrict_data' },
+				{ name: 'Product Default Quantity Interval', value: 'product_default_quantity_interval' },
+				{ name: 'Custom Cross Check Height Width', value: 'custom_cross_check_height_width' },
+				{ name: 'Custom Size Info', value: 'custom_size_info' },
+				{ name: 'Product Setup Cost', value: 'product_setup_cost' },
+				{ name: 'Product Hire Designer Cost', value: 'product_hire_designer_cost' },
+				{ name: 'Product Minimum Price', value: 'product_minimum_price' },
+				{ name: 'Product Start Price', value: 'product_start_price' },
+				{ name: 'External Catalogue', value: 'externalCatalogue' },
+				{ name: '─────────────────────────────', value: 'SEPARATOR2' },
+				{ name: 'Product Size (nested)', value: 'product_size' },
+				{ name: 'Product Additional Options (nested)', value: 'product_additional_options' },
+				],				default: [
 					'product_id',
 					'status',
 					'sort_order',
@@ -3358,16 +3373,24 @@ export class OnPrintShop implements INodeType {
 					{ name: '🔘 Select All Option Fields', value: 'SELECT_ALL' },
 					{ name: '🔘 Deselect All Option Fields', value: 'DESELECT_ALL' },
 					{ name: '─────────────────────────────', value: 'SEPARATOR' },
+					{ name: 'Product Additional Option ID', value: 'product_additional_option_id' },
+					{ name: 'Master Option ID', value: 'master_option_id' },
 					{ name: 'Option Key', value: 'option_key' },
+					{ name: 'Title', value: 'title' },
 					{ name: 'Options Type', value: 'options_type' },
 					{ name: 'Required', value: 'required' },
 					{ name: 'Sort Order', value: 'sort_order' },
+					{ name: 'Attributes', value: 'attributes' },
 				],
 				default: [
+					'product_additional_option_id',
+					'master_option_id',
 					'option_key',
+					'title',
 					'options_type',
 					'required',
 					'sort_order',
+					'attributes',
 				],
 				description: 'Select product additional options fields to return. Leave empty to exclude additional options.',
 			},
@@ -6624,6 +6647,7 @@ export class OnPrintShop implements INodeType {
 				if (queryParameters.offset) variables.offset = queryParameters.offset;
 				if (queryParameters.status !== undefined) variables.status = queryParameters.status;
 				if (queryParameters.all_store !== undefined) variables.all_store = queryParameters.all_store;
+				if (queryParameters.externalCatalogue !== undefined) variables.externalCatalogue = queryParameters.externalCatalogue;
 
 				// Filter out special options and separators
 				const productFields = productFieldsSelected
@@ -6658,8 +6682,8 @@ export class OnPrintShop implements INodeType {
 
 				// Build the GraphQL query with nested fields
 				const query = `
-					query productsDetails ($products_id: Int, $limit: Int, $offset: Int, $status: Int, $all_store: Int) {
-						products_details (products_id: $products_id, limit: $limit, offset: $offset, status: $status, all_store: $all_store) {
+					query productsDetails ($products_id: Int, $limit: Int, $offset: Int, $status: Int, $all_store: Int, $externalCatalogue: Int) {
+						products_details (products_id: $products_id, limit: $limit, offset: $offset, status: $status, all_store: $all_store, externalCatalogue: $externalCatalogue) {
 							products {
 								${productFields}
 								${productSizeQuery}
@@ -6730,6 +6754,7 @@ export class OnPrintShop implements INodeType {
 				if (queryParameters.offset) variables.offset = queryParameters.offset;
 				if (queryParameters.status !== undefined) variables.status = queryParameters.status;
 				if (queryParameters.all_store !== undefined) variables.all_store = queryParameters.all_store;
+				if (queryParameters.externalCatalogue !== undefined) variables.externalCatalogue = queryParameters.externalCatalogue;
 
 				// Filter out special options and separators
 				const productFields = productFieldsSelected
@@ -6764,8 +6789,8 @@ export class OnPrintShop implements INodeType {
 
 				// Build the GraphQL query with nested fields (no products_id parameter)
 				const query = `
-					query productsDetails ($limit: Int, $offset: Int, $status: Int, $all_store: Int) {
-						products_details (limit: $limit, offset: $offset, status: $status, all_store: $all_store) {
+					query productsDetails ($limit: Int, $offset: Int, $status: Int, $all_store: Int, $externalCatalogue: Int) {
+						products_details (limit: $limit, offset: $offset, status: $status, all_store: $all_store, externalCatalogue: $externalCatalogue) {
 							products {
 								${productFields}
 								${productSizeQuery}

@@ -1,61 +1,93 @@
 # Tanishq — Sprint Tasks
 
-**Sprint:** Storefront UI redesign
-**Spec:** `docs/superpowers/specs/2026-04-20-storefront-ui-redesign-design.md`
-**Implementation plan:** `docs/superpowers/plans/2026-04-20-storefront-ui-redesign.md`
-**Role:** PM / reviewer — no coding tasks.
+**Sprint:** OPS Push Pipeline + SanMar SFTP  
+**Role:** PM / reviewer
 
 ---
 
-## Overview
-
-All 20 implementation tasks run in parallel across Sinchana, Vidhi, and Urvashi. Each person owns a disjoint set of files (see their task files). No serial dependencies — if an import is missing, the author stubs it locally and removes the stub after the dependency lands.
-
-Your job is to keep this parallelism running smoothly.
-
 ## Responsibilities
 
-1. **Review every incoming PR** against the spec and the corresponding Plan Task. Acceptance criteria live in each person's task file.
-2. **Enforce file ownership.** If a PR from Person A touches a file that Person B owns, flag it and request revision. Prevents merge conflicts before they happen.
-3. **Enforce stub policy.** PRs may ship with local stubs for unmerged dependencies — that's allowed. Require the PR author to delete the stub and swap to the real import in a follow-up commit once the dependency lands on `main`.
-4. **Collect OPS credentials** from Christian so VG OPS supplier can be flipped `is_active=true` in staging.
-5. **Track sprint** via the checklist below.
-6. **Scope keeper.** Everything in "Out of scope" in the spec stays out. Push back on scope creep.
+1. **Review every incoming PR** against the spec and acceptance criteria in each person's task file.
+2. **Merge order:** Sinchana Task 1 (types) before Vidhi Task 7 (PushHistory). Urvashi Task 2 (schemas) before Urvashi Task 3 (candidates). SanMar: Vidhi D1→D2→W1→W2 sequential; Sinchana W4 parallel.
+3. **Scope keeper** — push back on anything not in `docs/superpowers/specs/2026-04-22-remaining-tasks-design.md` or `docs/superpowers/specs/2026-04-22-sanmar-sftp-integration-design.md`.
 
-## Sprint sign-off checklist
+---
 
-Track merges here:
+## Tanishq's Own Tasks (essential only)
 
-- [ ] Urvashi 1 — schema fields (`ProductListRead` + `ProductRead`)
-- [ ] Urvashi 2 — aggregate query in `list_products`
-- [ ] Urvashi 3 — route group migration (admin pages into `(admin)/`)
-- [ ] Vidhi 5 — storefront layout skeleton
-- [ ] Vidhi 7 — TopBar + SearchContext
-- [ ] Vidhi 9 — StorefrontShell real composition
-- [ ] Vidhi 14 — PDPLayout
-- [ ] Vidhi 15 — ImageGallery keyboard nav
-- [ ] Vidhi 16 — DescriptionHtml
-- [ ] Vidhi 17 — RelatedProducts
-- [ ] Vidhi 18 — PDP page rewrite
-- [ ] Sinchana 8 — LeftRail
-- [ ] Sinchana 10 — MobileFilterSheet
-- [ ] Sinchana 11 — `/storefront/vg/page.tsx` rewrite
-- [ ] Sinchana 12 — FilterChipBar
-- [ ] Sinchana 13 — ProductCard upgrades + `types.ts`
-- [ ] Sinchana 19 — category page rewrite
-- [ ] Sinchana 20 — dead code + Lighthouse + .gitignore
-- [ ] Sinchana 8 (housekeeping) — inline style sweep
+### OPS Push
 
-## Out of sprint scope
+- **C2** — Manual E2E: single product push through n8n → OPS. Steps in `docs/superpowers/plans/2026-04-20-ops-push.md` Task C2. *(Requires OPS creds + all Tier 1 PRs merged)*
+- **C3** — Error path test. Steps in ops-push plan Task C3.
+- **C4** — Write `n8n-workflows/PUSH_README.md` operator guide.
 
-- OPS push workflow (setProduct mutation + n8n workflow) — separate sprint.
-- Cart / quote flow — separate sprint.
-- Real lightbox modal — separate sprint.
-- Medusa integration — dropped indefinitely (per earlier brainstorm).
+### SanMar SFTP (credential-gated — do these first, unblocks Vidhi)
 
-## Review cadence
+- **P1** — Create SanMar supplier DB row:
+  ```bash
+  curl -X POST http://localhost:8000/api/suppliers \
+    -H "Content-Type: application/json" \
+    -d '{"name":"SanMar","slug":"sanmar","protocol":"sftp","auth_config":{}}'
+  ```
+  Save the returned `id`.
 
-- Triage open PRs every morning.
-- First-pass review within 6 hours of review-request.
-- Merge within 12 hours of green CI + no open blockers.
-- Escalate to Christian same day on creds / API shape blockers.
+- **P2** — Add `SanMar SFTP` credential in n8n UI:
+  - Settings → Credentials → New → SFTP
+  - Host: `ftp.sanmar.com`, Port: `2200`, Username + Password from Christian
+
+- **P3** — Set `INGEST_SHARED_SECRET` in n8n environment variables (match value from `api-hub/.env`)
+
+- **E1** — After Vidhi's W1+W2 merged: run full SFTP workflow, verify products in DB:
+  ```bash
+  curl "http://localhost:8000/api/products?supplier_id=<sanmar_id>&limit=5" | python3 -m json.tool
+  ```
+
+### Credentials to chase from Christian
+
+- [ ] SanMar SFTP username + password *(have host/port, need user/pass)*
+- [ ] OPS customer `ops_auth_config` (Client ID + Secret) — needed for C2
+- [ ] OPS Postman collection export — needed for GraphQL input typenames
+- [ ] S&S API credentials
+- [ ] 4Over API credentials
+
+---
+
+## PR Review Checklist
+
+For every PR:
+- [ ] File ownership respected (no one edited someone else's files)
+- [ ] Blueprint design system followed on frontend PRs (paper `#f2f0ed`, blue `#1e4d92`, shadcn/ui components)
+- [ ] No `Co-Authored-By` lines in commits
+- [ ] No per-supplier code or hardcoded credentials
+- [ ] `VARCHAR` not PG ENUM for any new DB column type fields
+- [ ] Backend: upserts use `ON CONFLICT DO UPDATE`, not plain `INSERT`
+
+---
+
+## Sprint Sign-Off Checklist
+
+- [ ] Sinchana 1 — ProductPushLogRead type
+- [ ] Sinchana 2 — Sync dashboard health
+- [ ] Sinchana 3 — Terminology overhaul
+- [ ] Sinchana 4 — Simplified supplier form
+- [ ] Vidhi 1 — Customers (Storefronts) page
+- [ ] Vidhi 2 — setProductSize OPS node (A3)
+- [ ] Vidhi 3 — setProductCategory OPS node (A4)
+- [ ] Vidhi 4 — Gap analysis doc update (A5)
+- [ ] Vidhi 5 — n8n smoke test (A6, manual)
+- [ ] Vidhi 6 — Verify ops-push.json (C1)
+- [ ] Vidhi 7 — PushHistory component (D2)
+- [ ] Vidhi 8 — PublishButton + wire (D3)
+- [ ] Vidhi 9 — Workflows page (0.5)
+- [ ] Urvashi 1 — Dashboard API wiring (0.6)
+- [ ] Urvashi 2 — push_log schemas + POST (B1)
+- [ ] Urvashi 3 — push_candidates module (B2)
+- [ ] Urvashi 4 — Variant bundle endpoint (B4)
+- [ ] Urvashi 5 — Category OPS input endpoint (B5)
+- [ ] Urvashi 6 — Image pipeline cache header (B6)
+- [ ] Urvashi 7 — Wire S&S/4Over protocols (G2)
+- [ ] Urvashi 8 — Fix SanMar protocol in supplier form
+- [ ] Urvashi 9 — Products API no-supplier filter
+- [ ] Tanishq — C2 E2E manual push test (requires OPS creds)
+- [ ] Tanishq — C3 error path test
+- [ ] Tanishq — C4 PUSH_README.md

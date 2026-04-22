@@ -68,7 +68,7 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
       // (This can happen if the POPULAR_SUPPLIERS code isn't perfectly matched in psCompanies)
       const name = isPS ? (selectedPS?.Name || "Mock Supplier") : customName;
       const protocol = isPS 
-        ? "ps" 
+        ? "promostandards"
         : (customType === "Secure API (signed requests)" ? "hmac" : "rest");
       const code = isPS ? (selectedPS?.Code || "MOCK") : customName.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
       

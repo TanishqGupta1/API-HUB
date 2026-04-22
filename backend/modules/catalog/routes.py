@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from database import get_db
 from modules.suppliers.models import Supplier
 
-from .models import Category, Product, ProductVariant
+from .models import Category, Product, ProductOption, ProductVariant
 from .schemas import ProductListRead, ProductRead
 
 router = APIRouter(prefix="/api/products", tags=["catalog"])
@@ -111,6 +111,7 @@ async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
         .options(
             selectinload(Product.variants),
             selectinload(Product.images),
+            selectinload(Product.options).selectinload(ProductOption.attributes),
         )
     )
     product = result.scalar_one_or_none()
@@ -121,6 +122,9 @@ async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
     data = ProductRead.model_validate(product)
     data.supplier_name = supplier.name if supplier else None
     data.images = sorted(data.images, key=lambda i: i.sort_order)
+    data.options = sorted(data.options, key=lambda o: o.sort_order)
+    for opt in data.options:
+        opt.attributes = sorted(opt.attributes, key=lambda a: a.sort_order)
     return data
 
 
