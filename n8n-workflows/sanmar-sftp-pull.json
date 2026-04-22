@@ -1,0 +1,242 @@
+{
+  "id": "sanmar-sftp-pull-001",
+  "name": "SanMar SFTP → Hub (Catalog)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-001",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 320]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/suppliers",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Get Suppliers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst list = items.flatMap((i) => {\n  const j = i.json;\n  if (Array.isArray(j)) return j;\n  if (j && Array.isArray(j.data)) return j.data;\n  return j && typeof j === 'object' ? [j] : [];\n});\nconst sanmar = list.find((s) => s && s.slug === 'sanmar');\nif (!sanmar) {\n  throw new Error(`SanMar supplier not found. Saw ${list.length} suppliers.`);\n}\nreturn [{ json: { sid: sanmar.id, name: sanmar.name } }];"
+      },
+      "id": "code-001",
+      "name": "Resolve SanMar SID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 320]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "path": "/",
+        "options": {
+          "filter": "*.csv"
+        }
+      },
+      "id": "sftp-001",
+      "name": "SFTP: List Files",
+      "type": "n8n-nodes-base.sftp",
+      "typeVersion": 1,
+      "position": [900, 320],
+      "credentials": {
+        "sftp": {
+          "id": "sanmar-sftp-creds",
+          "name": "SanMar SFTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "path": "={{ $json.name }}",
+        "options": {}
+      },
+      "id": "sftp-002",
+      "name": "SFTP: Download File",
+      "type": "n8n-nodes-base.sftp",
+      "typeVersion": 1,
+      "position": [1120, 320],
+      "credentials": {
+        "sftp": {
+          "id": "sanmar-sftp-creds",
+          "name": "SanMar SFTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "spreadsheet-001",
+      "name": "Spreadsheet: Parse CSV",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [1340, 320]
+    },
+    {
+      "parameters": {
+        "batchSize": 500,
+        "options": {}
+      },
+      "id": "batch-001",
+      "name": "Loop: 500 rows",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1560, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MAPPING PLACEHOLDER\n// SanMar bulk files vary by format. \n// Below is a generic mapping for typical SanMar CSV columns.\nconst rows = $input.all();\n\nreturn rows.map((item) => {\n  const p = item.json;\n  return {\n    json: {\n      supplier_sku: String(p.STYLE || p.style || ''),\n      product_name: p.PRODUCT_NAME || p.product_name || 'Unnamed SanMar Product',\n      brand: p.BRAND_NAME || p.brand || 'SanMar',\n      description: p.PRODUCT_DESCRIPTION || p.description || null,\n      product_type: 'apparel',\n      image_url: p.PRODUCT_IMAGE || null,\n      variants: [\n        {\n          part_id: String(p.UNIQUE_KEY || p.id || ''),\n          color: p.COLOR_NAME || null,\n          size: p.SIZE_NAME || null,\n          sku: p.SKU || null,\n          base_price: parseFloat(p.PIECE_PRICE || 0),\n          inventory: parseInt(p.QTY || 0),\n          warehouse: p.WAREHOUSE || null,\n        }\n      ],\n      images: [],\n      options: []\n    }\n  };\n});"
+      },
+      "id": "code-002",
+      "name": "Shape Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://host.docker.internal:8000/api/ingest/{{ $('Resolve SanMar SID').item.json.sid }}/products",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $items().map(i => i.json) }}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "POST /ingest/products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 320]
+    }
+  ],
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Get Suppliers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Suppliers": {
+      "main": [
+        [
+          {
+            "node": "Resolve SanMar SID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve SanMar SID": {
+      "main": [
+        [
+          {
+            "node": "SFTP: List Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SFTP: List Files": {
+      "main": [
+        [
+          {
+            "node": "SFTP: Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SFTP: Download File": {
+      "main": [
+        [
+          {
+            "node": "Spreadsheet: Parse CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Spreadsheet: Parse CSV": {
+      "main": [
+        [
+          {
+            "node": "Loop: 500 rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop: 500 rows": {
+      "main": [
+        [
+          {
+            "node": "Shape Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Products": {
+      "main": [
+        [
+          {
+            "node": "POST /ingest/products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /ingest/products": {
+      "main": [
+        [
+          {
+            "node": "Loop: 500 rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "sanmar-sftp-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

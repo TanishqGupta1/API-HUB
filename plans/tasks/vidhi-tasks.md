@@ -1,105 +1,155 @@
 # Vidhi — Sprint Tasks
 
-**Sprint:** Storefront UI redesign
-**Spec:** `docs/superpowers/specs/2026-04-20-storefront-ui-redesign-design.md`
-**Implementation plan:** `docs/superpowers/plans/2026-04-20-storefront-ui-redesign.md`
-**Branch:** cut from `main` as `vidhi/storefront-<slug>` per task. One PR per task.
+**Sprint:** OPS Push Pipeline + V0 Frontend Cleanup  
+**Spec:** `docs/superpowers/specs/2026-04-22-remaining-tasks-design.md`  
+**Full code for every task:** `docs/superpowers/plans/2026-04-20-ops-push.md`  
+**Branch per task:** `vidhi/<task-slug>` → one PR per task
 
 ---
 
 ## Overview
 
-You own the layout shell (top bar + storefront shell) and the full PDP (layout, gallery keyboard nav, sanitized description, related scroller, PDP page). **All 8 tasks run in parallel** — they touch disjoint files. Ship in any order. Stub external imports when needed.
-
-## Files you own (nobody else writes these)
-
-- `frontend/src/app/storefront/vg/layout.tsx` — NEW
-- `frontend/src/components/storefront/storefront-shell.tsx` — NEW (Task 5 stub, Task 9 real)
-- `frontend/src/components/storefront/search-context.tsx` — NEW
-- `frontend/src/components/storefront/top-bar.tsx` — NEW
-- `frontend/src/components/storefront/pdp-layout.tsx` — NEW
-- `frontend/src/components/storefront/description-html.tsx` — NEW
-- `frontend/src/components/storefront/related-products.tsx` — NEW
-- `frontend/src/components/storefront/image-gallery.tsx` — EDIT
-- `frontend/src/app/storefront/vg/product/[product_id]/page.tsx` — REWRITE
-- `frontend/src/app/globals.css` — EDIT (add `.prose-storefront` classes)
-- `frontend/package.json` + `frontend/package-lock.json` — EDIT (add `isomorphic-dompurify`)
-
-## Integration contracts (other people's files you import)
-
-| Imported from | Component | Stub strategy if not yet shipped |
-|---|---|---|
-| Sinchana 8 | `<LeftRail categories={} counts={} />` | Stub that renders empty `<aside />` |
-| Sinchana 10 | `<MobileFilterSheet categories={} counts={} />` | Stub that returns `null` |
-| Sinchana 13 | Extended `ProductListItem` shape | Type-cast to `any` inside related-products if Sinchana hasn't extended `types.ts` yet |
-| Urvashi 3 | `ProductRead.category_id: string \| null` | Cast `as Product & { category_id?: string }` (already in current code) |
-
-If Sinchana hasn't shipped her components, add placeholder at the top of `storefront-shell.tsx`:
-```ts
-function LeftRail() { return null; }           // replaced by Sinchana 8
-function MobileFilterSheet() { return null; }  // replaced by Sinchana 10
-```
-Remove the stubs when her PRs merge.
+9 tasks. Highest load this sprint. Mix of TypeScript (n8n node), React (frontend components), and n8n workflow validation. Do in the priority order below — Task 1 is blocking the entire push pipeline.
 
 ---
 
-## Tasks
+## Priority Order
 
-1. **Plan Task 5 — Storefront layout skeleton**
-   - `app/storefront/vg/layout.tsx`: tiny shim `<StorefrontShell>{children}</StorefrontShell>`.
-   - `storefront-shell.tsx`: bare container for now. Task 9 replaces it with real composition.
-   - Acceptance: `/storefront/vg` returns 200 with the new shell wrapping whatever the page renders.
+### Task 1 — Customers (Storefronts) Page ⚡ FIRST — blocks OPS push
 
-2. **Plan Task 7 — TopBar + SearchContext**
-   - `search-context.tsx`: `SearchProvider` + `useSearch` hook returning `{ query, setQuery }`.
-   - `top-bar.tsx`: sticky 60px, brand on left (VG mark + "Visual Graphics"), search center (uses `useSearch()`), `← Admin` link to `/` on right.
+**File:** `frontend/src/app/customers/page.tsx` (create)  
+**Why urgent:** OPS push needs at least one customer row in the DB. Without this page, no one can add a storefront.
 
-3. **Plan Task 9 — StorefrontShell real composition**
-   - Replace Task 5 stub.
-   - Loads `GET /api/suppliers` → VG → `/api/categories?supplier_id=<vg>` + `/api/products?limit=500` in parallel.
-   - Tallies `category_id` counts client-side, passes to `<LeftRail counts={} />`.
-   - Wraps tree in `<SearchProvider>`. Mounts `<TopBar>`, `<LeftRail>` (hidden on mobile), `<MobileFilterSheet>`.
+**What to build:**
+- List all customers: name, `ops_base_url`, active/inactive toggle
+- Inline add form: `name`, `ops_base_url`, `ops_token_url`, `ops_client_id`, `ops_client_secret`
+- `ops_client_secret` is write-only — never display it after save
+- API calls: `GET /api/customers`, `POST /api/customers`
+- Use existing shadcn `Table`, `Card`, `Input`, `Button` components
+- Blueprint design system: paper `#f2f0ed`, blue `#1e4d92`, same patterns as existing admin pages (see `suppliers/page.tsx` for reference)
+- Label "Customers" → "Storefronts" everywhere on this page
 
-4. **Plan Task 14 — PDPLayout wrapper**
-   - Props: `breadcrumbCategory` (`{id,name} | null`), `breadcrumbProduct`, `gallery`, `info`, `description?`, `related?`.
-   - Desktop grid: `grid-cols-[6fr_4fr] gap-10`. Info pane `lg:sticky lg:top-[80px] lg:self-start`.
-   - Mobile: single column stacks gallery → info.
-
-5. **Plan Task 15 — ImageGallery keyboard nav**
-   - Add `useEffect` listener on `ArrowLeft`/`ArrowRight` to cycle hero.
-   - Wrap hero in `<a href={active.url} target="_blank" rel="noopener noreferrer">` so click opens full-size in new tab.
-
-6. **Plan Task 16 — DescriptionHtml**
-   - `npm install isomorphic-dompurify`.
-   - Sanitize whitelist: `p, br, strong, em, ul, ol, li, a, span, h1–h6`; attrs: `href, target, rel`.
-   - Add `.prose-storefront` CSS rules at bottom of `globals.css` (plan has them verbatim).
-
-7. **Plan Task 17 — RelatedProducts**
-   - Props: `supplierId`, `categoryId`, `excludeId`.
-   - Fetch 16 from `?category_id=...` (fallback `?supplier_id=...&limit=16`), filter out current, take 8.
-   - Horizontal scroller with cards at 180px width. Label "Related products" (category scoped) or "Other VG products".
-
-8. **Plan Task 18 — Rewrite PDP page**
-   - Use `PDPLayout`, `ImageGallery`, `VariantPicker`, `PriceBlock`, `DescriptionHtml`, `RelatedProducts`.
-   - Breadcrumb category via `product.category_id` → `GET /api/categories/{id}` (graceful 404).
-   - CTAs: `← Back` (router.back), `Add to quote` disabled stub with tooltip.
+**Acceptance:** Can add a new OPS storefront with credentials. Credentials save. Page lists all storefronts with active badge.
 
 ---
 
-## Rules
+### Task 2 — `setProductSize` OPS Node Mutation (A3)
 
-- Follow plan's code blocks verbatim for Tasks 7, 14, 15, 16, 17.
-- Layout split fixed at `6fr_4fr` per spec.
-- Always sanitize HTML through DOMPurify — never raw `dangerouslySetInnerHTML`.
-- Blueprint tokens only.
-- No Co-Authored-By lines in commits.
-- One PR per task. PR title = `feat(storefront): <task name>`.
+**File:** `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts`  
+**Full step-by-step code:** `docs/superpowers/plans/2026-04-20-ops-push.md` → Task A3
 
-## Running locally
+Three steps:
+1. Add option entry `setProductSize` in the product resource options array (after `setProductPrice`)
+2. Add parameters block with `setProductSizeInput` JSON field (gated to `operation: ['setProductSize']`)
+3. Add execute branch with mutation string `setProductSize($input: ProductSizeInput!)`
 
+After: `cd n8n-nodes-onprintshop && npm run build` → `docker compose restart n8n`
+
+**Acceptance:** n8n editor shows "Set Product Size" in the product resource dropdown. Node executes without TypeScript errors.
+
+---
+
+### Task 3 — `setProductCategory` OPS Node Mutation (A4)
+
+**File:** `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts`  
+**Full step-by-step code:** `docs/superpowers/plans/2026-04-20-ops-push.md` → Task A4
+
+Same pattern as A3. Three steps:
+1. Option entry: `setProductCategory`
+2. Parameters: `setProductCategoryInput` JSON field
+3. Execute branch: `setProductCategory($input: ProductCategoryInput!)`
+
+Rebuild + restart n8n after.
+
+**Acceptance:** "Set Product Category" appears in node. Builds clean.
+
+---
+
+### Task 4 — Update Gap Analysis Doc (A5)
+
+**File:** `n8n-nodes-onprintshop/OPS-NODE-GAP-ANALYSIS.md`  
+**Effort:** XS
+
+In the "Missing Mutations" table, mark rows for `setProduct`, `setProductPrice`, `setProductSize`, `setProductCategory` as implemented. Move them to a new "Implemented" section at the bottom with the PR numbers.
+
+---
+
+### Task 5 — Combined n8n Smoke Test (A6)
+
+**Requires:** Tasks 2 + 3 done and n8n running  
+**No file to commit — manual test**
+
+In n8n UI, build a throwaway workflow: Set Product Category → Set Product → Set Product Size → Set Product Price. Chain outputs (reference `products_id`, `category_id`, `product_size_id` from prior steps). Execute once. Capture the test product id and **delete it from OPS admin immediately after**. Report any schema mismatches to Tanishq.
+
+---
+
+### Task 6 — Verify `vg-ops-push.json` Workflow (C1)
+
+**File:** `n8n-workflows/ops-push.json`
+
+Open the file. Confirm it has all 9+ nodes matching the spec in `docs/superpowers/plans/2026-04-20-ops-push.md` Phase C:
+- Manual trigger
+- HTTP GET candidates
+- Split products
+- HTTP GET ops-input → setProduct
+- HTTP GET ops-variants → setProductSize loop → setProductPrice loop
+- POST push-log on success
+- Error branch → POST push-log with `status: "failed"`
+
+If nodes are missing or flow is wrong, fix the JSON. Import into n8n and verify it loads without errors:
 ```bash
-docker compose up -d postgres n8n
-cd backend && source .venv/bin/activate && uvicorn main:app --port 8000 &
-cd frontend && npm run dev &
-# /storefront/vg → click card → PDP
+docker cp n8n-workflows/ops-push.json api-hub-n8n-1:/tmp/ops-push.json
+docker exec api-hub-n8n-1 n8n import:workflow --input=/tmp/ops-push.json
 ```
+
+---
+
+### Task 7 — `PushHistory` Component (D2)
+
+**File:** `frontend/src/components/products/push-history.tsx` (create)  
+**Full component code:** `docs/superpowers/plans/2026-04-20-ops-push.md` → Task D2
+
+Table showing push history for a product. Fetches `GET /api/push-log?product_id={id}&limit=20`. Columns: When, Customer, Status (pill: green=pushed, red=failed, grey=skipped), OPS ID, Error.
+
+Requires D1 (ProductPushLogRead type) from Sinchana — check if she's shipped it first. If not, define the interface inline and remove it when her PR lands.
+
+---
+
+### Task 8 — `PublishButton` + Wire into Product Detail (D3)
+
+**Files:**
+- `frontend/src/components/products/publish-button.tsx` (create)
+- `frontend/src/app/(admin)/products/[id]/page.tsx` (modify)
+
+**Full code:** `docs/superpowers/plans/2026-04-20-ops-push.md` → Task D3
+
+Button with customer dropdown. On click: `POST /api/n8n/workflows/vg-ops-push-001/trigger?product_id=...&customer_id=...`. Shows status message. Links to n8n workflow editor.
+
+Wire into product detail page with two new sections below existing content:
+- "Push to storefront" section (PublishButton)
+- "Push history" section (PushHistory from Task 7)
+
+**Acceptance:** Product detail page shows the Publish button. Clicking it with a customer selected fires the n8n workflow. After ~15s, push history table shows a row.
+
+---
+
+### Task 9 — Workflows Page (V0 Task 0.5) — after Tasks 1–8
+
+**File:** `frontend/src/app/workflows/page.tsx` (create)
+
+Animated pipeline diagram: Supplier → Fetch → Normalize → Store → Push to OPS. Each node shows idle/running/done/error status. Link to n8n editor at `http://localhost:5678`. Mostly static for now — becomes live in V1e.
+
+Lower priority — do after Tasks 1–8.
+
+---
+
+## Files You Own
+
+- `frontend/src/app/customers/page.tsx` — NEW
+- `frontend/src/app/workflows/page.tsx` — NEW
+- `frontend/src/components/products/push-history.tsx` — NEW
+- `frontend/src/components/products/publish-button.tsx` — NEW
+- `frontend/src/app/(admin)/products/[id]/page.tsx` — MODIFY
+- `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts` — MODIFY (Tasks 2+3)
+- `n8n-nodes-onprintshop/OPS-NODE-GAP-ANALYSIS.md` — MODIFY (Task 4)
+- `n8n-workflows/ops-push.json` — VERIFY/FIX (Task 6)

@@ -1,106 +1,145 @@
 # Sinchana — Sprint Tasks
 
-**Sprint:** Storefront UI redesign
-**Spec:** `docs/superpowers/specs/2026-04-20-storefront-ui-redesign-design.md`
-**Implementation plan:** `docs/superpowers/plans/2026-04-20-storefront-ui-redesign.md`
-**Branch:** cut from `main` as `sinchana/storefront-<slug>` per task. One PR per task.
+**Sprint:** OPS Push Pipeline + V1f UX Overhaul  
+**Spec:** `docs/superpowers/specs/2026-04-22-remaining-tasks-design.md`  
+**Reference:** `plans/2026-04-16-v1-integration-pipeline.md` Tasks 20 + 21  
+**Branch per task:** `sinchana/<task-slug>` → one PR per task
 
 ---
 
 ## Overview
 
-You own grid, category navigation, filter UI, and final polish. **All 8 tasks run in parallel** — they touch disjoint files. Ship in any order. If a task needs code from Vidhi or Urvashi that hasn't shipped yet, write a local stub with the interface below and move on.
+4 tasks. Frontend-only. Tasks 1 is a quick type addition; Tasks 2–4 are larger UX work for V1f. Do in priority order.
 
-## Files you own (nobody else writes these)
+---
 
-- `frontend/src/components/storefront/left-rail.tsx` — NEW
-- `frontend/src/components/storefront/mobile-filter-sheet.tsx` — NEW
-- `frontend/src/components/storefront/filter-chip-bar.tsx` — NEW
-- `frontend/src/components/storefront/storefront-product-card.tsx` — EDIT
-- `frontend/src/app/storefront/vg/page.tsx` — REWRITE
-- `frontend/src/app/storefront/vg/category/[category_id]/page.tsx` — REWRITE
-- `frontend/src/lib/types.ts` — EDIT (extend `ProductListItem`)
-- `frontend/.gitignore` — EDIT (add `*.tsbuildinfo`)
-- `frontend/src/components/storefront/category-nav.tsx` — DELETE
+## Task 1 — `ProductPushLogRead` TypeScript Type (D1) ⚡ FIRST
 
-## Integration contracts (other people's files you import)
+**File:** `frontend/src/lib/types.ts` (modify — append)
 
-If you import a file that hasn't been shipped yet, create a local stub with the signature below. Replace with their real component via rebase when their PR merges.
+Add this interface:
 
-| Imported from | Component | Interface |
-|---|---|---|
-| Vidhi 7 | `useSearch()` from `@/components/storefront/search-context` | returns `{ query: string; setQuery: (q: string) => void }` |
-| Urvashi 2 | backend `GET /api/products` response | new fields on `ProductListItem`: `price_min`, `price_max`, `total_inventory`, `category_id` (all optional) |
-| Urvashi 4 | no direct import (route group is orthogonal) | — |
-
-If Vidhi hasn't shipped SearchContext yet, stub at top of your page:
 ```ts
-const useSearch = () => ({ query: "", setQuery: () => {} }); // replaced by Vidhi 7
+export interface ProductPushLogRead {
+  id: string;
+  product_id: string;
+  customer_id: string;
+  ops_product_id: string | null;
+  status: "pushed" | "failed" | "skipped";
+  error: string | null;
+  pushed_at: string;
+}
 ```
+
+That's the full task. One PR. Ship fast — Vidhi's PushHistory component (D2) imports this type.
 
 ---
 
-## Tasks
+## Task 2 — Sync Dashboard Health View (V1e Task 19)
 
-1. **Plan Task 8 — LeftRail**
-   - Collapsible 260px/48px tree, sticky under top bar, per-category count.
-   - localStorage key: `vg-rail-collapsed`.
-   - Props: `categories: Category[]`, `counts: Record<string, number>`. No data fetch inside.
-   - Acceptance: active route = blueprint blue fill; nested categories indent 14px per level.
+**Files:**
+- `frontend/src/app/(admin)/sync/page.tsx` — modify (add filters + auto-refresh)
+- `frontend/src/app/(admin)/page.tsx` — modify (add health summary section)
 
-2. **Plan Task 10 — MobileFilterSheet**
-   - Floating Filter FAB at `< 768px` bottom-right; opens bottom sheet wrapping `<LeftRail>`.
-   - Escape + backdrop click close; `role="dialog" aria-modal="true"`.
-   - Acceptance: FAB invisible on desktop (Tailwind `md:hidden`).
+**Dashboard additions** (in `page.tsx` stats section):
+- Per-supplier last sync time: green if < 1h, amber if < 24h, red if > 24h
+- Sync health badge per supplier
+- Latest failed sync with error preview (click to expand full message)
 
-3. **Plan Task 12 — FilterChipBar**
-   - Props: `inStockOnly`, `onInStockChange`, `sort`, `onSortChange`, `query` (display only).
-   - Active chip = blueprint blue fill with `×`; inactive = white border.
-   - Right side: sort select + Clear all link.
+**Sync jobs page additions** (in `sync/page.tsx`):
+- Filter row: by supplier (dropdown), by job type (`full_sync` / `inventory` / `pricing`), by status
+- Show human-readable labels: `full_sync` → "Full Refresh", `inventory` → "Inventory Update", `delta` → "Recent Changes"
+- Auto-refresh every 30s while any job has `status: "running"` (`setInterval` in `useEffect`, clear on unmount)
+- Empty state: "No sync history yet. Activate a supplier to see updates here."
 
-4. **Plan Task 13 — StorefrontProductCard upgrades**
-   - Add price band (min–max) and OUT badge top-right when `total_inventory <= 0`.
-   - Extend `ProductListItem` in `frontend/src/lib/types.ts`:
-     ```ts
-     price_min: number | null;
-     price_max: number | null;
-     total_inventory: number | null;
-     category_id: string | null;
-     ```
-   - If Urvashi 2 not shipped, backend returns null for new fields — card handles gracefully (no band, no badge).
+APIs already exist: `GET /api/sync-jobs`, `GET /api/suppliers`.
 
-5. **Plan Task 11 — Rewrite `/storefront/vg/page.tsx`**
-   - Page renders grid + `<FilterChipBar>` only. Chrome comes from layout (Vidhi 5/9).
-   - Client-side filter: name/sku/brand via `useSearch()`; in-stock via FilterChipBar; sort name A-Z / Z-A / most variants.
-   - Acceptance: empty state when filters exclude all.
-
-6. **Plan Task 19 — Rewrite category page** (`app/storefront/vg/category/[category_id]/page.tsx`)
-   - Same layout as Task 11, adds breadcrumb at top.
-   - Products fetched with `?supplier_id=<vg>&category_id=<id>` (server resolves descendants).
-
-7. **Plan Task 20 — Dead code + a11y + gitignore**
-   - `git rm frontend/src/components/storefront/category-nav.tsx`.
-   - Grep for leftover imports: `grep -rn "category-nav" frontend/src || true`.
-   - Add `*.tsbuildinfo` to `frontend/.gitignore`.
-   - Lighthouse Accessibility audit on `/storefront/vg` and any PDP URL. Fix anything below 90 (alt attrs, contrast).
-
-8. **Housekeeping follow-up (from PR #19 review)**
-   - Grep `frontend/src/app` for any inline `style={{...}}` block > 5 lines. Convert to Tailwind utilities when obvious. Flag unclear cases in PR description — do not invent.
+**Acceptance:** Dashboard shows per-supplier health. Sync page auto-refreshes. Filters work. Human-readable labels everywhere.
 
 ---
 
-## Rules
+## Task 3 — Terminology Overhaul (V1f Task 20)
 
-- Follow plan's code blocks verbatim for Tasks 8, 10, 12.
-- Blueprint tokens only: paper `#f2f0ed`, ink `#1e1e24`, blueprint `#1e4d92`, muted `#888894`, border `#cfccc8`.
-- No Co-Authored-By lines in commits.
-- One PR per task. PR title = `feat(storefront): <task name>`.
+**Files:** All admin pages, `layout.tsx`, sidebar component
 
-## Running locally
+Global find-and-replace of jargon → business language. Full replacement map:
 
-```bash
-docker compose up -d postgres n8n
-cd backend && source .venv/bin/activate && uvicorn main:app --port 8000 &
-cd frontend && npm run dev &
-# http://localhost:3000/storefront/vg
-```
+| Current (jargon) | Replace with | Files |
+|---|---|---|
+| "Vendors" | "Suppliers" | dashboard `page.tsx` |
+| "Technical Index" | "Product Catalog" | `products/page.tsx` |
+| "Customers" | "Storefronts" | `customers/page.tsx`, sidebar |
+| "Push to OPS" | "Publish to Store" | product pages |
+| "Sync Jobs" | "Data Updates" | `sync/page.tsx`, sidebar |
+| "Markup Rules" | "Pricing Rules" | `markup/page.tsx`, sidebar |
+| "Field Mappings" | "Data Configuration" | `mappings/page.tsx`, sidebar |
+| `_QUERYING_INDEX...` | "Loading products..." | all pages |
+| `_QUERYING_ENDPOINT_REGISTRY...` | "Connecting..." | all pages |
+| `_FETCHING_METRICS...` | "Loading dashboard..." | dashboard |
+| `Auth_Error` | "Connection Failed" | status badges |
+| "delta" (job type label) | "Recent Changes" | sync page |
+| "full_sync" (job type label) | "Full Refresh" | sync page |
+
+**Sidebar sections** (find the sidebar nav component):
+- "Orchestration" → "Products"
+- "Management" → "Configuration"
+- "Catalog" → "Product Catalog"
+- "Customers" → "Storefronts"
+- "Markup Rules" → "Pricing Rules"
+- "Sync Jobs" → "Data Updates"
+- "Field Mapping" → "Data Configuration"
+
+**Empty states** — add to every page that can show an empty list:
+- Products: "No products yet. Connect a supplier to start syncing products."
+- Storefronts: "No storefronts added. Add your OnPrintShop storefront to start publishing."
+- Data Updates: "No sync history yet. Activate a supplier to see updates here."
+- Pricing Rules: "No pricing rules set. Add a rule to control storefront pricing."
+
+Use the existing `EmptyState` component in `components/ui/empty-state.tsx` if it exists, otherwise a simple `<div>` with the blueprint text style.
+
+**Acceptance:** Walk every admin page — zero instances of SOAP, WSDL, HMAC, OPS, delta, `_QUERYING` visible to the user. All empty states present.
+
+---
+
+## Task 4 — Simplified Supplier Form (V1f Task 21)
+
+**Files:**
+- `frontend/src/components/suppliers/reveal-form.tsx` — rewrite
+- `frontend/src/app/(admin)/suppliers/page.tsx` — modify if needed
+
+**Goal:** Replace the 5-step progressive reveal form with a clean 3-step flow. Zero SOAP/WSDL/HMAC jargon.
+
+**Step 1 — "Choose your supplier"**
+- Search input: "Search 994+ suppliers..."
+- Popular supplier quick-pick grid: SanMar, S&S Activewear, Alphabroder, 4Over (with logos or just name cards)
+- "Can't find yours? Add a custom supplier" toggle reveals:
+  - Supplier name input
+  - API URL input
+  - Dropdown "Connection type":
+    - "Standard API" (maps to `protocol: "rest"`)
+    - "Secure API (signed requests)" (maps to `protocol: "rest_hmac"`)
+  - Help text: "Not sure? Choose Standard API — your supplier's documentation will specify if signed requests are required."
+- PromoStandards suppliers (from directory): auto-set `protocol: "promostandards"`, hide tech fields entirely
+
+**Step 2 — "Connect your account"**
+- "API Username" + "API Password" inputs (not "Account ID" / "auth_config")
+- "Test Connection" button → calls existing supplier test endpoint
+- Success state: "Connected to [SanMar] — ready to sync"
+- Failure state: "Could not connect. Check your username and password." + "Try Again"
+
+**Step 3 — "Activate"**
+- Summary card: name, connection status
+- Single sync frequency dropdown: "Recommended (automatic)" / "Every 30 minutes" / "Every hour" / "Once a day"
+- "Activate Supplier" button → `POST /api/suppliers` → redirect to suppliers list
+
+**Acceptance:** Walk the form as a non-technical user — no SOAP/WSDL/HMAC visible. Can add SanMar in 3 steps. Can add a custom supplier with the simplified type dropdown.
+
+---
+
+## Files You Own
+
+- `frontend/src/lib/types.ts` — MODIFY (Task 1)
+- `frontend/src/app/(admin)/sync/page.tsx` — MODIFY (Task 2)
+- `frontend/src/app/(admin)/page.tsx` — MODIFY (Task 2, health section only)
+- All admin pages + sidebar — MODIFY (Task 3, terminology only)
+- `frontend/src/components/suppliers/reveal-form.tsx` — REWRITE (Task 4)

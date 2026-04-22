@@ -1,61 +1,60 @@
 # Tanishq — Sprint Tasks
 
-**Sprint:** Storefront UI redesign
-**Spec:** `docs/superpowers/specs/2026-04-20-storefront-ui-redesign-design.md`
-**Implementation plan:** `docs/superpowers/plans/2026-04-20-storefront-ui-redesign.md`
-**Role:** PM / reviewer — no coding tasks.
+**Sprint:** OPS Push Pipeline  
+**Role:** PM / reviewer — no coding tasks this sprint
 
 ---
 
-## Overview
-
-All 20 implementation tasks run in parallel across Sinchana, Vidhi, and Urvashi. Each person owns a disjoint set of files (see their task files). No serial dependencies — if an import is missing, the author stubs it locally and removes the stub after the dependency lands.
-
-Your job is to keep this parallelism running smoothly.
-
 ## Responsibilities
 
-1. **Review every incoming PR** against the spec and the corresponding Plan Task. Acceptance criteria live in each person's task file.
-2. **Enforce file ownership.** If a PR from Person A touches a file that Person B owns, flag it and request revision. Prevents merge conflicts before they happen.
-3. **Enforce stub policy.** PRs may ship with local stubs for unmerged dependencies — that's allowed. Require the PR author to delete the stub and swap to the real import in a follow-up commit once the dependency lands on `main`.
-4. **Collect OPS credentials** from Christian so VG OPS supplier can be flipped `is_active=true` in staging.
-5. **Track sprint** via the checklist below.
-6. **Scope keeper.** Everything in "Out of scope" in the spec stays out. Push back on scope creep.
+1. **Review every incoming PR** against the spec and the ops-push plan. Acceptance criteria in each person's task file.
+2. **Merge order:** Sinchana Task 1 (types) before Vidhi Task 7 (PushHistory). Urvashi Task 2 (schemas) before Urvashi Task 3 (candidates). Otherwise parallel merges are safe.
+3. **Chase credentials** (blocking E2E):
+   - OPS customer `ops_auth_config` (Client ID + Secret) — needed for C2 E2E test
+   - SanMar API credentials — needed for V1a Task 6 E2E
+   - S&S API credentials — needed for V1b E2E
+   - 4Over API credentials — needed for V1d E2E
+   - **OPS Postman collection export** — export from browser, needed to verify exact GraphQL input typenames before C2
+4. **After all Tier 1 PRs merged:** run C2 manual E2E (single product push through n8n → OPS), C3 error path test. Steps in `docs/superpowers/plans/2026-04-20-ops-push.md` Tasks C2 + C3.
+5. **Write C4** operator guide `n8n-workflows/PUSH_README.md` once C2 passes.
+6. **Scope keeper** — push back on anything not in `docs/superpowers/specs/2026-04-22-remaining-tasks-design.md`.
 
-## Sprint sign-off checklist
+---
 
-Track merges here:
+## PR Review Checklist
 
-- [x] Urvashi 1 — schema fields (`ProductListRead` + `ProductRead`)
-- [x] Urvashi 2 — aggregate query in `list_products`
-- [x] Urvashi 3 — route group migration (admin pages into `(admin)/`)
-- [x] Vidhi 5 — storefront layout skeleton
-- [x] Vidhi 7 — TopBar + SearchContext
-- [x] Vidhi 9 — StorefrontShell real composition
-- [x] Vidhi 14 — PDPLayout
-- [x] Vidhi 15 — ImageGallery keyboard nav
-- [x] Vidhi 16 — DescriptionHtml
-- [x] Vidhi 17 — RelatedProducts
-- [x] Vidhi 18 — PDP page rewrite
-- [x] Sinchana 8 — LeftRail
-- [x] Sinchana 10 — MobileFilterSheet
-- [x] Sinchana 11 — `/storefront/vg/page.tsx` rewrite
-- [x] Sinchana 12 — FilterChipBar
-- [x] Sinchana 13 — ProductCard upgrades + `types.ts`
-- [x] Sinchana 19 — category page rewrite
-- [x] Sinchana 20 — dead code + Lighthouse + .gitignore
-- [x] Sinchana 8 (housekeeping) — inline style sweep
+For every PR:
+- [ ] File ownership respected (no one edited someone else's files)
+- [ ] Blueprint design system followed on frontend PRs (paper `#f2f0ed`, blue `#1e4d92`, shadcn/ui components)
+- [ ] No `Co-Authored-By` lines in commits
+- [ ] No per-supplier code or hardcoded credentials
+- [ ] `VARCHAR` not PG ENUM for any new DB column type fields
+- [ ] Backend: upserts use `ON CONFLICT DO UPDATE`, not plain `INSERT`
 
-## Out of sprint scope
+---
 
-- OPS push workflow (setProduct mutation + n8n workflow) — separate sprint.
-- Cart / quote flow — separate sprint.
-- Real lightbox modal — separate sprint.
-- Medusa integration — dropped indefinitely (per earlier brainstorm).
+## Sprint Sign-Off Checklist
 
-## Review cadence
-
-- Triage open PRs every morning.
-- First-pass review within 6 hours of review-request.
-- Merge within 12 hours of green CI + no open blockers.
-- Escalate to Christian same day on creds / API shape blockers.
+- [ ] Sinchana 1 — ProductPushLogRead type
+- [ ] Sinchana 2 — Sync dashboard health
+- [ ] Sinchana 3 — Terminology overhaul
+- [ ] Sinchana 4 — Simplified supplier form
+- [ ] Vidhi 1 — Customers (Storefronts) page
+- [ ] Vidhi 2 — setProductSize OPS node (A3)
+- [ ] Vidhi 3 — setProductCategory OPS node (A4)
+- [ ] Vidhi 4 — Gap analysis doc update (A5)
+- [ ] Vidhi 5 — n8n smoke test (A6, manual)
+- [ ] Vidhi 6 — Verify ops-push.json (C1)
+- [ ] Vidhi 7 — PushHistory component (D2)
+- [ ] Vidhi 8 — PublishButton + wire (D3)
+- [ ] Vidhi 9 — Workflows page (0.5)
+- [ ] Urvashi 1 — Dashboard API wiring (0.6)
+- [ ] Urvashi 2 — push_log schemas + POST (B1)
+- [ ] Urvashi 3 — push_candidates module (B2)
+- [ ] Urvashi 4 — Variant bundle endpoint (B4)
+- [ ] Urvashi 5 — Category OPS input endpoint (B5)
+- [ ] Urvashi 6 — Image pipeline cache header (B6)
+- [ ] Urvashi 7 — Wire S&S/4Over protocols (G2)
+- [ ] Tanishq — C2 E2E manual push test (requires OPS creds)
+- [ ] Tanishq — C3 error path test
+- [ ] Tanishq — C4 PUSH_README.md
