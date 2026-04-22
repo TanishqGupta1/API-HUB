@@ -62,6 +62,25 @@ export interface ProductImage {
   sort_order: number;
 }
 
+export interface ProductOptionAttribute {
+  id: string;
+  title: string;
+  sort_order: number;
+  ops_attribute_id: number | null;
+}
+
+export interface ProductOption {
+  id: string;
+  option_key: string;
+  title: string;
+  options_type: string | null;
+  sort_order: number;
+  master_option_id: number | null;
+  ops_option_id: number | null;
+  required: boolean;
+  attributes: ProductOptionAttribute[];
+}
+
 export interface Product {
   id: string;
   supplier_id: string;
@@ -75,9 +94,11 @@ export interface Product {
   product_type: string;
   image_url: string | null;
   ops_product_id: string | null;
+  external_catalogue: number | null;
   last_synced: string | null;
   variants: Variant[];
   images: ProductImage[];
+  options: ProductOption[];
 }
 
 export interface ProductPushStatus {
@@ -98,6 +119,8 @@ export interface ProductListItem {
   category_id: string | null;
   product_type: string;
   image_url: string | null;
+  ops_product_id: string | null;
+  external_catalogue: number | null;
   variant_count: number;
   price_min: number | null;
   price_max: number | null;

@@ -1,6 +1,6 @@
 # Product Options Ingest Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 >
 > **⚠ Commit policy (project rule):** User runs commits manually. Each task ends with a **"Stage"** step listing exact `git add` paths + a suggested commit message. Do NOT run `git commit` automatically. Never add `Co-Authored-By` lines.
 
@@ -32,7 +32,7 @@
 **Files:**
 - Modify: `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:3357-3371`
 
-- [ ] **Step 1: Replace the `options` array and `default` in `productAdditionalOptionsFields`**
+- [x] **Step 1: Replace the `options` array and `default` in `productAdditionalOptionsFields`**
 
 Current block at lines 3357–3371:
 ```typescript
@@ -80,12 +80,12 @@ default: [
 ],
 ```
 
-- [ ] **Step 2: Build the node to verify no TypeScript errors**
+- [x] **Step 2: Build the node to verify no TypeScript errors**
 
 Run: `cd n8n-nodes-onprintshop && npm run build`
 Expected: Build succeeds with no errors. `dist/` updated.
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts
@@ -99,7 +99,7 @@ git add n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts
 **Files:**
 - Modify: `backend/modules/catalog/models.py`
 
-- [ ] **Step 1: Add imports and two model classes**
+- [x] **Step 1: Add imports and two model classes**
 
 Append to `backend/modules/catalog/models.py` after the `ProductImage` class (after line 95):
 
@@ -147,7 +147,7 @@ class ProductOptionAttribute(Base):
     option: Mapped["ProductOption"] = relationship(back_populates="attributes")
 ```
 
-- [ ] **Step 2: Add `options` relationship to `Product`**
+- [x] **Step 2: Add `options` relationship to `Product`**
 
 In the `Product` class (lines 51–57), add after `images` relationship:
 
@@ -157,7 +157,7 @@ options: Mapped[list["ProductOption"]] = relationship(
 )
 ```
 
-- [ ] **Step 3: Verify tables auto-create on startup**
+- [x] **Step 3: Verify tables auto-create on startup**
 
 Run: `docker compose exec -T api sh -c "cd /app && python -c 'from modules.catalog.models import ProductOption, ProductOptionAttribute; print(\"OK\")'"` 
 
@@ -167,7 +167,7 @@ Then check tables exist:
 Run: `docker compose exec -T postgres psql -U vg_user -d vg_hub -c "\dt product_option*"`
 Expected: Two rows — `product_option_attributes` and `product_options`.
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add backend/modules/catalog/models.py
@@ -181,7 +181,7 @@ git add backend/modules/catalog/models.py
 **Files:**
 - Modify: `backend/modules/catalog/schemas.py`
 
-- [ ] **Step 1: Add ingest schemas for options**
+- [x] **Step 1: Add ingest schemas for options**
 
 After `ImageIngest` (after line 91 in `schemas.py`), add:
 
@@ -203,7 +203,7 @@ class OptionIngest(BaseModel):
     attributes: list[OptionAttributeIngest] = Field(default_factory=list)
 ```
 
-- [ ] **Step 2: Extend `ProductIngest` with `options` field**
+- [x] **Step 2: Extend `ProductIngest` with `options` field**
 
 In `ProductIngest` (currently ending at line 104), add:
 
@@ -211,7 +211,7 @@ In `ProductIngest` (currently ending at line 104), add:
 options: list[OptionIngest] = Field(default_factory=list)
 ```
 
-- [ ] **Step 3: Add read schemas**
+- [x] **Step 3: Add read schemas**
 
 After `ProductImageRead` (after line 28), add:
 
@@ -239,7 +239,7 @@ class ProductOptionRead(BaseModel):
     model_config = {"from_attributes": True}
 ```
 
-- [ ] **Step 4: Extend `ProductRead` with `options` field**
+- [x] **Step 4: Extend `ProductRead` with `options` field**
 
 In `ProductRead`, add after `images: list[ProductImageRead] = []`:
 
@@ -247,12 +247,12 @@ In `ProductRead`, add after `images: list[ProductImageRead] = []`:
 options: list[ProductOptionRead] = []
 ```
 
-- [ ] **Step 5: Verify schema import**
+- [x] **Step 5: Verify schema import**
 
 Run: `docker compose exec -T api sh -c "cd /app && python -c 'from modules.catalog.schemas import ProductOptionRead, OptionIngest; print(\"OK\")'"` 
 Expected: `OK`
 
-- [ ] **Step 6: Stage**
+- [x] **Step 6: Stage**
 
 ```bash
 git add backend/modules/catalog/schemas.py
@@ -266,14 +266,14 @@ git add backend/modules/catalog/schemas.py
 **Files:**
 - Modify: `backend/tests/test_catalog_ingest.py`
 
-- [ ] **Step 1: Add import at top of test file**
+- [x] **Step 1: Add import at top of test file**
 
 Confirm `select` is already imported (it is, added in Task A2 from prior plan). If not, add:
 ```python
 from sqlalchemy import select
 ```
 
-- [ ] **Step 2: Append test — creates options + attributes**
+- [x] **Step 2: Append test — creates options + attributes**
 
 ```python
 @pytest.mark.asyncio
@@ -341,7 +341,7 @@ async def test_ingest_products_creates_options(client: AsyncClient, db, seed_sup
     assert {a.title for a in ink_attrs} == {"Gloss", "Matte", "FLX+"}
 ```
 
-- [ ] **Step 3: Append test — idempotent + attribute update**
+- [x] **Step 3: Append test — idempotent + attribute update**
 
 ```python
 @pytest.mark.asyncio
@@ -395,12 +395,12 @@ async def test_ingest_products_options_idempotent(client: AsyncClient, db, seed_
     assert {a.title for a in attrs} == {"None", "Gloss", "Matte"}
 ```
 
-- [ ] **Step 4: Run tests to verify they fail (expected — ingest logic not written yet)**
+- [x] **Step 4: Run tests to verify they fail (expected — ingest logic not written yet)**
 
 Run: `docker compose exec -T api sh -c "cd /app && python -m pytest tests/test_catalog_ingest.py::test_ingest_products_creates_options tests/test_catalog_ingest.py::test_ingest_products_options_idempotent -v"`
 Expected: Both FAIL with `422` or `KeyError` — `options` field not handled yet.
 
-- [ ] **Step 5: Stage**
+- [x] **Step 5: Stage**
 
 ```bash
 git add backend/tests/test_catalog_ingest.py
@@ -414,7 +414,7 @@ git add backend/tests/test_catalog_ingest.py
 **Files:**
 - Modify: `backend/modules/catalog/ingest.py`
 
-- [ ] **Step 1: Add new model imports**
+- [x] **Step 1: Add new model imports**
 
 In `ingest.py` line 24, change:
 ```python
@@ -425,7 +425,7 @@ to:
 from .models import Category, Product, ProductImage, ProductOption, ProductOptionAttribute, ProductVariant
 ```
 
-- [ ] **Step 2: Add new schema imports**
+- [x] **Step 2: Add new schema imports**
 
 In `ingest.py` line 25–31, change:
 ```python
@@ -449,7 +449,7 @@ from .schemas import (
 )
 ```
 
-- [ ] **Step 3: Add `_upsert_options` helper function**
+- [x] **Step 3: Add `_upsert_options` helper function**
 
 Add before `ingest_categories` (before line 86):
 
@@ -520,7 +520,7 @@ async def _upsert_options(
             ))
 ```
 
-- [ ] **Step 4: Call `_upsert_options` inside `ingest_products`**
+- [x] **Step 4: Call `_upsert_options` inside `ingest_products`**
 
 In `ingest_products`, after the images loop (after line 248, before `await _finish_sync_job`):
 
@@ -543,7 +543,7 @@ The full context around the insertion point:
     await _finish_sync_job(db, job, len(batch))
 ```
 
-- [ ] **Step 5: Add `uuid_mod` import if missing**
+- [x] **Step 5: Add `uuid_mod` import if missing**
 
 `ingest.py` uses `UUID` from `uuid` directly. `_upsert_options` uses `uuid_mod.UUID`. Add at top of file if not present:
 ```python
@@ -552,17 +552,17 @@ import uuid as uuid_mod
 
 Check: `grep "^import uuid" backend/modules/catalog/ingest.py` — if absent, add it after `import os`.
 
-- [ ] **Step 6: Run failing tests — expect PASS now**
+- [x] **Step 6: Run failing tests — expect PASS now**
 
 Run: `docker compose exec -T api sh -c "cd /app && python -m pytest tests/test_catalog_ingest.py::test_ingest_products_creates_options tests/test_catalog_ingest.py::test_ingest_products_options_idempotent -v"`
 Expected: Both PASS.
 
-- [ ] **Step 7: Run full suite to catch regressions**
+- [x] **Step 7: Run full suite to catch regressions**
 
 Run: `docker compose exec -T api sh -c "cd /app && python -m pytest tests/test_catalog_ingest.py -v"`
 Expected: All pass (12 prior + 2 new = 14 total).
 
-- [ ] **Step 8: Stage**
+- [x] **Step 8: Stage**
 
 ```bash
 git add backend/modules/catalog/ingest.py
@@ -576,7 +576,7 @@ git add backend/modules/catalog/ingest.py
 **Files:**
 - Modify: `backend/modules/catalog/routes.py:12-13,111-114`
 
-- [ ] **Step 1: Add `ProductOption` to model imports**
+- [x] **Step 1: Add `ProductOption` to model imports**
 
 Line 12:
 ```python
@@ -587,7 +587,7 @@ Change to:
 from .models import Category, Product, ProductOption, ProductVariant
 ```
 
-- [ ] **Step 2: Add `selectinload` for options in `get_product`**
+- [x] **Step 2: Add `selectinload` for options in `get_product`**
 
 Lines 111–114 currently:
 ```python
@@ -605,7 +605,7 @@ Change to:
         )
 ```
 
-- [ ] **Step 3: Smoke test**
+- [x] **Step 3: Smoke test**
 
 Run:
 ```bash
@@ -614,7 +614,7 @@ curl -s "http://localhost:8000/api/products/${PRODUCT_ID}" | python -m json.tool
 ```
 Expected: `"options": []` (no options yet — empty array is correct, products haven't been re-ingested with options).
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add backend/modules/catalog/routes.py
@@ -628,7 +628,7 @@ git add backend/modules/catalog/routes.py
 **Files:**
 - Modify: `frontend/src/lib/types.ts:65-81`
 
-- [ ] **Step 1: Add `ProductOptionAttribute` and `ProductOption` interfaces**
+- [x] **Step 1: Add `ProductOptionAttribute` and `ProductOption` interfaces**
 
 In `frontend/src/lib/types.ts`, before the `Product` interface (before line 65), add:
 
@@ -653,7 +653,7 @@ export interface ProductOption {
 }
 ```
 
-- [ ] **Step 2: Extend `Product` interface with `options`**
+- [x] **Step 2: Extend `Product` interface with `options`**
 
 In the `Product` interface, after `images: ProductImage[];` (line 80), add:
 
@@ -661,12 +661,12 @@ In the `Product` interface, after `images: ProductImage[];` (line 80), add:
   options: ProductOption[];
 ```
 
-- [ ] **Step 3: TypeScript check**
+- [x] **Step 3: TypeScript check**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: No errors.
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add frontend/src/lib/types.ts
@@ -680,7 +680,7 @@ git add frontend/src/lib/types.ts
 **Files:**
 - Modify: `frontend/src/app/storefront/vg/product/[product_id]/page.tsx`
 
-- [ ] **Step 1: Add options section to `info` JSX**
+- [x] **Step 1: Add options section to `info` JSX**
 
 In `page.tsx`, the `info` block starts at line 73. Insert after the `VariantPicker` block (after line 99, before the button row at line 101):
 
@@ -712,12 +712,12 @@ In `page.tsx`, the `info` block starts at line 73. Insert after the `VariantPick
       )}
 ```
 
-- [ ] **Step 2: TypeScript check**
+- [x] **Step 2: TypeScript check**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: No errors.
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add "frontend/src/app/storefront/vg/product/[product_id]/page.tsx"
@@ -728,12 +728,12 @@ git add "frontend/src/app/storefront/vg/product/[product_id]/page.tsx"
 
 ## Task 9: End-to-end verification
 
-- [ ] **Step 1: Run full backend test suite**
+- [x] **Step 1: Run full backend test suite**
 
 Run: `docker compose exec -T api sh -c "cd /app && python -m pytest -q"`
 Expected: All green. 2 new option tests pass (14 total in `test_catalog_ingest.py`).
 
-- [ ] **Step 2: Test ingest with options payload via curl**
+- [x] **Step 2: Test ingest with options payload via curl**
 
 Run:
 ```bash
@@ -746,7 +746,7 @@ curl -s -X POST "http://localhost:8000/api/ingest/${SUPPLIER_ID}/products" \
 ```
 Expected: `{"sync_job_id":"...","records_processed":1,"status":"completed"}`
 
-- [ ] **Step 3: Verify API returns options**
+- [x] **Step 3: Verify API returns options**
 
 Run:
 ```bash
@@ -755,12 +755,12 @@ curl -s "http://localhost:8000/api/products/${PRODUCT_ID}" | python -m json.tool
 ```
 Expected: `"options"` array with one entry having `"option_key": "inkFinish"` and `"attributes"` with Gloss + Matte.
 
-- [ ] **Step 4: Frontend typecheck**
+- [x] **Step 4: Frontend typecheck**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: No errors.
 
-- [ ] **Step 5: Rebuild Docker frontend (if running containerized)**
+- [x] **Step 5: Rebuild Docker frontend (if running containerized)**
 
 Run: `docker compose build frontend && docker compose up -d frontend`
 Expected: Container starts, `/storefront/vg` returns 200.

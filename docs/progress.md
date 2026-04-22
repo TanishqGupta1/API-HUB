@@ -3,7 +3,7 @@
 > Source of truth for what is actually implemented in the codebase.
 > The master plan lives in `plans/2026-04-14-v0-proof-of-concept.md` — do not edit that file here.
 
-Last updated: 2026-04-16
+Last updated: 2026-04-22
 
 ---
 
@@ -16,24 +16,24 @@ Last updated: 2026-04-16
 | 3 | Supplier Model + Schemas | ✅ DONE |
 | 4 | Product + Variant Models | ✅ DONE |
 | 5 | PS Directory Client + Supplier Service | ✅ DONE |
-| 6 | API Routes — suppliers, ps_directory, catalog | ⚠️ PARTIAL |
+| 6 | API Routes — suppliers, ps_directory, catalog | ✅ DONE |
 | 7 | FastAPI Main App | ✅ DONE |
 | 8 | Demo Seed Script | ✅ DONE |
-| 9 | Next.js Scaffold + Blueprint Layout | ❌ TODO |
-| 10 | Suppliers Page + Reveal Form | ❌ TODO |
-| 11 | Products Page (catalog grid) | ❌ TODO |
-| 12 | Product Detail Page | ❌ TODO |
-| 13 | Customers Page | ❌ TODO |
-| 14 | Workflows Page (pipeline visualizer) | ❌ TODO |
-| 15 | Sync Jobs Page | ❌ TODO |
+| 9 | Next.js Scaffold + Blueprint Layout | ✅ DONE |
+| 10 | Suppliers Page + Reveal Form | ✅ DONE |
+| 11 | Products Page (catalog grid) | ✅ DONE |
+| 12 | Product Detail Page | ✅ DONE |
+| 13 | Customers Page | ✅ DONE |
+| 14 | Workflows Page (pipeline visualizer) | ✅ DONE |
+| 15 | Sync Jobs Page | ✅ DONE |
 | 16 | Field Mapping Page | ✅ DONE |
-| 17 | End-to-End Verification | ❌ TODO |
+| 17 | End-to-End Verification | 📝 READY (see docs/e2e-verification.md) |
 | 18 | Customer Model (OAuth2) | ✅ DONE |
 | 19 | Markup Rules | ✅ DONE |
 | 20 | Push Log | ✅ DONE |
-| 21 | n8n OPS Push Workflow | ❌ TODO |
+| 21 | n8n OPS Push Workflow | ✅ DONE (see n8n-workflows/ops-push.json) |
 
-**Summary: 12 DONE · 1 PARTIAL · 8 TODO**
+**Summary: 20 DONE · 1 READY**
 
 ---
 
@@ -41,9 +41,7 @@ Last updated: 2026-04-16
 
 | Task | Can start because... |
 |------|----------------------|
-| **Task 9 — Next.js Scaffold** | Pure frontend, no backend dependency |
-| **Task 17 — E2E Verification** | Requires Tasks 1–16 all done; Task 6 still partial |
-| **Task 21 — n8n OPS Push Workflow** | Backend ready (18, 19, 20 done); blocked on n8n-nodes-onprintshop external dependency |
+| **Task 17 — E2E Verification** | All core screens + APIs exist; run the checklist |
 
 ---
 

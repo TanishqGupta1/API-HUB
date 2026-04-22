@@ -75,8 +75,28 @@ class OnPrintShop {
                             value: 'productStocks',
                         },
                         {
+                            name: 'Batch',
+                            value: 'batch',
+                        },
+                        {
+                            name: 'Department',
+                            value: 'department',
+                        },
+                        {
                             name: 'Mutation',
                             value: 'mutation',
+                        },
+                        {
+                            name: 'Quote',
+                            value: 'quote',
+                        },
+                        {
+                            name: 'Quote Product',
+                            value: 'quoteProduct',
+                        },
+                        {
+                            name: 'Store',
+                            value: 'store',
                         },
                     ],
                     default: 'customer',
@@ -388,7 +408,217 @@ class OnPrintShop {
                     ],
                     default: ['id', 'title'],
                 },
+                // Batch Operations
+                {
+                    displayName: 'Operation',
+                    name: 'operation',
+                    type: 'options',
+                    noDataExpression: true,
+                    displayOptions: { show: { resource: ['batch'] } },
+                    options: [{ name: 'Get Many', value: 'getAll', action: 'Get many batches' }],
+                    default: 'getAll',
+                },
+                {
+                    displayName: 'Batch ID',
+                    name: 'batch_batchId',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['batch'], operation: ['getAll'] } },
+                    default: 0,
+                    description: 'Filter by batch ID (0 = no filter)',
+                },
+                {
+                    displayName: 'Search',
+                    name: 'batch_search',
+                    type: 'string',
+                    displayOptions: { show: { resource: ['batch'], operation: ['getAll'] } },
+                    default: '',
+                    description: 'Search string to filter batches',
+                },
+                {
+                    displayName: 'Limit',
+                    name: 'batch_limit',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['batch'], operation: ['getAll'] } },
+                    default: 20,
+                    description: 'Max number of results to return',
+                },
+                {
+                    displayName: 'Offset',
+                    name: 'batch_offset',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['batch'], operation: ['getAll'] } },
+                    default: 0,
+                },
+                // Quote Operations
+                {
+                    displayName: 'Operation',
+                    name: 'operation',
+                    type: 'options',
+                    noDataExpression: true,
+                    displayOptions: { show: { resource: ['quote'] } },
+                    options: [{ name: 'Get Many', value: 'getAll', action: 'Get many quotes' }],
+                    default: 'getAll',
+                },
+                {
+                    displayName: 'Quote ID',
+                    name: 'quote_quoteId',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['quote'], operation: ['getAll'] } },
+                    default: 0,
+                    description: 'Filter by quote ID (0 = no filter)',
+                },
+                {
+                    displayName: 'User ID',
+                    name: 'quote_userId',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['quote'], operation: ['getAll'] } },
+                    default: 0,
+                    description: 'Filter by user/customer ID (0 = no filter)',
+                },
+                {
+                    displayName: 'Limit',
+                    name: 'quote_limit',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['quote'], operation: ['getAll'] } },
+                    default: 10,
+                },
+                {
+                    displayName: 'Offset',
+                    name: 'quote_offset',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['quote'], operation: ['getAll'] } },
+                    default: 0,
+                },
+                // Quote Product Operations
+                {
+                    displayName: 'Operation',
+                    name: 'operation',
+                    type: 'options',
+                    noDataExpression: true,
+                    displayOptions: { show: { resource: ['quoteProduct'] } },
+                    options: [{ name: 'Get Many', value: 'getAll', action: 'Get many quote products' }],
+                    default: 'getAll',
+                },
+                {
+                    displayName: 'Quote ID',
+                    name: 'quoteProduct_quoteId',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['quoteProduct'], operation: ['getAll'] } },
+                    default: 0,
+                    description: 'Filter by quote ID (0 = no filter)',
+                },
+                {
+                    displayName: 'Quote Products ID',
+                    name: 'quoteProduct_quoteProductsId',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['quoteProduct'], operation: ['getAll'] } },
+                    default: 0,
+                    description: 'Filter by quote products ID (0 = no filter)',
+                },
+                {
+                    displayName: 'Limit',
+                    name: 'quoteProduct_limit',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['quoteProduct'], operation: ['getAll'] } },
+                    default: 10,
+                },
+                {
+                    displayName: 'Offset',
+                    name: 'quoteProduct_offset',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['quoteProduct'], operation: ['getAll'] } },
+                    default: 0,
+                },
+                // Store Operations
+                {
+                    displayName: 'Operation',
+                    name: 'operation',
+                    type: 'options',
+                    noDataExpression: true,
+                    displayOptions: { show: { resource: ['store'] } },
+                    options: [{ name: 'Get Many', value: 'getAll', action: 'Get many stores' }],
+                    default: 'getAll',
+                },
+                {
+                    displayName: 'Corporate ID',
+                    name: 'store_corporateId',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['store'], operation: ['getAll'] } },
+                    default: 0,
+                    description: 'Filter by corporate ID (0 = no filter)',
+                },
+                {
+                    displayName: 'Email',
+                    name: 'store_email',
+                    type: 'string',
+                    displayOptions: { show: { resource: ['store'], operation: ['getAll'] } },
+                    default: '',
+                    description: 'Filter by email',
+                },
+                {
+                    displayName: 'Status',
+                    name: 'store_status',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['store'], operation: ['getAll'] } },
+                    default: 0,
+                    description: 'Filter by status',
+                },
+                {
+                    displayName: 'Limit',
+                    name: 'store_limit',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['store'], operation: ['getAll'] } },
+                    default: 10,
+                },
+                {
+                    displayName: 'Offset',
+                    name: 'store_offset',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['store'], operation: ['getAll'] } },
+                    default: 0,
+                },
+                // Department Operations
+                {
+                    displayName: 'Operation',
+                    name: 'operation',
+                    type: 'options',
+                    noDataExpression: true,
+                    displayOptions: { show: { resource: ['department'] } },
+                    options: [{ name: 'Get Many', value: 'getAll', action: 'Get many departments' }],
+                    default: 'getAll',
+                },
+                {
+                    displayName: 'Department ID',
+                    name: 'department_departmentId',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['department'], operation: ['getAll'] } },
+                    default: 0,
+                    description: 'Filter by department ID (0 = no filter)',
+                },
+                {
+                    displayName: 'Corporate ID',
+                    name: 'department_corporateId',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['department'], operation: ['getAll'] } },
+                    default: 0,
+                    description: 'Filter by corporate ID (0 = no filter)',
+                },
+                {
+                    displayName: 'Limit',
+                    name: 'department_limit',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['department'], operation: ['getAll'] } },
+                    default: 10,
+                },
+                {
+                    displayName: 'Offset',
+                    name: 'department_offset',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['department'], operation: ['getAll'] } },
+                    default: 0,
+                },
                 // Mutations (additive)
+                // NOTE: "Update Product Stock" was removed — it used a stale contract. Use "Product > Update Stock" instead.
                 {
                     displayName: 'Operation',
                     name: 'operation',
@@ -396,52 +626,260 @@ class OnPrintShop {
                     noDataExpression: true,
                     displayOptions: { show: { resource: ['mutation'] } },
                     options: [
-                        { name: 'Update Order Status', value: 'updateOrderStatus', action: 'Update order status' },
-                        { name: 'Update Product Stock', value: 'updateProductStock', action: 'Update product stock' },
+                        { name: 'Add Proof Version', value: 'addProofVersion', action: 'Add proof version to order product' },
+                        { name: 'Set Batch', value: 'setBatch', action: 'Create or update a batch' },
+                        { name: 'Set Order Product', value: 'setOrderProduct', action: 'Update an order product' },
+                        { name: 'Set Product', value: 'setProduct', action: 'Create or update a product' },
+                        { name: 'Set Product Design', value: 'setProductDesign', action: 'Update product design links' },
+                        { name: 'Set Product Price', value: 'setProductPrice', action: 'Create or update product price' },
+                        { name: 'Set Quote', value: 'setQuote', action: 'Create or update a quote' },
+                        { name: 'Update Order Product Images', value: 'updateOrderProductImages', action: 'Update order product images' },
+                        { name: 'Update Order Status', value: 'updateOrderStatus', action: 'Update order or order product status' },
+                        { name: 'Update Ziflow Link (Images)', value: 'updateZiflowLinkImages', action: 'Update ziflow link images wise' },
                     ],
                     default: 'updateOrderStatus',
                 },
                 // Mutation: Update Order Status
                 {
+                    displayName: 'Type',
+                    name: 'statusUpdateType',
+                    type: 'options',
+                    required: true,
+                    displayOptions: { show: { resource: ['mutation'], operation: ['updateOrderStatus'] } },
+                    options: [
+                        { name: 'Order', value: 'order' },
+                        { name: 'Product', value: 'product' },
+                    ],
+                    default: 'order',
+                    description: 'Whether to update an order-level or order-product-level status',
+                },
+                {
                     displayName: 'Orders ID',
                     name: 'orders_id',
                     type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['updateOrderStatus'], statusUpdateType: ['order'] } },
+                    default: 0,
+                    description: 'The order ID (for order-level status updates)',
+                },
+                {
+                    displayName: 'Orders Products ID',
+                    name: 'orders_products_id',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['updateOrderStatus'], statusUpdateType: ['product'] } },
+                    default: 0,
+                    description: 'The order-product ID (for product-level status updates)',
+                },
+                {
+                    displayName: 'Input (JSON)',
+                    name: 'updateOrderStatusInput',
+                    type: 'json',
                     required: true,
                     displayOptions: { show: { resource: ['mutation'], operation: ['updateOrderStatus'] } },
+                    default: '{\n  "order_product_status": "Awaiting Artwork",\n  "comment": "",\n  "notify": 0\n}',
+                    description: 'UpdateOrderStatusInput object with order_product_status, comment, notify (0 or 1)',
+                },
+                // Mutation: Set Order Product
+                {
+                    displayName: 'Order Product ID',
+                    name: 'setOrderProduct_order_product_id',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setOrderProduct'] } },
+                    default: 0,
+                    description: 'The order-product ID to update',
+                },
+                {
+                    displayName: 'Width',
+                    name: 'setOrderProduct_width',
+                    type: 'number',
+                    typeOptions: { numberPrecision: 2 },
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setOrderProduct'] } },
                     default: 0,
                 },
                 {
-                    displayName: 'Order Status ID',
-                    name: 'orders_status_id',
+                    displayName: 'Height',
+                    name: 'setOrderProduct_height',
+                    type: 'number',
+                    typeOptions: { numberPrecision: 2 },
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setOrderProduct'] } },
+                    default: 0,
+                },
+                {
+                    displayName: 'Input (JSON)',
+                    name: 'setOrderProduct_input',
+                    type: 'json',
+                    required: true,
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setOrderProduct'] } },
+                    default: '{\n  "lock_price": 0,\n  "comment": "",\n  "notify_customer": 0\n}',
+                    description: 'SetOrderProductInput JSON object',
+                },
+                // Mutation: Set Batch
+                {
+                    displayName: 'Batch ID',
+                    name: 'setBatch_batch_id',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setBatch'] } },
+                    default: 0,
+                    description: 'Batch ID (0 to create new)',
+                },
+                {
+                    displayName: 'Input (JSON)',
+                    name: 'setBatch_input',
+                    type: 'json',
+                    required: true,
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setBatch'] } },
+                    default: '{\n  "batch_name": "",\n  "nesting_size": "",\n  "nest_width": 0,\n  "nest_height": 0,\n  "print_count": 1,\n  "send_mail": 0,\n  "print_instructions": [],\n  "finishing_instructions": [],\n  "front_print_filename": "",\n  "front_cut_filename": "",\n  "front_image_link": "",\n  "rear_print_filename": "",\n  "rear_cut_filename": "",\n  "rear_image_link": "",\n  "jobs": []\n}',
+                    description: 'SetBatchMasterInput JSON object',
+                },
+                // Mutation: Set Product
+                {
+                    displayName: 'Input (JSON)',
+                    name: 'setProduct_input',
+                    type: 'json',
+                    required: true,
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setProduct'] } },
+                    default: '{\n  "category_id": 0,\n  "visible": 1,\n  "products_title": "",\n  "products_internal_title": ""\n}',
+                    description: 'ProductInput JSON object',
+                },
+                // Mutation: Set Product Price
+                {
+                    displayName: 'Input (JSON)',
+                    name: 'setProductPrice_input',
+                    type: 'json',
+                    required: true,
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setProductPrice'] } },
+                    default: '{\n  "product_price_id": 0,\n  "products_id": 0,\n  "qty": 1,\n  "qty_to": 100,\n  "price": 0,\n  "vendor_price": 0,\n  "size_id": 0,\n  "visible": "1"\n}',
+                    description: 'ProductPriceInput JSON object',
+                },
+                // Mutation: Set Quote
+                {
+                    displayName: 'User ID',
+                    name: 'setQuote_userid',
                     type: 'number',
                     required: true,
-                    displayOptions: { show: { resource: ['mutation'], operation: ['updateOrderStatus'] } },
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setQuote'] } },
                     default: 0,
                 },
-                // Mutation: Update Product Stock
                 {
-                    displayName: 'Product ID',
-                    name: 'product_id',
+                    displayName: 'Quote ID',
+                    name: 'setQuote_quote_id',
                     type: 'number',
-                    required: true,
-                    displayOptions: { show: { resource: ['mutation'], operation: ['updateProductStock'] } },
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setQuote'] } },
                     default: 0,
+                    description: 'Quote ID (0 to create new)',
                 },
                 {
-                    displayName: 'SKU',
-                    name: 'products_sku',
+                    displayName: 'Quote Title',
+                    name: 'setQuote_quote_title',
                     type: 'string',
                     required: true,
-                    displayOptions: { show: { resource: ['mutation'], operation: ['updateProductStock'] } },
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setQuote'] } },
                     default: '',
                 },
                 {
-                    displayName: 'Quantity',
-                    name: 'quantity',
-                    type: 'number',
+                    displayName: 'Shipping Type',
+                    name: 'setQuote_selectedShippingType',
+                    type: 'string',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setQuote'] } },
+                    default: '',
+                    description: 'e.g. fedexground',
+                },
+                {
+                    displayName: 'Input (JSON)',
+                    name: 'setQuote_input',
+                    type: 'json',
                     required: true,
-                    displayOptions: { show: { resource: ['mutation'], operation: ['updateProductStock'] } },
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setQuote'] } },
+                    default: '{\n  "productsArr": []\n}',
+                    description: 'SetQuoteInput JSON object with productsArr',
+                },
+                // Mutation: Set Product Design
+                {
+                    displayName: 'Order Product ID',
+                    name: 'setProductDesign_order_product_id',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setProductDesign'] } },
                     default: 0,
+                },
+                {
+                    displayName: 'Ziflow Link',
+                    name: 'setProductDesign_ziflow_link',
+                    type: 'string',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setProductDesign'] } },
+                    default: '',
+                },
+                {
+                    displayName: 'Ziflow Preflight Link',
+                    name: 'setProductDesign_ziflow_preflight_link',
+                    type: 'string',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setProductDesign'] } },
+                    default: '',
+                },
+                // Mutation: Update Order Product Images
+                {
+                    displayName: 'Order Product ID',
+                    name: 'updateOrderProductImages_order_product_id',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['updateOrderProductImages'] } },
+                    default: 0,
+                },
+                {
+                    displayName: 'Input (JSON)',
+                    name: 'updateOrderProductImages_input',
+                    type: 'json',
+                    required: true,
+                    displayOptions: { show: { resource: ['mutation'], operation: ['updateOrderProductImages'] } },
+                    default: '{\n  "imagefiles": [\n    {\n      "thumb": "",\n      "large": "",\n      "original": "",\n      "pagename": "Front_1"\n    }\n  ]\n}',
+                    description: 'SetOrderProductImageInput JSON object with imagefiles array',
+                },
+                // Mutation: Add Proof Version
+                {
+                    displayName: 'Order Product ID',
+                    name: 'addProofVersion_order_product_id',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['addProofVersion'] } },
+                    default: 0,
+                },
+                {
+                    displayName: 'Add Version File Only',
+                    name: 'addProofVersion_add_version_file_only',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['addProofVersion'] } },
+                    default: 1,
+                    description: 'Set to 1 to add version file only',
+                },
+                {
+                    displayName: 'Ask For Approval',
+                    name: 'addProofVersion_ask_for_approval',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['addProofVersion'] } },
+                    default: 0,
+                    description: 'Set to 1 to ask for approval',
+                },
+                {
+                    displayName: 'Input (JSON)',
+                    name: 'addProofVersion_input',
+                    type: 'json',
+                    required: true,
+                    displayOptions: { show: { resource: ['mutation'], operation: ['addProofVersion'] } },
+                    default: '{\n  "imagefiles": []\n}',
+                    description: 'SetOrderProductImageInput JSON with imagefiles array containing version metadata',
+                },
+                // Mutation: Update Ziflow Link (Images)
+                {
+                    displayName: 'Order Product ID',
+                    name: 'updateZiflowLinkImages_order_product_id',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['updateZiflowLinkImages'] } },
+                    default: 0,
+                },
+                {
+                    displayName: 'Input (JSON)',
+                    name: 'updateZiflowLinkImages_input',
+                    type: 'json',
+                    required: true,
+                    displayOptions: { show: { resource: ['mutation'], operation: ['updateZiflowLinkImages'] } },
+                    default: '{\n  "imagefiles": [\n    {\n      "pagename": "Front_1",\n      "ziflow_link": "",\n      "ziflow_preflight_link": ""\n    }\n  ]\n}',
+                    description: 'SetOrderProductImageInput JSON with ziflow links per image',
                 },
                 // Customer Operations
                 {
@@ -2581,6 +3019,13 @@ class OnPrintShop {
                             default: 0,
                             description: 'All store filter',
                         },
+                        {
+                            displayName: 'External Catalogue',
+                            name: 'externalCatalogue',
+                            type: 'number',
+                            default: 0,
+                            description: 'Filter by external catalogue (0 or 1)',
+                        },
                     ],
                 },
                 // Product: Get Detailed - Fields Selection
@@ -2644,6 +3089,7 @@ class OnPrintShop {
                         { name: 'Product Hire Designer Cost', value: 'product_hire_designer_cost' },
                         { name: 'Product Minimum Price', value: 'product_minimum_price' },
                         { name: 'Product Start Price', value: 'product_start_price' },
+                        { name: 'External Catalogue', value: 'externalCatalogue' },
                     ],
                     default: [
                         'product_id',
@@ -2762,6 +3208,13 @@ class OnPrintShop {
                             default: 0,
                             description: 'All store filter',
                         },
+                        {
+                            displayName: 'External Catalogue',
+                            name: 'externalCatalogue',
+                            type: 'number',
+                            default: 0,
+                            description: 'Filter by external catalogue (0 or 1)',
+                        },
                     ],
                 },
                 // Product: Get Many Detailed - Fields Selection
@@ -2825,11 +3278,11 @@ class OnPrintShop {
                         { name: 'Product Hire Designer Cost', value: 'product_hire_designer_cost' },
                         { name: 'Product Minimum Price', value: 'product_minimum_price' },
                         { name: 'Product Start Price', value: 'product_start_price' },
+                        { name: 'External Catalogue', value: 'externalCatalogue' },
                         { name: '─────────────────────────────', value: 'SEPARATOR2' },
                         { name: 'Product Size (nested)', value: 'product_size' },
                         { name: 'Product Additional Options (nested)', value: 'product_additional_options' },
-                    ],
-                    default: [
+                    ], default: [
                         'product_id',
                         'status',
                         'sort_order',
@@ -2916,16 +3369,24 @@ class OnPrintShop {
                         { name: '🔘 Select All Option Fields', value: 'SELECT_ALL' },
                         { name: '🔘 Deselect All Option Fields', value: 'DESELECT_ALL' },
                         { name: '─────────────────────────────', value: 'SEPARATOR' },
+                        { name: 'Product Additional Option ID', value: 'product_additional_option_id' },
+                        { name: 'Master Option ID', value: 'master_option_id' },
                         { name: 'Option Key', value: 'option_key' },
+                        { name: 'Title', value: 'title' },
                         { name: 'Options Type', value: 'options_type' },
                         { name: 'Required', value: 'required' },
                         { name: 'Sort Order', value: 'sort_order' },
+                        { name: 'Attributes', value: 'attributes' },
                     ],
                     default: [
+                        'product_additional_option_id',
+                        'master_option_id',
                         'option_key',
+                        'title',
                         'options_type',
                         'required',
                         'sort_order',
+                        'attributes',
                     ],
                     description: 'Select product additional options fields to return. Leave empty to exclude additional options.',
                 },
@@ -4862,25 +5323,285 @@ class OnPrintShop {
                             throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
                     }
                 }
+                if (resource === 'batch' && operation === 'getAll') {
+                    const variables = {};
+                    const batchId = this.getNodeParameter('batch_batchId', i);
+                    const search = this.getNodeParameter('batch_search', i);
+                    const limit = this.getNodeParameter('batch_limit', i);
+                    const offset = this.getNodeParameter('batch_offset', i);
+                    if (batchId)
+                        variables.batch_id = batchId;
+                    if (search)
+                        variables.search = search;
+                    if (limit)
+                        variables.limit = limit;
+                    if (offset)
+                        variables.offset = offset;
+                    const query = `query getBatch ($batch_id: Int, $search: String, $limit: Int, $offset: Int) { getBatch (batch_id: $batch_id, search: $search, limit: $limit, offset: $offset) { batchDetails { id batch_name nesting_size nest_width nest_height print_count print_instructions finishing_instructions front_print_filename front_cut_filename front_image_link rear_print_filename rear_cut_filename rear_image_link jobs } totalBatchDetails } }`;
+                    const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+                    if (responseData && responseData.data && responseData.data.getBatch) {
+                        const batches = responseData.data.getBatch.batchDetails || [];
+                        for (const b of batches) {
+                            returnData.push({ ...b, _totalBatchDetails: responseData.data.getBatch.totalBatchDetails });
+                        }
+                    }
+                    else if (responseData && responseData.errors) {
+                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                }
+                if (resource === 'quote' && operation === 'getAll') {
+                    const variables = {};
+                    const quoteId = this.getNodeParameter('quote_quoteId', i);
+                    const userId = this.getNodeParameter('quote_userId', i);
+                    const limit = this.getNodeParameter('quote_limit', i);
+                    const offset = this.getNodeParameter('quote_offset', i);
+                    if (quoteId)
+                        variables.quote_id = quoteId;
+                    if (userId)
+                        variables.user_id = userId;
+                    if (limit)
+                        variables.limit = limit;
+                    if (offset)
+                        variables.offset = offset;
+                    const query = `query get_quote ($quote_id: Int, $user_id: Int, $limit: Int, $offset: Int) { get_quote (quote_id: $quote_id, user_id: $user_id, limit: $limit, offset: $offset) { quote { quote_id user_id quote_title quote_price quote_vendor_price sort_order quote_status quote_date admin_notes quote_shipping_addr quote_billing_addr ship_amt quote_tax_exampt quoteproduct { isCustomProduct quote_products_id quote_id products_id products_title quote_products_quantity quote_products_price quote_products_vendor_price quote_products_info products_prd_day products_weight quote_product_sku quote_product_notes } } totalQuote } }`;
+                    const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+                    if (responseData && responseData.data && responseData.data.get_quote) {
+                        const quotes = responseData.data.get_quote.quote || [];
+                        for (const q of quotes) {
+                            returnData.push({ ...q, _totalQuote: responseData.data.get_quote.totalQuote });
+                        }
+                    }
+                    else if (responseData && responseData.errors) {
+                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                }
+                if (resource === 'quoteProduct' && operation === 'getAll') {
+                    const variables = {};
+                    const quoteId = this.getNodeParameter('quoteProduct_quoteId', i);
+                    const quoteProductsId = this.getNodeParameter('quoteProduct_quoteProductsId', i);
+                    const limit = this.getNodeParameter('quoteProduct_limit', i);
+                    const offset = this.getNodeParameter('quoteProduct_offset', i);
+                    if (quoteId)
+                        variables.quote_id = quoteId;
+                    if (quoteProductsId)
+                        variables.quote_products_id = quoteProductsId;
+                    if (limit)
+                        variables.limit = limit;
+                    if (offset)
+                        variables.offset = offset;
+                    const query = `query quoteproduct ($quote_id: Int, $quote_products_id: Int, $limit: Int, $offset: Int) { quoteproduct (quote_id: $quote_id, quote_products_id: $quote_products_id, limit: $limit, offset: $offset) { quoteproduct { isCustomProduct quote_products_id quote_id products_id products_title quote_products_quantity quote_products_price quote_products_vendor_price quote_products_info products_prd_day products_weight quote_product_sku quote_product_notes } totalQuoteProduct } }`;
+                    const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+                    if (responseData && responseData.data && responseData.data.quoteproduct) {
+                        const products = responseData.data.quoteproduct.quoteproduct || [];
+                        for (const p of products) {
+                            returnData.push({ ...p, _totalQuoteProduct: responseData.data.quoteproduct.totalQuoteProduct });
+                        }
+                    }
+                    else if (responseData && responseData.errors) {
+                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                }
+                if (resource === 'store' && operation === 'getAll') {
+                    const variables = {};
+                    const corporateId = this.getNodeParameter('store_corporateId', i);
+                    const email = this.getNodeParameter('store_email', i);
+                    const status = this.getNodeParameter('store_status', i);
+                    const limit = this.getNodeParameter('store_limit', i);
+                    const offset = this.getNodeParameter('store_offset', i);
+                    if (corporateId)
+                        variables.corporate_id = corporateId;
+                    if (email)
+                        variables.email = email;
+                    if (status)
+                        variables.status = status;
+                    if (limit)
+                        variables.limit = limit;
+                    if (offset)
+                        variables.offset = offset;
+                    const query = `query get_store ($corporate_id: Int, $email: String, $status: Int, $limit: Int, $offset: Int) { get_store (corporate_id: $corporate_id, email: $email, status: $status, limit: $limit, offset: $offset) { store { corporate_id email username corporate_name phone_number status tax_exempt tax_exempt_type order_approval price_visible price_text department_module_enable fix_billing_address fix_shipping_address manage_email_notification main_url created_on modified_on url_type parent_corporate_id manage_private_store markup_type flat_markup corporate_markup_id unassigned_products production_days display_in_company_list department { department_id name email_to status cost_center_code production_days created_on modified_on } } totalStore } }`;
+                    const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+                    if (responseData && responseData.data && responseData.data.get_store) {
+                        const stores = responseData.data.get_store.store || [];
+                        for (const s of stores) {
+                            returnData.push({ ...s, _totalStore: responseData.data.get_store.totalStore });
+                        }
+                    }
+                    else if (responseData && responseData.errors) {
+                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                }
+                if (resource === 'department' && operation === 'getAll') {
+                    const variables = {};
+                    const departmentId = this.getNodeParameter('department_departmentId', i);
+                    const corporateId = this.getNodeParameter('department_corporateId', i);
+                    const limit = this.getNodeParameter('department_limit', i);
+                    const offset = this.getNodeParameter('department_offset', i);
+                    if (departmentId)
+                        variables.department_id = departmentId;
+                    if (corporateId)
+                        variables.corporate_id = corporateId;
+                    if (limit)
+                        variables.limit = limit;
+                    if (offset)
+                        variables.offset = offset;
+                    const query = `query get_departments ($department_id: Int, $corporate_id: Int, $limit: Int, $offset: Int) { get_departments (department_id: $department_id, corporate_id: $corporate_id, limit: $limit, offset: $offset) { departments { department_id corporate_id name email_to status cost_center_code production_days created_on modified_on } totalDepartments } }`;
+                    const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+                    if (responseData && responseData.data && responseData.data.get_departments) {
+                        const departments = responseData.data.get_departments.departments || [];
+                        for (const d of departments) {
+                            returnData.push({ ...d, _totalDepartments: responseData.data.get_departments.totalDepartments });
+                        }
+                    }
+                    else if (responseData && responseData.errors) {
+                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                }
                 if (resource === 'mutation') {
                     if (operation === 'updateOrderStatus') {
-                        const orders_id = this.getNodeParameter('orders_id', i);
-                        const orders_status_id = this.getNodeParameter('orders_status_id', i);
-                        const mutation = `mutation updateOrderStatus ($orders_id: Int!, $orders_status_id: Int!) { updateOrderStatus (orders_id: $orders_id, orders_status_id: $orders_status_id) { result message } }`;
-                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { orders_id, orders_status_id } }, json: true });
+                        const type = this.getNodeParameter('statusUpdateType', i);
+                        const variables = {
+                            type,
+                            input: JSON.parse(this.getNodeParameter('updateOrderStatusInput', i)),
+                        };
+                        if (type === 'order') {
+                            const orders_id = this.getNodeParameter('orders_id', i);
+                            if (orders_id)
+                                variables.orders_id = orders_id;
+                        }
+                        else {
+                            const orders_products_id = this.getNodeParameter('orders_products_id', i);
+                            if (orders_products_id)
+                                variables.orders_products_id = orders_products_id;
+                        }
+                        const mutation = `mutation updateOrderStatus ($type: OrderStatusUpdateTypeEnum!, $orders_id: Int, $orders_products_id: Int, $input: UpdateOrderStatusInput!) { updateOrderStatus (type: $type, orders_id: $orders_id, orders_products_id: $orders_products_id, input: $input) { result message } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
                         if (responseData && responseData.data && responseData.data.updateOrderStatus)
                             returnData.push(responseData.data.updateOrderStatus);
                         else if (responseData && responseData.errors)
                             throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
                     }
-                    if (operation === 'updateProductStock') {
-                        const product_id = this.getNodeParameter('product_id', i);
-                        const products_sku = this.getNodeParameter('products_sku', i);
-                        const quantity = this.getNodeParameter('quantity', i);
-                        const mutation = `mutation updateProductStock ($product_id: Int!, $products_sku: String!, $quantity: Int!) { updateProductStock (product_id: $product_id, products_sku: $products_sku, quantity: $quantity) { result message } }`;
-                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { product_id, products_sku, quantity } }, json: true });
-                        if (responseData && responseData.data && responseData.data.updateProductStock)
-                            returnData.push(responseData.data.updateProductStock);
+                    if (operation === 'setOrderProduct') {
+                        const order_product_id = this.getNodeParameter('setOrderProduct_order_product_id', i);
+                        const width = this.getNodeParameter('setOrderProduct_width', i);
+                        const height = this.getNodeParameter('setOrderProduct_height', i);
+                        const input = JSON.parse(this.getNodeParameter('setOrderProduct_input', i));
+                        const variables = { input };
+                        if (order_product_id)
+                            variables.order_product_id = order_product_id;
+                        if (width)
+                            variables.width = width;
+                        if (height)
+                            variables.height = height;
+                        const mutation = `mutation setOrderProduct ($order_product_id: Int, $width: Float, $height: Float, $input: SetOrderProductInput!) { setOrderProduct (order_product_id: $order_product_id, width: $width, height: $height, input: $input) { result message } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+                        if (responseData && responseData.data && responseData.data.setOrderProduct)
+                            returnData.push(responseData.data.setOrderProduct);
+                        else if (responseData && responseData.errors)
+                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                    if (operation === 'setBatch') {
+                        const batch_id = this.getNodeParameter('setBatch_batch_id', i);
+                        const input = JSON.parse(this.getNodeParameter('setBatch_input', i));
+                        const variables = { batch_id, input };
+                        const mutation = `mutation setBatch ($batch_id: Int, $input: SetBatchMasterInput!) { setBatch (batch_id: $batch_id, input: $input) { result message batch_id batch_link batch_pdf_link } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+                        if (responseData && responseData.data && responseData.data.setBatch)
+                            returnData.push(responseData.data.setBatch);
+                        else if (responseData && responseData.errors)
+                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                    if (operation === 'setProduct') {
+                        const input = JSON.parse(this.getNodeParameter('setProduct_input', i));
+                        const mutation = `mutation setProduct ($input: ProductInput!) { setProduct (input: $input) { result message products_id } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+                        if (responseData && responseData.data && responseData.data.setProduct)
+                            returnData.push(responseData.data.setProduct);
+                        else if (responseData && responseData.errors)
+                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                    if (operation === 'setProductPrice') {
+                        const input = JSON.parse(this.getNodeParameter('setProductPrice_input', i));
+                        const mutation = `mutation setProductPrice ($input: ProductPriceInput!) { setProductPrice (input: $input) { result message product_price_id } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+                        if (responseData && responseData.data && responseData.data.setProductPrice)
+                            returnData.push(responseData.data.setProductPrice);
+                        else if (responseData && responseData.errors)
+                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                    if (operation === 'setQuote') {
+                        const userid = this.getNodeParameter('setQuote_userid', i);
+                        const quote_id = this.getNodeParameter('setQuote_quote_id', i);
+                        const quote_title = this.getNodeParameter('setQuote_quote_title', i);
+                        const selectedShippingType = this.getNodeParameter('setQuote_selectedShippingType', i);
+                        const input = JSON.parse(this.getNodeParameter('setQuote_input', i));
+                        const variables = { userid, quote_title, input };
+                        if (quote_id)
+                            variables.quote_id = quote_id;
+                        if (selectedShippingType)
+                            variables.selectedShippingType = selectedShippingType;
+                        const mutation = `mutation setQuote ($userid: Int!, $quote_id: Int, $selectedShippingType: String, $quote_title: String!, $input: SetQuoteInput!) { setQuote (userid: $userid, quote_title: $quote_title, selectedShippingType: $selectedShippingType, quote_id: $quote_id, input: $input) { result message quote_id } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+                        if (responseData && responseData.data && responseData.data.setQuote)
+                            returnData.push(responseData.data.setQuote);
+                        else if (responseData && responseData.errors)
+                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                    if (operation === 'setProductDesign') {
+                        const order_product_id = this.getNodeParameter('setProductDesign_order_product_id', i);
+                        const ziflow_link = this.getNodeParameter('setProductDesign_ziflow_link', i);
+                        const ziflow_preflight_link = this.getNodeParameter('setProductDesign_ziflow_preflight_link', i);
+                        const variables = {};
+                        if (order_product_id)
+                            variables.order_product_id = order_product_id;
+                        if (ziflow_link)
+                            variables.ziflow_link = ziflow_link;
+                        if (ziflow_preflight_link)
+                            variables.ziflow_preflight_link = ziflow_preflight_link;
+                        const mutation = `mutation setProductDesign ($order_product_id: Int, $ziflow_link: String, $ziflow_preflight_link: String) { setProductDesign (order_product_id: $order_product_id, ziflow_link: $ziflow_link, ziflow_preflight_link: $ziflow_preflight_link) { result message } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+                        if (responseData && responseData.data && responseData.data.setProductDesign)
+                            returnData.push(responseData.data.setProductDesign);
+                        else if (responseData && responseData.errors)
+                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                    if (operation === 'updateOrderProductImages') {
+                        const order_product_id = this.getNodeParameter('updateOrderProductImages_order_product_id', i);
+                        const input = JSON.parse(this.getNodeParameter('updateOrderProductImages_input', i));
+                        const variables = { input };
+                        if (order_product_id)
+                            variables.order_product_id = order_product_id;
+                        const mutation = `mutation setOrderProductImage ($order_product_id: Int, $input: SetOrderProductImageInput!) { setOrderProductImage (order_product_id: $order_product_id, input: $input) { result message } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+                        if (responseData && responseData.data && responseData.data.setOrderProductImage)
+                            returnData.push(responseData.data.setOrderProductImage);
+                        else if (responseData && responseData.errors)
+                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                    if (operation === 'addProofVersion') {
+                        const order_product_id = this.getNodeParameter('addProofVersion_order_product_id', i);
+                        const add_version_file_only = this.getNodeParameter('addProofVersion_add_version_file_only', i);
+                        const ask_for_approval = this.getNodeParameter('addProofVersion_ask_for_approval', i);
+                        const input = JSON.parse(this.getNodeParameter('addProofVersion_input', i));
+                        const variables = { update_ziflow_link_only: 0, add_version_file_only, ask_for_approval, input };
+                        if (order_product_id)
+                            variables.order_product_id = order_product_id;
+                        const mutation = `mutation setOrderProductImage ($order_product_id: Int, $update_ziflow_link_only: Int, $add_version_file_only: Int, $ask_for_approval: Int, $input: SetOrderProductImageInput!) { setOrderProductImage (order_product_id: $order_product_id, update_ziflow_link_only: $update_ziflow_link_only, add_version_file_only: $add_version_file_only, ask_for_approval: $ask_for_approval, input: $input) { result message } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+                        if (responseData && responseData.data && responseData.data.setOrderProductImage)
+                            returnData.push(responseData.data.setOrderProductImage);
+                        else if (responseData && responseData.errors)
+                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                    if (operation === 'updateZiflowLinkImages') {
+                        const order_product_id = this.getNodeParameter('updateZiflowLinkImages_order_product_id', i);
+                        const input = JSON.parse(this.getNodeParameter('updateZiflowLinkImages_input', i));
+                        const variables = { update_ziflow_link_only: 1, input };
+                        if (order_product_id)
+                            variables.order_product_id = order_product_id;
+                        const mutation = `mutation setOrderProductImage ($order_product_id: Int, $update_ziflow_link_only: Int, $input: SetOrderProductImageInput!) { setOrderProductImage (order_product_id: $order_product_id, update_ziflow_link_only: $update_ziflow_link_only, input: $input) { result message } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+                        if (responseData && responseData.data && responseData.data.setOrderProductImage)
+                            returnData.push(responseData.data.setOrderProductImage);
                         else if (responseData && responseData.errors)
                             throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
                     }
@@ -5963,6 +6684,8 @@ class OnPrintShop {
                         variables.status = queryParameters.status;
                     if (queryParameters.all_store !== undefined)
                         variables.all_store = queryParameters.all_store;
+                    if (queryParameters.externalCatalogue !== undefined)
+                        variables.externalCatalogue = queryParameters.externalCatalogue;
                     // Filter out special options and separators
                     const productFields = productFieldsSelected
                         .filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
@@ -5993,8 +6716,8 @@ class OnPrintShop {
                     }
                     // Build the GraphQL query with nested fields
                     const query = `
-					query productsDetails ($products_id: Int, $limit: Int, $offset: Int, $status: Int, $all_store: Int) {
-						products_details (products_id: $products_id, limit: $limit, offset: $offset, status: $status, all_store: $all_store) {
+					query productsDetails ($products_id: Int, $limit: Int, $offset: Int, $status: Int, $all_store: Int, $externalCatalogue: Int) {
+						products_details (products_id: $products_id, limit: $limit, offset: $offset, status: $status, all_store: $all_store, externalCatalogue: $externalCatalogue) {
 							products {
 								${productFields}
 								${productSizeQuery}
@@ -6061,6 +6784,8 @@ class OnPrintShop {
                         variables.status = queryParameters.status;
                     if (queryParameters.all_store !== undefined)
                         variables.all_store = queryParameters.all_store;
+                    if (queryParameters.externalCatalogue !== undefined)
+                        variables.externalCatalogue = queryParameters.externalCatalogue;
                     // Filter out special options and separators
                     const productFields = productFieldsSelected
                         .filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
@@ -6091,8 +6816,8 @@ class OnPrintShop {
                     }
                     // Build the GraphQL query with nested fields (no products_id parameter)
                     const query = `
-					query productsDetails ($limit: Int, $offset: Int, $status: Int, $all_store: Int) {
-						products_details (limit: $limit, offset: $offset, status: $status, all_store: $all_store) {
+					query productsDetails ($limit: Int, $offset: Int, $status: Int, $all_store: Int, $externalCatalogue: Int) {
+						products_details (limit: $limit, offset: $offset, status: $status, all_store: $all_store, externalCatalogue: $externalCatalogue) {
 							products {
 								${productFields}
 								${productSizeQuery}

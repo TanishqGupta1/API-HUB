@@ -11,6 +11,7 @@ import { VariantPicker } from "@/components/storefront/variant-picker";
 import { PriceBlock } from "@/components/storefront/price-block";
 import { DescriptionHtml } from "@/components/storefront/description-html";
 import { RelatedProducts } from "@/components/storefront/related-products";
+import { ProductOptions } from "@/components/storefront/product-options";
 
 export default function VGProductDetailPage() {
   const params = useParams<{ product_id: string }>();
@@ -81,8 +82,15 @@ export default function VGProductDetailPage() {
         <h1 className="text-[28px] font-extrabold tracking-[-0.03em] leading-tight text-[#1e1e24]">
           {product.product_name}
         </h1>
-        <div className="font-mono text-[12px] text-[#888894] mt-2">
-          {product.supplier_sku} · {product.product_type}
+        <div className="flex items-center gap-3 mt-2">
+          <div className="font-mono text-[12px] text-[#888894]">
+            {product.supplier_sku} · {product.product_type}
+          </div>
+          {product.external_catalogue === 1 && (
+            <span className="px-2 py-0.5 rounded bg-[#eef4fb] border border-[#1e4d92] text-[#1e4d92] text-[10px] font-bold tracking-wide uppercase">
+              External Catalogue
+            </span>
+          )}
         </div>
       </div>
 
@@ -97,6 +105,8 @@ export default function VGProductDetailPage() {
           />
         </div>
       )}
+
+      <ProductOptions options={product.options} />
 
       <div className="flex gap-3 pt-2">
         <button type="button" onClick={() => router.back()}

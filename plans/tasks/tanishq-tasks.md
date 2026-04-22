@@ -26,25 +26,25 @@ Your job is to keep this parallelism running smoothly.
 
 Track merges here:
 
-- [ ] Urvashi 1 — schema fields (`ProductListRead` + `ProductRead`)
-- [ ] Urvashi 2 — aggregate query in `list_products`
-- [ ] Urvashi 3 — route group migration (admin pages into `(admin)/`)
-- [ ] Vidhi 5 — storefront layout skeleton
-- [ ] Vidhi 7 — TopBar + SearchContext
-- [ ] Vidhi 9 — StorefrontShell real composition
-- [ ] Vidhi 14 — PDPLayout
-- [ ] Vidhi 15 — ImageGallery keyboard nav
-- [ ] Vidhi 16 — DescriptionHtml
-- [ ] Vidhi 17 — RelatedProducts
-- [ ] Vidhi 18 — PDP page rewrite
-- [ ] Sinchana 8 — LeftRail
-- [ ] Sinchana 10 — MobileFilterSheet
-- [ ] Sinchana 11 — `/storefront/vg/page.tsx` rewrite
-- [ ] Sinchana 12 — FilterChipBar
-- [ ] Sinchana 13 — ProductCard upgrades + `types.ts`
-- [ ] Sinchana 19 — category page rewrite
-- [ ] Sinchana 20 — dead code + Lighthouse + .gitignore
-- [ ] Sinchana 8 (housekeeping) — inline style sweep
+- [x] Urvashi 1 — schema fields (`ProductListRead` + `ProductRead`)
+- [x] Urvashi 2 — aggregate query in `list_products`
+- [x] Urvashi 3 — route group migration (admin pages into `(admin)/`)
+- [x] Vidhi 5 — storefront layout skeleton
+- [x] Vidhi 7 — TopBar + SearchContext
+- [x] Vidhi 9 — StorefrontShell real composition
+- [x] Vidhi 14 — PDPLayout
+- [x] Vidhi 15 — ImageGallery keyboard nav
+- [x] Vidhi 16 — DescriptionHtml
+- [x] Vidhi 17 — RelatedProducts
+- [x] Vidhi 18 — PDP page rewrite
+- [x] Sinchana 8 — LeftRail
+- [x] Sinchana 10 — MobileFilterSheet
+- [x] Sinchana 11 — `/storefront/vg/page.tsx` rewrite
+- [x] Sinchana 12 — FilterChipBar
+- [x] Sinchana 13 — ProductCard upgrades + `types.ts`
+- [x] Sinchana 19 — category page rewrite
+- [x] Sinchana 20 — dead code + Lighthouse + .gitignore
+- [x] Sinchana 8 (housekeeping) — inline style sweep
 
 ## Out of sprint scope
 

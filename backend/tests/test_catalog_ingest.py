@@ -272,6 +272,86 @@ async def test_ingest_products_links_category_by_external_id(
     assert prod.category_id == cat.id
 
 
+@pytest.mark.asyncio
+async def test_ingest_products_upserts_options_and_attributes(
+    client: AsyncClient, db, seed_supplier
+):
+    from modules.catalog.models import Product, ProductOption, ProductOptionAttribute
+
+    payload = [
+        {
+            "supplier_sku": "DECAL-131",
+            "product_name": "Decals - General Performance",
+            "options": [
+                {
+                    "option_key": "inkFinish",
+                    "title": "Ink Finish",
+                    "options_type": "Radio Button",
+                    "sort_order": 3,
+                    "master_option_id": 112,
+                    "ops_option_id": 456,
+                    "required": False,
+                    "attributes": [
+                        {"title": "Gloss", "sort_order": 0, "ops_attribute_id": None},
+                        {"title": "Matte", "sort_order": 1, "ops_attribute_id": None},
+                    ],
+                }
+            ],
+        }
+    ]
+    r = await client.post(
+        f"/api/ingest/{seed_supplier.id}/products", headers=SECRET, json=payload
+    )
+    assert r.status_code == 200
+
+    prod = (
+        await db.execute(
+            select(Product).where(
+                Product.supplier_id == seed_supplier.id,
+                Product.supplier_sku == "DECAL-131",
+            )
+        )
+    ).scalar_one()
+
+    opt = (
+        await db.execute(
+            select(ProductOption).where(ProductOption.product_id == prod.id)
+        )
+    ).scalar_one()
+    assert opt.option_key == "inkFinish"
+    assert opt.title == "Ink Finish"
+    assert opt.master_option_id == 112
+    assert opt.ops_option_id == 456
+
+    attrs = (
+        await db.execute(
+            select(ProductOptionAttribute).where(
+                ProductOptionAttribute.product_option_id == opt.id
+            )
+        )
+    ).scalars().all()
+    assert [a.title for a in sorted(attrs, key=lambda a: a.sort_order)] == [
+        "Gloss",
+        "Matte",
+    ]
+
+    # Update attributes via JSON string payload; attributes should be replaced.
+    payload[0]["options"][0]["attributes"] = '[{"title":"FLX+","sort_order":2}]'
+    r2 = await client.post(
+        f"/api/ingest/{seed_supplier.id}/products", headers=SECRET, json=payload
+    )
+    assert r2.status_code == 200
+
+    attrs2 = (
+        await db.execute(
+            select(ProductOptionAttribute).where(
+                ProductOptionAttribute.product_option_id == opt.id
+            )
+        )
+    ).scalars().all()
+    assert [a.title for a in attrs2] == ["FLX+"]
+
+
 # ─── Task A8: Inventory endpoint ────────────────────────────────────────────
 
 @pytest.mark.asyncio
