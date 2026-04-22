@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
-os.environ.setdefault("INGEST_SHARED_SECRET", "test-secret-do-not-use-in-prod")
+os.environ["INGEST_SHARED_SECRET"] = "test-secret-do-not-use-in-prod"
 
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy import delete, select  # noqa: E402

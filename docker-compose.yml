@@ -22,6 +22,9 @@ services:
     environment:
       - POSTGRES_URL=postgresql+asyncpg://${POSTGRES_USER:-vg_user}:${POSTGRES_PASSWORD:-vg_pass}@postgres:5432/${POSTGRES_DB:-vg_hub}
       - SECRET_KEY=${SECRET_KEY:-y0uR_s3cr3t_k3y_h3r3}
+      - N8N_API_KEY=${N8N_API_KEY:-}
+      - N8N_BASE_URL=http://n8n:5678
+      - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET:-}
     volumes:
       - ./backend:/app
     depends_on:

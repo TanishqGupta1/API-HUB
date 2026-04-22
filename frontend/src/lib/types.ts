@@ -70,6 +70,7 @@ export interface Product {
   product_name: string;
   brand: string | null;
   category: string | null;
+  category_id: string | null;
   description: string | null;
   product_type: string;
   image_url: string | null;
@@ -94,9 +95,13 @@ export interface ProductListItem {
   supplier_sku: string;
   product_name: string;
   brand: string | null;
+  category_id: string | null;
   product_type: string;
   image_url: string | null;
   variant_count: number;
+  price_min: number | null;
+  price_max: number | null;
+  total_inventory: number | null;
 }
 
 /* ─── Category (hierarchical) ────────────────────────────────────────────── */

@@ -167,7 +167,7 @@ export default function CustomersPage() {
         <div>
           <div className="page-title">Storefronts</div>
           <div className="page-subtitle">
-            OnPrintShop storefronts — each one is an independent OPS instance
+            Storefronts — each one is an independent instance
           </div>
         </div>
         {!showForm && (
@@ -190,10 +190,10 @@ export default function CustomersPage() {
           <div style={{ padding: "20px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <Field label="Store Name" value={form.name} onChange={setField("name")}
               placeholder="e.g., Acme Corp Store" error={formErrors.name} />
-            <Field label="OPS GraphQL URL" value={form.ops_base_url} onChange={setField("ops_base_url")}
-              placeholder="https://acme.onprintshop.com/graphql" type="url" error={formErrors.ops_base_url} />
+            <Field label="Storefront API URL" value={form.ops_base_url} onChange={setField("ops_base_url")}
+              placeholder="https://acme.example.com/graphql" type="url" error={formErrors.ops_base_url} />
             <Field label="OAuth Token URL" value={form.ops_token_url} onChange={setField("ops_token_url")}
-              placeholder="https://acme.onprintshop.com/oauth/token" type="url" error={formErrors.ops_token_url} />
+              placeholder="https://acme.example.com/oauth/token" type="url" error={formErrors.ops_token_url} />
             <Field label="Client ID" value={form.ops_client_id} onChange={setField("ops_client_id")}
               placeholder="Client ID" error={formErrors.ops_client_id} />
             <Field label="Client Secret" value={form.ops_client_secret} onChange={setField("ops_client_secret")}
@@ -201,7 +201,7 @@ export default function CustomersPage() {
           </div>
           <div style={{ padding: "0 24px 20px" }}>
             <p style={{ fontSize: 12, color: "var(--ink-muted)", marginBottom: 14 }}>
-              Find credentials in your OnPrintShop admin under Settings › API.
+              Find credentials in your storefront admin under Settings › API.
               The client secret is encrypted and never exposed after saving.
             </p>
             {saveError && (
@@ -248,7 +248,7 @@ export default function CustomersPage() {
           <thead>
             <tr>
               <th>Storefront</th>
-              <th>OPS Endpoint</th>
+              <th>API Endpoint</th>
               <th>Status</th>
               <th>Products Pushed</th>
               <th>Pricing Rules</th>
@@ -288,7 +288,7 @@ export default function CustomersPage() {
                   </div>
                 </td>
 
-                {/* OPS URL */}
+                {/* Storefront URL */}
                 <td>
                   <a href={c.ops_base_url} target="_blank" rel="noopener noreferrer"
                     style={{ color: "var(--blue)", fontSize: 13, textDecoration: "none", fontWeight: 500 }}
@@ -381,7 +381,7 @@ export default function CustomersPage() {
                     No storefronts yet
                   </div>
                   <div style={{ fontSize: 13, color: "var(--ink-muted)", marginBottom: 20 }}>
-                    Add your first OnPrintShop storefront to start publishing products.
+                    Add your first storefront to start publishing products.
                   </div>
                   <button className="btn btn-primary"
                     onClick={() => { setShowForm(true); setSaveError(null); setFormErrors({}); }}>

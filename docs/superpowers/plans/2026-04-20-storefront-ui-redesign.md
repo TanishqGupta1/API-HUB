@@ -32,7 +32,7 @@
 **Files:**
 - Modify: `backend/modules/catalog/schemas.py`
 
-- [ ] **Step 1: Add fields**
+- [x] **Step 1: Add fields**
 
 Replace the existing `ProductListRead` class with:
 
@@ -56,7 +56,7 @@ class ProductListRead(BaseModel):
     model_config = {"from_attributes": True}
 ```
 
-- [ ] **Step 2: Stage**
+- [x] **Step 2: Stage**
 
 ```bash
 git add backend/modules/catalog/schemas.py
@@ -68,7 +68,7 @@ git add backend/modules/catalog/schemas.py
 **Files:**
 - Modify: `backend/modules/catalog/routes.py`
 
-- [ ] **Step 1: Rewrite the aggregate section of `list_products`**
+- [x] **Step 1: Rewrite the aggregate section of `list_products`**
 
 Replace the existing loop at the bottom of `list_products` with a single aggregate query that pulls variant stats for every product in one go:
 
@@ -109,7 +109,7 @@ Replace the existing loop at the bottom of `list_products` with a single aggrega
 
 Remove the previous per-product `variant_count` count query (it's now folded into the aggregate).
 
-- [ ] **Step 2: Smoke test the endpoint**
+- [x] **Step 2: Smoke test the endpoint**
 
 Run:
 ```bash
@@ -121,7 +121,7 @@ curl -s "http://localhost:8000/api/products?supplier_id=$(curl -s http://localho
 
 Expected: each product row includes `price_min`, `price_max`, `total_inventory` fields (may be null/0 if variants lack prices).
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add backend/modules/catalog/routes.py
@@ -133,7 +133,7 @@ git add backend/modules/catalog/routes.py
 **Files:**
 - Modify: `backend/modules/catalog/schemas.py`
 
-- [ ] **Step 1: Add field to `ProductRead`**
+- [x] **Step 1: Add field to `ProductRead`**
 
 Insert inside the existing `ProductRead` class, after `category`:
 
@@ -143,7 +143,7 @@ Insert inside the existing `ProductRead` class, after `category`:
 
 The SQLAlchemy `Product` model already has `category_id` — Pydantic `from_attributes` picks it up automatically.
 
-- [ ] **Step 2: Smoke test PDP endpoint**
+- [x] **Step 2: Smoke test PDP endpoint**
 
 ```bash
 curl -s "http://localhost:8000/api/products/$(curl -s "http://localhost:8000/api/products?limit=1" | python3 -c 'import sys,json; print(json.load(sys.stdin)[0][\"id\"])')" | python3 -m json.tool | grep -E 'category|id' | head
@@ -151,7 +151,7 @@ curl -s "http://localhost:8000/api/products/$(curl -s "http://localhost:8000/api
 
 Expected: response includes `"category_id": "<uuid or null>"`.
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add backend/modules/catalog/schemas.py
@@ -168,7 +168,7 @@ git add backend/modules/catalog/schemas.py
 - Create: `frontend/src/app/(admin)/layout.tsx`
 - Move: 9 directories (below) into `(admin)/`
 
-- [ ] **Step 1: Create admin layout**
+- [x] **Step 1: Create admin layout**
 
 Write `frontend/src/app/(admin)/layout.tsx`:
 
@@ -189,7 +189,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
 This mirrors whatever the current root layout was rendering. Open `frontend/src/app/layout.tsx` first — if the current layout already wraps `children` with `Sidebar`, copy that wrapper markup here verbatim.
 
-- [ ] **Step 2: Move pages into the route group**
+- [x] **Step 2: Move pages into the route group**
 
 ```bash
 cd frontend/src/app
@@ -202,7 +202,7 @@ done
 
 Verify in another terminal with `git status` — expect 9 renames.
 
-- [ ] **Step 3: Slim root layout**
+- [x] **Step 3: Slim root layout**
 
 Open `frontend/src/app/layout.tsx` and strip it to:
 
@@ -226,7 +226,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 Keep any existing `<link>` / `<script>` tags that were in the original.
 
-- [ ] **Step 4: Smoke test admin routes**
+- [x] **Step 4: Smoke test admin routes**
 
 ```bash
 cd frontend && npm run dev &
@@ -236,7 +236,7 @@ curl -sI http://localhost:3000/workflows | head -1   # expect 200
 curl -sI http://localhost:3000/ | head -1            # expect 200 (dashboard)
 ```
 
-- [ ] **Step 5: Stage**
+- [x] **Step 5: Stage**
 
 ```bash
 git add frontend/src/app
@@ -248,7 +248,7 @@ git add frontend/src/app
 **Files:**
 - Create: `frontend/src/app/storefront/vg/layout.tsx`
 
-- [ ] **Step 1: Minimal storefront layout**
+- [x] **Step 1: Minimal storefront layout**
 
 ```tsx
 import { StorefrontShell } from "@/components/storefront/storefront-shell";
@@ -258,7 +258,7 @@ export default function StorefrontLayout({ children }: { children: React.ReactNo
 }
 ```
 
-- [ ] **Step 2: Temporary StorefrontShell stub (replaced in Task 7)**
+- [x] **Step 2: Temporary StorefrontShell stub (replaced in Task 7)**
 
 Write `frontend/src/components/storefront/storefront-shell.tsx`:
 
@@ -274,13 +274,13 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
 
 Existing `/storefront/vg/page.tsx` and PDP/category pages already render their own shells — they'll be stripped in later tasks. Stub keeps them working for now.
 
-- [ ] **Step 3: Smoke test**
+- [x] **Step 3: Smoke test**
 
 ```bash
 curl -sI http://localhost:3000/storefront/vg | head -1   # expect 200
 ```
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add frontend/src/app/storefront/vg/layout.tsx frontend/src/components/storefront/storefront-shell.tsx
@@ -296,13 +296,13 @@ git add frontend/src/app/storefront/vg/layout.tsx frontend/src/components/storef
 
 Each page currently renders a full `<div>` shell with its own header. The new layout will own that. Strip each page to render **only** its main content (grid, PDP body, category grid). Wrap content in React fragment.
 
-- [ ] **Step 1: `storefront/vg/page.tsx`** — remove outer wrapper + header, return just the search row + `<CategoryNav>` + grid. Left rail and top bar will come from layout later. Leave for now — it'll get torn down in Task 11.
+- [x] **Step 1: `storefront/vg/page.tsx`** — remove outer wrapper + header, return just the search row + `<CategoryNav>` + grid. Left rail and top bar will come from layout later. Leave for now — it'll get torn down in Task 11.
 
-- [ ] **Step 2: `storefront/vg/category/[category_id]/page.tsx`** — same treatment. Leave for now; Task 11 rewrites.
+- [x] **Step 2: `storefront/vg/category/[category_id]/page.tsx`** — same treatment. Leave for now; Task 11 rewrites.
 
-- [ ] **Step 3: `storefront/vg/product/[product_id]/page.tsx`** — leave; Task 14 rewrites.
+- [x] **Step 3: `storefront/vg/product/[product_id]/page.tsx`** — leave; Task 14 rewrites.
 
-- [ ] **Step 4: No stage yet** — these files change meaningfully in later tasks. Skip commit.
+- [x] **Step 4: No stage yet** — these files change meaningfully in later tasks. Skip commit.
 
 ---
 
@@ -314,7 +314,7 @@ Each page currently renders a full `<div>` shell with its own header. The new la
 - Create: `frontend/src/components/storefront/top-bar.tsx`
 - Create: `frontend/src/components/storefront/search-context.tsx`
 
-- [ ] **Step 1: Search context (lets TopBar search filter grid without prop drilling)**
+- [x] **Step 1: Search context (lets TopBar search filter grid without prop drilling)**
 
 `search-context.tsx`:
 
@@ -341,7 +341,7 @@ export function useSearch() {
 }
 ```
 
-- [ ] **Step 2: TopBar**
+- [x] **Step 2: TopBar**
 
 `top-bar.tsx`:
 
@@ -399,7 +399,7 @@ export function TopBar() {
 }
 ```
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add frontend/src/components/storefront/top-bar.tsx frontend/src/components/storefront/search-context.tsx
@@ -411,7 +411,7 @@ git add frontend/src/components/storefront/top-bar.tsx frontend/src/components/s
 **Files:**
 - Create: `frontend/src/components/storefront/left-rail.tsx`
 
-- [ ] **Step 1: Rail**
+- [x] **Step 1: Rail**
 
 ```tsx
 "use client";
@@ -531,7 +531,7 @@ export function LeftRail({ categories, counts }: RailProps) {
 }
 ```
 
-- [ ] **Step 2: Stage**
+- [x] **Step 2: Stage**
 
 ```bash
 git add frontend/src/components/storefront/left-rail.tsx
@@ -543,7 +543,7 @@ git add frontend/src/components/storefront/left-rail.tsx
 **Files:**
 - Modify: `frontend/src/components/storefront/storefront-shell.tsx`
 
-- [ ] **Step 1: Replace stub**
+- [x] **Step 1: Replace stub**
 
 ```tsx
 "use client";
@@ -608,11 +608,11 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
 }
 ```
 
-- [ ] **Step 2: Smoke test**
+- [x] **Step 2: Smoke test**
 
 Open `http://localhost:3000/storefront/vg`. Expect: top bar with brand + search + Admin link; left rail with 95 categories + counts; main area unchanged for now (old grid renders below old header — will clean in Task 11).
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add frontend/src/components/storefront/storefront-shell.tsx
@@ -625,7 +625,7 @@ git add frontend/src/components/storefront/storefront-shell.tsx
 - Create: `frontend/src/components/storefront/mobile-filter-sheet.tsx`
 - Modify: `frontend/src/components/storefront/storefront-shell.tsx`
 
-- [ ] **Step 1: Sheet component**
+- [x] **Step 1: Sheet component**
 
 ```tsx
 "use client";
@@ -686,7 +686,7 @@ export function MobileFilterSheet({ categories, counts }: Props) {
 }
 ```
 
-- [ ] **Step 2: Mount in shell**
+- [x] **Step 2: Mount in shell**
 
 In `storefront-shell.tsx`, under the main `<div className="flex">` block, add after the `<main>`:
 
@@ -700,7 +700,7 @@ And add the import:
 import { MobileFilterSheet } from "./mobile-filter-sheet";
 ```
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add frontend/src/components/storefront/mobile-filter-sheet.tsx frontend/src/components/storefront/storefront-shell.tsx
@@ -716,7 +716,7 @@ git add frontend/src/components/storefront/mobile-filter-sheet.tsx frontend/src/
 **Files:**
 - Rewrite: `frontend/src/app/storefront/vg/page.tsx`
 
-- [ ] **Step 1: Page content only (shell owns chrome)**
+- [x] **Step 1: Page content only (shell owns chrome)**
 
 ```tsx
 "use client";
@@ -815,7 +815,7 @@ export default function VGStorefrontPage() {
 }
 ```
 
-- [ ] **Step 2: Stage**
+- [x] **Step 2: Stage**
 
 ```bash
 git add frontend/src/app/storefront/vg/page.tsx
@@ -827,7 +827,7 @@ git add frontend/src/app/storefront/vg/page.tsx
 **Files:**
 - Create: `frontend/src/components/storefront/filter-chip-bar.tsx`
 
-- [ ] **Step 1: Component**
+- [x] **Step 1: Component**
 
 ```tsx
 "use client";
@@ -890,7 +890,7 @@ export function FilterChipBar({ inStockOnly, onInStockChange, sort, onSortChange
 }
 ```
 
-- [ ] **Step 2: Stage**
+- [x] **Step 2: Stage**
 
 ```bash
 git add frontend/src/components/storefront/filter-chip-bar.tsx
@@ -902,7 +902,7 @@ git add frontend/src/components/storefront/filter-chip-bar.tsx
 **Files:**
 - Rewrite: `frontend/src/components/storefront/storefront-product-card.tsx`
 
-- [ ] **Step 1: Replace file**
+- [x] **Step 1: Replace file**
 
 ```tsx
 "use client";
@@ -977,7 +977,7 @@ export function StorefrontProductCard({ product }: Props) {
 }
 ```
 
-- [ ] **Step 2: Update `ProductListItem` type**
+- [x] **Step 2: Update `ProductListItem` type**
 
 Open `frontend/src/lib/types.ts` and extend the interface:
 
@@ -999,11 +999,11 @@ export interface ProductListItem {
 }
 ```
 
-- [ ] **Step 3: Smoke test**
+- [x] **Step 3: Smoke test**
 
 Refresh `http://localhost:3000/storefront/vg`. Expect cards showing price band + OUT badge where applicable.
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add frontend/src/components/storefront/storefront-product-card.tsx frontend/src/lib/types.ts
@@ -1019,7 +1019,7 @@ git add frontend/src/components/storefront/storefront-product-card.tsx frontend/
 **Files:**
 - Create: `frontend/src/components/storefront/pdp-layout.tsx`
 
-- [ ] **Step 1: Component**
+- [x] **Step 1: Component**
 
 ```tsx
 "use client";
@@ -1069,7 +1069,7 @@ export function PDPLayout({ breadcrumbCategory, breadcrumbProduct, gallery, info
 }
 ```
 
-- [ ] **Step 2: Stage**
+- [x] **Step 2: Stage**
 
 ```bash
 git add frontend/src/components/storefront/pdp-layout.tsx
@@ -1081,7 +1081,7 @@ git add frontend/src/components/storefront/pdp-layout.tsx
 **Files:**
 - Modify: `frontend/src/components/storefront/image-gallery.tsx`
 
-- [ ] **Step 1: Add keyboard handler**
+- [x] **Step 1: Add keyboard handler**
 
 After the existing `useState` lines, add inside the component:
 
@@ -1110,7 +1110,7 @@ Replace the main hero block with:
 </a>
 ```
 
-- [ ] **Step 2: Stage**
+- [x] **Step 2: Stage**
 
 ```bash
 git add frontend/src/components/storefront/image-gallery.tsx
@@ -1123,13 +1123,13 @@ git add frontend/src/components/storefront/image-gallery.tsx
 - Create: `frontend/src/components/storefront/description-html.tsx`
 - Modify: `frontend/package.json`
 
-- [ ] **Step 1: Install DOMPurify**
+- [x] **Step 1: Install DOMPurify**
 
 ```bash
 cd frontend && npm install isomorphic-dompurify
 ```
 
-- [ ] **Step 2: Component**
+- [x] **Step 2: Component**
 
 ```tsx
 "use client";
@@ -1159,7 +1159,7 @@ export function DescriptionHtml({ html }: Props) {
 }
 ```
 
-- [ ] **Step 3: Add prose styles to globals.css**
+- [x] **Step 3: Add prose styles to globals.css**
 
 At the bottom of `frontend/src/app/globals.css`:
 
@@ -1172,7 +1172,7 @@ At the bottom of `frontend/src/app/globals.css`:
 .prose-storefront li { margin-bottom: 0.3em; }
 ```
 
-- [ ] **Step 4: Stage**
+- [x] **Step 4: Stage**
 
 ```bash
 git add frontend/src/components/storefront/description-html.tsx frontend/package.json frontend/package-lock.json frontend/src/app/globals.css
@@ -1184,7 +1184,7 @@ git add frontend/src/components/storefront/description-html.tsx frontend/package
 **Files:**
 - Create: `frontend/src/components/storefront/related-products.tsx`
 
-- [ ] **Step 1: Component**
+- [x] **Step 1: Component**
 
 ```tsx
 "use client";
@@ -1236,7 +1236,7 @@ export function RelatedProducts({ supplierId, categoryId, excludeId }: Props) {
 }
 ```
 
-- [ ] **Step 2: Stage**
+- [x] **Step 2: Stage**
 
 ```bash
 git add frontend/src/components/storefront/related-products.tsx
@@ -1248,7 +1248,7 @@ git add frontend/src/components/storefront/related-products.tsx
 **Files:**
 - Rewrite: `frontend/src/app/storefront/vg/product/[product_id]/page.tsx`
 
-- [ ] **Step 1: Replace file**
+- [x] **Step 1: Replace file**
 
 ```tsx
 "use client";
@@ -1386,7 +1386,7 @@ export default function VGProductDetailPage() {
 }
 ```
 
-- [ ] **Step 2: Smoke test**
+- [x] **Step 2: Smoke test**
 
 ```bash
 curl -sI "http://localhost:3000/storefront/vg/product/$(curl -s 'http://localhost:8000/api/products?limit=1' | python3 -c 'import sys,json;print(json.load(sys.stdin)[0][\"id\"])')" | head -1
@@ -1394,7 +1394,7 @@ curl -sI "http://localhost:3000/storefront/vg/product/$(curl -s 'http://localhos
 
 Expect `200 OK`. Open in browser; confirm two-pane layout, sticky info on scroll, description renders sanitized HTML, related scroller at bottom.
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add frontend/src/app/storefront/vg/product/
@@ -1410,7 +1410,7 @@ git add frontend/src/app/storefront/vg/product/
 **Files:**
 - Rewrite: `frontend/src/app/storefront/vg/category/[category_id]/page.tsx`
 
-- [ ] **Step 1: Replace file**
+- [x] **Step 1: Replace file**
 
 ```tsx
 "use client";
@@ -1528,7 +1528,7 @@ export default function VGCategoryPage() {
 }
 ```
 
-- [ ] **Step 2: Stage**
+- [x] **Step 2: Stage**
 
 ```bash
 git add frontend/src/app/storefront/vg/category/
@@ -1540,7 +1540,7 @@ git add frontend/src/app/storefront/vg/category/
 **Files:**
 - Delete: `frontend/src/components/storefront/category-nav.tsx`
 
-- [ ] **Step 1: Remove old CategoryNav**
+- [x] **Step 1: Remove old CategoryNav**
 
 ```bash
 git rm frontend/src/components/storefront/category-nav.tsx
@@ -1548,7 +1548,7 @@ git rm frontend/src/components/storefront/category-nav.tsx
 grep -rn "category-nav" frontend/src || true
 ```
 
-- [ ] **Step 2: Lighthouse accessibility check**
+- [x] **Step 2: Lighthouse accessibility check**
 
 Open DevTools → Lighthouse → run Accessibility audit on:
 - `http://localhost:3000/storefront/vg`
@@ -1556,7 +1556,7 @@ Open DevTools → Lighthouse → run Accessibility audit on:
 
 Expected: score ≥ 90. If lower, fix whatever is flagged (likely missing alt attrs or color contrast on a badge).
 
-- [ ] **Step 3: Stage**
+- [x] **Step 3: Stage**
 
 ```bash
 git add frontend/src/components/storefront/

@@ -12,7 +12,7 @@ const PIPELINE_NODES: PipelineNode[] = [
   { id: "fetch",     label: "Fetch Data",        sublabel: "SOAP / REST",       status: "idle", icon: "fetch"     },
   { id: "normalize", label: "Normalize",         sublabel: "Canonical schema",  status: "idle", icon: "normalize" },
   { id: "store",     label: "Store in DB",       sublabel: "PostgreSQL",        status: "idle", icon: "store"     },
-  { id: "publish",   label: "Publish to Store",  sublabel: "OnPrintShop",       status: "idle", icon: "publish"   },
+  { id: "publish",   label: "Publish to Store",  sublabel: "Storefront",        status: "idle", icon: "publish"   },
 ];
 
 interface WorkflowSummary {

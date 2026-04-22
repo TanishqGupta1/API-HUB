@@ -36,6 +36,7 @@ class ProductRead(BaseModel):
     product_name: str
     brand: Optional[str]
     category: Optional[str]
+    category_id: Optional[UUID] = None
     description: Optional[str]
     product_type: str
     image_url: Optional[str]
@@ -59,6 +60,9 @@ class ProductListRead(BaseModel):
     product_type: str
     image_url: Optional[str]
     variant_count: int = 0
+    price_min: Optional[Decimal] = None
+    price_max: Optional[Decimal] = None
+    total_inventory: int = 0
 
     model_config = {"from_attributes": True}
 

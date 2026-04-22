@@ -47,11 +47,31 @@ async def list_products(
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Product)
+    variant_agg = (
+        select(
+            ProductVariant.product_id.label("product_id"),
+            func.count(ProductVariant.id).label("variant_count"),
+            func.min(ProductVariant.base_price).label("price_min"),
+            func.max(ProductVariant.base_price).label("price_max"),
+            func.coalesce(func.sum(ProductVariant.inventory), 0).label("total_inventory"),
+        )
+        .group_by(ProductVariant.product_id)
+        .subquery()
+    )
+
+    query = (
+        select(
+            Product,
+            variant_agg.c.variant_count,
+            variant_agg.c.price_min,
+            variant_agg.c.price_max,
+            variant_agg.c.total_inventory,
+        )
+        .outerjoin(variant_agg, variant_agg.c.product_id == Product.id)
+    )
     if supplier_id:
         query = query.where(Product.supplier_id == supplier_id)
     if category_id:
-        # Include products in this category AND any descendant categories.
         descendants = await _category_descendants(db, category_id)
         query = query.where(Product.category_id.in_(descendants))
     if brand:
@@ -60,30 +80,25 @@ async def list_products(
         query = query.where(Product.product_name.ilike(f"%{search}%"))
     query = query.offset(skip).limit(limit).order_by(Product.product_name)
 
-    result = await db.execute(query)
-    products = result.scalars().all()
+    rows = (await db.execute(query)).all()
+    products = [row[0] for row in rows]
 
-    # Batch-fetch supplier names to avoid N+1
     supplier_ids = {p.supplier_id for p in products}
     supplier_map: dict[UUID, str] = {}
     if supplier_ids:
-        rows = await db.execute(
+        sup_rows = await db.execute(
             select(Supplier.id, Supplier.name).where(Supplier.id.in_(supplier_ids))
         )
-        supplier_map = {row.id: row.name for row in rows}
+        supplier_map = {row.id: row.name for row in sup_rows}
 
-    out = []
-    for p in products:
-        count = (
-            await db.execute(
-                select(func.count())
-                .select_from(ProductVariant)
-                .where(ProductVariant.product_id == p.id)
-            )
-        ).scalar() or 0
-        data = ProductListRead.model_validate(p)
-        data.variant_count = count
-        data.supplier_name = supplier_map.get(p.supplier_id)
+    out: list[ProductListRead] = []
+    for prod, vcount, pmin, pmax, total_inv in rows:
+        data = ProductListRead.model_validate(prod)
+        data.variant_count = int(vcount or 0)
+        data.price_min = pmin
+        data.price_max = pmax
+        data.total_inventory = int(total_inv or 0)
+        data.supplier_name = supplier_map.get(prod.supplier_id)
         out.append(data)
     return out
 

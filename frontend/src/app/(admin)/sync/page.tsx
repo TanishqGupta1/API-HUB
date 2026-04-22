@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SyncJob } from "@/lib/types";
 
@@ -227,9 +227,8 @@ export default function SyncJobsPage() {
             {loading && [1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
 
             {!loading && jobs.map((j) => (
-              <>
+              <React.Fragment key={j.id}>
                 <tr
-                  key={j.id}
                   className="transition-colors"
                   style={{ borderTop: "1px solid var(--border)" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "var(--paper)")}
@@ -295,7 +294,7 @@ export default function SyncJobsPage() {
 
                 {/* Expanded error log */}
                 {expandedError === j.id && j.error_log && (
-                  <tr key={`${j.id}-err`} style={{ borderTop: "1px solid var(--border)" }}>
+                  <tr style={{ borderTop: "1px solid var(--border)" }}>
                     <td colSpan={7} className="px-5 py-4" style={{ background: "rgba(185,50,50,0.03)" }}>
                       <pre
                         className="text-xs rounded-md p-4 overflow-auto max-h-48 whitespace-pre-wrap"
@@ -311,7 +310,7 @@ export default function SyncJobsPage() {
                     </td>
                   </tr>
                 )}
-              </>
+              </React.Fragment>
             ))}
 
             {/* Empty state */}

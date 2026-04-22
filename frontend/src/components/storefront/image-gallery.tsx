@@ -26,6 +26,18 @@ export function ImageGallery({ images, fallbackUrl, alt }: ImageGalleryProps) {
         ]
       : [];
 
+  useEffect(() => {
+    if (list.length < 2) return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "ArrowRight") setActiveIdx((i) => (i + 1) % list.length);
+      if (e.key === "ArrowLeft") setActiveIdx((i) => (i - 1 + list.length) % list.length);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [list.length]);
+
   if (list.length === 0) {
     return (
       <div className="aspect-square bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] flex items-center justify-center">
@@ -38,29 +50,17 @@ export function ImageGallery({ images, fallbackUrl, alt }: ImageGalleryProps) {
 
   const active = list[Math.min(activeIdx, list.length - 1)];
 
-  useEffect(() => {
-    if (list.length <= 1) return;
-    function onKey(e: KeyboardEvent) {
-      const tag = (document.activeElement as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if (e.key === "ArrowLeft")  setActiveIdx(i => (i - 1 + list.length) % list.length);
-      if (e.key === "ArrowRight") setActiveIdx(i => (i + 1) % list.length);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [list.length]);
-
   return (
     <div className="flex flex-col gap-3">
-      <div className="aspect-square bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] overflow-hidden flex items-center justify-center">
-        <a href={active.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${alt} full size`} className="w-full h-full flex items-center justify-center">
-          <img
-            src={active.url}
-            alt={alt}
-            className="w-full h-full object-contain p-6"
-          />
-        </a>
-      </div>
+      <a
+        href={active.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Open ${alt} full size`}
+        className="aspect-square bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] overflow-hidden flex items-center justify-center cursor-zoom-in"
+      >
+        <img src={active.url} alt={alt} className="w-full h-full object-contain p-6" />
+      </a>
 
       {list.length > 1 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
