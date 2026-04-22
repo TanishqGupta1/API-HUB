@@ -143,3 +143,60 @@ Use the existing `EmptyState` component in `components/ui/empty-state.tsx` if it
 - `frontend/src/app/(admin)/page.tsx` — MODIFY (Task 2, health section only)
 - All admin pages + sidebar — MODIFY (Task 3, terminology only)
 - `frontend/src/components/suppliers/reveal-form.tsx` — REWRITE (Task 4)
+
+---
+
+## SanMar SFTP Tasks
+
+**Spec:** `docs/superpowers/specs/2026-04-22-sanmar-sftp-integration-design.md`  
+**Prerequisite:** Vidhi's SanMar Tasks 3+4 must be merged before E2 (frontend verify).
+
+### SanMar Task 1 — Error Handling Branch (W4)
+
+**File:** `n8n-workflows/sanmar-sftp-pull.json`  
+**No backend changes. No blockers — can start now.**
+
+The current workflow has no error handling — if any `POST /api/ingest` call fails, the loop silently dies. Add an error output from the `POST /ingest/products` HTTP node (`http-002`):
+
+1. Open `sanmar-sftp-pull.json`
+2. Find the `http-002` node (POST /ingest/products)
+3. Add a new node connected to its error output:
+
+```json
+{
+  "parameters": {
+    "jsCode": "const err = $input.first().json;\nreturn [{ json: {\n  event: 'sanmar_ingest_error',\n  batch_error: err.message || JSON.stringify(err),\n  timestamp: new Date().toISOString()\n}}];"
+  },
+  "name": "Format Error",
+  "type": "n8n-nodes-base.code",
+  "typeVersion": 2
+}
+```
+
+4. Connect Format Error → another HTTP node posting to a Slack webhook or just logging via `POST /api/push-log` with `status: "failed"`.
+
+At minimum: the error branch must prevent a silent failure. Even just a Set node that captures the error message is better than nothing.
+
+Import the updated workflow into n8n. Verify the error branch appears in the workflow editor.
+
+---
+
+### SanMar Task 2 — Frontend E2E Verify (E2)
+
+**Requires:** Tanishq has run E1 (products in DB)  
+**No code changes — verification only**
+
+Open `http://localhost:3000/storefront/vg`. Confirm:
+- SanMar products visible (brand badge shows "SanMar")
+- Product images load (not broken)
+- Variant picker shows real colors + sizes
+- Price block shows real pricing
+- Product detail page loads without errors
+
+If anything is broken, create a GitHub issue with a screenshot and the product ID. Do not fix — report to Tanishq.
+
+---
+
+## Files You Own (SanMar additions)
+
+- `n8n-workflows/sanmar-sftp-pull.json` — MODIFY (SanMar Task 1, error branch only)

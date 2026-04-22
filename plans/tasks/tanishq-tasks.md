@@ -1,23 +1,54 @@
 # Tanishq — Sprint Tasks
 
-**Sprint:** OPS Push Pipeline  
-**Role:** PM / reviewer — no coding tasks this sprint
+**Sprint:** OPS Push Pipeline + SanMar SFTP  
+**Role:** PM / reviewer — limited time, essential work only
 
 ---
 
 ## Responsibilities
 
-1. **Review every incoming PR** against the spec and the ops-push plan. Acceptance criteria in each person's task file.
-2. **Merge order:** Sinchana Task 1 (types) before Vidhi Task 7 (PushHistory). Urvashi Task 2 (schemas) before Urvashi Task 3 (candidates). Otherwise parallel merges are safe.
-3. **Chase credentials** (blocking E2E):
-   - OPS customer `ops_auth_config` (Client ID + Secret) — needed for C2 E2E test
-   - SanMar API credentials — needed for V1a Task 6 E2E
-   - S&S API credentials — needed for V1b E2E
-   - 4Over API credentials — needed for V1d E2E
-   - **OPS Postman collection export** — export from browser, needed to verify exact GraphQL input typenames before C2
-4. **After all Tier 1 PRs merged:** run C2 manual E2E (single product push through n8n → OPS), C3 error path test. Steps in `docs/superpowers/plans/2026-04-20-ops-push.md` Tasks C2 + C3.
-5. **Write C4** operator guide `n8n-workflows/PUSH_README.md` once C2 passes.
-6. **Scope keeper** — push back on anything not in `docs/superpowers/specs/2026-04-22-remaining-tasks-design.md`.
+1. **Review every incoming PR** against the spec and acceptance criteria in each person's task file.
+2. **Merge order:** Sinchana Task 1 (types) before Vidhi Task 7 (PushHistory). Urvashi Task 2 (schemas) before Urvashi Task 3 (candidates). SanMar: Vidhi D1→D2→W1→W2 sequential; Sinchana W4 parallel.
+3. **Scope keeper** — push back on anything not in `docs/superpowers/specs/2026-04-22-remaining-tasks-design.md` or `docs/superpowers/specs/2026-04-22-sanmar-sftp-integration-design.md`.
+
+---
+
+## Tanishq's Own Tasks (essential only)
+
+### OPS Push
+
+- **C2** — Manual E2E: single product push through n8n → OPS. Steps in `docs/superpowers/plans/2026-04-20-ops-push.md` Task C2. *(Requires OPS creds + all Tier 1 PRs merged)*
+- **C3** — Error path test. Steps in ops-push plan Task C3.
+- **C4** — Write `n8n-workflows/PUSH_README.md` operator guide.
+
+### SanMar SFTP (credential-gated — do these first, unblocks Vidhi)
+
+- **P1** — Create SanMar supplier DB row:
+  ```bash
+  curl -X POST http://localhost:8000/api/suppliers \
+    -H "Content-Type: application/json" \
+    -d '{"name":"SanMar","slug":"sanmar","protocol":"sftp","auth_config":{}}'
+  ```
+  Save the returned `id`.
+
+- **P2** — Add `SanMar SFTP` credential in n8n UI:
+  - Settings → Credentials → New → SFTP
+  - Host: `ftp.sanmar.com`, Port: `2200`, Username + Password from Christian
+
+- **P3** — Set `INGEST_SHARED_SECRET` in n8n environment variables (match value from `api-hub/.env`)
+
+- **E1** — After Vidhi's W1+W2 merged: run full SFTP workflow, verify products in DB:
+  ```bash
+  curl "http://localhost:8000/api/products?supplier_id=<sanmar_id>&limit=5" | python3 -m json.tool
+  ```
+
+### Credentials to chase from Christian
+
+- [ ] SanMar SFTP username + password *(have host/port, need user/pass)*
+- [ ] OPS customer `ops_auth_config` (Client ID + Secret) — needed for C2
+- [ ] OPS Postman collection export — needed for GraphQL input typenames
+- [ ] S&S API credentials
+- [ ] 4Over API credentials
 
 ---
 

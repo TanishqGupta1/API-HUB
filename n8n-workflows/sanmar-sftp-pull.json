@@ -82,6 +82,16 @@
     },
     {
       "parameters": {
+        "jsCode": "return $input.all().slice(0, 100);"
+      },
+      "id": "limit-001",
+      "name": "Limit to 100 Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 320]
+    },
+    {
+      "parameters": {
         "batchSize": 500,
         "options": {}
       },
@@ -93,7 +103,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// MAPPING PLACEHOLDER\n// SanMar bulk files vary by format. \n// Below is a generic mapping for typical SanMar CSV columns.\nconst rows = $input.all();\n\nreturn rows.map((item) => {\n  const p = item.json;\n  return {\n    json: {\n      supplier_sku: String(p.STYLE || p.style || ''),\n      product_name: p.PRODUCT_NAME || p.product_name || 'Unnamed SanMar Product',\n      brand: p.BRAND_NAME || p.brand || 'SanMar',\n      description: p.PRODUCT_DESCRIPTION || p.description || null,\n      product_type: 'apparel',\n      image_url: p.PRODUCT_IMAGE || null,\n      variants: [\n        {\n          part_id: String(p.UNIQUE_KEY || p.id || ''),\n          color: p.COLOR_NAME || null,\n          size: p.SIZE_NAME || null,\n          sku: p.SKU || null,\n          base_price: parseFloat(p.PIECE_PRICE || 0),\n          inventory: parseInt(p.QTY || 0),\n          warehouse: p.WAREHOUSE || null,\n        }\n      ],\n      images: [],\n      options: []\n    }\n  };\n});"
+        "jsCode": "// Mapping based on SanMar FTP Guide v23.4 (EPDD format)\nconst rows = $input.all();\n\nreturn rows.map((item) => {\n  const p = item.json;\n  return {\n    json: {\n      supplier_sku: String(p['STYLE#'] || ''),\n      product_name: p.PRODUCT_TITLE || 'Unnamed SanMar Product',\n      brand: p.MILL || 'SanMar',\n      description: p.PRODUCT_DESCRIPTION || null,\n      product_type: 'apparel',\n      image_url: p.FRONT_MODEL_IMAGE_URL || null,\n      ops_product_id: String(p.STYLE_INDEX || ''),\n      variants: [\n        {\n          part_id: String(p.UNIQUE_KEY || ''),\n          color: p.COLOR_NAME || null,\n          size: p.SIZE || null,\n          sku: p.SKU || String(p.UNIQUE_KEY || ''),\n          base_price: parseFloat(p.PIECE_PRICE || 0),\n          inventory: parseInt(p.QTY || 0),\n          warehouse: 'SanMar Bulk',\n        }\n      ],\n      images: p.FRONT_MODEL_IMAGE_URL ? [\n        { url: p.FRONT_MODEL_IMAGE_URL, image_type: 'front', sort_order: 0 },\n        { url: p.BACK_MODEL_IMAGE_URL, image_type: 'back', sort_order: 1 }\n      ].filter(img => img.url) : [],\n      options: []\n    }\n  };\n});"
       },
       "id": "code-002",
       "name": "Shape Products",
@@ -187,6 +197,17 @@
       ]
     },
     "Spreadsheet: Parse CSV": {
+      "main": [
+        [
+          {
+            "node": "Limit to 100 Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit to 100 Products": {
       "main": [
         [
           {

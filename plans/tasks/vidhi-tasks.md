@@ -153,3 +153,78 @@ Lower priority — do after Tasks 1–8.
 - `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts` — MODIFY (Tasks 2+3)
 - `n8n-nodes-onprintshop/OPS-NODE-GAP-ANALYSIS.md` — MODIFY (Task 4)
 - `n8n-workflows/ops-push.json` — VERIFY/FIX (Task 6)
+
+---
+
+## SanMar SFTP Tasks
+
+**Spec:** `docs/superpowers/specs/2026-04-22-sanmar-sftp-integration-design.md`  
+**Prerequisite:** Tanishq must complete P1 (DB row) + P2 (n8n SFTP credential) first. Wait for confirmation before starting D1.
+
+### SanMar Task 1 — FTP Directory Listing (D1)
+
+**No file to commit — discovery run only**
+
+In n8n UI, build a throwaway 2-node workflow:
+1. Manual Trigger
+2. SFTP: List Files — host `ftp.sanmar.com`, port `2200`, credential `SanMar SFTP`, path `/`, no filter
+
+Execute. Copy the full file list (names + sizes). Document it in the spec appendix or share with Tanishq. This reveals:
+- Exact product CSV filename
+- Whether pricing + inventory are separate files
+- File sizes (estimate row counts)
+
+**Acceptance:** File list captured. At minimum know the product catalog filename.
+
+---
+
+### SanMar Task 2 — Inspect CSV Column Headers (D2)
+
+**Requires:** D1 done  
+**No file to commit — discovery only**
+
+In n8n, extend the discovery workflow: add SFTP Download + Spreadsheet Parse nodes. Download the product CSV. Look at the first 5 rows. Document the actual column names for:
+- Style / product SKU
+- Product name, brand, description
+- Color name, size name, variant SKU
+- Piece price, inventory qty, warehouse
+- Image URL
+
+Fill in the "Actual Column Name" column in the spec table at `docs/superpowers/specs/2026-04-22-sanmar-sftp-integration-design.md` Task D2. Share with Tanishq before starting W1.
+
+---
+
+### SanMar Task 3 — Fix Column Mapping in Workflow (W1)
+
+**File:** `n8n-workflows/sanmar-sftp-pull.json` — `Shape Products` node (`code-002`)  
+**Requires:** D2 column names confirmed
+
+Replace the `// MAPPING PLACEHOLDER` block with real column names. Template in spec Task W1. Plug in actual column names from D2.
+
+After editing the JSON, import into n8n and execute with a small test file (limit the SFTP download to 1 file). Verify Shape Products output has `supplier_sku`, `product_name`, `variants[0].base_price` all populated.
+
+---
+
+### SanMar Task 4 — Fix SFTP File Filter (W2)
+
+**File:** `n8n-workflows/sanmar-sftp-pull.json` — `SFTP: List Files` node (`sftp-001`)  
+**Requires:** D1 done (need actual product filename)
+
+Change the `filter` parameter from `*.csv` to the exact product CSV filename. Prevents pricing/inventory CSVs from being accidentally fed to the products endpoint.
+
+---
+
+### SanMar Task 5 — Add File-Type Router for Pricing + Inventory (W3)
+
+**File:** `n8n-workflows/sanmar-sftp-pull.json`  
+**Requires:** D1 done. Only do this if SanMar has separate pricing/inventory files.
+
+After `SFTP: List Files`, add a Code node that tags each file as `products` / `pricing` / `inventory` based on filename keywords. Then a Switch node routes each type to the correct ingest endpoint. Full code in spec Task W3.
+
+Skip if SanMar delivers one combined file.
+
+---
+
+## Files You Own (SanMar additions)
+
+- `n8n-workflows/sanmar-sftp-pull.json` — MODIFY (Tasks 3, 4, 5)
