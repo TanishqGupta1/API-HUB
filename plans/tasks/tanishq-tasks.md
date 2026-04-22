@@ -1,7 +1,7 @@
 # Tanishq — Sprint Tasks
 
 **Sprint:** OPS Push Pipeline + SanMar SFTP  
-**Role:** PM / reviewer — limited time, essential work only
+**Role:** PM / reviewer
 
 ---
 

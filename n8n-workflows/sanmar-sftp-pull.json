@@ -35,9 +35,9 @@
     {
       "parameters": {
         "operation": "list",
-        "path": "/",
+        "path": "/SanMarPDD",
         "options": {
-          "filter": "*.csv"
+          "filter": "SanMar_EPDD.csv"
         }
       },
       "id": "sftp-001",
@@ -55,7 +55,7 @@
     {
       "parameters": {
         "operation": "download",
-        "path": "={{ $json.name }}",
+        "path": "={{ $json.path ? $json.path : '/SanMarPDD/' + $json.name }}",
         "options": {}
       },
       "id": "sftp-002",
@@ -82,7 +82,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return $input.all().slice(0, 100);"
+        "jsCode": "const limitRaw = $env.SANMAR_PRODUCT_LIMIT;\nconst limit = limitRaw ? parseInt(limitRaw, 10) : 0;\nif (!Number.isFinite(limit) || limit <= 0) return $input.all();\nreturn $input.all().slice(0, limit);"
       },
       "id": "limit-001",
       "name": "Limit to 100 Products",
@@ -103,7 +103,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Mapping based on SanMar FTP Guide v23.4 (EPDD format)\nconst rows = $input.all();\n\nreturn rows.map((item) => {\n  const p = item.json;\n  return {\n    json: {\n      supplier_sku: String(p['STYLE#'] || ''),\n      product_name: p.PRODUCT_TITLE || 'Unnamed SanMar Product',\n      brand: p.MILL || 'SanMar',\n      description: p.PRODUCT_DESCRIPTION || null,\n      product_type: 'apparel',\n      image_url: p.FRONT_MODEL_IMAGE_URL || null,\n      ops_product_id: String(p.STYLE_INDEX || ''),\n      variants: [\n        {\n          part_id: String(p.UNIQUE_KEY || ''),\n          color: p.COLOR_NAME || null,\n          size: p.SIZE || null,\n          sku: p.SKU || String(p.UNIQUE_KEY || ''),\n          base_price: parseFloat(p.PIECE_PRICE || 0),\n          inventory: parseInt(p.QTY || 0),\n          warehouse: 'SanMar Bulk',\n        }\n      ],\n      images: p.FRONT_MODEL_IMAGE_URL ? [\n        { url: p.FRONT_MODEL_IMAGE_URL, image_type: 'front', sort_order: 0 },\n        { url: p.BACK_MODEL_IMAGE_URL, image_type: 'back', sort_order: 1 }\n      ].filter(img => img.url) : [],\n      options: []\n    }\n  };\n});"
+        "jsCode": "// SanMar FTP (EPDD/SDL) CSV row -> API-HUB ProductIngest\n// Note: SanMar's FTP feeds often provide image *file names* (not URLs). We only pass URLs if present.\nconst rows = $input.all();\n\nfunction pick(obj, keys) {\n  for (const k of keys) {\n    if (obj[k] !== undefined && obj[k] !== null && String(obj[k]).trim() !== '') return obj[k];\n  }\n  return null;\n}\n\nreturn rows.map((item) => {\n  const p = item.json ?? {};\n\n  const supplierSku = String(pick(p, ['STYLE#', 'STYLE', 'style', 'Style', 'STYLE_NO', 'STYLE_NO#']) ?? '');\n  const productName = pick(p, ['PRODUCT_TITLE', 'PRODUCT_NAME', 'product_name', 'TITLE', 'NAME']) ?? 'Unnamed SanMar Product';\n  const brand = pick(p, ['MILL', 'BRAND_NAME', 'BRAND', 'brand']) ?? 'SanMar';\n  const description = pick(p, ['PRODUCT_DESCRIPTION', 'description', 'DESC']) ?? null;\n\n  const categoryName = pick(p, ['CATEGORY_NAME', 'CATEGORY', 'Main Category']) ?? null;\n  const subCategoryName = pick(p, ['SUBCATEGORY_NAME', 'SUBCATEGORY', 'Sub Category']) ?? null;\n\n  const partId = String(pick(p, ['SKU', 'UNIQUE_KEY', 'INVENTORY_KEY', 'PART_ID', 'part_id']) ?? '');\n  const basePriceRaw = pick(p, ['PIECE_PRICE', 'PRICE', 'BASE_PRICE', 'COST']) ?? 0;\n  const inventoryRaw = pick(p, ['QTY', 'QTY_AVAILABLE', 'INVENTORY', 'INVENTORY_QTY', 'AVAILABLE_QTY']) ?? 0;\n\n  const frontUrl = pick(p, ['FRONT_MODEL_IMAGE_URL', 'FRONT_MODEL_URL', 'FRONT_IMAGE_URL']) ?? null;\n  const backUrl = pick(p, ['BACK_MODEL_IMAGE_URL', 'BACK_MODEL_URL', 'BACK_IMAGE_URL']) ?? null;\n  const imageUrl = pick(p, ['PRODUCT_IMAGE_URL', 'PRODUCT_IMAGE', 'IMAGE_URL']) ?? frontUrl;\n\n  const images = [\n    { url: frontUrl, image_type: 'front', sort_order: 0 },\n    { url: backUrl, image_type: 'back', sort_order: 1 },\n  ].filter((img) => img.url);\n\n  return {\n    json: {\n      supplier_sku: supplierSku,\n      product_name: productName,\n      brand,\n      description,\n      product_type: 'apparel',\n      image_url: imageUrl,\n      ops_product_id: pick(p, ['STYLE_INDEX', 'OPS_PRODUCT_ID', 'ops_product_id']) ? String(pick(p, ['STYLE_INDEX', 'OPS_PRODUCT_ID', 'ops_product_id'])) : null,\n      category_name: subCategoryName ? `${categoryName ?? 'Uncategorized'} / ${subCategoryName}` : categoryName,\n      variants: [\n        {\n          part_id: partId,\n          color: pick(p, ['COLOR_NAME', 'COLOR', 'color']) ?? null,\n          size: pick(p, ['SIZE', 'SIZE_NAME', 'size']) ?? null,\n          sku: partId,\n          base_price: Number(basePriceRaw) || 0,\n          inventory: parseInt(String(inventoryRaw), 10) || 0,\n          warehouse: pick(p, ['WAREHOUSE', 'WHSE', 'WHSE_NO']) ? String(pick(p, ['WAREHOUSE', 'WHSE', 'WHSE_NO'])) : 'SanMar',\n        }\n      ],\n      images,\n      options: []\n    }\n  };\n});"
       },
       "id": "code-002",
       "name": "Shape Products",

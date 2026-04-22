@@ -293,8 +293,6 @@ Open `http://localhost:3000/storefront/vg` — SanMar products visible with corr
 
 ## Team Assignment
 
-Tanishq is manager — only credential-gated and essential work. Everything else Vidhi + Sinchana.
-
 | Task | Who | Effort | Order |
 |---|---|---|---|
 | P1 — Create SanMar DB row | **Tanishq** | XS | First — needs API access |
