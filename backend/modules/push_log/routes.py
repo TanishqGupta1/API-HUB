@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -14,24 +15,34 @@ router = APIRouter(tags=["push_log"])
 
 
 @router.get("/api/push-log", response_model=list[PushLogRead])
-async def list_push_logs(limit: int = 20, db: AsyncSession = Depends(get_db)):
+async def list_push_logs(
+    product_id: Optional[UUID] = None,
+    customer_id: Optional[UUID] = None,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+):
     from modules.catalog.models import Product
     from modules.suppliers.models import Supplier
 
-    result = await db.execute(
+    query = (
         select(
-            ProductPushLog, 
-            Product.product_name, 
+            ProductPushLog,
+            Product.product_name,
             Customer.name.label("customer_name"),
-            Supplier.name.label("supplier_name")
+            Supplier.name.label("supplier_name"),
         )
         .join(Product, ProductPushLog.product_id == Product.id)
         .join(Customer, ProductPushLog.customer_id == Customer.id)
         .join(Supplier, Product.supplier_id == Supplier.id)
         .order_by(ProductPushLog.pushed_at.desc())
-        .limit(limit)
     )
-    rows = result.all()
+    if product_id:
+        query = query.where(ProductPushLog.product_id == product_id)
+    if customer_id:
+        query = query.where(ProductPushLog.customer_id == customer_id)
+    query = query.limit(limit)
+
+    rows = (await db.execute(query)).all()
     out = []
     for log, prod_name, cust_name, supp_name in rows:
         data = PushLogRead.model_validate(log)
