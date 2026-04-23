@@ -16,29 +16,32 @@ router = APIRouter(tags=["push_log"])
 @router.get("/api/push-log", response_model=list[PushLogRead])
 async def list_push_logs(
     product_id: UUID | None = None,
+    customer_id: UUID | None = None,
     limit: int = Query(default=20, le=200),
     db: AsyncSession = Depends(get_db),
 ):
     from modules.catalog.models import Product
     from modules.suppliers.models import Supplier
 
-    q = select(
-        ProductPushLog, 
-        Product.product_name, 
-        Customer.name.label("customer_name"),
-        Supplier.name.label("supplier_name")
-    )
-    if product_id:
-        q = q.where(ProductPushLog.product_id == product_id)
-    
-    result = await db.execute(
-        q.join(Product, ProductPushLog.product_id == Product.id)
+    q = (
+        select(
+            ProductPushLog,
+            Product.product_name,
+            Customer.name.label("customer_name"),
+            Supplier.name.label("supplier_name"),
+        )
+        .join(Product, ProductPushLog.product_id == Product.id)
         .join(Customer, ProductPushLog.customer_id == Customer.id)
         .join(Supplier, Product.supplier_id == Supplier.id)
         .order_by(ProductPushLog.pushed_at.desc())
-        .limit(limit)
     )
-    rows = result.all()
+    if product_id:
+        q = q.where(ProductPushLog.product_id == product_id)
+    if customer_id:
+        q = q.where(ProductPushLog.customer_id == customer_id)
+    q = q.limit(limit)
+
+    rows = (await db.execute(q)).all()
     out = []
     for log, prod_name, cust_name, supp_name in rows:
         data = PushLogRead.model_validate(log)
