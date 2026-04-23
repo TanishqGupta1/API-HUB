@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -33,9 +34,35 @@ async def list_suppliers(db: AsyncSession = Depends(get_db)):
 
 @router.post("", response_model=SupplierRead, status_code=201)
 async def create_supplier(body: SupplierCreate, db: AsyncSession = Depends(get_db)):
-    supplier = Supplier(**body.model_dump())
+    payload = body.model_dump()
+
+    existing = (
+        await db.execute(select(Supplier).where(Supplier.slug == payload["slug"]))
+    ).scalar_one_or_none()
+
+    # "Activate" flow is idempotent in the UI: if the supplier already exists,
+    # update credentials/config instead of failing with a unique constraint 500.
+    if existing:
+        for key, val in payload.items():
+            setattr(existing, key, val)
+        existing.is_active = True
+        await db.commit()
+        await db.refresh(existing)
+        data = SupplierRead.model_validate(existing)
+        data.product_count = (
+            await db.execute(
+                select(func.count()).select_from(Product).where(Product.supplier_id == existing.id)
+            )
+        ).scalar() or 0
+        return data
+
+    supplier = Supplier(**payload)
     db.add(supplier)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "Supplier with this slug already exists")
     await db.refresh(supplier)
     data = SupplierRead.model_validate(supplier)
     data.product_count = 0

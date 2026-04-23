@@ -2,6 +2,8 @@ import json
 import logging
 import os
 from pathlib import Path
+import base64
+import hashlib
 from typing import Any, Optional
 
 from dotenv import load_dotenv
@@ -25,6 +27,23 @@ class Base(DeclarativeBase):
     pass
 
 
+def _get_fernet() -> Optional[Fernet]:
+    """Return a Fernet instance from SECRET_KEY.
+
+    Accepts either a proper Fernet key (urlsafe base64) or an arbitrary string.
+    For arbitrary strings, derive a stable Fernet key via SHA-256.
+    """
+    if not SECRET_KEY:
+        return None
+
+    raw = SECRET_KEY.encode()
+    try:
+        return Fernet(raw)
+    except Exception:
+        derived = base64.urlsafe_b64encode(hashlib.sha256(raw).digest())
+        return Fernet(derived)
+
+
 class EncryptedJSON(TypeDecorator):
     """Transparently encrypts/decrypts JSON data in the database."""
 
@@ -34,20 +53,26 @@ class EncryptedJSON(TypeDecorator):
     def process_bind_param(self, value: Any, dialect: Any) -> Optional[str]:
         if value is None:
             return None
-        if not SECRET_KEY:
+        f = _get_fernet()
+        if not f:
             return json.dumps(value)
-        f = Fernet(SECRET_KEY.encode())
         return f.encrypt(json.dumps(value).encode()).decode()
 
     def process_result_value(self, value: Any, dialect: Any) -> Any:
         if value is None:
             return None
-        if not SECRET_KEY:
+        f = _get_fernet()
+        if not f:
             return json.loads(value)
         try:
-            f = Fernet(SECRET_KEY.encode())
             return json.loads(f.decrypt(value.encode()))
         except Exception as e:
+            # Backwards-compat: if data was stored unencrypted (SECRET_KEY was empty),
+            # allow reading it even when SECRET_KEY is now set.
+            try:
+                return json.loads(value)
+            except Exception:
+                pass
             logging.error(
                 "EncryptedJSON decryption failed — SECRET_KEY mismatch or data corruption: %s",
                 e,

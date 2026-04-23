@@ -35,11 +35,6 @@ from .schemas import (
 
 log = logging.getLogger(__name__)
 
-# PromoStandards caps inventory at 500 per the spec — anything larger is
-# reported as exactly 500. Mirror that here so downstream callers don't have
-# to special-case it.
-_INVENTORY_CAP = 500
-
 
 # ---------------------------------------------------------------------------
 # zeep response walkers — tolerant of shape drift across PS implementations
@@ -121,12 +116,22 @@ class PromoStandardsClient:
         self._service = ZeepClient(self.wsdl_url, transport=transport).service
         return self._service
 
-    def _auth(self, ws_version: str) -> dict:
-        return {
+    def _auth(
+        self,
+        ws_version: str,
+        localization_country: str | None = None,
+        localization_language: str | None = None,
+    ) -> dict:
+        payload = {
             "wsVersion": ws_version,
             "id": self.auth_config.get("id", ""),
             "password": self.auth_config.get("password", ""),
         }
+        if localization_country is not None:
+            payload["localizationCountry"] = localization_country
+        if localization_language is not None:
+            payload["localizationLanguage"] = localization_language
+        return payload
 
     # -- Product Data ------------------------------------------------------
 
@@ -178,9 +183,7 @@ class PromoStandardsClient:
         try:
             response = svc.getProduct(
                 productId=product_id,
-                localizationCountry=localization_country,
-                localizationLanguage=localization_language,
-                **self._auth(ws_version),
+                **self._auth(ws_version, localization_country, localization_language),
             )
         except Exception as exc:  # noqa: BLE001 — defensive: per-product failure isolation
             log.warning("getProduct(%s) failed: %s", product_id, exc)
@@ -224,9 +227,7 @@ class PromoStandardsClient:
             try:
                 response = svc.getProduct(
                     productId=pid,
-                    localizationCountry=localization_country,
-                    localizationLanguage=localization_language,
-                    **self._auth(ws_version),
+                    **self._auth(ws_version, localization_country, localization_language),
                 )
             except Exception as exc:  # noqa: BLE001
                 log.warning("getProduct(%s) failed: %s", pid, exc)
@@ -331,27 +332,49 @@ class PromoStandardsClient:
         for inv_record in _as_list(inv_root):
             rec_pid = _text(_attr(inv_record, "productId")) or product_id
             parts_container = _attr(
-                inv_record, "PartInventoryArray", "partInventoryArray"
+                inv_record, "PartInventoryArray", "partInventoryArray", "ProductVariationInventoryArray"
             )
-            part_items = _as_list(_attr(parts_container, "PartInventory", "partInventory"))
+            part_items = _as_list(_attr(parts_container, "PartInventory", "partInventory", "ProductVariationInventory"))
             for part in part_items:
                 part_id = _text(_attr(part, "partId", "part_id"))
                 if not part_id:
                     continue
-                raw_qty = _attr(part, "quantityAvailable", "quantity")
-                qty = self._coerce_int(raw_qty)
-                # Spec caps at 500 — enforce it here so callers never see more.
-                qty = min(qty, _INVENTORY_CAP)
-
-                warehouse = None
+                
                 loc_container = _attr(
                     part, "InventoryLocationArray", "inventoryLocationArray"
                 )
                 locs = _as_list(_attr(loc_container, "InventoryLocation", "inventoryLocation"))
+                
+                total_qty = 0
+                max_loc_qty = -1
+                primary_warehouse = None
+
                 if locs:
-                    warehouse = _text(
-                        _attr(locs[0], "inventoryLocationName", "name")
-                    )
+                    for loc in locs:
+                        qty_container = _attr(loc, "inventoryLocationQuantity")
+                        if qty_container:
+                            qty_obj = _attr(qty_container, "Quantity", "quantity")
+                            val = _attr(qty_obj, "value") if qty_obj else None
+                        else:
+                            val = _attr(loc, "quantityAvailable") # fallback
+                            
+                        qty = self._coerce_int(val)
+                        total_qty += qty
+                        if qty > max_loc_qty:
+                            max_loc_qty = qty
+                            primary_warehouse = _text(_attr(loc, "inventoryLocationName", "name"))
+                    qty = total_qty
+                    warehouse = primary_warehouse
+                else:
+                    # Fallback to root level quantityAvailable if locs not present
+                    raw_qty = _attr(part, "quantityAvailable", "quantity")
+                    if raw_qty and hasattr(raw_qty, "Quantity"):
+                        qty = self._coerce_int(_attr(raw_qty.Quantity, "value"))
+                    elif raw_qty and isinstance(raw_qty, dict) and "Quantity" in raw_qty:
+                        qty = self._coerce_int(_attr(raw_qty["Quantity"], "value"))
+                    else:
+                        qty = self._coerce_int(raw_qty)
+                    warehouse = None
 
                 yield PSInventoryLevel(
                     product_id=rec_pid,
@@ -375,19 +398,50 @@ class PromoStandardsClient:
     # -- Pricing (PPC) -----------------------------------------------------
 
     async def get_pricing(
-        self, product_ids: list[str], ws_version: str = "1.0.0"
+        self,
+        product_ids: list[str],
+        ws_version: str = "1.0.0",
+        fob_id: str = "1",
+        price_type: str = "Net",
+        currency: str = "USD",
+        configuration_type: str = "Blank",
+        localization_country: str = "US",
+        localization_language: str = "EN",
     ) -> list[PSPricePoint]:
-        return await asyncio.to_thread(self._sync_get_pricing, product_ids, ws_version)
+        return await asyncio.to_thread(
+            self._sync_get_pricing,
+            product_ids,
+            ws_version,
+            fob_id,
+            price_type,
+            currency,
+            configuration_type,
+            localization_country,
+            localization_language,
+        )
 
     def _sync_get_pricing(
-        self, product_ids: list[str], ws_version: str
+        self,
+        product_ids: list[str],
+        ws_version: str,
+        fob_id: str,
+        price_type: str,
+        currency: str,
+        configuration_type: str,
+        localization_country: str,
+        localization_language: str,
     ) -> list[PSPricePoint]:
         svc = self._get_service()
         out: list[PSPricePoint] = []
         for pid in product_ids:
             try:
                 response = svc.getConfigurationAndPricing(
-                    productId=pid, **self._auth(ws_version)
+                    productId=pid,
+                    currency=currency,
+                    fobId=fob_id,
+                    priceType=price_type,
+                    configurationType=configuration_type,
+                    **self._auth(ws_version, localization_country, localization_language)
                 )
             except Exception as exc:  # noqa: BLE001
                 log.warning("getConfigurationAndPricing(%s) failed: %s", pid, exc)
@@ -429,18 +483,22 @@ class PromoStandardsClient:
     # -- Media Content -----------------------------------------------------
 
     async def get_media(
-        self, product_ids: list[str], ws_version: str = "1.0.0"
+        self, product_ids: list[str], ws_version: str = "1.1.0", media_type: str = "Image"
     ) -> list[PSMediaItem]:
-        return await asyncio.to_thread(self._sync_get_media, product_ids, ws_version)
+        return await asyncio.to_thread(self._sync_get_media, product_ids, ws_version, media_type)
 
     def _sync_get_media(
-        self, product_ids: list[str], ws_version: str
+        self, product_ids: list[str], ws_version: str, media_type: str
     ) -> list[PSMediaItem]:
         svc = self._get_service()
         out: list[PSMediaItem] = []
         for pid in product_ids:
             try:
-                response = svc.getMediaContent(productId=pid, **self._auth(ws_version))
+                response = svc.getMediaContent(
+                    productId=pid,
+                    mediaType=media_type,
+                    **self._auth(ws_version)
+                )
             except Exception as exc:  # noqa: BLE001
                 log.warning("getMediaContent(%s) failed: %s", pid, exc)
                 continue

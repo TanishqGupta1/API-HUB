@@ -9,10 +9,11 @@ Upstream deps (Tanishq T3b + T4) are imported lazily inside the
 background task so this module stays importable while those land.
 """
 
+import os
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,6 +52,18 @@ async def _load_active_ps_supplier(db: AsyncSession, supplier_id: UUID) -> Suppl
             400, f"Supplier '{supplier.name}' has no promostandards_code configured"
         )
     return supplier
+
+
+def _get_auth_config(supplier: Supplier) -> dict:
+    """Return auth_config, overriding with env vars for SanMar if present."""
+    auth = dict(supplier.auth_config or {})
+    if supplier.slug == "sanmar":
+        env_id = os.getenv("SANMAR_ID")
+        env_password = os.getenv("SANMAR_PASSWORD")
+        if env_id and env_password:
+            auth["id"] = env_id
+            auth["password"] = env_password
+    return auth
 
 
 async def _ensure_no_active_job(
@@ -135,6 +148,7 @@ async def _run_full_product_sync(
     wsdl_inventory: str | None,
     wsdl_ppc: str | None,
     wsdl_media: str | None,
+    limit: int | None = None,
 ) -> None:
     async with async_session() as session:
         await _mark_job_running(session, job_id)
@@ -156,6 +170,10 @@ async def _run_full_product_sync(
         try:
             product_client = PromoStandardsClient(wsdl_product, auth_config)
             product_ids = await product_client.get_sellable_product_ids()
+            
+            if limit:
+                product_ids = product_ids[:limit]
+                
             products = await product_client.get_products_batch(product_ids)
 
             inventory = []
@@ -315,6 +333,7 @@ async def _run_pricing_sync(
 async def trigger_product_sync(
     supplier_id: UUID,
     background_tasks: BackgroundTasks,
+    limit: int | None = Query(None, description="Limit the number of products to sync for testing"),
     db: AsyncSession = Depends(get_db),
 ):
     supplier = await _load_active_ps_supplier(db, supplier_id)
@@ -333,11 +352,12 @@ async def trigger_product_sync(
         _run_full_product_sync,
         job.id,
         supplier.id,
-        dict(supplier.auth_config or {}),
+        _get_auth_config(supplier),
         wsdl_product,
         resolve_wsdl_url(endpoints, "inventory"),
         resolve_wsdl_url(endpoints, "ppc"),
         resolve_wsdl_url(endpoints, "media"),
+        limit,
     )
     return {"job_id": str(job.id), "status": job.status, "job_type": job.job_type}
 
@@ -365,7 +385,7 @@ async def trigger_inventory_sync(
         _run_inventory_sync,
         job.id,
         supplier.id,
-        dict(supplier.auth_config or {}),
+        _get_auth_config(supplier),
         wsdl_product,
         wsdl_inventory,
     )
@@ -395,7 +415,7 @@ async def trigger_pricing_sync(
         _run_pricing_sync,
         job.id,
         supplier.id,
-        dict(supplier.auth_config or {}),
+        _get_auth_config(supplier),
         wsdl_product,
         wsdl_ppc,
     )
@@ -440,7 +460,7 @@ async def trigger_rest_sync(
         supplier.id,
         supplier.protocol,
         supplier.base_url,
-        dict(supplier.auth_config or {}),
+        _get_auth_config(supplier),
         dict(supplier.field_mappings or {}) if supplier.field_mappings else None,
     )
     return {"job_id": str(job.id), "status": job.status, "job_type": job.job_type}
