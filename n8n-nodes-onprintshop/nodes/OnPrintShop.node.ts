@@ -636,6 +636,7 @@ export class OnPrintShop implements INodeType {
 					{ name: 'Set Product', value: 'setProduct', action: 'Create or update a product' },
 					{ name: 'Set Product Design', value: 'setProductDesign', action: 'Update product design links' },
 					{ name: 'Set Product Price', value: 'setProductPrice', action: 'Create or update product price' },
+					{ name: 'Set Product Category', value: 'setProductCategory', action: 'Create or update a product category' },
 					{ name: 'Set Product Size', value: 'setProductSize', action: 'Create or update product size variant' },
 					{ name: 'Set Quote', value: 'setQuote', action: 'Create or update a quote' },
 					{ name: 'Update Order Product Images', value: 'updateOrderProductImages', action: 'Update order product images' },
@@ -764,6 +765,15 @@ export class OnPrintShop implements INodeType {
 				displayOptions: { show: { resource: ['mutation'], operation: ['setProductSize'] } },
 				default: '{\n  "product_size_id": 0,\n  "products_id": 0,\n  "size_name": "",\n  "color_name": "",\n  "products_sku": "",\n  "visible": 1\n}',
 				description: 'ProductSizeInput JSON object. Set product_size_id to 0 to create new.',
+			},
+			{
+				displayName: 'Input (JSON)',
+				name: 'setProductCategory_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setProductCategory'] } },
+				default: '{\n  "category_id": 0,\n  "category_name": "",\n  "parent_id": 0,\n  "visible": 1\n}',
+				description: 'ProductCategoryInput JSON object. Set category_id to 0 to create new.',
 			},
 			// Mutation: Set Quote
 			{
@@ -5420,6 +5430,13 @@ export class OnPrintShop implements INodeType {
 						const mutation = `mutation setProductSize ($input: ProductSizeInput!) { setProductSize (input: $input) { result message product_size_id } }`;
 						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
 						if (responseData && responseData.data && responseData.data.setProductSize) returnData.push(responseData.data.setProductSize);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setProductCategory') {
+						const input = JSON.parse(this.getNodeParameter('setProductCategory_input', i) as string);
+						const mutation = `mutation setProductCategory ($input: ProductCategoryInput!) { setProductCategory (input: $input) { result message category_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setProductCategory) returnData.push(responseData.data.setProductCategory);
 						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
 					}
 					if (operation === 'setQuote') {
