@@ -35,6 +35,10 @@ export function StorefrontProductCard({ product }: Props) {
         )}
         <div className="absolute top-3 left-3 px-[10px] py-[4px] bg-white border border-[#cfccc8] rounded
                         font-mono text-[10px] font-bold text-[#1e4d92]">VG</div>
+        {product.external_catalogue === 1 && (
+          <div className="absolute bottom-3 left-3 px-[8px] py-[3px] bg-[#eef4fb] border border-[#1e4d92] rounded
+                          font-mono text-[9px] font-bold text-[#1e4d92]">EXTERNAL</div>
+        )}
         {oos && (
           <div className="absolute top-3 right-3 px-[8px] py-[3px] bg-[#fdeded] border border-[#b93232] rounded
                           font-mono text-[10px] font-bold text-[#b93232]">OUT</div>

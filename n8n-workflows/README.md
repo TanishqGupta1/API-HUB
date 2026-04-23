@@ -74,6 +74,46 @@ Stock and pricing are **not** in this workflow yet — they're separate OPS quer
 
 Workflow URLs use `http://host.docker.internal:8000` because FastAPI runs on the host (uvicorn) while n8n runs in Docker. If FastAPI later runs inside Docker (`docker compose up -d api`), replace every `host.docker.internal:8000` with `api:8000` across the workflow JSON (9 lines), save, re-import.
 
+---
+
+## `ops-push.json` — Push products from Hub → OnPrintShop (minimal)
+
+**What it does**
+
+1. Trigger via webhook with a `customer_id`.
+2. Lists hub products via `GET /api/products`.
+3. For each product, calls `GET /api/push/{customer_id}/product/{product_id}/payload` (requires `X-Ingest-Secret`) to apply markup rules.
+4. Calls OPS GraphQL mutations via the custom node:
+   - `setProduct` (creates/updates a product shell)
+   - `setProductPrice` (creates a simple 1..999999 price band)
+5. Writes an audit row to `POST /api/push-log`.
+
+**Prerequisites**
+
+- FastAPI running on host :8000
+- n8n running: `docker compose up -d n8n`
+- `INGEST_SHARED_SECRET` set in repo-root `.env` and exposed to n8n (compose already includes it)
+- Create a hub customer (Storefront) in the UI and note its UUID
+- In n8n, create an OnPrintShop credential named **`OPS Storefront`** (matches the workflow JSON)
+
+**Activate + run**
+
+1. Import `ops-push.json` in n8n.
+2. Set the `OPS Storefront` credential on both OPS nodes if it didn’t auto-bind.
+3. Activate the workflow (required for webhooks).
+4. Trigger:
+   ```bash
+   curl "http://localhost:5678/webhook/ops-push?customer_id=<UUID>&limit=5"
+   ```
+5. Verify:
+   - `GET /api/push-log` shows new rows
+   - Product detail push-status shows latest per-customer status
+
+**Notes / limitations**
+
+- The workflow pushes to a *single* OPS credential; it does not dynamically select credentials per customer.
+- It uses default `category_id=0` and `size_id=0`. If your OPS instance requires valid IDs, update the `Build OPS Inputs` code node accordingly.
+
 ## Next additions (not in v1)
 
 - `Get Stock` loop per product → POST `/api/ingest/{sid}/inventory`.

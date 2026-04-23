@@ -1,0 +1,299 @@
+{
+  "id": "ops-push-001",
+  "name": "Hub → OPS Push (Products + Price + Push Log)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "ops-push",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1111111-0001-0000-0000-000000000001",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reads query params from the webhook.\n// Required: customer_id\n// Optional: supplier_id, limit\n//\n// Example:\n//   GET /webhook/ops-push?customer_id=<uuid>&supplier_id=<uuid>&limit=25\n//\n// Notes:\n// - This workflow pushes to ONE OPS credential (selected in the OPS nodes).\n// - Ensure that credential matches the provided customer_id.\n\nconst first = $input.first().json ?? {};\nconst q = first.query ?? first.queryParameters ?? {};\n\nconst customer_id = q.customer_id ?? q.customerId;\nif (!customer_id) {\n  throw new Error('Missing required query param: customer_id');\n}\n\nconst supplier_id = q.supplier_id ?? q.supplierId ?? null;\nconst limitRaw = q.limit ?? 25;\nconst limit = Math.max(1, Math.min(200, Number(limitRaw) || 25));\n\nconst api_base = $env.API_HUB_BASE_URL || 'http://host.docker.internal:8000';\n\nconst url = new URL(`${api_base.replace(/\\/$/, '')}/api/products`);\nurl.searchParams.set('limit', String(limit));\nif (supplier_id) url.searchParams.set('supplier_id', String(supplier_id));\n\nreturn [{\n  json: {\n    api_base,\n    customer_id: String(customer_id),\n    supplier_id: supplier_id ? String(supplier_id) : null,\n    limit,\n    products_url: url.toString(),\n  },\n}];"
+      },
+      "id": "a1111111-0002-0000-0000-000000000002",
+      "name": "Parse Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.products_url}}",
+        "options": {}
+      },
+      "id": "a1111111-0003-0000-0000-000000000003",
+      "name": "Get Products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize the /api/products response into one item per product.\n// Carries customer_id and api_base forward for downstream nodes.\n\nconst ctx = $node['Parse Params'].json;\nconst items = $input.all();\n\nconst list = items.flatMap((i) => {\n  const j = i.json;\n  if (Array.isArray(j)) return j;\n  if (j && Array.isArray(j.data)) return j.data;\n  if (j && Array.isArray(j.body)) return j.body;\n  return j && typeof j === 'object' ? [j] : [];\n});\n\nreturn list\n  .filter((p) => p && (p.id || p.product_id))\n  .map((p) => ({\n    json: {\n      api_base: ctx.api_base,\n      customer_id: ctx.customer_id,\n      product_id: String(p.id ?? p.product_id),\n      product_name: p.product_name ?? p.name ?? p.products_title ?? 'Unnamed',\n      supplier_name: p.supplier_name ?? null,\n    },\n  }));"
+      },
+      "id": "a1111111-0004-0000-0000-000000000004",
+      "name": "Explode Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.api_base}}/api/push/{{$json.customer_id}}/product/{{$json.product_id}}/payload",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{$env.INGEST_SHARED_SECRET}}"
+            }
+          ]
+        }
+      },
+      "id": "a1111111-0005-0000-0000-000000000005",
+      "name": "Get Push Payload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 320]
+    },
+    {
+      "parameters": {
+        "mode": "mergeByIndex"
+      },
+      "id": "a1111111-0006-0000-0000-000000000006",
+      "name": "Merge IDs + Payload",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1340, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds JSON-string inputs for OPS setProduct + setProductPrice.\n//\n// IMPORTANT:\n// - The OnPrintShop node expects setProduct_input/setProductPrice_input as JSON strings.\n// - This workflow uses size_id=0 and category_id=0 as defaults; adjust if your OPS instance requires these.\n\nconst items = $input.all();\n\nfunction minNumber(values) {\n  const nums = values.filter((v) => typeof v === 'number' && Number.isFinite(v));\n  if (!nums.length) return null;\n  return Math.min(...nums);\n}\n\nreturn items.map((item) => {\n  // Merge node returns combined json from both inputs.\n  const merged = item.json ?? {};\n  const payload = merged.product ? merged : (merged.payload ?? merged);\n\n  const productMeta = payload.product ?? {};\n  const variants = Array.isArray(payload.variants) ? payload.variants : [];\n\n  const minFinal = minNumber(variants.map((v) => v.final_price));\n  const minBase = minNumber(variants.map((v) => v.base_price));\n\n  const setProductInput = {\n    category_id: 0,\n    visible: 1,\n    products_title: productMeta.name ?? merged.product_name ?? 'Unnamed',\n    products_internal_title: productMeta.supplier_sku ?? merged.product_id,\n  };\n\n  const setProductPriceTemplate = {\n    product_price_id: 0,\n    products_id: 0,\n    qty: 1,\n    qty_to: 999999,\n    price: minFinal ?? 0,\n    vendor_price: minBase ?? 0,\n    size_id: 0,\n    visible: '1',\n  };\n\n  return {\n    json: {\n      api_base: merged.api_base,\n      customer_id: merged.customer_id,\n      product_id: merged.product_id,\n      product_name: merged.product_name,\n      payload,\n      setProduct_input: JSON.stringify(setProductInput, null, 2),\n      setProductPrice_template: setProductPriceTemplate,\n    },\n  };\n});"
+      },
+      "id": "a1111111-0007-0000-0000-000000000007",
+      "name": "Build OPS Inputs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 320]
+    },
+    {
+      "parameters": {
+        "resource": "mutation",
+        "operation": "setProduct",
+        "setProduct_input": "={{$json.setProduct_input}}"
+      },
+      "id": "a1111111-0008-0000-0000-000000000008",
+      "name": "OPS: Set Product",
+      "type": "n8n-nodes-onprintshop.onPrintShop",
+      "typeVersion": 1,
+      "position": [1780, 320],
+      "credentials": {
+        "onPrintShopApi": {
+          "id": "",
+          "name": "OPS Storefront"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combines the setProduct result with the pre-built price template.\n// setProduct returns: { result, message, products_id }\n\nconst setProduct = $input.first().json ?? {};\nconst ctx = $node['Build OPS Inputs'].json;\n\nconst products_id = setProduct.products_id ?? setProduct.productsId;\nif (!products_id) {\n  throw new Error(`setProduct did not return products_id. Got: ${JSON.stringify(setProduct)}`);\n}\n\nconst price = { ...(ctx.setProductPrice_template ?? {}) };\nprice.products_id = Number(products_id);\n\nreturn [{\n  json: {\n    api_base: ctx.api_base,\n    customer_id: ctx.customer_id,\n    product_id: ctx.product_id,\n    ops_product_id: String(products_id),\n    setProductPrice_input: JSON.stringify(price, null, 2)\n  }\n}];"
+      },
+      "id": "a1111111-0009-0000-0000-000000000009",
+      "name": "Build Price Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 320]
+    },
+    {
+      "parameters": {
+        "resource": "mutation",
+        "operation": "setProductPrice",
+        "setProductPrice_input": "={{$json.setProductPrice_input}}"
+      },
+      "id": "a1111111-0010-0000-0000-000000000010",
+      "name": "OPS: Set Product Price",
+      "type": "n8n-nodes-onprintshop.onPrintShop",
+      "typeVersion": 1,
+      "position": [2220, 320],
+      "credentials": {
+        "onPrintShopApi": {
+          "id": "",
+          "name": "OPS Storefront"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$json.api_base}}/api/push-log",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"product_id\": $json.product_id,\n  \"customer_id\": $json.customer_id,\n  \"ops_product_id\": $json.ops_product_id,\n  \"status\": \"pushed\",\n  \"error\": null\n}"
+      },
+      "id": "a1111111-0011-0000-0000-000000000011",
+      "name": "POST Push Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, 320]
+    },
+    {
+      "parameters": {
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "a1111111-0012-0000-0000-000000000012",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2660, 320]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Params": {
+      "main": [
+        [
+          {
+            "node": "Get Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Products": {
+      "main": [
+        [
+          {
+            "node": "Explode Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Explode Products": {
+      "main": [
+        [
+          {
+            "node": "Get Push Payload",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge IDs + Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Push Payload": {
+      "main": [
+        [
+          {
+            "node": "Merge IDs + Payload",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge IDs + Payload": {
+      "main": [
+        [
+          {
+            "node": "Build OPS Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build OPS Inputs": {
+      "main": [
+        [
+          {
+            "node": "OPS: Set Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPS: Set Product": {
+      "main": [
+        [
+          {
+            "node": "Build Price Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Price Input": {
+      "main": [
+        [
+          {
+            "node": "OPS: Set Product Price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPS: Set Product Price": {
+      "main": [
+        [
+          {
+            "node": "POST Push Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Push Log": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "ops-push-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
+

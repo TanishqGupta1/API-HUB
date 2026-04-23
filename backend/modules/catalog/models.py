@@ -3,7 +3,7 @@ import uuid as uuid_mod
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -46,12 +46,16 @@ class Product(Base):
     product_type: Mapped[str] = mapped_column(String(50), default="apparel")
     image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     ops_product_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    external_catalogue: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     last_synced: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     variants: Mapped[list["ProductVariant"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )
     images: Mapped[list["ProductImage"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )
+    options: Mapped[list["ProductOption"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )
     category_ref: Mapped[Optional["Category"]] = relationship(back_populates="products")
@@ -93,3 +97,48 @@ class ProductImage(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     product: Mapped["Product"] = relationship(back_populates="images")
+
+
+class ProductOption(Base):
+    __tablename__ = "product_options"
+    __table_args__ = (
+        UniqueConstraint("product_id", "option_key", name="uq_product_option_key"),
+    )
+
+    id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
+    product_id: Mapped[uuid_mod.UUID] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE")
+    )
+    ops_option_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    master_option_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    option_key: Mapped[str] = mapped_column(String(255))
+    title: Mapped[str] = mapped_column(String(255))
+    options_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[int] = mapped_column(Integer, default=1)
+
+    product: Mapped["Product"] = relationship(back_populates="options")
+    attributes: Mapped[list["ProductOptionAttribute"]] = relationship(
+        back_populates="option", cascade="all, delete-orphan"
+    )
+
+
+class ProductOptionAttribute(Base):
+    __tablename__ = "product_option_attributes"
+    __table_args__ = (
+        UniqueConstraint(
+            "product_option_id", "title", name="uq_option_attribute_title"
+        ),
+    )
+
+    id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
+    product_option_id: Mapped[uuid_mod.UUID] = mapped_column(
+        ForeignKey("product_options.id", ondelete="CASCADE")
+    )
+    ops_attribute_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    title: Mapped[str] = mapped_column(String(255))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[int] = mapped_column(Integer, default=1)
+
+    option: Mapped["ProductOption"] = relationship(back_populates="attributes")

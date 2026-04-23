@@ -28,6 +28,29 @@ class ProductImageRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProductOptionAttributeRead(BaseModel):
+    id: UUID
+    title: str
+    sort_order: int
+    ops_attribute_id: Optional[int] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ProductOptionRead(BaseModel):
+    id: UUID
+    option_key: str
+    title: str
+    options_type: Optional[str] = None
+    sort_order: int
+    master_option_id: Optional[int] = None
+    ops_option_id: Optional[int] = None
+    required: bool
+    attributes: list[ProductOptionAttributeRead] = []
+
+    model_config = {"from_attributes": True}
+
+
 class ProductRead(BaseModel):
     id: UUID
     supplier_id: UUID
@@ -41,9 +64,11 @@ class ProductRead(BaseModel):
     product_type: str
     image_url: Optional[str]
     ops_product_id: Optional[str]
+    external_catalogue: Optional[int] = None
     last_synced: Optional[datetime]
     variants: list[VariantRead] = []
     images: list[ProductImageRead] = []
+    options: list[ProductOptionRead] = []
 
     model_config = {"from_attributes": True}
 
@@ -59,6 +84,8 @@ class ProductListRead(BaseModel):
     category_id: Optional[UUID] = None
     product_type: str
     image_url: Optional[str]
+    ops_product_id: Optional[str] = None
+    external_catalogue: Optional[int] = None
     variant_count: int = 0
     price_min: Optional[Decimal] = None
     price_max: Optional[Decimal] = None
@@ -90,6 +117,24 @@ class ImageIngest(BaseModel):
     sort_order: int = 0
 
 
+class OptionAttributeIngest(BaseModel):
+    title: str
+    sort_order: int = 0
+    ops_attribute_id: Optional[int] = None
+
+
+class OptionIngest(BaseModel):
+    option_key: str
+    title: str
+    options_type: Optional[str] = None
+    sort_order: int = 0
+    master_option_id: Optional[int] = None
+    ops_option_id: Optional[int] = None
+    required: bool = False
+    # OPS sometimes returns this as a JSON string; ingest normalizes in ingest.py.
+    attributes: list[OptionAttributeIngest] | str | None = None
+
+
 class ProductIngest(BaseModel):
     supplier_sku: str
     product_name: str
@@ -102,6 +147,7 @@ class ProductIngest(BaseModel):
     category_name: Optional[str] = None
     variants: list[VariantIngest] = Field(default_factory=list)
     images: list[ImageIngest] = Field(default_factory=list)
+    options: list[OptionIngest] = Field(default_factory=list)
 
 
 class InventoryIngest(BaseModel):

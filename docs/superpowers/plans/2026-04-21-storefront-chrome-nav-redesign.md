@@ -1,6 +1,6 @@
 # Storefront Chrome + Navigation Redesign Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 >
 > **⚠ Commit policy (project rule):** User typically commits manually per existing plans, but at the end of this session the user may ask "commit" directly — honor that. Never add `Co-Authored-By` lines.
 
@@ -1051,7 +1051,7 @@ Visit each, verify:
 
 - [x] **Step 4: Tick plan checkboxes**
 
-Open this file and mark every `- [ ]` → `- [x]` across Tasks 1-12.
+Open this file and mark every `- [x]` → `- [x]` across Tasks 1-12.
 
 - [x] **Step 5: Stage**
 
