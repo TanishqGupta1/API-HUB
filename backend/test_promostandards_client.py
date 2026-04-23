@@ -342,3 +342,55 @@ async def test_get_products_batch_propagates_locale():
     for _, kwargs in svc.calls:
         assert kwargs["localizationCountry"] == "us"
         assert kwargs["localizationLanguage"] == "en"
+
+
+# ---------------------------------------------------------------------------
+# Task 2: product parser — SanMar <category> field + multi-description join
+# ---------------------------------------------------------------------------
+
+async def test_parse_product_reads_sanmar_category_field():
+    """SanMar wraps category name in <category>, not <categoryName>."""
+    svc = FakeService()
+    svc.responses[("getProduct", "MM1000")] = NS(
+        Product=NS(
+            productId="MM1000",
+            productName="Polo",
+            ProductCategoryArray=NS(
+                ProductCategory=[NS(category="Polos/Knits", subCategory="Cotton")]
+            ),
+        )
+    )
+    product = await _client(svc).get_product("MM1000")
+    assert product is not None
+    assert "Polos/Knits" in product.categories
+
+
+async def test_parse_product_joins_multi_description():
+    """SanMar returns several <description> elements; zeep yields a list."""
+    svc = FakeService()
+    svc.responses[("getProduct", "MM1000")] = NS(
+        Product=NS(
+            productId="MM1000",
+            description=[
+                "Crafted in heavier knit",
+                "8.1-ounce fabric",
+                "Moisture-wicking",
+            ],
+        )
+    )
+    product = await _client(svc).get_product("MM1000")
+    assert product is not None
+    assert product.description == (
+        "Crafted in heavier knit\n8.1-ounce fabric\nMoisture-wicking"
+    )
+
+
+async def test_parse_product_single_description_still_works():
+    """Backwards compat: suppliers returning one description string must still parse."""
+    svc = FakeService()
+    svc.responses[("getProduct", "PC61")] = NS(
+        Product=NS(productId="PC61", description="100% cotton")
+    )
+    product = await _client(svc).get_product("PC61")
+    assert product is not None
+    assert product.description == "100% cotton"

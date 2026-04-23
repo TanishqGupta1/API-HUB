@@ -246,11 +246,22 @@ class PromoStandardsClient:
         category_items = _as_list(_attr(cat_container, "ProductCategory", "productCategory"))
         categories: list[str] = []
         for c in category_items:
-            # Category element can be a wrapper with .productCategory, or the
-            # raw string directly if the array holds primitives.
-            name = _text(_attr(c, "productCategory", "name")) or _text(c)
+            # SanMar uses <category>; others use <categoryName> or <productCategory>.
+            # Fall back to raw string if the element itself is a primitive.
+            name = _text(
+                _attr(c, "category", "categoryName", "productCategory", "name")
+            ) or _text(c)
             if name:
                 categories.append(name)
+
+        # description may be a list (SanMar emits one element per line) or a
+        # single string. Join lists with newlines.
+        raw_description = _attr(product, "description")
+        if isinstance(raw_description, list):
+            parts_desc = [_text(d) for d in raw_description]
+            description = "\n".join(p for p in parts_desc if p) or None
+        else:
+            description = _text(raw_description)
 
         parts_container = _attr(product, "productPartArray", "ProductPartArray")
         part_items = _as_list(_attr(parts_container, "productPart", "ProductPart"))
@@ -259,7 +270,7 @@ class PromoStandardsClient:
         return PSProductData(
             product_id=pid,
             product_name=_text(_attr(product, "productName", "name")),
-            description=_text(_attr(product, "description")),
+            description=description,
             brand=_text(_attr(product, "productBrand", "brand")),
             categories=categories,
             product_type=_text(_attr(product, "productType")) or "apparel",
