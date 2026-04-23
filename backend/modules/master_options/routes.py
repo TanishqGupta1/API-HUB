@@ -8,7 +8,8 @@ from sqlalchemy.orm import selectinload
 from database import get_db
 
 from .models import MasterOption
-from .schemas import MasterOptionRead, SyncStatus
+from .schemas import MasterOptionRead, OptionConfigItem, SyncStatus
+from .service import load_product_config
 
 router = APIRouter(prefix="/api/master-options", tags=["master_options"])
 
@@ -44,3 +45,15 @@ async def get_master_option(master_option_id: UUID, db: AsyncSession = Depends(g
     if not mo:
         raise HTTPException(404, "Master option not found")
     return mo
+
+
+product_config_router = APIRouter(prefix="/api/products", tags=["master_options"])
+
+
+@product_config_router.get("/{product_id}/options-config", response_model=list[OptionConfigItem])
+async def get_product_options_config(product_id: UUID, db: AsyncSession = Depends(get_db)):
+    from modules.catalog.models import Product
+    exists = (await db.execute(select(Product.id).where(Product.id == product_id))).scalar_one_or_none()
+    if not exists:
+        raise HTTPException(404, "Product not found")
+    return await load_product_config(db, product_id)

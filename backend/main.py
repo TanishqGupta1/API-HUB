@@ -25,7 +25,7 @@ from modules.push_log.routes import router as push_log_router
 from modules.catalog.routes import router as catalog_router, categories_router
 from modules.catalog.ingest import router as catalog_ingest_router
 from modules.master_options.ingest import router as master_options_ingest_router
-from modules.master_options.routes import router as master_options_router
+from modules.master_options.routes import router as master_options_router, product_config_router as master_options_product_config_router
 from modules.n8n_proxy.routes import router as n8n_proxy_router
 from modules.ps_directory.routes import router as ps_router
 from modules.promostandards.routes import router as promostandards_sync_router
@@ -80,6 +80,7 @@ app.include_router(categories_router)
 app.include_router(catalog_ingest_router)
 app.include_router(master_options_ingest_router)
 app.include_router(master_options_router)
+app.include_router(master_options_product_config_router)
 app.include_router(n8n_proxy_router)
 app.include_router(sync_jobs_router)
 app.include_router(ops_push_router)
