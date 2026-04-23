@@ -27,25 +27,24 @@ function fmtStarted(iso: string): string {
 // ─── sub-components ──────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
-  const cfg: Record<string, { color: string; bg: string; dot: string }> = {
-    completed: { color: "var(--green)",     bg: "rgba(36,122,82,0.1)",    dot: "var(--green)"     },
-    running:   { color: "var(--blue)", bg: "var(--blue-pale)",         dot: "var(--blue)" },
-    failed:    { color: "var(--red)",       bg: "rgba(185,50,50,0.1)",    dot: "var(--red)"       },
-    pending:   { color: "var(--ink-muted)", bg: "var(--paper-warm)",      dot: "var(--ink-muted)" },
+  const statusStyles: Record<string, string> = {
+    completed: "bg-[#e6f3ec] text-[#247a52]",
+    running:   "bg-[#eef4fb] text-[#1e4d92]",
+    failed:    "bg-[#fdeded] text-[#b93232]",
+    pending:   "bg-[#f9f7f4] text-[#484852]",
   };
-  const s = cfg[status] ?? cfg.pending;
+  const dotStyles: Record<string, string> = {
+    completed: "bg-[#247a52]",
+    running:   "bg-[#1e4d92]",
+    failed:    "bg-[#b93232]",
+    pending:   "bg-[#484852]",
+  };
+  const currentStyle = statusStyles[status] || statusStyles.pending;
+  const currentDot = dotStyles[status] || dotStyles.pending;
+
   return (
-    <span
-      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
-      style={{ background: s.bg, color: s.color }}
-    >
-      <span
-        className="w-1.5 h-1.5 rounded-full shrink-0"
-        style={{
-          background: s.dot,
-          animation: status === "running" ? "pulse-dot 1.2s ease-in-out infinite" : "none",
-        }}
-      />
+    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${currentStyle}`}>
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${currentDot} ${status === "running" ? "animate-pulse" : ""}`} />
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
@@ -53,10 +52,10 @@ function StatusBadge({ status }: { status: string }) {
 
 function SkeletonRow() {
   return (
-    <tr style={{ borderTop: "1px solid var(--border)" }}>
+    <tr className="border-t border-[#cfccc8]">
       {[120, 80, 100, 60, 60, 110, 90].map((w, i) => (
         <td key={i} className="px-5 py-4">
-          <div className="h-3 rounded animate-pulse" style={{ width: w, background: "var(--paper-warm)" }} />
+          <div className="h-3 rounded animate-pulse w-full bg-[#f2f0ed]" style={{ width: w }} />
         </td>
       ))}
     </tr>
@@ -133,8 +132,8 @@ export default function SyncJobsPage() {
       {/* Header row */}
       <div className="flex justify-between items-start mb-5">
         <div>
-          <h1 className="text-3xl font-bold" style={{ color: "var(--ink)" }}>Data Updates</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--ink-muted)" }}>Execution history of your data pipelines</p>
+          <h1 className="text-3xl font-bold text-[#1e1e24]">Data Updates</h1>
+          <p className="text-sm mt-1 text-[#484852]">Execution history of your data pipelines</p>
         </div>
 
         {/* Dropdown filters */}
@@ -142,14 +141,9 @@ export default function SyncJobsPage() {
           <select
             value={filterSupplier}
             onChange={(e) => setFilterSupplier(e.target.value)}
-            className="text-sm px-3 py-2 rounded-md border outline-none"
-            style={{
-              borderColor: "var(--border)",
-              background: "white",
-              color: filterSupplier ? "var(--ink)" : "var(--ink-muted)",
-              fontFamily: "var(--font-head)",
-              minWidth: 160,
-            }}
+            className={`text-sm px-3 py-2 rounded-md border border-[#cfccc8] bg-white outline-none min-w-[160px] font-sans ${
+              filterSupplier ? "text-[#1e1e24]" : "text-[#484852]"
+            }`}
           >
             <option value="">All Suppliers</option>
             {supplierNames.map((s) => (
@@ -160,14 +154,9 @@ export default function SyncJobsPage() {
           <select
             value={filterJobType}
             onChange={(e) => setFilterJobType(e.target.value)}
-            className="text-sm px-3 py-2 rounded-md border outline-none"
-            style={{
-              borderColor: "var(--border)",
-              background: "white",
-              color: filterJobType ? "var(--ink)" : "var(--ink-muted)",
-              fontFamily: "var(--font-head)",
-              minWidth: 150,
-            }}
+            className={`text-sm px-3 py-2 rounded-md border border-[#cfccc8] bg-white outline-none min-w-[150px] font-sans ${
+              filterJobType ? "text-[#1e1e24]" : "text-[#484852]"
+            }`}
           >
             <option value="">All Job Types</option>
             {JOB_TYPES.map((j) => (
@@ -178,14 +167,9 @@ export default function SyncJobsPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="text-sm px-3 py-2 rounded-md border outline-none"
-            style={{
-              borderColor: "var(--border)",
-              background: "white",
-              color: filterStatus ? "var(--ink)" : "var(--ink-muted)",
-              fontFamily: "var(--font-head)",
-              minWidth: 140,
-            }}
+            className={`text-sm px-3 py-2 rounded-md border border-[#cfccc8] bg-white outline-none min-w-[140px] font-sans ${
+              filterStatus ? "text-[#1e1e24]" : "text-[#484852]"
+            }`}
           >
             <option value="">All Statuses</option>
             {STATUSES.map((s) => (
@@ -196,26 +180,24 @@ export default function SyncJobsPage() {
       </div>
 
       {/* Divider */}
-      <div className="mb-5" style={{ borderBottom: "1px solid var(--border)" }} />
+      <div className="mb-5 border-b border-[#cfccc8]" />
 
       {/* Fetch error */}
       {fetchError && (
-        <div className="rounded-lg border px-4 py-3 mb-5 text-sm"
-          style={{ borderColor: "var(--red)", color: "var(--red)", background: "rgba(185,50,50,0.06)" }}>
+        <div className="rounded-lg border border-[#b93232] px-4 py-3 mb-5 text-sm text-[#b93232] bg-[#fdf2f2]">
           Failed to load sync jobs: {fetchError}
         </div>
       )}
 
       {/* Table */}
-      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: "var(--border)", background: "white" }}>
+      <div className="rounded-xl border border-[#cfccc8] bg-white overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
           <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+            <tr className="border-b border-[#cfccc8]">
               {["Supplier", "Job Type", "Status", "Records", "Duration", "Started", "Error"].map((h) => (
                 <th
                   key={h}
-                  className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide"
-                  style={{ color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}
+                  className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide text-[#484852] font-mono"
                 >
                   {h}
                 </th>
@@ -228,19 +210,14 @@ export default function SyncJobsPage() {
 
             {!loading && jobs.map((j) => (
               <React.Fragment key={j.id}>
-                <tr
-                  className="transition-colors"
-                  style={{ borderTop: "1px solid var(--border)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--paper)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-                >
+                <tr className="transition-colors border-t border-[#cfccc8] hover:bg-[#f9f7f4]">
                   {/* Supplier */}
-                  <td className="px-5 py-4 font-semibold" style={{ color: "var(--ink)" }}>
+                  <td className="px-5 py-4 font-semibold text-[#1e1e24]">
                     {j.supplier_name}
                   </td>
 
                   {/* Job Type */}
-                  <td className="px-5 py-4" style={{ color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
+                  <td className="px-5 py-4 text-[#484852] font-mono">
                     {j.job_type === 'delta' ? 'Recent Changes' : 
                      (j.job_type as string === 'full' || j.job_type as string === 'full_sync') ? 'Full Refresh' : 
                      j.job_type}
@@ -252,17 +229,17 @@ export default function SyncJobsPage() {
                   </td>
 
                   {/* Records */}
-                  <td className="px-5 py-4" style={{ fontFamily: "var(--font-mono)", color: "var(--ink)" }}>
+                  <td className="px-5 py-4 font-mono text-[#1e1e24]">
                     {j.records_processed > 0 ? j.records_processed.toLocaleString() : "0"}
                   </td>
 
                   {/* Duration */}
-                  <td className="px-5 py-4" style={{ fontFamily: "var(--font-mono)", color: "var(--ink-muted)" }}>
+                  <td className="px-5 py-4 font-mono text-[#484852]">
                     {fmtDuration(j.started_at, j.finished_at)}
                   </td>
 
                   {/* Started */}
-                  <td className="px-5 py-4 text-xs" style={{ color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
+                  <td className="px-5 py-4 text-xs text-[#484852] font-mono">
                     {fmtStarted(j.started_at)}
                   </td>
 
@@ -271,39 +248,30 @@ export default function SyncJobsPage() {
                     {j.error_log ? (
                       <button
                         onClick={() => setExpandedError(expandedError === j.id ? null : j.id)}
-                        className="text-xs font-medium flex items-center gap-1"
-                        style={{ color: "var(--red)", fontFamily: "var(--font-mono)" }}
+                        className="text-xs font-medium flex items-center gap-1 text-[#b93232] font-mono"
                       >
                         {j.error_log.split("\n")[0].slice(0, 40)}
                         {j.error_log.length > 40 && "…"}
                         <span
-                          style={{
-                            display: "inline-block",
-                            transition: "transform 0.15s",
-                            transform: expandedError === j.id ? "rotate(180deg)" : "none",
-                          }}
+                          className={`inline-block transition-transform duration-150 ${
+                            expandedError === j.id ? "rotate-180" : ""
+                          }`}
                         >
                           ▼
                         </span>
                       </button>
                     ) : (
-                      <span style={{ color: "var(--ink-muted)" }}>—</span>
+                      <span className="text-[#484852]">—</span>
                     )}
                   </td>
                 </tr>
 
                 {/* Expanded error log */}
                 {expandedError === j.id && j.error_log && (
-                  <tr style={{ borderTop: "1px solid var(--border)" }}>
-                    <td colSpan={7} className="px-5 py-4" style={{ background: "rgba(185,50,50,0.03)" }}>
+                  <tr className="border-t border-[#cfccc8]">
+                    <td colSpan={7} className="px-5 py-4 bg-[#fef9f9]">
                       <pre
-                        className="text-xs rounded-md p-4 overflow-auto max-h-48 whitespace-pre-wrap"
-                        style={{
-                          background: "rgba(185,50,50,0.06)",
-                          color: "var(--red)",
-                          fontFamily: "var(--font-mono)",
-                          border: "1px solid rgba(185,50,50,0.18)",
-                        }}
+                        className="text-xs rounded-md p-4 overflow-auto max-h-48 whitespace-pre-wrap bg-[#fdf2f2] text-[#b93232] font-mono border border-[#fbd9d9]"
                       >
                         {j.error_log}
                       </pre>
@@ -318,10 +286,10 @@ export default function SyncJobsPage() {
               <tr>
                 <td colSpan={7} className="px-5 py-16 text-center">
                   <div className="text-3xl mb-3">📋</div>
-                  <div className="text-sm font-semibold mb-1" style={{ color: "var(--ink)" }}>
+                  <div className="text-sm font-semibold mb-1 text-[#1e1e24]">
                     {filterStatus || filterSupplier ? "No jobs match these filters" : "No updates yet"}
                   </div>
-                  <div className="text-xs" style={{ color: "var(--ink-muted)" }}>
+                  <div className="text-xs text-[#484852]">
                     {filterStatus || filterSupplier
                       ? "Try changing the filters above."
                       : "No sync history yet. Activate a supplier to see data updates here."}
@@ -333,12 +301,6 @@ export default function SyncJobsPage() {
         </table>
       </div>
 
-      <style>{`
-        @keyframes pulse-dot {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50%       { opacity: 0.4; transform: scale(1.5); }
-        }
-      `}</style>
     </div>
   );
 }

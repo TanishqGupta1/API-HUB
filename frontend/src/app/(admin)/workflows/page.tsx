@@ -71,14 +71,14 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
-      style={{ background: bg[status] ?? "#f9f7f4", color: fg[status] ?? "#484852" }}
+      style={{
+        background: bg[status] ?? "#f9f7f4",
+        color: fg[status] ?? "#484852"
+      }}
     >
       <span
-        className="w-1.5 h-1.5 rounded-full"
-        style={{
-          background: fg[status] ?? "#888894",
-          animation: status === "running" ? "pulse-dot 1.2s ease-in-out infinite" : "none",
-        }}
+        className={`w-1.5 h-1.5 rounded-full ${status === "running" ? "animate-pulse" : ""}`}
+        style={{ background: fg[status] ?? "#888894" }}
       />
       {status}
     </span>
@@ -227,19 +227,13 @@ export default function WorkflowsPage() {
       </div>
 
       {/* Pipeline diagram */}
-      <div
-        className="rounded-lg border"
-        style={{ borderColor: "var(--border)", background: "white" }}
-      >
+      <div className="rounded-lg border border-[#cfccc8] bg-white">
         <PipelineView nodes={liveNodes} />
       </div>
 
       {/* Cron workflow cards */}
       <div>
-        <div
-          className="text-xs font-semibold uppercase tracking-widest mb-3"
-          style={{ color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}
-        >
+        <div className="text-xs font-semibold uppercase tracking-widest mb-3 text-[#484852] font-mono">
           Scheduled Workflows
         </div>
 
@@ -250,11 +244,10 @@ export default function WorkflowsPage() {
             return (
               <div
                 key={wf.type}
-                className="rounded-lg border px-4 py-3"
-                style={{ borderColor: "var(--border)", background: "white" }}
+                className="rounded-lg border px-4 py-3 border-[#cfccc8] bg-white"
               >
                 <div className="flex items-start justify-between gap-2 mb-1">
-                  <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                  <div className="text-sm font-semibold text-[#1e1e24]">
                     {wf.title}
                   </div>
                   <span
@@ -262,24 +255,18 @@ export default function WorkflowsPage() {
                     style={{ background: style.bg, color: style.color }}
                   >
                     <span
-                      className="w-1.5 h-1.5 rounded-full"
-                      style={{
-                        background: style.color,
-                        animation: job?.status === "running" ? "pulse-dot 1.2s ease-in-out infinite" : "none",
-                      }}
+                      className={`w-1.5 h-1.5 rounded-full ${job?.status === "running" ? "animate-pulse" : ""}`}
+                      style={{ background: style.color }}
                     />
                     {style.label}
                   </span>
                 </div>
 
-                <p className="text-xs mb-2" style={{ color: "var(--ink-muted)" }}>
+                <p className="text-xs mb-2 text-[#484852]">
                   {wf.description}
                 </p>
 
-                <div
-                  className="flex items-center justify-between text-[11px]"
-                  style={{ color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}
-                >
+                <div className="flex items-center justify-between text-[11px] text-[#484852] font-mono">
                   <span>{wf.schedule}</span>
                   <span>
                     {loading
@@ -342,11 +329,9 @@ export default function WorkflowsPage() {
                       {w.name}
                     </div>
                     <span
-                      className="font-mono text-[10px] font-bold px-2 py-[2px] rounded"
-                      style={{
-                        background: w.active ? "#e6f3ec" : "#fdeded",
-                        color: w.active ? "#247a52" : "#b93232",
-                      }}
+                      className={`font-mono text-[10px] font-bold px-2 py-[2px] rounded ${
+                        w.active ? "bg-[#e6f3ec] text-[#247a52]" : "bg-[#fdeded] text-[#b93232]"
+                      }`}
                     >
                       {w.active ? "ACTIVE" : "INACTIVE"}
                     </span>
@@ -444,12 +429,6 @@ export default function WorkflowsPage() {
         })
       )}
 
-      <style jsx>{`
-        @keyframes pulse-dot {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50%       { opacity: 0.4; transform: scale(1.4); }
-        }
-      `}</style>
     </div>
   );
 }

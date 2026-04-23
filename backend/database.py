@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Optional
@@ -46,8 +47,14 @@ class EncryptedJSON(TypeDecorator):
         try:
             f = Fernet(SECRET_KEY.encode())
             return json.loads(f.decrypt(value.encode()))
-        except Exception:
-            return json.loads(value)
+        except Exception as e:
+            logging.error(
+                "EncryptedJSON decryption failed — SECRET_KEY mismatch or data corruption: %s",
+                e,
+            )
+            raise ValueError(
+                "Failed to decrypt stored secret. Check SECRET_KEY configuration."
+            ) from e
 
 
 async def get_db():

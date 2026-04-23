@@ -201,3 +201,17 @@ export interface FieldMapping {
   target_field: string;
   transform: string | null;
 }
+
+/* ─── Push Log ───────────────────────────────────────────────────────────── */
+export interface ProductPushLogRead {
+  id: string;
+  product_id: string;
+  product_name: string | null;
+  customer_id: string;
+  customer_name: string | null;
+  supplier_name: string | null;
+  ops_product_id: string | null;
+  status: "pushed" | "failed" | "skipped";
+  error: string | null;
+  pushed_at: string;
+}

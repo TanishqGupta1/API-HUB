@@ -5,8 +5,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-vg_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vg_pass}
       POSTGRES_DB: ${POSTGRES_DB:-vg_hub}
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

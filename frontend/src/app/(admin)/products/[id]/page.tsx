@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type {
-  Customer,
   Product,
   ProductImage,
-  ProductPushStatus,
   Supplier,
 } from "@/lib/types";
+import { PublishButton } from "@/components/products/publish-button";
+import { PushHistory } from "@/components/products/push-history";
 
 const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
 
@@ -32,22 +32,15 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const [product, setProduct] = useState<Product | null>(null);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [pushStatuses, setPushStatuses] = useState<ProductPushStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pushing, setPushing] = useState<string | null>(null);
   const [activeImageTab, setActiveImageTab] = useState<string>("front");
 
   const fetchData = async () => {
     try {
-      const [p, c, s] = await Promise.all([
+      const [p] = await Promise.all([
         api<Product>(`/api/products/${id}`),
-        api<Customer[]>("/api/customers"),
-        api<ProductPushStatus[]>(`/api/products/${id}/push-status`),
       ]);
       setProduct(p);
-      setCustomers(c);
-      setPushStatuses(s);
       try {
         const sup = await api<Supplier>(`/api/suppliers/${p.supplier_id}`);
         setSupplier(sup);
@@ -88,33 +81,6 @@ export default function ProductDetailPage() {
     ]);
   }, [supplier]);
 
-  const handlePush = async (customerId?: string) => {
-    if (!product) return;
-    const targetId = customerId || (customers.length > 0 ? customers[0].id : null);
-    if (!targetId) {
-      alert("Please configure a customer in the Customers page first.");
-      return;
-    }
-    setPushing(targetId);
-    try {
-      await api("/api/push-log", {
-        method: "POST",
-        body: JSON.stringify({
-          product_id: product.id,
-          customer_id: targetId,
-          status: "pushed",
-          ops_product_id: `ops-prod-${Math.floor(Math.random() * 9000) + 1000}`,
-        }),
-      });
-      const newStatuses = await api<ProductPushStatus[]>(`/api/products/${id}/push-status`);
-      setPushStatuses(newStatuses);
-    } catch (e) {
-      console.error(e);
-      alert("Push failed. Check connection.");
-    } finally {
-      setPushing(null);
-    }
-  };
 
   if (loading) {
     return (
@@ -156,15 +122,14 @@ export default function ProductDetailPage() {
           </div>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={() => handlePush()}
-            disabled={!!pushing}
-            className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
-                       bg-[#1e4d92] text-white shadow-[0_4px_0_#143566] transition-all
-                       hover:-translate-y-px hover:shadow-[0_5px_0_#143566] disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {pushing ? "Publishing..." : "Publish to Store"}
-          </button>
+          <PublishButton
+            productId={id}
+            onDone={() => {
+              // History will auto-refresh due to its own effect if we trigger a state change, 
+              // but a full fetch is safer for now.
+              setTimeout(fetchData, 2000);
+            }}
+          />
           <button
             onClick={fetchData}
             className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
@@ -366,76 +331,14 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* ── Storefront Publish Status ────────────────────────────── */}
       <div className="bg-white border border-[#cfccc8] rounded-lg shadow-[4px_6px_0_rgba(30,77,146,0.08)] overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 bg-[#ebe8e3] border-b border-[#cfccc8]">
           <div className="text-[14px] font-bold uppercase tracking-[0.05em] text-[#1e1e24]">
-            Storefront Publish Status
+            Storefront Push History
           </div>
         </div>
-        <div className="overflow-x-auto">
-        <table className="w-full border-collapse min-w-[640px]">
-          <thead>
-            <tr>
-              {["Storefront", "Status", "Pushed", "Store Product ID", "Action"].map((h) => (
-                <th
-                  key={h}
-                  className="text-left px-6 py-3 text-[10px] font-bold uppercase tracking-[0.1em] text-[#888894] border-b border-[#cfccc8]"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {pushStatuses.map((s) => (
-              <tr key={s.customer_id} className="hover:bg-[rgba(30,77,146,0.05)] transition-colors">
-                <td className="px-6 py-[14px] text-[14px] text-[#1e1e24] font-semibold border-b border-[#f9f7f4]">
-                  {s.customer_name}
-                </td>
-                <td className="px-6 py-[14px] border-b border-[#f9f7f4]">
-                  {s.status === "pushed" ? (
-                    <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1 rounded-full bg-[#f0f9f4] text-[#247a52]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#247a52]" />
-                      Published
-                    </span>
-                  ) : s.status === "failed" ? (
-                    <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1 rounded-full bg-[#fdf2f2] text-[#b93232]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#b93232]" />
-                      Connection Failed
-                    </span>
-                  ) : (
-                    <span className="text-[12px] text-[#b4b4bc]">Not pushed</span>
-                  )}
-                </td>
-                <td className="px-6 py-[14px] font-mono text-[12px] text-[#484852] border-b border-[#f9f7f4]">
-                  {s.pushed_at ? new Date(s.pushed_at).toLocaleString() : "—"}
-                </td>
-                <td className="px-6 py-[14px] font-mono text-[12px] text-[#484852] border-b border-[#f9f7f4]">
-                  {s.ops_product_id || "—"}
-                </td>
-                <td className="px-6 py-[14px] border-b border-[#f9f7f4]">
-                  <button
-                    onClick={() => handlePush(s.customer_id)}
-                    disabled={pushing === s.customer_id}
-                    className="px-3 py-1 text-[11px] font-semibold bg-white border border-[#cfccc8] rounded
-                               shadow-[0_2px_0_rgba(30,77,146,0.08)] hover:border-[#1e4d92] transition-all
-                               disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {pushing === s.customer_id ? "..." : "Push Now"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {pushStatuses.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-6 py-5 text-center text-[#888894] text-[13px]">
-                  No customers configured. Add one in the Customers page to enable pushing.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="p-6">
+          <PushHistory productId={id} />
         </div>
       </div>
     </div>

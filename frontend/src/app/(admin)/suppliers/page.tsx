@@ -201,13 +201,7 @@ function SuppliersContent() {
                         <span className="badge-dot"></span> Active
                       </span>
                     ) : (
-                      <span
-                        style={{
-                          color: "var(--ink-faint)",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                        }}
-                      >
+                      <span className="text-[12px] font-semibold text-[#888894]">
                         Inactive
                       </span>
                     )}
@@ -219,12 +213,7 @@ function SuppliersContent() {
                 <tr>
                   <td
                     colSpan={6}
-                    style={{
-                      padding: "40px",
-                      textAlign: "center",
-                      color: "var(--ink-muted)",
-                      fontSize: "14px",
-                    }}
+                    className="p-10 text-center text-[#484852] text-[14px]"
                   >
                     No suppliers connected. Click &quot;+ Connect New&quot; to begin.
                   </td>
@@ -235,13 +224,7 @@ function SuppliersContent() {
                 <tr>
                   <td
                     colSpan={6}
-                    style={{
-                      padding: "40px",
-                      textAlign: "center",
-                      color: "var(--ink-muted)",
-                      fontSize: "14px",
-                      fontFamily: "var(--font-mono)",
-                    }}
+                    className="p-10 text-center text-[#484852] text-[14px] font-mono"
                   >
                     Connecting...
                   </td>
@@ -259,7 +242,7 @@ export default function SuppliersPage() {
   return (
     <Suspense
       fallback={
-        <div style={{ padding: "40px", color: "var(--ink-muted)" }}>
+        <div className="p-10 text-[#484852]">
           Loading...
         </div>
       }

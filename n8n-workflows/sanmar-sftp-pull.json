@@ -131,13 +131,57 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $items().map(i => i.json) }}",
-        "options": {}
+        "options": {},
+        "onError": "continueErrorOutput"
       },
       "id": "http-002",
       "name": "POST /ingest/products",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [2000, 320]
+    },
+    {
+      "id": "code-error-001",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 400],
+      "parameters": {
+        "jsCode": "const err = $input.first().json;\nreturn [{ json: {\n  event: 'sanmar_ingest_error',\n  batch_error: err.message || JSON.stringify(err),\n  timestamp: new Date().toISOString()\n}}];"
+      }
+    },
+    {
+      "id": "http-error-log",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/push-log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "failed"
+            },
+            {
+              "name": "error",
+              "value": "={{ $json.batch_error }}"
+            }
+          ]
+        }
+      }
     }
   ],
   "connections": {
@@ -245,6 +289,26 @@
         [
           {
             "node": "Loop: 500 rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Log Error",
             "type": "main",
             "index": 0
           }

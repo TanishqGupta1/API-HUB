@@ -44,13 +44,7 @@ const EMPTY_FORM: FormState = {
 
 function Avatar({ name }: { name: string }) {
   return (
-    <div style={{
-      width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-      background: "var(--blue-pale)", color: "var(--blue)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontWeight: 800, fontSize: 12, fontFamily: "var(--font-mono)",
-      border: "1.5px solid var(--border)",
-    }}>
+    <div className="w-9 h-9 rounded-lg shrink-0 bg-[#eef4fb] text-[#1e4d92] flex items-center justify-center font-extrabold text-[12px] font-mono border-[1.5px] border-[#cfccc8]">
       {initials(name)}
     </div>
   );
@@ -65,8 +59,8 @@ function Field({
   placeholder?: string; type?: string; error?: string;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <label style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
+    <div className="flex flex-col gap-1">
+      <label className="text-[12px] font-semibold text-[#484852] font-mono">
         {label}
       </label>
       <input
@@ -74,14 +68,11 @@ function Field({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        style={{
-          padding: "8px 12px", fontSize: 14, borderRadius: 6,
-          border: `1.5px solid ${error ? "var(--red)" : "var(--border)"}`,
-          background: "white", color: "var(--ink)", outline: "none",
-          fontFamily: "var(--font-sans)",
-        }}
+        className={`px-3 py-2 text-[14px] rounded-md border-[1.5px] bg-white text-[#1e1e24] outline-none font-sans ${
+          error ? "border-[#b93232]" : "border-[#cfccc8]"
+        } focus:border-[#1e4d92]`}
       />
-      {error && <span style={{ fontSize: 11, color: "var(--red)" }}>{error}</span>}
+      {error && <span className="text-[11px] text-[#b93232]">{error}</span>}
     </div>
   );
 }
@@ -179,15 +170,15 @@ export default function CustomersPage() {
 
       {/* ── Add form ── */}
       {showForm && (
-        <div className="panel" style={{ marginBottom: 24 }}>
+        <div className="panel mb-6">
           <div className="panel-header">
             <span className="panel-title">New Storefront</span>
-            <button className="btn btn-ghost" style={{ fontSize: 13, padding: "4px 12px" }}
+            <button className="btn btn-ghost text-[13px] px-3 py-1"
               onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setFormErrors({}); }}>
               Cancel
             </button>
           </div>
-          <div style={{ padding: "20px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div className="px-6 py-5 grid grid-cols-2 gap-4">
             <Field label="Store Name" value={form.name} onChange={setField("name")}
               placeholder="e.g., Acme Corp Store" error={formErrors.name} />
             <Field label="Storefront API URL" value={form.ops_base_url} onChange={setField("ops_base_url")}
@@ -199,20 +190,17 @@ export default function CustomersPage() {
             <Field label="Client Secret" value={form.ops_client_secret} onChange={setField("ops_client_secret")}
               placeholder="••••••••" type="password" error={formErrors.ops_client_secret} />
           </div>
-          <div style={{ padding: "0 24px 20px" }}>
-            <p style={{ fontSize: 12, color: "var(--ink-muted)", marginBottom: 14 }}>
+          <div className="px-6 pb-5">
+            <p className="text-[12px] text-[#484852] mb-3.5">
               Find credentials in your storefront admin under Settings › API.
               The client secret is encrypted and never exposed after saving.
             </p>
             {saveError && (
-              <div style={{
-                fontSize: 12, padding: "8px 12px", borderRadius: 6, marginBottom: 12,
-                background: "var(--red-pale)", color: "var(--red)", fontFamily: "var(--font-mono)",
-              }}>
+              <div className="text-[12px] px-3 py-2 rounded-md mb-3 bg-[#fdf2f2] text-[#b93232] font-mono">
                 {saveError}
               </div>
             )}
-            <div style={{ display: "flex", gap: 10 }}>
+            <div className="flex gap-2.5">
               <button className="btn btn-primary" onClick={handleAdd} disabled={saving}>
                 {saving ? "Saving…" : "Save Storefront"}
               </button>
@@ -227,10 +215,7 @@ export default function CustomersPage() {
 
       {/* ── Fetch error ── */}
       {fetchError && (
-        <div style={{
-          padding: "12px 16px", borderRadius: 8, marginBottom: 20, fontSize: 13,
-          border: "1.5px solid var(--red)", color: "var(--red)", background: "var(--red-pale)",
-        }}>
+        <div className="px-4 py-3 rounded-lg mb-5 text-[13px] border-[1.5px] border-[#b93232] text-[#b93232] bg-[#fdf2f2]">
           Failed to load storefronts: {fetchError}
         </div>
       )}
@@ -239,7 +224,7 @@ export default function CustomersPage() {
       <div className="panel">
         <div className="panel-header">
           <span className="panel-title">Storefront Directory</span>
-          <span style={{ fontSize: 12, color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
+          <span className="text-[12px] text-[#484852] font-mono">
             {!loading && `${customers.length} storefront${customers.length !== 1 ? "s" : ""}`}
           </span>
         </div>
@@ -261,11 +246,10 @@ export default function CustomersPage() {
               <tr key={i}>
                 {[220, 160, 70, 90, 90, 130].map((w, j) => (
                   <td key={j}>
-                    <div style={{
-                      height: 12, width: w, borderRadius: 4,
-                      background: "var(--paper-warm)",
-                      animation: "pulse 1.5s ease-in-out infinite",
-                    }} />
+                    <div
+                      className="h-3 rounded bg-[#f2f0ed] animate-pulse"
+                      style={{ width: w }}
+                    />
                   </td>
                 ))}
               </tr>
@@ -277,11 +261,11 @@ export default function CustomersPage() {
 
                 {/* Name + avatar */}
                 <td>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div className="flex items-center gap-2.5">
                     <Avatar name={c.name} />
                     <div>
                       <div className="cell-primary">{c.name}</div>
-                      <div style={{ fontSize: 11, color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
+                      <div className="text-[11px] text-[#484852] font-mono">
                         {c.ops_client_id}
                       </div>
                     </div>
@@ -291,25 +275,23 @@ export default function CustomersPage() {
                 {/* Storefront URL */}
                 <td>
                   <a href={c.ops_base_url} target="_blank" rel="noopener noreferrer"
-                    style={{ color: "var(--blue)", fontSize: 13, textDecoration: "none", fontWeight: 500 }}
-                    onMouseOver={(e) => (e.currentTarget.style.textDecoration = "underline")}
-                    onMouseOut={(e) => (e.currentTarget.style.textDecoration = "none")}
+                    className="text-[#1e4d92] text-[13px] font-medium no-underline hover:underline"
                   >
                     {hostname(c.ops_base_url)}
                   </a>
-                  <div style={{ fontSize: 11, color: "var(--ink-muted)", marginTop: 2 }}>OAuth2</div>
+                  <div className="text-[11px] text-[#484852] mt-0.5">OAuth2</div>
                 </td>
 
                 {/* Status */}
                 <td>
                   {c.is_active ? (
                     <span className="badge badge-ok">
-                      <span className="badge-dot" style={{ background: "var(--green)" }} />
+                      <span className="badge-dot bg-[#2e8b57]" />
                       Active
                     </span>
                   ) : (
-                    <span className="badge" style={{ background: "var(--paper)", color: "var(--ink-muted)", border: "1px solid var(--border)" }}>
-                      <span className="badge-dot" style={{ background: "var(--ink-muted)" }} />
+                    <span className="badge bg-[#f9f7f4] text-[#484852] border border-[#cfccc8]">
+                      <span className="badge-dot bg-[#484852]" />
                       Inactive
                     </span>
                   )}
@@ -319,7 +301,7 @@ export default function CustomersPage() {
                 <td className="cell-mono">
                   {c.products_pushed > 0
                     ? c.products_pushed.toLocaleString()
-                    : <span style={{ color: "var(--ink-faint)" }}>—</span>}
+                    : <span className="text-[#888894]">—</span>}
                 </td>
 
                 {/* Pricing rules */}
@@ -329,7 +311,7 @@ export default function CustomersPage() {
                       {c.markup_rules_count} {c.markup_rules_count === 1 ? "rule" : "rules"}
                     </span>
                   ) : (
-                    <a href="/pricing-rules" style={{ fontSize: 12, color: "var(--blue)", textDecoration: "none", fontWeight: 600 }}>
+                    <a href="/pricing-rules" className="text-[12px] text-[#1e4d92] no-underline font-semibold hover:underline">
                       + Add rules
                     </a>
                   )}
@@ -337,26 +319,18 @@ export default function CustomersPage() {
 
                 {/* Actions */}
                 <td>
-                  <div style={{ display: "flex", gap: 6 }}>
+                  <div className="flex gap-1.5">
                     <button
                       onClick={() => handleDeactivate(c)}
                       disabled={deactivating === c.id}
-                      style={{
-                        fontSize: 12, fontWeight: 600, padding: "4px 10px",
-                        border: "1.5px solid var(--border)", borderRadius: 5,
-                        background: "white", color: "var(--ink-light)", cursor: "pointer",
-                      }}
+                      className="text-[12px] font-semibold px-2.5 py-1 border-[1.5px] border-[#cfccc8] rounded-md bg-white text-[#484852] cursor-pointer hover:bg-[#f9f7f4]"
                     >
                       {deactivating === c.id ? "…" : c.is_active ? "Deactivate" : "Activate"}
                     </button>
                     <button
                       onClick={() => handleDelete(c.id)}
                       disabled={deleting === c.id}
-                      style={{
-                        fontSize: 12, fontWeight: 600, padding: "4px 10px",
-                        border: "1.5px solid transparent", borderRadius: 5,
-                        background: "transparent", color: "var(--red)", cursor: "pointer",
-                      }}
+                      className="text-[12px] font-semibold px-2.5 py-1 border-none rounded-md bg-transparent text-[#b93232] cursor-pointer hover:bg-[#fdf2f2]"
                     >
                       {deleting === c.id ? "…" : "Delete"}
                     </button>
@@ -368,19 +342,14 @@ export default function CustomersPage() {
             {/* Empty state */}
             {!loading && customers.length === 0 && !fetchError && (
               <tr>
-                <td colSpan={6} style={{ padding: "60px 24px", textAlign: "center" }}>
-                  <div style={{
-                    width: 48, height: 48, borderRadius: 12, margin: "0 auto 16px",
-                    background: "var(--blue-pale)", color: "var(--blue)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 22,
-                  }}>
+                <td colSpan={6} className="px-6 py-16 text-center">
+                  <div className="w-12 h-12 rounded-xl mx-auto mb-4 bg-[#eef4fb] text-[#1e4d92] flex items-center justify-center text-[22px]">
                     🏪
                   </div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>
+                  <div className="text-[14px] font-semibold text-[#1e1e24] mb-1.5">
                     No storefronts yet
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--ink-muted)", marginBottom: 20 }}>
+                  <div className="text-[13px] text-[#484852] mb-5">
                     Add your first storefront to start publishing products.
                   </div>
                   <button className="btn btn-primary"

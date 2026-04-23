@@ -114,6 +114,15 @@ const NAV_ITEMS = [
           </svg>
         ),
       },
+      {
+        href: "/products/configure",
+        label: "Product Setup",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20v-8m0 0V4m0 8h8m-8 0H4" />
+          </svg>
+        ),
+      },
     ],
   },
   {

@@ -1,8 +1,8 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,24 +17,18 @@ categories_router = APIRouter(prefix="/api/categories", tags=["catalog"])
 
 
 async def _category_descendants(db: AsyncSession, root_id: UUID) -> list[UUID]:
-    """Return root_id + all descendant category ids (BFS)."""
-    all_cats = (
-        await db.execute(select(Category.id, Category.parent_id))
-    ).all()
-    children_by_parent: dict[UUID, list[UUID]] = {}
-    for cid, pid in all_cats:
-        if pid is not None:
-            children_by_parent.setdefault(pid, []).append(cid)
-
-    out = [root_id]
-    stack = [root_id]
-    while stack:
-        cur = stack.pop()
-        for child in children_by_parent.get(cur, []):
-            if child not in out:
-                out.append(child)
-                stack.append(child)
-    return out
+    """Return root_id + all descendant category ids via PostgreSQL recursive CTE."""
+    cte_sql = text("""
+        WITH RECURSIVE descendants AS (
+            SELECT id FROM categories WHERE id = :root_id
+            UNION ALL
+            SELECT c.id FROM categories c
+            JOIN descendants d ON c.parent_id = d.id
+        )
+        SELECT id FROM descendants
+    """)
+    rows = (await db.execute(cte_sql, {"root_id": root_id})).fetchall()
+    return [row[0] for row in rows]
 
 
 @router.get("", response_model=list[ProductListRead])
@@ -44,7 +38,7 @@ async def list_products(
     brand: Optional[str] = None,
     search: Optional[str] = None,
     skip: int = 0,
-    limit: int = 50,
+    limit: int = Query(default=50, le=500),
     db: AsyncSession = Depends(get_db),
 ):
     variant_agg = (

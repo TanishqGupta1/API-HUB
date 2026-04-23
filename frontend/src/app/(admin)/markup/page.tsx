@@ -166,23 +166,14 @@ export default function MarkupPage() {
               : "Select a customer to view rules"}
           </div>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <div className="flex gap-2.5 items-center">
           {customersLoading ? (
-            <span style={{ fontSize: "13px", color: "var(--ink-muted)" }}>Loading…</span>
+            <span className="text-[13px] text-[#888894]">Loading…</span>
           ) : (
             <select
               value={selectedCustomerId ?? ""}
               onChange={(e) => setSelectedCustomerId(e.target.value)}
-              style={{
-                padding: "9px 14px",
-                border: "1.5px solid var(--border)",
-                borderRadius: "5px",
-                fontFamily: "var(--font-head)",
-                fontSize: "13px",
-                fontWeight: 600,
-                background: "white",
-                cursor: "pointer",
-              }}
+              className="px-3.5 py-[9px] border-[1.5px] border-[#cfccc8] rounded-[5px] font-bold text-[13px] bg-white cursor-pointer"
             >
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -206,20 +197,20 @@ export default function MarkupPage() {
         </div>
 
         {error && (
-          <div style={{ padding: "24px", color: "var(--red)", fontSize: "13px" }}>{error}</div>
+          <div className="p-6 text-[#b93232] text-[13px]">{error}</div>
         )}
 
         {rulesLoading && (
-          <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--ink-muted)", fontSize: "13px" }}>
+          <div className="py-12 px-6 text-center text-[#888894] text-[13px]">
             Loading rules…
           </div>
         )}
 
         {!rulesLoading && !error && rules.length === 0 && (
-          <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--ink-muted)" }}>
-            <div style={{ fontSize: "32px", marginBottom: "12px" }}>$</div>
-            <div style={{ fontWeight: 600, marginBottom: "6px" }}>No pricing rules configured</div>
-            <div style={{ fontSize: "13px" }}>
+          <div className="py-12 px-6 text-center text-[#888894]">
+            <div className="text-[32px] mb-3">$</div>
+            <div className="font-bold mb-1.5">No pricing rules configured</div>
+            <div className="text-[13px]">
               Select a storefront and add pricing rules to control margins.
             </div>
           </div>
@@ -246,25 +237,24 @@ export default function MarkupPage() {
                 return (
                   <tr key={rule.id}>
                     <td>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 700, color: "var(--blue)" }}>
+                      <span className="font-mono text-[12px] font-bold text-[#1e4d92]">
                         {index + 1}
                       </span>
                       {isFirst && (
-                        <span style={{ fontSize: "10px", color: "var(--ink-faint)", marginLeft: "4px" }}>highest</span>
+                        <span className="text-[10px] text-[#cfccc8] ml-1">highest</span>
                       )}
                       {isLast && (
-                        <span style={{ fontSize: "10px", color: "var(--ink-faint)", marginLeft: "4px" }}>lowest</span>
+                        <span className="text-[10px] text-[#cfccc8] ml-1">lowest</span>
                       )}
                     </td>
                     <td><span className="cell-tag">{scopeType}</span></td>
                     <td className="cell-primary">{target}</td>
-                    <td className="cell-mono" style={{ fontWeight: 600 }}>{rule.markup_pct}%</td>
+                    <td className="cell-mono font-bold">{rule.markup_pct}%</td>
                     <td className="cell-mono">{rule.min_margin != null ? `${rule.min_margin}%` : "—"}</td>
                     <td className="cell-mono">{roundingLabel(rule.rounding)}</td>
                     <td>
                       <button
-                        className="btn btn-ghost"
-                        style={{ padding: "4px 10px", fontSize: "12px" }}
+                        className="btn btn-ghost px-2.5 py-1 text-[12px]"
                         onClick={() => handleDelete(rule.id)}
                       >
                         Remove
@@ -283,26 +273,19 @@ export default function MarkupPage() {
         <div className="panel">
           <div className="panel-header">
             <div className="panel-title">Pricing Preview</div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "12px", color: "var(--ink-muted)" }}>Base price:</span>
+            <div className="flex items-center gap-2.5">
+              <span className="text-[12px] text-[#888894]">Base price:</span>
               <input
                 type="number"
                 step="0.01"
                 min="0"
                 value={previewBasePrice}
                 onChange={(e) => setPreviewBasePrice(e.target.value)}
-                style={{
-                  width: "80px",
-                  padding: "4px 8px",
-                  border: "1.5px solid var(--border)",
-                  borderRadius: "4px",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "13px",
-                }}
+                className="w-20 px-2 py-1 border-[1.5px] border-[#cfccc8] rounded font-mono text-[13px]"
               />
             </div>
           </div>
-          <div style={{ padding: "24px", display: "grid", gap: "10px" }}>
+          <div className="p-6 grid gap-2.5">
             {rules.map((rule, index) => {
               const isApplied = index === 0;
               const markedUp  = base * (1 + rule.markup_pct / 100);
@@ -313,47 +296,27 @@ export default function MarkupPage() {
               return (
                 <div
                   key={rule.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "16px",
-                    padding: "14px 18px",
-                    borderRadius: "8px",
-                    background: isApplied ? "var(--blue-pale)" : "var(--vellum)",
-                    border: isApplied
-                      ? "1.5px solid rgba(30,77,146,0.2)"
-                      : "1.5px solid var(--border)",
-                    opacity: isApplied ? 1 : 0.5,
-                  }}
+                  className={`flex items-center gap-4 py-3.5 px-[18px] rounded-lg border-[1.5px] ${
+                    isApplied 
+                      ? "bg-[#eef4fb] border-[#1e4d92]/20 opacity-100" 
+                      : "bg-[#f2f0ed] border-[#cfccc8] opacity-50"
+                  }`}
                 >
-                  <span style={{
-                    fontWeight: isApplied ? 700 : 600,
-                    fontSize: "13px",
-                    color: isApplied ? "var(--blue)" : "var(--ink-light)",
-                    minWidth: "130px",
-                  }}>
+                  <span className={`font-bold text-[13px] min-w-[130px] ${
+                    isApplied ? "text-[#1e4d92]" : "text-[#888894]"
+                  }`}>
                     {label}
                   </span>
-                  <span style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "13px",
-                    color: isApplied ? "var(--ink)" : "var(--ink-muted)",
-                  }}>
+                  <span className={`font-mono text-[13px] ${
+                    isApplied ? "text-[#1e1e24]" : "text-[#888894]"
+                  }`}>
                     {fmt(base)} &rarr; {fmt(markedUp)} &rarr;{" "}
-                    <strong style={isApplied ? { fontSize: "15px", color: "var(--blue)" } : {}}>
+                    <strong className={isApplied ? "text-[15px] text-[#1e4d92]" : ""}>
                       {fmt(rounded)}
                     </strong>
                   </span>
                   {isApplied && (
-                    <span style={{
-                      marginLeft: "auto",
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      color: "var(--green)",
-                      background: "var(--green-pale)",
-                      padding: "3px 10px",
-                      borderRadius: "4px",
-                    }}>
+                    <span className="ml-auto text-[11px] font-bold text-[#2e7d32] bg-[#edf7ed] px-2.5 py-[3px] rounded">
                       ✓ Applied
                     </span>
                   )}
@@ -366,32 +329,26 @@ export default function MarkupPage() {
 
       {/* ADD RULE MODAL */}
       {showModal && (
-        <div style={{
-          position: "fixed", inset: 0,
-          background: "rgba(30,30,36,0.4)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          zIndex: 100,
-        }}>
-          <div className="panel" style={{ width: "480px", margin: 0, maxHeight: "90vh", overflowY: "auto" }}>
+        <div className="fixed inset-0 bg-[#1e1e24]/40 flex items-center justify-center z-[100]">
+          <div className="panel w-[480px] m-0 max-h-[90vh] overflow-y-auto">
             <div className="panel-header">
               <div className="panel-title">Add Pricing Rule</div>
               <button
-                className="btn btn-ghost"
-                style={{ padding: "4px 12px", fontSize: "12px" }}
+                className="btn btn-ghost px-3 py-1 text-[12px]"
                 onClick={() => setShowModal(false)}
               >
                 ✕
               </button>
             </div>
-            <form onSubmit={handleSubmit} style={{ padding: "24px", display: "grid", gap: "16px" }}>
+            <form onSubmit={handleSubmit} className="p-6 grid gap-4">
 
               {/* Scope type */}
-              <div style={{ display: "grid", gap: "6px" }}>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--ink-light)" }}>Scope</label>
+              <div className="grid gap-1.5">
+                <label className="text-[12px] font-bold text-[#888894]">Scope</label>
                 <select
                   value={formScopeType}
                   onChange={(e) => setFormScopeType(e.target.value)}
-                  style={{ padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: "5px", fontSize: "13px" }}
+                  className="px-3 py-2 border-[1.5px] border-[#cfccc8] rounded-[5px] text-[13px]"
                 >
                   {SCOPE_TYPES.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -401,8 +358,8 @@ export default function MarkupPage() {
 
               {/* Scope target — hidden for Global */}
               {formScopeType !== "all" && (
-                <div style={{ display: "grid", gap: "6px" }}>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--ink-light)" }}>
+                <div className="grid gap-1.5">
+                  <label className="text-[12px] font-bold text-[#888894]">
                     {formScopeType === "category" ? "Category Name" : formScopeType === "product" ? "Product SKU" : "Supplier Name"}
                   </label>
                   <input
@@ -411,14 +368,14 @@ export default function MarkupPage() {
                     value={formScopeTarget}
                     onChange={(e) => setFormScopeTarget(e.target.value)}
                     placeholder={formScopeType === "category" ? "e.g. T-Shirts" : formScopeType === "product" ? "e.g. PC61" : "e.g. SanMar"}
-                    style={{ padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: "5px", fontSize: "13px" }}
+                    className="px-3 py-2 border-[1.5px] border-[#cfccc8] rounded-[5px] text-[13px]"
                   />
                 </div>
               )}
 
               {/* Markup % */}
-              <div style={{ display: "grid", gap: "6px" }}>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--ink-light)" }}>Markup %</label>
+              <div className="grid gap-1.5">
+                <label className="text-[12px] font-bold text-[#888894]">Markup %</label>
                 <input
                   required
                   type="number"
@@ -427,13 +384,13 @@ export default function MarkupPage() {
                   value={formMarkupPct}
                   onChange={(e) => setFormMarkupPct(e.target.value)}
                   placeholder="e.g. 45"
-                  style={{ padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: "5px", fontSize: "13px" }}
+                  className="px-3 py-2 border-[1.5px] border-[#cfccc8] rounded-[5px] text-[13px]"
                 />
               </div>
 
               {/* Min Margin % */}
-              <div style={{ display: "grid", gap: "6px" }}>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--ink-light)" }}>Min Margin % <span style={{ fontWeight: 400, color: "var(--ink-muted)" }}>(optional)</span></label>
+              <div className="grid gap-1.5">
+                <label className="text-[12px] font-bold text-[#888894]">Min Margin % <span className="font-normal text-[#888894]">(optional)</span></label>
                 <input
                   type="number"
                   step="0.01"
@@ -441,17 +398,17 @@ export default function MarkupPage() {
                   value={formMinMargin}
                   onChange={(e) => setFormMinMargin(e.target.value)}
                   placeholder="e.g. 25"
-                  style={{ padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: "5px", fontSize: "13px" }}
+                  className="px-3 py-2 border-[1.5px] border-[#cfccc8] rounded-[5px] text-[13px]"
                 />
               </div>
 
               {/* Rounding */}
-              <div style={{ display: "grid", gap: "6px" }}>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--ink-light)" }}>Rounding</label>
+              <div className="grid gap-1.5">
+                <label className="text-[12px] font-bold text-[#888894]">Rounding</label>
                 <select
                   value={formRounding}
                   onChange={(e) => setFormRounding(e.target.value)}
-                  style={{ padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: "5px", fontSize: "13px" }}
+                  className="px-3 py-2 border-[1.5px] border-[#cfccc8] rounded-[5px] text-[13px]"
                 >
                   {ROUNDING_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -460,9 +417,9 @@ export default function MarkupPage() {
               </div>
 
               {/* Priority */}
-              <div style={{ display: "grid", gap: "6px" }}>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--ink-light)" }}>
-                  Priority <span style={{ fontWeight: 400, color: "var(--ink-muted)" }}>(higher number = higher priority)</span>
+              <div className="grid gap-1.5">
+                <label className="text-[12px] font-bold text-[#888894]">
+                  Priority <span className="font-normal text-[#888894]">(higher number = higher priority)</span>
                 </label>
                 <input
                   required
@@ -471,15 +428,15 @@ export default function MarkupPage() {
                   step="1"
                   value={formPriority}
                   onChange={(e) => setFormPriority(e.target.value)}
-                  style={{ padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: "5px", fontSize: "13px" }}
+                  className="px-3 py-2 border-[1.5px] border-[#cfccc8] rounded-[5px] text-[13px]"
                 />
               </div>
 
               {formError && (
-                <div style={{ fontSize: "13px", color: "var(--red)" }}>{formError}</div>
+                <div className="text-[13px] text-[#b93232]">{formError}</div>
               )}
 
-              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <div className="flex gap-2.5 justify-end">
                 <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)}>
                   Cancel
                 </button>
