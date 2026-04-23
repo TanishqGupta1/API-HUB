@@ -58,19 +58,31 @@ async def get_supplier(supplier_id: UUID, db: AsyncSession = Depends(get_db)):
     return data
 
 
-@router.put("/{supplier_id}", response_model=SupplierRead)
-async def update_supplier(
-    supplier_id: UUID, body: SupplierCreate, db: AsyncSession = Depends(get_db)
+@router.patch("/{supplier_id}", response_model=SupplierRead)
+async def patch_supplier(
+    supplier_id: UUID, body: dict, db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(Supplier).where(Supplier.id == supplier_id))
     supplier = result.scalar_one_or_none()
     if not supplier:
         raise HTTPException(404, "Supplier not found")
-    for key, val in body.model_dump().items():
-        setattr(supplier, key, val)
+    
+    # Partial update from dict
+    for key, val in body.items():
+        if hasattr(supplier, key):
+            setattr(supplier, key, val)
+            
     await db.commit()
     await db.refresh(supplier)
-    return SupplierRead.model_validate(supplier)
+    
+    count = (
+        await db.execute(
+            select(func.count()).select_from(Product).where(Product.supplier_id == supplier.id)
+        )
+    ).scalar() or 0
+    data = SupplierRead.model_validate(supplier)
+    data.product_count = count
+    return data
 
 
 @router.delete("/{supplier_id}")

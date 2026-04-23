@@ -6,23 +6,82 @@ import { api } from "@/lib/api";
 // --- Components ---
 
 function APIEntry({ method, path, desc, blueprint }: { method: string; path: string; desc: string; blueprint: string }) {
+  const [response, setResponse] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function testEndpoint() {
+    setLoading(true);
+    setResponse(null);
+    try {
+      let finalPath = path;
+
+      // --- Placeholder Resolution ---
+      // If path has {supplier_id}, find the first supplier
+      if (path.includes("{supplier_id}") || path.includes("{id}")) {
+        try {
+          const suppliers = await api<any[]>("/api/suppliers");
+          if (suppliers.length > 0) {
+            const sid = suppliers[0].id;
+            finalPath = path.replace("{supplier_id}", sid).replace("{id}", sid);
+          }
+        } catch (e) {
+          console.warn("Failed to fetch fallback ID for placeholder", e);
+        }
+      }
+
+      const data = await api<any>(finalPath, { method });
+      setResponse(JSON.stringify(data, null, 2));
+    } catch (err: any) {
+      // If it's a 422 or other JSON error, try to stringify the body
+      if (err.body) {
+        setResponse(`Error ${err.status}:\n${JSON.stringify(err.body, null, 2)}`);
+      } else {
+        setResponse(`Error: ${err.message || String(err)}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="api-entry">
       <div className="api-head">
-        <span className={`method m-${method.toLowerCase()}`}>
-          {method.toUpperCase()}
-        </span>
-        <span className="path">
-          {path}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span className={`method m-${method.toLowerCase()}`}>
+            {method.toUpperCase()}
+          </span>
+          <span className="path">
+            {path}
+          </span>
+        </div>
+        <button 
+          onClick={testEndpoint}
+          disabled={loading}
+          className="btn btn-ghost"
+          style={{ 
+            fontSize: "10px", 
+            padding: "4px 10px", 
+            textTransform: "uppercase", 
+            fontWeight: "bold",
+            background: loading ? "var(--paper-warm)" : "transparent",
+            color: "var(--blue)"
+          }}
+        >
+          {loading ? "Calling..." : "Test Endpoint ⚡"}
+        </button>
       </div>
       <div className="api-desc">
         {desc}
       </div>
-      <div className="api-blueprint">
-        {blueprint}
-        <div className="api-blueprint-label">
-          Sample Response
+      <div className="api-blueprint" style={{ position: "relative" }}>
+        <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+          {response || blueprint}
+        </pre>
+        <div className="api-blueprint-label" style={{ 
+          color: response ? "var(--green)" : "var(--ink-faint)",
+          fontWeight: response ? "bold" : "normal"
+        }}>
+          {response ? "Live Response" : "Sample Response"}
         </div>
       </div>
     </div>
@@ -58,14 +117,43 @@ export default function APIRegistryPage() {
 
       <div className="api-list">
         <div>
-          <div className="api-category">System & Health</div>
+          <div className="api-category">Authentication & Security</div>
           <div style={{ display: "grid", gap: "16px" }}>
             <APIEntry 
               method="GET" 
               path="/health" 
-              desc="Service heartbeat and uptime verification." 
-              blueprint='{ "status": "healthy", "service": "api-hub" }' 
+              desc="Public health check. No auth required." 
+              blueprint='{ "status": "ok" }' 
             />
+            <div className="api-entry" style={{ borderLeft: "4px solid var(--red)" }}>
+              <div className="api-desc" style={{ padding: "10px", fontSize: "11px", color: "var(--red)", fontWeight: "bold" }}>
+                🔒 SECURE ENDPOINTS REQUIRE: X-Ingest-Secret header
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="api-category">Supplier Sync (Triggered)</div>
+          <div style={{ display: "grid", gap: "16px" }}>
+            <APIEntry 
+              method="POST" 
+              path="/api/sync/{supplier_id}/products" 
+              desc="Trigger a background product sync. Requires Secret." 
+              blueprint='{ "job_id": "uuid", "status": "queued" }' 
+            />
+            <APIEntry 
+              method="GET" 
+              path="/api/sync/{supplier_id}/status" 
+              desc="Get the status of the latest sync job for a supplier." 
+              blueprint='{ "status": "completed", "records_processed": 1250 }' 
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="api-category">System & Health</div>
+          <div style={{ display: "grid", gap: "16px" }}>
             <APIEntry 
               method="GET" 
               path="/api/stats" 
@@ -84,24 +172,6 @@ export default function APIRegistryPage() {
               desc="List all connected suppliers with product counts." 
               blueprint='[ { "id": "uuid", "name": "SanMar", "protocol": "promostandards", "product_count": 12450 } ]' 
             />
-            <APIEntry 
-              method="POST" 
-              path="/api/suppliers" 
-              desc="Register a new supplier. Encrypts auth_config at rest." 
-              blueprint='Request: { "name": "...", "promostandards_code": "...", "auth_config": {...} }' 
-            />
-          </div>
-        </div>
-
-        <div>
-          <div className="api-category">PromoStandards Directory</div>
-          <div style={{ display: "grid", gap: "16px" }}>
-            <APIEntry 
-              method="GET" 
-              path="/api/ps-directory/companies" 
-              desc="Fetch the global registry of 1800+ PromoStandards members." 
-              blueprint='[ { "Code": "SANMAR", "Name": "SanMar Corporation", "Type": "Supplier" } ]' 
-            />
           </div>
         </div>
 
@@ -110,9 +180,9 @@ export default function APIRegistryPage() {
           <div style={{ display: "grid", gap: "16px" }}>
             <APIEntry 
               method="GET" 
-              path="/api/products" 
+              path="/api/products?limit=10" 
               desc="Search normalized product catalog with pagination." 
-              blueprint='Params: ?search=tee&limit=50&brand=Gildan' 
+              blueprint='{ "total": 32000, "products": [...] }' 
             />
           </div>
         </div>

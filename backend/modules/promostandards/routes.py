@@ -22,6 +22,7 @@ from modules.suppliers.service import get_cached_endpoints
 from modules.sync_jobs.models import SyncJob
 
 from .resolver import resolve_wsdl_url
+from modules.catalog.ingest import require_ingest_secret
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
@@ -30,7 +31,7 @@ router = APIRouter(prefix="/api/sync", tags=["sync"])
 # Helpers
 # ---------------------------------------------------------------------------
 
-async def _load_active_ps_supplier(db: AsyncSession, supplier_id: UUID) -> Supplier:
+async def _load_active_supplier(db: AsyncSession, supplier_id: UUID) -> Supplier:
     supplier = (
         await db.execute(select(Supplier).where(Supplier.id == supplier_id))
     ).scalar_one_or_none()
@@ -38,18 +39,6 @@ async def _load_active_ps_supplier(db: AsyncSession, supplier_id: UUID) -> Suppl
         raise HTTPException(404, "Supplier not found")
     if not supplier.is_active:
         raise HTTPException(409, f"Supplier '{supplier.name}' is not active")
-    # Repo uses "soap" for PS-compliant SOAP suppliers; V1 plan also references
-    # "promostandards" — accept either so this works across naming conventions.
-    if supplier.protocol not in ("soap", "promostandards"):
-        raise HTTPException(
-            400,
-            f"Supplier '{supplier.name}' uses protocol '{supplier.protocol}', "
-            "which is not PromoStandards-compatible",
-        )
-    if not supplier.promostandards_code:
-        raise HTTPException(
-            400, f"Supplier '{supplier.name}' has no promostandards_code configured"
-        )
     return supplier
 
 
@@ -311,44 +300,49 @@ async def _run_pricing_sync(
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/{supplier_id}/products", status_code=202)
+@router.post("/{supplier_id}/products", status_code=202, dependencies=[Depends(require_ingest_secret)])
 async def trigger_product_sync(
     supplier_id: UUID,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    supplier = await _load_active_ps_supplier(db, supplier_id)
+    supplier = await _load_active_supplier(db, supplier_id)
     await _ensure_no_active_job(db, supplier_id, "full_sync")
-    endpoints = await get_cached_endpoints(db, supplier_id)
 
-    wsdl_product = resolve_wsdl_url(endpoints, "product_data")
-    if not wsdl_product:
-        raise HTTPException(
-            502, "Product Data WSDL not found in supplier endpoint cache"
+    if supplier.protocol in ("soap", "promostandards"):
+        endpoints = await get_cached_endpoints(db, supplier_id)
+        wsdl_product = resolve_wsdl_url(endpoints, "product_data")
+        if not wsdl_product:
+            raise HTTPException(502, "Product Data WSDL not found in supplier endpoint cache")
+        
+        job = await _create_job(db, supplier, job_type="full_sync")
+        background_tasks.add_task(
+            _run_full_product_sync,
+            job.id,
+            supplier.id,
+            dict(supplier.auth_config or {}),
+            wsdl_product,
+            resolve_wsdl_url(endpoints, "inventory"),
+            resolve_wsdl_url(endpoints, "ppc"),
+            resolve_wsdl_url(endpoints, "media"),
         )
+    elif supplier.protocol in ("rest", "rest_hmac", "ops_graphql"):
+        # Placeholder for REST/GraphQL background task — wiring B2/G2 requirement
+        job = await _create_job(db, supplier, job_type="full_sync")
+        # background_tasks.add_task(_run_rest_sync, job.id, supplier)
+    else:
+        raise HTTPException(400, f"Sync not implemented for protocol '{supplier.protocol}'")
 
-    job = await _create_job(db, supplier, job_type="full_sync")
-
-    background_tasks.add_task(
-        _run_full_product_sync,
-        job.id,
-        supplier.id,
-        dict(supplier.auth_config or {}),
-        wsdl_product,
-        resolve_wsdl_url(endpoints, "inventory"),
-        resolve_wsdl_url(endpoints, "ppc"),
-        resolve_wsdl_url(endpoints, "media"),
-    )
     return {"job_id": str(job.id), "status": job.status, "job_type": job.job_type}
 
 
-@router.post("/{supplier_id}/inventory", status_code=202)
+@router.post("/{supplier_id}/inventory", status_code=202, dependencies=[Depends(require_ingest_secret)])
 async def trigger_inventory_sync(
     supplier_id: UUID,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    supplier = await _load_active_ps_supplier(db, supplier_id)
+    supplier = await _load_active_supplier(db, supplier_id)
     endpoints = await get_cached_endpoints(db, supplier_id)
 
     await _ensure_no_active_job(db, supplier_id, "inventory")
@@ -372,13 +366,13 @@ async def trigger_inventory_sync(
     return {"job_id": str(job.id), "status": job.status, "job_type": job.job_type}
 
 
-@router.post("/{supplier_id}/pricing", status_code=202)
+@router.post("/{supplier_id}/pricing", status_code=202, dependencies=[Depends(require_ingest_secret)])
 async def trigger_pricing_sync(
     supplier_id: UUID,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    supplier = await _load_active_ps_supplier(db, supplier_id)
+    supplier = await _load_active_supplier(db, supplier_id)
     endpoints = await get_cached_endpoints(db, supplier_id)
 
     await _ensure_no_active_job(db, supplier_id, "pricing")
