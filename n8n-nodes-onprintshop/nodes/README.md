@@ -1,18 +1,15 @@
 # OnPrintShop Node
 
-Custom n8n node for integrating with OnPrintShop printing services API.
+Custom n8n node for integrating with the OnPrintShop **GraphQL API**.
 
 ## Features
 
-- **Submit Print Jobs**: Upload and submit files for printing
-- **Track Orders**: Monitor order status and progress
-- **Product Catalog**: Manage printing products and options
-- **Payment Processing**: Handle payment workflows
-- **Customer Management**: Manage customer accounts
+- **Query** customers, orders, products, statuses, quotes, stores, departments, batches
+- **Mutate** orders/products/stocks and admin catalog entities (where enabled)
 
 ## Files
 
-- `OnPrintShop.node.ts` - Main node implementation (6,799 lines)
+- `OnPrintShop.node.ts` - Main node implementation
 - `onprintshop.svg` - Custom branded icon
 
 ## Credentials Required
@@ -20,29 +17,26 @@ Custom n8n node for integrating with OnPrintShop printing services API.
 Uses `OnPrintShopApi` credentials:
 - **Client ID**: From OnPrintShop developer portal
 - **Client Secret**: OAuth secret key
-- **Environment**: Production or Sandbox
+- **Base URL**: Your OPS API base URL
+- **Token URL**: OAuth2 token endpoint
 
 ## API Documentation
 
-https://documenter.getpostman.com/view/33263100/2sA3kVmMgH
+https://documenter.getpostman.com/view/33263100/2sBXijHWys
 
 ## Usage Example
 
 ```
 1. Add OnPrintShop node to workflow
 2. Configure authentication
-3. Select operation (Submit Job, Track Order, etc.)
+3. Select Resource + Operation (Query or Mutation)
 4. Set parameters
 5. Execute workflow
 ```
 
 ## Operations
 
-- Submit Print Job
-- Check Order Status
-- List Products
-- Process Payment
-- Manage Customer Accounts
-- Upload Files
-
+- Queries: Customer/Order/Product/Status/Quote/Store/Department/etc.
+- Mutations: Update Order Status, Set Shipment, Set Product catalog entities, Update Product Stock, etc.
+- Some operations are marked Staging/Beta/Test in the Postman collection and may be disabled by OPS support on your instance.
 

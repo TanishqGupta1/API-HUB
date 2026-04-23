@@ -114,6 +114,39 @@ Workflow URLs use `http://host.docker.internal:8000` because FastAPI runs on the
 - The workflow pushes to a *single* OPS credential; it does not dynamically select credentials per customer.
 - It uses default `category_id=0` and `size_id=0`. If your OPS instance requires valid IDs, update the `Build OPS Inputs` code node accordingly.
 
+---
+
+## `ops-master-options-pull.json` — Pull master options catalog from OnPrintShop
+
+**What it does**
+
+1. Calls the OnPrintShop custom node `getManyMasterOptions` operation (paginated, all master-option fields + nested `attributes`).
+2. Normalizes each record into the hub's `MasterOptionIngest` contract (casts IDs to int, coerces pricing fields, unwraps the `attributes[]` array).
+3. POSTs the batch to `/api/ingest/master-options` with the `X-Ingest-Secret` header.
+4. On HTTP error, routes the failure through a `Format Error` code node for downstream logging.
+
+**Prerequisites**
+
+- FastAPI running on host :8000 with the master-options ingest endpoint live.
+- n8n running with the `OnPrintShop` credential configured (same cred type used by `vg-ops-pull`).
+- `INGEST_SHARED_SECRET` exposed to the n8n container.
+
+**Import**
+
+```bash
+docker cp n8n-workflows/ops-master-options-pull.json api-hub-n8n-1:/tmp/mo.json
+docker exec api-hub-n8n-1 n8n import:workflow --input=/tmp/mo.json
+```
+
+## Workflow index
+
+| File | Schedule | Flow |
+|---|---|---|
+| `vg-ops-pull.json` | Manual / Daily | OPS categories + products → hub `/api/ingest/{sid}/*` |
+| `sanmar-sftp-pull.json` | Daily | SanMar SFTP → hub `/api/ingest/{sid}/*` |
+| `ops-push.json` | Webhook | Hub `/api/push/...` → OPS `setProduct` + `setProductPrice` |
+| `ops-master-options-pull.json` | Daily | OPS `getManyMasterOptions` → hub `/api/ingest/master-options` |
+
 ## Next additions (not in v1)
 
 - `Get Stock` loop per product → POST `/api/ingest/{sid}/inventory`.

@@ -153,14 +153,35 @@ class PromoStandardsClient:
         return ids
 
     async def get_product(
-        self, product_id: str, ws_version: str = "2.0.0"
+        self,
+        product_id: str,
+        ws_version: str = "2.0.0",
+        localization_country: str = "us",
+        localization_language: str = "en",
     ) -> PSProductData | None:
-        return await asyncio.to_thread(self._sync_get_product, product_id, ws_version)
+        return await asyncio.to_thread(
+            self._sync_get_product,
+            product_id,
+            ws_version,
+            localization_country,
+            localization_language,
+        )
 
-    def _sync_get_product(self, product_id: str, ws_version: str) -> PSProductData | None:
+    def _sync_get_product(
+        self,
+        product_id: str,
+        ws_version: str,
+        localization_country: str,
+        localization_language: str,
+    ) -> PSProductData | None:
         svc = self._get_service()
         try:
-            response = svc.getProduct(productId=product_id, **self._auth(ws_version))
+            response = svc.getProduct(
+                productId=product_id,
+                localizationCountry=localization_country,
+                localizationLanguage=localization_language,
+                **self._auth(ws_version),
+            )
         except Exception as exc:  # noqa: BLE001 — defensive: per-product failure isolation
             log.warning("getProduct(%s) failed: %s", product_id, exc)
             return None
@@ -171,6 +192,8 @@ class PromoStandardsClient:
         product_ids: list[str],
         batch_size: int = 50,
         ws_version: str = "2.0.0",
+        localization_country: str = "us",
+        localization_language: str = "en",
     ) -> list[PSProductData]:
         """Fetch products in batches. Batch size is advisory — PS getProduct is
         one-at-a-time, so the batches only govern how often we yield to the
@@ -178,18 +201,33 @@ class PromoStandardsClient:
         out: list[PSProductData] = []
         for i in range(0, len(product_ids), batch_size):
             batch = product_ids[i : i + batch_size]
-            results = await asyncio.to_thread(self._sync_fetch_batch, batch, ws_version)
+            results = await asyncio.to_thread(
+                self._sync_fetch_batch,
+                batch,
+                ws_version,
+                localization_country,
+                localization_language,
+            )
             out.extend(results)
         return out
 
     def _sync_fetch_batch(
-        self, product_ids: list[str], ws_version: str
+        self,
+        product_ids: list[str],
+        ws_version: str,
+        localization_country: str,
+        localization_language: str,
     ) -> list[PSProductData]:
         svc = self._get_service()
         out: list[PSProductData] = []
         for pid in product_ids:
             try:
-                response = svc.getProduct(productId=pid, **self._auth(ws_version))
+                response = svc.getProduct(
+                    productId=pid,
+                    localizationCountry=localization_country,
+                    localizationLanguage=localization_language,
+                    **self._auth(ws_version),
+                )
             except Exception as exc:  # noqa: BLE001
                 log.warning("getProduct(%s) failed: %s", pid, exc)
                 continue

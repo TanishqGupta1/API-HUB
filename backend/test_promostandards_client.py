@@ -304,3 +304,41 @@ async def test_media_parses_content():
     assert media[0].media_type == "front"
     assert media[0].color_name == "Navy"
     assert media[1].product_id == "PC61"  # falls back to request productId
+
+
+# ---------------------------------------------------------------------------
+# Task 1: localization params on getProduct
+# ---------------------------------------------------------------------------
+
+async def test_get_product_sends_localization_defaults():
+    """SanMar requires localizationCountry + localizationLanguage on getProduct."""
+    svc = FakeService()
+    svc.responses[("getProduct", "PC61")] = NS(
+        Product=NS(productId="PC61", productName="Tee")
+    )
+    await _client(svc).get_product("PC61")
+    _, kwargs = svc.calls[-1]
+    assert kwargs["localizationCountry"] == "us"
+    assert kwargs["localizationLanguage"] == "en"
+
+
+async def test_get_product_accepts_explicit_locale():
+    svc = FakeService()
+    svc.responses[("getProduct", "PC61")] = NS(
+        Product=NS(productId="PC61")
+    )
+    await _client(svc).get_product(
+        "PC61", localization_country="ca", localization_language="fr"
+    )
+    _, kwargs = svc.calls[-1]
+    assert kwargs["localizationCountry"] == "ca"
+    assert kwargs["localizationLanguage"] == "fr"
+
+
+async def test_get_products_batch_propagates_locale():
+    svc = FakeService()
+    svc.responses["getProduct"] = NS(Product=NS(productId="X"))
+    await _client(svc).get_products_batch(["A", "B"])
+    for _, kwargs in svc.calls:
+        assert kwargs["localizationCountry"] == "us"
+        assert kwargs["localizationLanguage"] == "en"
