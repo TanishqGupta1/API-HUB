@@ -515,3 +515,46 @@ async def test_get_media_accepts_document_media_type():
     await _client(svc).get_media(["PC61"], media_type="Document")
     _, kwargs = svc.calls[-1]
     assert kwargs["mediaType"] == "Document"
+
+
+# ---------------------------------------------------------------------------
+# Task 5: Pricing — required SanMar params
+# ---------------------------------------------------------------------------
+
+async def test_get_pricing_sends_required_sanmar_params():
+    """SanMar PPC requires currency/fobId/priceType/localization/configurationType."""
+    svc = FakeService()
+    svc.responses[("getConfigurationAndPricing", "K500")] = NS(
+        Configuration=NS(PartArray=None)
+    )
+    await _client(svc).get_pricing(["K500"])
+    _, kwargs = svc.calls[-1]
+    assert kwargs["currency"] == "USD"
+    assert kwargs["fobId"] == "1"
+    assert kwargs["priceType"] == "Net"
+    assert kwargs["localizationCountry"] == "US"
+    assert kwargs["localizationLanguage"] == "EN"
+    assert kwargs["configurationType"] == "Blank"
+
+
+async def test_get_pricing_accepts_explicit_overrides():
+    svc = FakeService()
+    svc.responses[("getConfigurationAndPricing", "K500")] = NS(
+        Configuration=NS(PartArray=None)
+    )
+    await _client(svc).get_pricing(
+        ["K500"],
+        currency="CAD",
+        fob_id="6",
+        price_type="List",
+        localization_country="CA",
+        localization_language="FR",
+        configuration_type="Configured",
+    )
+    _, kwargs = svc.calls[-1]
+    assert kwargs["currency"] == "CAD"
+    assert kwargs["fobId"] == "6"
+    assert kwargs["priceType"] == "List"
+    assert kwargs["localizationCountry"] == "CA"
+    assert kwargs["localizationLanguage"] == "FR"
+    assert kwargs["configurationType"] == "Configured"
