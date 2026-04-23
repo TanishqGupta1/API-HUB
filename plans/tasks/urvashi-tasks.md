@@ -9,7 +9,7 @@
 
 ## Overview
 
-9 tasks. Tasks 1, 6, 9 are already done — verified against codebase. Real work starts at Task 2 (small fix), then Tasks 3–5, 7–8. Do in order — Task 3 depends on Task 2.
+9 tasks. Tasks 1, 6, 9 were already done against the codebase. Tasks 2, 3, 4, 5, 7 are now complete (commits merged or PRs open). Only Task 8 remains — and it needs a small backend change (see Step 3 under Task 8).
 
 ---
 
@@ -19,7 +19,13 @@
 
 ---
 
-## Task 2 — Add `product_id` Filter to Push-Log GET (B1 fix)
+## ✅ Task 2 — Add `product_id` Filter to Push-Log GET (B1 fix) — DONE
+
+Branch: `urvashi-push-log-product-filter` — implementation adds both `product_id` and `customer_id` filters, plus a `Query(le=200)` cap from the QA audit. Merge conflict with main resolved.
+
+---
+
+<details><summary>Original spec (for reference)</summary>
 
 **File:** `backend/modules/push_log/routes.py`  
 **Effort:** XS  
@@ -83,9 +89,17 @@ curl -s "http://localhost:8000/api/push-log?product_id=$PROD&limit=5" | python3 
 
 **Acceptance:** `GET /api/push-log?product_id=<uuid>` returns only logs for that product.
 
+</details>
+
 ---
 
-## Task 3 — `push_candidates` Module (B2)
+## ✅ Task 3 — `push_candidates` Module (B2) — DONE
+
+Merged to main (PR #36, commit `8b356c1`). `GET /api/push/candidates/{customer_id}` live.
+
+---
+
+<details><summary>Original spec (for reference)</summary>
 
 **Files to create:**
 - `backend/modules/push_candidates/__init__.py` — empty
@@ -205,9 +219,17 @@ curl -s "http://localhost:8000/api/push/candidates/$CUST?limit=5" | python3 -m j
 
 **Acceptance:** Returns list of `{product_id, supplier_sku, product_name, ops_product_id}`. Empty list if no synced products — not a 500.
 
+</details>
+
 ---
 
-## Task 4 — Variant Bundle Endpoint for OPS (B4)
+## ✅ Task 4 — Variant Bundle Endpoint for OPS (B4) — DONE
+
+Merged to main (PR #37, commit `2657e29`). `GET /api/push/{customer_id}/product/{product_id}/ops-variants` live; ingest-secret protected.
+
+---
+
+<details><summary>Original spec (for reference)</summary>
 
 **Files:**
 - `backend/modules/markup/schemas.py` — append
@@ -294,9 +316,17 @@ curl -s -H "X-Ingest-Secret: $(grep INGEST_SHARED_SECRET .env | cut -d= -f2)" \
 
 **Acceptance:** Returns `{sizes: [...], prices: [...]}` with same length. Each size has `size_name`, `color_name`, `products_sku`. Each price has `price` (with markup applied).
 
+</details>
+
 ---
 
-## Task 5 — Category OPS Input Endpoint (B5)
+## ✅ Task 5 — Category OPS Input Endpoint (B5) — DONE
+
+Merged to main (PR #38, commit `4ab2753`). `GET /api/categories/{category_id}/ops-input` live; falls back to a name-slug when `external_id` is missing.
+
+---
+
+<details><summary>Original spec (for reference)</summary>
 
 **Files:**
 - `backend/modules/catalog/schemas.py` — append
@@ -336,6 +366,8 @@ curl -s "http://localhost:8000/api/categories/$CAT/ops-input" | python3 -m json.
 
 **Acceptance:** Returns `{category_name, parent_id: -1, status: 1, category_internal_name}`. 404 for unknown ID.
 
+</details>
+
 ---
 
 ## ✅ Task 6 — Image Pipeline Cache Header — DONE
@@ -344,7 +376,19 @@ curl -s "http://localhost:8000/api/categories/$CAT/ops-input" | python3 -m json.
 
 ---
 
-## Task 7 — Wire S&S + 4Over Protocols into Sync Dispatch (Gap G2)
+## ✅ Task 7 — Wire S&S + 4Over Protocols into Sync Dispatch (Gap G2) — DONE
+
+Branch: `urvashi-task7-rest-sync-dispatch` (commit `366322b`) — `POST /api/sync/{supplier_id}/products/rest` dispatches REST/HMAC suppliers through the existing SyncJob helpers. Verified against S&S supplier in local dev: 202 + job_id → background worker flips status to `failed` with a readable error_log when creds are missing (no 500).
+
+Two spec deviations forced by reality (the spec warned names might differ):
+- Normalizers: `ss_to_ps_format` (not `ss_to_ps_products`) and `normalize_4over` (not `fourover_to_ps_products`).
+- `upsert_products` lives in `modules.promostandards.normalizer`, not `modules.catalog.ingest`.
+
+Also reused existing `_create_job`/`_ensure_no_active_job`/`_mark_job_running`/`_finish_job` helpers for consistency with the SOAP routes.
+
+---
+
+<details><summary>Original spec (for reference)</summary>
 
 **File:** `backend/modules/promostandards/routes.py`
 
@@ -439,12 +483,17 @@ async def _run_rest_sync(supplier_id: UUID, job_id: UUID) -> None:
 
 **Acceptance:** `POST /api/sync/{ss_supplier_id}/products/rest` returns 202 and a job_id. `GET /api/sync-jobs/{job_id}` eventually shows `status: "completed"`. No 500 for S&S suppliers.
 
+</details>
+
 ---
 
 ## Task 8 — Fix Supplier Form Protocol for SanMar
 
-**File:** `frontend/src/components/suppliers/reveal-form.tsx`  
-**Effort:** XS
+**Files:**
+- `frontend/src/components/suppliers/reveal-form.tsx` — MODIFY (3 places)
+- `backend/modules/suppliers/schemas.py` — MODIFY (1 line)
+
+**Effort:** XS (frontend) + XS (backend)
 
 `POPULAR_SUPPLIERS` (line 13–18) lists SanMar with `type: "ps"`. When clicked, `handleActivate` (line 65) resolves `protocol = "promostandards"` — wrong. SanMar uses SFTP.
 
@@ -465,7 +514,22 @@ const protocol = isCustom
   : (popularEntry?.type === "sftp" ? "sftp" : "promostandards");
 ```
 
-**Acceptance:** Click SanMar → Activate → check DB: `GET /api/suppliers` returns SanMar row with `protocol: "sftp"`.
+**Step 3** — update the Popular Suppliers click handler (around line 158). Currently the `if (s.type === "ps")` branch is the only path that routes through the PS flow; any other `type` falls into a 4Over-specific ELSE branch (hardcoded `customUrl="https://api.4over.com"`, `customType="Secure API (signed requests)"`). Without this fix, clicking SanMar would populate it as a 4Over HMAC custom supplier. Change to:
+```ts
+if (s.type === "ps" || s.type === "sftp") {
+```
+
+**Step 4 — backend Literal.** `backend/modules/suppliers/schemas.py:7` currently reads:
+```python
+Protocol = Literal["soap", "rest", "hmac", "ops_graphql", "promostandards"]
+```
+The frontend will POST `protocol: "sftp"`, which gets rejected with 422 until this Literal accepts it. Update to:
+```python
+Protocol = Literal["soap", "rest", "hmac", "ops_graphql", "promostandards", "sftp"]
+```
+This is strictly additive — no migration needed; the column is VARCHAR per the project's "no PG ENUMs" rule.
+
+**Acceptance:** Click SanMar → Activate → `POST /api/suppliers` returns 201 (not 422) → `GET /api/suppliers` shows SanMar row with `protocol: "sftp"`.
 
 ---
 
@@ -488,3 +552,4 @@ const protocol = isCustom
 - `backend/modules/catalog/routes.py` — MODIFY (Task 5)
 - `backend/modules/promostandards/routes.py` — MODIFY (Task 7)
 - `frontend/src/components/suppliers/reveal-form.tsx` — MODIFY (Task 8)
+- `backend/modules/suppliers/schemas.py` — MODIFY (Task 8, add `"sftp"` to Protocol Literal)
