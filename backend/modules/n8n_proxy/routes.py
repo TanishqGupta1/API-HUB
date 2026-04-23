@@ -47,9 +47,14 @@ def _client() -> httpx.AsyncClient:
 @router.get("/workflows")
 async def list_workflows():
     c = _client()
-    r = await c.get("/api/v1/workflows", params={"limit": 50})
-    r.raise_for_status()
-    body = r.json()
+    try:
+        r = await c.get("/api/v1/workflows", params={"limit": 50})
+        r.raise_for_status()
+        body = r.json()
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+        # Fallback for dashboard stability during n8n boot-up
+        print(f"n8n proxy warning: {str(e)}")
+        return []
 
     out = []
     for w in body.get("data", []):
@@ -79,11 +84,14 @@ async def list_workflows():
 @router.get("/workflows/{workflow_id}")
 async def get_workflow(workflow_id: str):
     c = _client()
-    r = await c.get(f"/api/v1/workflows/{workflow_id}")
-    if r.status_code == 404:
-        raise HTTPException(404, "Workflow not found")
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = await c.get(f"/api/v1/workflows/{workflow_id}")
+        if r.status_code == 404:
+            raise HTTPException(404, "Workflow not found")
+        r.raise_for_status()
+        return r.json()
+    except (httpx.ConnectError, httpx.TimeoutException):
+        raise HTTPException(503, "n8n service is currently unreachable")
 
 
 @router.get("/executions")
@@ -92,9 +100,13 @@ async def list_executions(workflow_id: Optional[str] = None, limit: int = 20):
     if workflow_id:
         params["workflowId"] = workflow_id
     c = _client()
-    r = await c.get("/api/v1/executions", params=params)
-    r.raise_for_status()
-    body = r.json()
+    try:
+        r = await c.get("/api/v1/executions", params=params)
+        r.raise_for_status()
+        body = r.json()
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+        print(f"n8n proxy warning (executions): {str(e)}")
+        return []
 
     return [
         {
@@ -115,11 +127,14 @@ async def trigger_workflow_by_id(workflow_id: str, params: dict | None = None) -
     from other modules without constructing a Request object."""
     params = params or {}
     c = _client()
-    r = await c.get(f"/api/v1/workflows/{workflow_id}")
-    if r.status_code == 404:
-        raise HTTPException(404, "Workflow not found")
-    r.raise_for_status()
-    w = r.json()
+    try:
+        r = await c.get(f"/api/v1/workflows/{workflow_id}")
+        if r.status_code == 404:
+            raise HTTPException(404, "Workflow not found")
+        r.raise_for_status()
+        w = r.json()
+    except (httpx.ConnectError, httpx.TimeoutException):
+        raise HTTPException(503, "n8n service is currently unreachable")
 
     if not w.get("active"):
         raise HTTPException(409, f"Workflow '{w.get('name')}' is not active")

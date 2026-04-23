@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 
 type Stats = {
@@ -158,12 +159,13 @@ export default function Dashboard() {
               const lastIso = last?.finished_at ?? last?.started_at ?? null;
               const h = healthFor(lastIso);
               return (
-                <div
+                <Link
                   key={s.id}
-                  className="border border-[#cfccc8] rounded-lg p-3 bg-white"
+                  href={`/mappings/${s.id}`}
+                  className="border border-[#cfccc8] rounded-lg p-3 bg-white hover:border-[var(--blue)] hover:shadow-sm transition-all block group"
                 >
                   <div className="flex justify-between items-start mb-2 gap-2">
-                    <div className="font-semibold text-[13px] text-[#1e1e24]">
+                    <div className="font-semibold text-[13px] text-[#1e1e24] group-hover:text-[var(--blue)] transition-colors">
                       {s.name}
                     </div>
                     <span
@@ -182,7 +184,7 @@ export default function Dashboard() {
                   <div className="text-[11px] text-[#888894] font-mono">
                     Products: {s.product_count}
                   </div>
-                </div>
+                </Link>
               );
             })
           )}

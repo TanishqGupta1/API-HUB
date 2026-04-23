@@ -144,19 +144,18 @@ export default function WorkflowsPage() {
       const ws = await api<WorkflowSummary[]>("/api/n8n/workflows");
       setWorkflows(ws);
 
+      // Fetch latest 50 executions across all workflows in one call (Performance fix)
+      const allExecs = await api<ExecutionSummary[]>("/api/n8n/executions?limit=50");
       const execMap: Record<string, ExecutionSummary[]> = {};
-      await Promise.all(
-        ws.map(async (w) => {
-          try {
-            const e = await api<ExecutionSummary[]>(
-              `/api/n8n/executions?workflow_id=${w.id}&limit=5`
-            );
-            execMap[w.id] = e;
-          } catch {
-            execMap[w.id] = [];
-          }
-        })
-      );
+      
+      // Group them by workflowId
+      allExecs.forEach(e => {
+        if (!execMap[e.workflowId]) execMap[e.workflowId] = [];
+        if (execMap[e.workflowId].length < 5) {
+          execMap[e.workflowId].push(e);
+        }
+      });
+      
       setExecutions(execMap);
       setError(null);
     } catch (err) {

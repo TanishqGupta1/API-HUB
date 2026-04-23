@@ -443,6 +443,7 @@ async def test_get_products_batch_propagates_locale():
         assert kwargs["localizationLanguage"] == "en"
 
 
+
 # ---------------------------------------------------------------------------
 # Task 2: product parser — SanMar <category> field + multi-description join
 # ---------------------------------------------------------------------------
@@ -558,3 +559,5 @@ async def test_get_pricing_accepts_explicit_overrides():
     assert kwargs["localizationCountry"] == "CA"
     assert kwargs["localizationLanguage"] == "FR"
     assert kwargs["configurationType"] == "Configured"
+
+
