@@ -3,6 +3,7 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import type { AttributeConfigItem } from "@/lib/types";
+import { humanizeAttributeName } from "@/lib/humanize-options";
 
 interface Props {
   attr: AttributeConfigItem;
@@ -16,7 +17,9 @@ export function AttributeRow({ attr, onChange }: Props) {
         checked={attr.enabled}
         onCheckedChange={(v) => onChange({ enabled: Boolean(v) })}
       />
-      <div className="flex-1 text-sm text-[#1e1e24] truncate">{attr.title}</div>
+      <div className="flex-1 text-sm text-[#1e1e24] truncate">
+        {humanizeAttributeName(attr.title, attr.attribute_key)}
+      </div>
       <div className="flex items-center gap-1 text-xs text-[#888894]">
         <span>$</span>
         <Input

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { MasterOption, MasterOptionsSyncStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { humanizeOptionName, humanizeAttributeName } from "@/lib/humanize-options";
 
 export default function MasterOptionsCatalogPage() {
   const [options, setOptions] = useState<MasterOption[]>([]);
@@ -78,7 +79,7 @@ export default function MasterOptionsCatalogPage() {
             <div key={mo.id}
                  className="bg-white rounded-[10px] border border-[#cfccc8] shadow-[4px_5px_0_rgba(30,77,146,0.08)] p-5">
               <div className="flex items-center justify-between mb-3">
-                <div className="font-bold text-[#1e4d92]">{mo.title}</div>
+                <div className="font-bold text-[#1e4d92]">{humanizeOptionName(mo.title, mo.option_key)}</div>
                 <span className="text-[10px] font-mono text-[#888894]">#{mo.ops_master_option_id}</span>
               </div>
               <div className="text-xs text-[#888894] mb-3">
@@ -87,7 +88,7 @@ export default function MasterOptionsCatalogPage() {
               <div className="flex flex-wrap gap-1">
                 {mo.attributes.slice(0, 6).map((a) => (
                   <span key={a.id} className="text-[10px] px-2 py-0.5 bg-[#ebe8e3] rounded">
-                    {a.title}
+                    {humanizeAttributeName(a.title, (a as any).attribute_key ?? null)}
                   </span>
                 ))}
                 {mo.attributes.length > 6 && (

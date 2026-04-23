@@ -70,6 +70,7 @@ async def ingest_master_options(
                     title=attr.title,
                     sort_order=attr.sort_order,
                     default_price=attr.default_price,
+                    raw_json=attr.raw_json,
                 )
             )
 

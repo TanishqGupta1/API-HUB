@@ -249,6 +249,7 @@ export interface AttributeConfigItem {
   attribute_id: string | null;
   ops_attribute_id: number;
   title: string;
+  attribute_key: string | null;
   enabled: boolean;
   price: number;
   numeric_value: number;
@@ -259,6 +260,7 @@ export interface OptionConfigItem {
   master_option_id: string;
   ops_master_option_id: number;
   title: string;
+  option_key: string | null;
   options_type: string | null;
   master_option_tag: string | null;
   enabled: boolean;

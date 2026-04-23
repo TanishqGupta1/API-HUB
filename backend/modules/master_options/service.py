@@ -51,11 +51,15 @@ async def load_product_config(db: AsyncSession, product_id: UUID) -> list[Option
         attrs: list[AttributeConfigItem] = []
         for ma in sorted(mo.attributes, key=lambda a: a.sort_order):
             poa = po_attrs_by_ops_id.get(ma.ops_attribute_id)
+            # raw_json (for master attributes pulled from OPS) may carry attribute_key
+            raw = ma.raw_json or {}
+            attr_key = raw.get("attribute_key") if isinstance(raw, dict) else None
             attrs.append(
                 AttributeConfigItem(
                     attribute_id=poa.id if poa else None,
                     ops_attribute_id=ma.ops_attribute_id,
                     title=ma.title,
+                    attribute_key=attr_key,
                     enabled=poa.enabled if poa else False,
                     price=poa.price if (poa and poa.price is not None) else (ma.default_price or 0),
                     numeric_value=poa.numeric_value if (poa and poa.numeric_value is not None) else 0,
@@ -68,6 +72,7 @@ async def load_product_config(db: AsyncSession, product_id: UUID) -> list[Option
                 master_option_id=mo.id,
                 ops_master_option_id=mo.ops_master_option_id,
                 title=mo.title,
+                option_key=mo.option_key,
                 options_type=mo.options_type,
                 master_option_tag=mo.master_option_tag,
                 enabled=po.enabled if po else False,

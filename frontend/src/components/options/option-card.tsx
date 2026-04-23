@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { AttributeRow } from "./attribute-row";
 import type { OptionConfigItem, AttributeConfigItem } from "@/lib/types";
+import { humanizeOptionName } from "@/lib/humanize-options";
 
 interface Props {
   card: OptionConfigItem;
@@ -35,7 +36,7 @@ export function OptionCard({ card, dirty, onChange, onSave, onDelete }: Props) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#cfccc8] bg-[#ebe8e3] rounded-t-[10px]">
         <div className="font-bold text-[#1e4d92] text-sm flex items-center gap-2">
           <span className="w-1 h-4 bg-[#1e4d92]" />
-          {card.title}
+          {humanizeOptionName(card.title, card.option_key)}
         </div>
         <Switch
           checked={card.enabled}

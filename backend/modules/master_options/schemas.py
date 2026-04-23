@@ -40,6 +40,7 @@ class MasterOptionAttributeIngest(BaseModel):
     title: str
     sort_order: int = 0
     default_price: Optional[Decimal] = None
+    raw_json: Optional[dict] = None
 
 
 class MasterOptionIngest(BaseModel):
@@ -62,6 +63,7 @@ class AttributeConfigItem(BaseModel):
     attribute_id: Optional[UUID] = None
     ops_attribute_id: int
     title: str
+    attribute_key: Optional[str] = None
     enabled: bool = False
     price: Decimal = Decimal("0")
     numeric_value: Decimal = Decimal("0")
@@ -72,6 +74,7 @@ class OptionConfigItem(BaseModel):
     master_option_id: UUID
     ops_master_option_id: int
     title: str
+    option_key: Optional[str] = None
     options_type: Optional[str] = None
     master_option_tag: Optional[str] = None
     enabled: bool = False
