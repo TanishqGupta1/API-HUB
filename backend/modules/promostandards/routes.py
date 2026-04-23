@@ -183,6 +183,58 @@ async def _run_full_product_sync(
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
+async def _run_rest_sync(
+    job_id: UUID,
+    supplier_id: UUID,
+    protocol: str,
+    base_url: str,
+    auth_config: dict,
+    field_mappings: dict | None,
+) -> None:
+    """Background worker for REST/HMAC suppliers (S&S, 4Over)."""
+    async with async_session() as session:
+        await _mark_job_running(session, job_id)
+
+        try:
+            from modules.rest_connector.client import RESTConnectorClient
+            from modules.rest_connector.ss_normalizer import ss_to_ps_format
+            from modules.rest_connector.fourover_client import FourOverClient
+            from modules.rest_connector.fourover_normalizer import normalize_4over
+            from .normalizer import upsert_products
+        except ImportError as exc:
+            await _finish_job(
+                session,
+                job_id,
+                status="failed",
+                error=f"REST adapter not yet deployed: {exc}",
+            )
+            return
+
+        try:
+            if protocol == "rest":
+                client = RESTConnectorClient(base_url=base_url, auth_config=auth_config)
+                raw = await client.get_products()
+                products, inventory, pricing, media = ss_to_ps_format(raw)
+            else:  # "rest_hmac"
+                client = FourOverClient(base_url=base_url, auth_config=auth_config)
+                raw = await client.get_products()
+                mapping = (field_mappings or {}).get("mapping") or {}
+                products = normalize_4over(raw, mapping)
+                inventory, pricing, media = [], [], []
+
+            await upsert_products(
+                session, supplier_id, products, inventory, pricing, media
+            )
+            await _finish_job(
+                session,
+                job_id,
+                status="completed",
+                records_processed=len(products),
+            )
+        except Exception as exc:
+            await _finish_job(session, job_id, status="failed", error=str(exc))
+
+
 async def _run_inventory_sync(
     job_id: UUID,
     supplier_id: UUID,
@@ -346,6 +398,50 @@ async def trigger_pricing_sync(
         dict(supplier.auth_config or {}),
         wsdl_product,
         wsdl_ppc,
+    )
+    return {"job_id": str(job.id), "status": job.status, "job_type": job.job_type}
+
+
+@router.post("/{supplier_id}/products/rest", status_code=202)
+async def trigger_rest_sync(
+    supplier_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Kick off a full-catalog sync for REST/HMAC suppliers (S&S, 4Over).
+
+    Separate endpoint from /products because _load_active_ps_supplier
+    rejects non-SOAP protocols by design.
+    """
+    supplier = (
+        await db.execute(select(Supplier).where(Supplier.id == supplier_id))
+    ).scalar_one_or_none()
+    if not supplier:
+        raise HTTPException(404, "Supplier not found")
+    if not supplier.is_active:
+        raise HTTPException(409, f"Supplier '{supplier.name}' is not active")
+    if supplier.protocol not in ("rest", "rest_hmac"):
+        raise HTTPException(
+            400,
+            f"Supplier '{supplier.name}' uses protocol '{supplier.protocol}'; "
+            f"use POST /api/sync/{supplier_id}/products for SOAP suppliers",
+        )
+    if not supplier.base_url:
+        raise HTTPException(
+            400, f"Supplier '{supplier.name}' has no base_url configured"
+        )
+
+    await _ensure_no_active_job(db, supplier_id, "full_sync")
+    job = await _create_job(db, supplier, job_type="full_sync")
+
+    background_tasks.add_task(
+        _run_rest_sync,
+        job.id,
+        supplier.id,
+        supplier.protocol,
+        supplier.base_url,
+        dict(supplier.auth_config or {}),
+        dict(supplier.field_mappings or {}) if supplier.field_mappings else None,
     )
     return {"job_id": str(job.id), "status": job.status, "job_type": job.job_type}
 
