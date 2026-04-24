@@ -137,6 +137,21 @@ export interface Category {
   sort_order: number;
 }
 
+/* ─── Supplier Category Browse (for import picker) ───────────────────────── */
+export interface SupplierCategoryBrowse {
+  name: string;
+  slug: string | null;
+  product_count: number | null;
+  preview_image_url: string | null;
+}
+
+export interface ImportCategoryResponse {
+  job_id: string;
+  status: string;
+  category_name: string;
+  limit: number;
+}
+
 /* ─── Customer ───────────────────────────────────────────────────────────── */
 export interface Customer {
   id: string;
