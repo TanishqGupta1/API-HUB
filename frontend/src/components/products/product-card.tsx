@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import type { ProductListItem } from "@/lib/types";
+import { PushRowAction } from "@/components/products/push-row-action";
 
 interface ProductCardProps {
   product: ProductListItem;
@@ -68,6 +69,14 @@ export function ProductCard({ product }: ProductCardProps) {
         <span className="font-mono text-[12px] font-semibold text-[#1e4d92]">
           {product.variant_count} variants
         </span>
+      </div>
+
+      {/* Action row — Push to OPS */}
+      <div
+        className="flex items-center justify-end px-5 py-2 bg-white border-t border-[#cfccc8]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <PushRowAction productId={product.id} productName={product.product_name} />
       </div>
     </div>
   );
