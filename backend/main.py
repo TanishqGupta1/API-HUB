@@ -34,6 +34,7 @@ from modules.sync_jobs.routes import router as sync_jobs_router
 from modules.ops_push.routes import router as ops_push_router
 from modules.push_candidates.routes import router as push_candidates_router
 from modules.push_mappings.routes import router as push_mappings_router
+from modules.suppliers.category_import import router as category_import_router
 
 
 # Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
@@ -110,6 +111,7 @@ app.include_router(sync_jobs_router)
 app.include_router(ops_push_router)
 app.include_router(push_candidates_router)
 app.include_router(push_mappings_router)
+app.include_router(category_import_router)
 app.include_router(promostandards_sync_router)
 
 
