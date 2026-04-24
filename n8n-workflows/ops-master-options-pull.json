@@ -1,13 +1,18 @@
 {
   "id": "ops-master-options-pull-001",
   "name": "OPS → Hub (Master Options)",
-  "active": false,
+  "active": true,
   "nodes": [
     {
-      "parameters": {},
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ops-master-options-pull",
+        "responseMode": "lastNode",
+        "options": {}
+      },
       "id": "trigger-001",
-      "name": "When clicking 'Execute workflow'",
-      "type": "n8n-nodes-base.manualTrigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [240, 320]
     },
@@ -80,7 +85,7 @@
     }
   ],
   "connections": {
-    "When clicking 'Execute workflow'": {
+    "Webhook Trigger": {
       "main": [[{ "node": "OPS: Get Master Options", "type": "main", "index": 0 }]]
     },
     "OPS: Get Master Options": {

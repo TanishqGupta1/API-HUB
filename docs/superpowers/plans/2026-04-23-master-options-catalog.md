@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+
+> **Status:** ASSIGNED TO SINCHANA (In Progress)
+
 **Goal:** Sync OPS master options into hub + build per-product "Assign Options" UI (screenshot parity) with hub-side storage. Push to OPS deferred until beta mutations ship.
 
 **Architecture:** OPS owns master option definitions (one-way sync via n8n). Hub owns per-product assignments (`enabled`, `price`, `numeric_value`, `sort_order` overrides). Reuse existing `ProductOption` + `ProductOptionAttribute` tables by adding columns. Two new mirror tables for global catalog. n8n workflow pulls daily. Push deferred.
