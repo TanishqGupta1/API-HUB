@@ -14,7 +14,7 @@ interface Props {
 
 export function PDPLayout({ breadcrumbCategory, breadcrumbProduct, gallery, info, description, related }: Props) {
   return (
-    <div className="flex flex-col gap-6 pb-12">
+    <div className="flex flex-col gap-6 pb-12 max-w-[1200px] mx-auto w-full">
       <div className="flex items-center gap-2 text-[12px] text-[#888894]">
         <Link href="/storefront/vg" className="hover:text-[#1e4d92] font-medium">Visual Graphics</Link>
         <span>/</span>

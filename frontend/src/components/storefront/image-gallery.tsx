@@ -40,7 +40,7 @@ export function ImageGallery({ images, fallbackUrl, alt }: ImageGalleryProps) {
 
   if (list.length === 0) {
     return (
-      <div className="aspect-square bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] flex items-center justify-center">
+      <div className="aspect-square max-h-[600px] w-full bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] flex items-center justify-center">
         <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#b4b4bc]">
           No images
         </span>
@@ -57,9 +57,9 @@ export function ImageGallery({ images, fallbackUrl, alt }: ImageGalleryProps) {
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`Open ${alt} full size`}
-        className="aspect-square bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] overflow-hidden flex items-center justify-center cursor-zoom-in"
+        className="aspect-square max-h-[600px] w-full bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] overflow-hidden flex items-center justify-center cursor-zoom-in"
       >
-        <img src={active.url} alt={alt} className="w-full h-full object-contain p-6" />
+        <img src={active.url} alt={alt} className="w-full h-full object-contain p-6 mix-blend-multiply" />
       </a>
 
       {list.length > 1 && (
@@ -74,7 +74,7 @@ export function ImageGallery({ images, fallbackUrl, alt }: ImageGalleryProps) {
                   : "border-[#cfccc8] hover:border-[#1e4d92]"
                 }`}
             >
-              <img src={img.url} alt="" className="w-full h-full object-contain bg-[#f9f7f4] p-1" />
+              <img src={img.url} alt="" className="w-full h-full object-contain bg-[#f9f7f4] p-1 mix-blend-multiply" />
             </button>
           ))}
         </div>

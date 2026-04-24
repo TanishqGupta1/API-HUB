@@ -215,3 +215,54 @@ export interface ProductPushLogRead {
   error: string | null;
   pushed_at: string;
 }
+
+/* ─── Master Options ─────────────────────────────────────────────────────── */
+export interface MasterOptionAttribute {
+  id: string;
+  ops_attribute_id: number;
+  title: string;
+  sort_order: number;
+  default_price: number | null;
+}
+
+export interface MasterOption {
+  id: string;
+  ops_master_option_id: number;
+  title: string;
+  option_key: string | null;
+  options_type: string | null;
+  pricing_method: string | null;
+  status: number;
+  sort_order: number;
+  description: string | null;
+  master_option_tag: string | null;
+  attributes: MasterOptionAttribute[];
+}
+
+export interface MasterOptionsSyncStatus {
+  total: number;
+  last_synced_at: string | null;
+}
+
+/* Per-product config */
+export interface AttributeConfigItem {
+  attribute_id: string | null;
+  ops_attribute_id: number;
+  title: string;
+  attribute_key: string | null;
+  enabled: boolean;
+  price: number;
+  numeric_value: number;
+  sort_order: number;
+}
+
+export interface OptionConfigItem {
+  master_option_id: string;
+  ops_master_option_id: number;
+  title: string;
+  option_key: string | null;
+  options_type: string | null;
+  master_option_tag: string | null;
+  enabled: boolean;
+  attributes: AttributeConfigItem[];
+}

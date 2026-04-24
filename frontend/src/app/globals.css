@@ -86,6 +86,7 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  position: relative;
 }
 
 /* Blueprint grid background */
@@ -98,7 +99,7 @@ body::before {
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 32px 32px;
   pointer-events: none;
-  z-index: 0;
+  z-index: -1;
 }
 
 /* === LAYOUT === */

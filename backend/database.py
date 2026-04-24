@@ -2,20 +2,28 @@ import json
 import logging
 import os
 from pathlib import Path
+import base64
+import hashlib
 from typing import Any, Optional
 
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import Text, TypeDecorator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+
+log = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv(
     "POSTGRES_URL", "postgresql+asyncpg://vg_user:vg_pass@localhost:5432/vg_hub"
 )
 SECRET_KEY = os.getenv("SECRET_KEY", "")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+ALLOW_UNENCRYPTED_LEGACY = os.getenv("ALLOW_UNENCRYPTED_LEGACY", "").lower() in {"1", "true", "yes"}
+
+_MIN_DERIVED_KEY_LEN = 32
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -23,6 +31,35 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 class Base(DeclarativeBase):
     pass
+
+
+def _get_fernet() -> Optional[Fernet]:
+    """Return a Fernet instance from SECRET_KEY.
+
+    Accepts a proper urlsafe-base64 Fernet key directly. In non-production
+    environments, a long arbitrary string is accepted and a stable Fernet key
+    is derived from it via SHA-256. In production, only real Fernet keys are
+    accepted — weak SECRET_KEY values must be rejected at startup.
+    """
+    if not SECRET_KEY:
+        return None
+
+    raw = SECRET_KEY.encode()
+    try:
+        return Fernet(raw)
+    except (ValueError, TypeError):
+        if ENVIRONMENT == "production":
+            raise RuntimeError(
+                "SECRET_KEY is not a valid Fernet key. "
+                "Generate one with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+            )
+        if len(raw) < _MIN_DERIVED_KEY_LEN:
+            raise RuntimeError(
+                f"SECRET_KEY is too short ({len(raw)} < {_MIN_DERIVED_KEY_LEN}). "
+                "Use a real Fernet key or a long random string."
+            )
+        derived = base64.urlsafe_b64encode(hashlib.sha256(raw).digest())
+        return Fernet(derived)
 
 
 class EncryptedJSON(TypeDecorator):
@@ -34,27 +71,44 @@ class EncryptedJSON(TypeDecorator):
     def process_bind_param(self, value: Any, dialect: Any) -> Optional[str]:
         if value is None:
             return None
-        if not SECRET_KEY:
+        f = _get_fernet()
+        if not f:
+            if ENVIRONMENT == "production":
+                raise RuntimeError(
+                    "SECRET_KEY is required in production — refusing to write unencrypted secret."
+                )
             return json.dumps(value)
-        f = Fernet(SECRET_KEY.encode())
         return f.encrypt(json.dumps(value).encode()).decode()
 
     def process_result_value(self, value: Any, dialect: Any) -> Any:
         if value is None:
             return None
-        if not SECRET_KEY:
+        f = _get_fernet()
+        if not f:
             return json.loads(value)
         try:
-            f = Fernet(SECRET_KEY.encode())
             return json.loads(f.decrypt(value.encode()))
-        except Exception as e:
-            logging.error(
-                "EncryptedJSON decryption failed — SECRET_KEY mismatch or data corruption: %s",
-                e,
+        except InvalidToken:
+            if ALLOW_UNENCRYPTED_LEGACY:
+                try:
+                    parsed = json.loads(value)
+                except ValueError:
+                    raise ValueError(
+                        "Stored secret is neither valid Fernet ciphertext nor legacy JSON."
+                    )
+                log.warning(
+                    "EncryptedJSON: read UNENCRYPTED legacy row (ALLOW_UNENCRYPTED_LEGACY=1). "
+                    "Re-save the row to encrypt it at rest."
+                )
+                return parsed
+            log.error(
+                "EncryptedJSON decryption failed — SECRET_KEY mismatch, rotated key, or unencrypted legacy row. "
+                "Set ALLOW_UNENCRYPTED_LEGACY=1 to permit migration reads."
             )
             raise ValueError(
-                "Failed to decrypt stored secret. Check SECRET_KEY configuration."
-            ) from e
+                "Failed to decrypt stored secret. Check SECRET_KEY configuration "
+                "or set ALLOW_UNENCRYPTED_LEGACY=1 to migrate legacy rows."
+            )
 
 
 async def get_db():

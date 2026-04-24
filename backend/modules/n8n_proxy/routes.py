@@ -122,10 +122,10 @@ async def list_executions(workflow_id: Optional[str] = None, limit: int = 20):
     ]
 
 
-@router.post("/workflows/{workflow_id}/trigger")
-async def trigger_workflow(workflow_id: str, request: Request):
-    """Trigger workflow via its first webhook path, forwarding query params as POST body."""
-    params = dict(request.query_params)
+async def trigger_workflow_by_id(workflow_id: str, params: dict | None = None) -> dict:
+    """Trigger a workflow via its first webhook path. Internal helper — callable
+    from other modules without constructing a Request object."""
+    params = params or {}
     c = _client()
     try:
         r = await c.get(f"/api/v1/workflows/{workflow_id}")
@@ -151,7 +151,13 @@ async def trigger_workflow(workflow_id: str, request: Request):
         )
 
     trigger_url = f"{_base()}/webhook/{webhook_path}"
-    async with httpx.AsyncClient(timeout=10.0) as c:
-        r = await c.post(trigger_url, json=params)
-        r.raise_for_status()
-        return {"triggered": True, "url": trigger_url, "response": r.json()}
+    async with httpx.AsyncClient(timeout=10.0) as hc:
+        tr = await hc.post(trigger_url, json=params)
+        tr.raise_for_status()
+        return {"triggered": True, "url": trigger_url, "response": tr.json()}
+
+
+@router.post("/workflows/{workflow_id}/trigger")
+async def trigger_workflow(workflow_id: str, request: Request):
+    """Trigger workflow via its first webhook path, forwarding query params as POST body."""
+    return await trigger_workflow_by_id(workflow_id, dict(request.query_params))
