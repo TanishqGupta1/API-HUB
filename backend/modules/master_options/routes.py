@@ -123,4 +123,8 @@ async def duplicate_from(
 @router.post("/sync", dependencies=[Depends(require_ingest_secret)])
 async def trigger_sync():
     """Trigger the n8n master options pull workflow."""
-    return await trigger_workflow_by_id("ops-master-options-pull-001")
+    try:
+        return await trigger_workflow_by_id("ops-master-options-pull-001")
+    except Exception as e:
+        print(f"Warning: n8n trigger failed ({e}). Please execute manually in n8n UI.")
+        return {"triggered": False, "message": "Please execute 'OPS → Hub (Master Options)' manually in n8n."}

@@ -1,6 +1,6 @@
 # SanMar PromoStandards Smoke Test — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Patch the existing supplier-agnostic `PromoStandardsClient` to match the PromoStandards spec fields SanMar requires, then ship a standalone smoke-test script that exercises four SanMar production WSDLs end-to-end for a curated SKU list.
 
@@ -36,7 +36,7 @@ SanMar `getProduct` requires `localizationCountry` and `localizationLanguage` in
 - Modify: `backend/modules/promostandards/client.py`
 - Modify: `backend/test_promostandards_client.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/test_promostandards_client.py` after the existing `test_get_product_*` tests:
 
@@ -75,7 +75,7 @@ async def test_get_products_batch_propagates_locale():
         assert kwargs["localizationLanguage"] == "en"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 cd api-hub/backend && source .venv/bin/activate
@@ -84,7 +84,7 @@ pytest test_promostandards_client.py::test_get_product_sends_localization_defaul
 
 Expected: FAIL with `KeyError: 'localizationCountry'` — the current `getProduct` call doesn't pass the key.
 
-- [ ] **Step 3: Patch `get_product` + `_sync_get_product`**
+- [x] **Step 3: Patch `get_product` + `_sync_get_product`**
 
 Open `backend/modules/promostandards/client.py`. Replace the existing `get_product` and `_sync_get_product` methods (around lines 155–167) with:
 
@@ -125,7 +125,7 @@ Open `backend/modules/promostandards/client.py`. Replace the existing `get_produ
         return self._parse_product(response)
 ```
 
-- [ ] **Step 4: Patch `get_products_batch` + `_sync_fetch_batch`**
+- [x] **Step 4: Patch `get_products_batch` + `_sync_fetch_batch`**
 
 Replace the existing `get_products_batch` (around lines 169–183) and `_sync_fetch_batch` (around lines 185–199) with:
 
@@ -180,7 +180,7 @@ Replace the existing `get_products_batch` (around lines 169–183) and `_sync_fe
         return out
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 ```bash
 cd api-hub/backend && source .venv/bin/activate
@@ -189,7 +189,7 @@ pytest test_promostandards_client.py -v -k "get_product"
 
 Expected: all `test_get_product_*` tests PASS, including the three new tests.
 
-- [ ] **Step 6: Run the full client test suite for regression**
+- [x] **Step 6: Run the full client test suite for regression**
 
 ```bash
 pytest test_promostandards_client.py -v
@@ -197,7 +197,7 @@ pytest test_promostandards_client.py -v
 
 Expected: all pre-existing tests still PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /Users/tanishq/Documents/project-files/api-hub/api-hub
@@ -215,7 +215,7 @@ SanMar's `<ProductCategory>` wraps `<category>` (not `<categoryName>`). Its `<de
 - Modify: `backend/modules/promostandards/client.py`
 - Modify: `backend/test_promostandards_client.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `backend/test_promostandards_client.py`:
 
@@ -268,7 +268,7 @@ async def test_parse_product_single_description_still_works():
     assert product.description == "100% cotton"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 pytest test_promostandards_client.py -v -k "category_field or multi_description"
@@ -276,7 +276,7 @@ pytest test_promostandards_client.py -v -k "category_field or multi_description"
 
 Expected: FAIL — `test_parse_product_reads_sanmar_category_field` returns `[]` for categories, and `test_parse_product_joins_multi_description` stringifies the whole list via `_text(list)` which yields `"['Crafted in heavier knit', ...]"`.
 
-- [ ] **Step 3: Patch `_parse_product`**
+- [x] **Step 3: Patch `_parse_product`**
 
 Open `backend/modules/promostandards/client.py` and replace the `_parse_product` method (around lines 201–230) with:
 
@@ -324,7 +324,7 @@ Open `backend/modules/promostandards/client.py` and replace the `_parse_product`
         )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 ```bash
 pytest test_promostandards_client.py -v -k "parse_product"
@@ -332,7 +332,7 @@ pytest test_promostandards_client.py -v -k "parse_product"
 
 Expected: PASS for all three new tests plus the pre-existing `test_parse_product_*` tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /Users/tanishq/Documents/project-files/api-hub/api-hub
@@ -350,7 +350,7 @@ SanMar's Media Content WSDL is `V1.1.0`, not `1.0.0`. The SOAP body requires a `
 - Modify: `backend/modules/promostandards/client.py`
 - Modify: `backend/test_promostandards_client.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `backend/test_promostandards_client.py`:
 
@@ -373,7 +373,7 @@ async def test_get_media_accepts_document_media_type():
     assert kwargs["mediaType"] == "Document"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 pytest test_promostandards_client.py -v -k "media"
@@ -381,7 +381,7 @@ pytest test_promostandards_client.py -v -k "media"
 
 Expected: FAIL — `test_get_media_uses_v110_and_sends_mediatype_image` reports `wsVersion == "1.0.0"` and missing `mediaType` key.
 
-- [ ] **Step 3: Patch `get_media` and `_sync_get_media`**
+- [x] **Step 3: Patch `get_media` and `_sync_get_media`**
 
 Replace the existing `get_media` and `_sync_get_media` methods (around lines 382–399) with:
 
@@ -415,7 +415,7 @@ Replace the existing `get_media` and `_sync_get_media` methods (around lines 382
         return out
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 ```bash
 pytest test_promostandards_client.py -v -k "media"
@@ -423,7 +423,7 @@ pytest test_promostandards_client.py -v -k "media"
 
 Expected: PASS for both new tests plus any pre-existing `test_media_*` tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /Users/tanishq/Documents/project-files/api-hub/api-hub
@@ -441,7 +441,7 @@ SanMar returns `<quantityAvailable><Quantity><uom>EA</uom><value>1045</value></Q
 - Modify: `backend/modules/promostandards/client.py`
 - Modify: `backend/test_promostandards_client.py`
 
-- [ ] **Step 1: Update the existing cap test**
+- [x] **Step 1: Update the existing cap test**
 
 Open `backend/test_promostandards_client.py` and locate `test_inventory_cap_and_shape`. Replace the assertion block (the last four `assert` lines) with:
 
@@ -461,7 +461,7 @@ async def test_inventory_flat_quantity_still_parses():
 
 (Replace the existing `test_inventory_cap_and_shape` line with the above.)
 
-- [ ] **Step 2: Add the new SanMar-shape tests**
+- [x] **Step 2: Add the new SanMar-shape tests**
 
 Append to `backend/test_promostandards_client.py`:
 
@@ -558,7 +558,7 @@ async def test_inventory_prefers_top_level_when_locations_empty():
     assert levels[0].quantity_available == 42
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 ```bash
 pytest test_promostandards_client.py -v -k "inventory"
@@ -566,7 +566,7 @@ pytest test_promostandards_client.py -v -k "inventory"
 
 Expected: the original `test_inventory_flat_quantity_still_parses` passes the first two asserts but fails on `99999` (current cap truncates to 500). The three new tests also fail — nested Quantity path and aggregation logic are absent.
 
-- [ ] **Step 4: Remove the inventory cap constant**
+- [x] **Step 4: Remove the inventory cap constant**
 
 In `backend/modules/promostandards/client.py`, delete the constant definition (around lines 38–41) and its usage. Replace:
 
@@ -584,7 +584,7 @@ with:
 # warehouse × 8 warehouses. Leave raw values through to callers.
 ```
 
-- [ ] **Step 5: Patch `_parse_inventory`**
+- [x] **Step 5: Patch `_parse_inventory`**
 
 Replace the `_parse_inventory` method (around lines 280–312) with:
 
@@ -662,7 +662,7 @@ Replace the `_parse_inventory` method (around lines 280–312) with:
         return qty, warehouse_name
 ```
 
-- [ ] **Step 6: Run the inventory tests**
+- [x] **Step 6: Run the inventory tests**
 
 ```bash
 pytest test_promostandards_client.py -v -k "inventory"
@@ -670,7 +670,7 @@ pytest test_promostandards_client.py -v -k "inventory"
 
 Expected: all four inventory tests PASS (one flat, one nested, one aggregated, one top-level-only).
 
-- [ ] **Step 7: Run the full client test suite**
+- [x] **Step 7: Run the full client test suite**
 
 ```bash
 pytest test_promostandards_client.py -v
@@ -678,7 +678,7 @@ pytest test_promostandards_client.py -v
 
 Expected: every test PASSes. If a normalizer test references the old cap, update the expected value inline before committing.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /Users/tanishq/Documents/project-files/api-hub/api-hub
@@ -696,7 +696,7 @@ SanMar's PPC WSDL requires `currency`, `fobId`, `priceType`, `localizationCountr
 - Modify: `backend/modules/promostandards/client.py`
 - Modify: `backend/test_promostandards_client.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `backend/test_promostandards_client.py`:
 
@@ -740,7 +740,7 @@ async def test_get_pricing_accepts_explicit_overrides():
     assert kwargs["configurationType"] == "Configured"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 pytest test_promostandards_client.py -v -k "get_pricing_sends or get_pricing_accepts"
@@ -748,7 +748,7 @@ pytest test_promostandards_client.py -v -k "get_pricing_sends or get_pricing_acc
 
 Expected: FAIL — `KeyError: 'currency'` because current `getConfigurationAndPricing` call doesn't pass these params.
 
-- [ ] **Step 3: Patch `get_pricing` and `_sync_get_pricing`**
+- [x] **Step 3: Patch `get_pricing` and `_sync_get_pricing`**
 
 Replace the existing `get_pricing` and `_sync_get_pricing` methods (around lines 328–347) with:
 
@@ -808,7 +808,7 @@ Replace the existing `get_pricing` and `_sync_get_pricing` methods (around lines
         return out
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 ```bash
 pytest test_promostandards_client.py -v -k "pricing"
@@ -816,7 +816,7 @@ pytest test_promostandards_client.py -v -k "pricing"
 
 Expected: all pricing tests PASS, including the two new and the pre-existing `test_pricing_parses_tiers` + `test_pricing_skips_bad_rows`.
 
-- [ ] **Step 5: Run the full client suite and regression tests**
+- [x] **Step 5: Run the full client suite and regression tests**
 
 ```bash
 pytest test_promostandards_client.py -v
@@ -825,7 +825,7 @@ pytest tests/test_promostandards_normalizer.py -v
 
 Expected: both suites PASS. If the normalizer test mocks `get_pricing`, the new kwargs don't affect it.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /Users/tanishq/Documents/project-files/api-hub/api-hub
@@ -844,14 +844,14 @@ Standalone CLI under `backend/scripts/sanmar_smoke.py`. Loads the SanMar supplie
 - Create: `backend/scripts/sanmar_smoke.py`
 - Create: `backend/tests/test_sanmar_smoke.py`
 
-- [ ] **Step 1: Create the package marker**
+- [x] **Step 1: Create the package marker**
 
 ```bash
 mkdir -p /Users/tanishq/Documents/project-files/api-hub/api-hub/backend/scripts
 touch /Users/tanishq/Documents/project-files/api-hub/api-hub/backend/scripts/__init__.py
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `backend/tests/test_sanmar_smoke.py`:
 
@@ -958,7 +958,7 @@ async def test_smoke_counts_failures(monkeypatch, capsys):
     assert "3/4 calls passed" in out
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 ```bash
 cd api-hub/backend && source .venv/bin/activate
@@ -967,7 +967,7 @@ pytest tests/test_sanmar_smoke.py -v
 
 Expected: `ModuleNotFoundError: No module named 'scripts.sanmar_smoke'`.
 
-- [ ] **Step 4: Create `backend/scripts/sanmar_smoke.py`**
+- [x] **Step 4: Create `backend/scripts/sanmar_smoke.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -1146,7 +1146,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 5: Run the script test**
+- [x] **Step 5: Run the script test**
 
 ```bash
 cd api-hub/backend && source .venv/bin/activate
@@ -1155,7 +1155,7 @@ pytest tests/test_sanmar_smoke.py -v
 
 Expected: all three tests PASS.
 
-- [ ] **Step 6: Verify the script imports cleanly**
+- [x] **Step 6: Verify the script imports cleanly**
 
 ```bash
 python -c "from scripts import sanmar_smoke; print(sanmar_smoke.DEFAULT_SKUS)"
@@ -1163,7 +1163,7 @@ python -c "from scripts import sanmar_smoke; print(sanmar_smoke.DEFAULT_SKUS)"
 
 Expected: `['PC61', 'K420', 'LPC61', 'MM1000']`.
 
-- [ ] **Step 7: Verify `--help` renders**
+- [x] **Step 7: Verify `--help` renders**
 
 ```bash
 python scripts/sanmar_smoke.py --help
@@ -1171,7 +1171,7 @@ python scripts/sanmar_smoke.py --help
 
 Expected: argparse help text listing `--test`, `--sku`, `-v`. Exit code 0.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /Users/tanishq/Documents/project-files/api-hub/api-hub
@@ -1188,7 +1188,7 @@ Doc-only. Captures the one-time steps an operator runs to create the SanMar Supp
 **Files:**
 - Create: `docs/sanmar_smoke_runbook.md`
 
-- [ ] **Step 1: Create the runbook**
+- [x] **Step 1: Create the runbook**
 
 Create `docs/sanmar_smoke_runbook.md`:
 
@@ -1319,7 +1319,7 @@ route path for a real catalog pull, then run a bounded sync against ~50 SKUs
 before opening the gate to the full catalog.
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 cd /Users/tanishq/Documents/project-files/api-hub/api-hub
@@ -1333,7 +1333,7 @@ git commit -m "docs: add SanMar PromoStandards smoke-test runbook"
 
 After every task is complete:
 
-- [ ] **Run the full backend test suite**
+- [x] **Run the full backend test suite**
 
 ```bash
 cd api-hub/backend && source .venv/bin/activate
@@ -1342,7 +1342,7 @@ pytest -v
 
 Expected: every pre-existing test plus every new test from Tasks 1–6 PASSes. No new warnings or errors.
 
-- [ ] **Confirm import chain**
+- [x] **Confirm import chain**
 
 ```bash
 python -c "from scripts.sanmar_smoke import run_smoke, PROD_WSDLS, TEST_WSDLS, DEFAULT_SKUS; print(len(PROD_WSDLS))"
@@ -1350,7 +1350,7 @@ python -c "from scripts.sanmar_smoke import run_smoke, PROD_WSDLS, TEST_WSDLS, D
 
 Expected: `4`.
 
-- [ ] **Dry-run the script without real creds**
+- [x] **Dry-run the script without real creds**
 
 ```bash
 python scripts/sanmar_smoke.py
