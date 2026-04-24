@@ -1,4 +1,4 @@
-export type SortKey = "name" | "price_asc" | "price_desc" | "newest";
+export type SortKey = "name" | "price_asc" | "price_desc" | "newest" | "variants";
 export type StockFilter = "in" | null;
 
 export interface StorefrontFilters {
@@ -11,7 +11,10 @@ export interface StorefrontFilters {
 export function readFilters(sp: URLSearchParams): StorefrontFilters {
   const rawSort = sp.get("sort");
   const sort: SortKey =
-    rawSort === "price_asc" || rawSort === "price_desc" || rawSort === "newest"
+    rawSort === "price_asc" ||
+    rawSort === "price_desc" ||
+    rawSort === "newest" ||
+    rawSort === "variants"
       ? rawSort
       : "name";
   return {

@@ -174,3 +174,10 @@ class IngestResult(BaseModel):
     sync_job_id: UUID
     records_processed: int
     status: str
+
+
+class OPSCategoryInput(BaseModel):
+    category_name: str
+    parent_id: int = -1
+    status: int = 1
+    category_internal_name: str

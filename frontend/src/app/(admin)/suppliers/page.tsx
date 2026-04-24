@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { PSCompany, Supplier } from "@/lib/types";
@@ -116,6 +117,29 @@ function SuppliersContent() {
     setShowAdd(false);
   };
 
+  const toggleActive = async (s: Supplier) => {
+    try {
+      const updated = await api<Supplier>(`/api/suppliers/${s.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: !s.is_active }),
+      });
+      setSuppliers(suppliers.map((item) => (item.id === updated.id ? updated : item)));
+    } catch (err) {
+      console.error("Failed to toggle supplier status:", err);
+    }
+  };
+
+  const triggerSync = async (s: Supplier) => {
+    if (!s.is_active) return;
+    try {
+      await api(`/api/sync/${s.id}/products`, { method: "POST" });
+      router.push("/sync");
+    } catch (err) {
+      console.error("Failed to trigger sync:", err);
+      alert("Sync failed: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
   /** Find the most recent push timestamp for a supplier by name */
   const getLastPush = (supplierName: string): string => {
     const key = supplierName.toLowerCase();
@@ -181,12 +205,20 @@ function SuppliersContent() {
                 <th>Last Push</th>
                 <th>Products</th>
                 <th>Status</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {suppliers.map((s) => (
                 <tr key={s.id}>
-                  <td className="cell-primary">{s.name}</td>
+                  <td className="cell-primary">
+                    <Link 
+                      href={`/mappings/${s.id}`}
+                      className="hover:text-[var(--blue)] hover:underline transition-colors cursor-pointer"
+                    >
+                      {s.name}
+                    </Link>
+                  </td>
                   <td>
                     <span className="cell-tag">
                       {s.promostandards_code || "API"}
@@ -196,21 +228,32 @@ function SuppliersContent() {
                   <td className="cell-mono">{getLastPush(s.name)}</td>
                   <td className="cell-mono">{getProductCount(s)}</td>
                   <td>
-                    {s.is_active ? (
-                      <span className="badge badge-ok">
-                        <span className="badge-dot"></span> Active
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          color: "var(--ink-faint)",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                        }}
-                      >
-                        Inactive
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleActive(s)}
+                      className="bg-transparent border-none p-0 cursor-pointer outline-none block"
+                      title={s.is_active ? "Deactivate supplier" : "Activate supplier"}
+                    >
+                      {s.is_active ? (
+                        <span className="badge badge-ok">
+                          <span className="badge-dot"></span> Active
+                        </span>
+                      ) : (
+                        <span className="text-[12px] font-semibold text-[#888894] hover:text-[#484852] transition-colors">
+                          Inactive
+                        </span>
+                      )}
+                    </button>
+                  </td>
+                  <td className="text-right">
+                    <button
+                      onClick={() => triggerSync(s)}
+                      disabled={!s.is_active}
+                      className={`btn btn-ghost !py-1 !px-2 !text-[11px] ${!s.is_active ? "opacity-30 grayscale cursor-not-allowed" : "text-[var(--blue)]"}`}
+                      title="Sync Now"
+                    >
+                      Sync Now ⚡
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -219,12 +262,7 @@ function SuppliersContent() {
                 <tr>
                   <td
                     colSpan={6}
-                    style={{
-                      padding: "40px",
-                      textAlign: "center",
-                      color: "var(--ink-muted)",
-                      fontSize: "14px",
-                    }}
+                    className="p-10 text-center text-[#484852] text-[14px]"
                   >
                     No suppliers connected. Click &quot;+ Connect New&quot; to begin.
                   </td>
@@ -235,13 +273,7 @@ function SuppliersContent() {
                 <tr>
                   <td
                     colSpan={6}
-                    style={{
-                      padding: "40px",
-                      textAlign: "center",
-                      color: "var(--ink-muted)",
-                      fontSize: "14px",
-                      fontFamily: "var(--font-mono)",
-                    }}
+                    className="p-10 text-center text-[#484852] text-[14px] font-mono"
                   >
                     Connecting...
                   </td>
@@ -259,7 +291,7 @@ export default function SuppliersPage() {
   return (
     <Suspense
       fallback={
-        <div style={{ padding: "40px", color: "var(--ink-muted)" }}>
+        <div className="p-10 text-[#484852]">
           Loading...
         </div>
       }

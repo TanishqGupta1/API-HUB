@@ -2,15 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
-import { PushHistory } from "@/components/products/push-history";
 import type {
-  Customer,
   Product,
   ProductImage,
-  ProductPushStatus,
   Supplier,
 } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { PublishButton } from "@/components/products/publish-button";
+import { PushHistory } from "@/components/products/push-history";
 
 const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
 
@@ -33,23 +34,15 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const [product, setProduct] = useState<Product | null>(null);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [pushStatuses, setPushStatuses] = useState<ProductPushStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pushing, setPushing] = useState<string | null>(null);
-  const [pushRefresh, setPushRefresh] = useState(0);
   const [activeImageTab, setActiveImageTab] = useState<string>("front");
 
   const fetchData = async () => {
     try {
-      const [p, c, s] = await Promise.all([
+      const [p] = await Promise.all([
         api<Product>(`/api/products/${id}`),
-        api<Customer[]>("/api/customers"),
-        api<ProductPushStatus[]>(`/api/products/${id}/push-status`),
       ]);
       setProduct(p);
-      setCustomers(c);
-      setPushStatuses(s);
       try {
         const sup = await api<Supplier>(`/api/suppliers/${p.supplier_id}`);
         setSupplier(sup);
@@ -90,36 +83,6 @@ export default function ProductDetailPage() {
     ]);
   }, [supplier]);
 
-  const handlePush = async (customerId?: string) => {
-    if (!product) return;
-    const targetId = customerId || (customers.length > 0 ? customers[0].id : null);
-    if (!targetId) {
-      alert("Please configure a storefront in the Storefronts page first.");
-      return;
-    }
-    setPushing(targetId);
-    try {
-      // Trigger n8n workflow — it writes the push-log entry itself on completion
-      await api(`/api/n8n/workflows/ops-push-001/trigger`, {
-        method: "POST",
-        body: JSON.stringify({
-          product_id: product.id,
-          customer_id: targetId,
-        }),
-      });
-      // Poll push status after ~5s for the result (n8n workflow ~15s total)
-      await new Promise((r) => setTimeout(r, 5000));
-      const newStatuses = await api<ProductPushStatus[]>(`/api/products/${id}/push-status`);
-      setPushStatuses(newStatuses);
-      // Also trigger PushHistory to re-fetch its log (both tables live there)
-      setPushRefresh((n) => n + 1);
-    } catch (e) {
-      console.error(e);
-      alert("Publish failed. Check n8n logs at http://localhost:5678.");
-    } finally {
-      setPushing(null);
-    }
-  };
 
   if (loading) {
     return (
@@ -141,6 +104,12 @@ export default function ProductDetailPage() {
   return (
     <div id="s-product-detail">
 
+      {supplier?.protocol === "ops_graphql" && product.options?.some((o: any) => o.enabled) && (
+        <div className="bg-yellow-50 border border-yellow-300 rounded-lg px-4 py-3 mb-4 text-sm text-yellow-900">
+          <strong>Options saved to hub.</strong> OPS push is pending beta API — configure manually in OPS admin for now.
+        </div>
+      )}
+
       {/* ── Page header ─────────────────────────────────── */}
       <div className="flex items-end justify-between mb-10 pb-5 border-b-2 border-[#1e1e24]">
         <div>
@@ -161,15 +130,21 @@ export default function ProductDetailPage() {
           </div>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={() => handlePush()}
-            disabled={!!pushing}
-            className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
-                       bg-[#1e4d92] text-white shadow-[0_4px_0_#143566] transition-all
-                       hover:-translate-y-px hover:shadow-[0_5px_0_#143566] disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {pushing ? "Publishing..." : "Publish to Store"}
-          </button>
+          {supplier?.protocol === "ops_graphql" && (
+            <Link href={`/products/${product.id}/options`}>
+              <Button variant="outline" className="border-[#1e4d92] text-[#1e4d92]">
+                Configure Options
+              </Button>
+            </Link>
+          )}
+          <PublishButton
+            productId={id}
+            onDone={() => {
+              // History will auto-refresh due to its own effect if we trigger a state change,
+              // but a full fetch is safer for now.
+              setTimeout(fetchData, 2000);
+            }}
+          />
           <button
             onClick={fetchData}
             className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
@@ -371,15 +346,16 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* ── Push History (current status + full log) ────────────── */}
-      <PushHistory
-        productId={id}
-        customers={customers}
-        pushing={pushing}
-        onPush={handlePush}
-        refreshTrigger={pushRefresh}
-      />
-
+      <div className="bg-white border border-[#cfccc8] rounded-lg shadow-[4px_6px_0_rgba(30,77,146,0.08)] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 bg-[#ebe8e3] border-b border-[#cfccc8]">
+          <div className="text-[14px] font-bold uppercase tracking-[0.05em] text-[#1e1e24]">
+            Storefront Push History
+          </div>
+        </div>
+        <div className="p-6">
+          <PushHistory productId={id} />
+        </div>
+      </div>
     </div>
   );
 }

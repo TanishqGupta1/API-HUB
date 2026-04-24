@@ -8,7 +8,8 @@ import { FilterButton } from "@/components/storefront/filter-button";
 import { ActiveFilterChips } from "@/components/storefront/active-filter-chips";
 import { StorefrontProductCard } from "@/components/storefront/storefront-product-card";
 
-export default function StorefrontGridPage() {
+
+export default function VGStorefrontPage() {
   const { filters } = useSearch();
   const [products, setProducts] = useState<ProductListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,10 +17,7 @@ export default function StorefrontGridPage() {
   useEffect(() => {
     (async () => {
       try {
-        const sups = await api<{ id: string; slug: string }[]>("/api/suppliers");
-        const vg = sups.find((s) => s.slug === "vg-ops");
-        if (!vg) return;
-        const rows = await api<ProductListItem[]>(`/api/products?supplier_id=${vg.id}&limit=500`);
+        const rows = await api<ProductListItem[]>("/api/products?limit=500");
         setProducts(rows);
       } finally {
         setLoading(false);
@@ -27,16 +25,31 @@ export default function StorefrontGridPage() {
     })();
   }, []);
 
+
   const visible = useMemo(() => {
     let rows = products;
-    if (filters.category) rows = rows.filter((p) => p.category_id === filters.category);
+    
+    // 1. Category Filter
+    if (filters.category) {
+      rows = rows.filter((p) => p.category_id === filters.category);
+    }
+    
+    // 2. Search Query
     if (filters.q) {
       const q = filters.q.toLowerCase();
       rows = rows.filter(
-        (p) => p.product_name.toLowerCase().includes(q) || (p.brand ?? "").toLowerCase().includes(q),
+        (p) => p.product_name.toLowerCase().includes(q) || 
+               p.supplier_sku.toLowerCase().includes(q) ||
+               (p.brand ?? "").toLowerCase().includes(q),
       );
     }
-    if (filters.stock === "in") rows = rows.filter((p) => (p.total_inventory ?? 0) > 0);
+    
+    // 3. Stock Filter
+    if (filters.stock === "in") {
+      rows = rows.filter((p) => (p.total_inventory ?? 0) > 0);
+    }
+    
+    // 4. Sorting
     const sorted = [...rows];
     switch (filters.sort) {
       case "price_asc":
@@ -48,6 +61,9 @@ export default function StorefrontGridPage() {
       case "newest":
         sorted.reverse();
         break;
+      case "variants":
+        sorted.sort((a, b) => (b.variant_count ?? 0) - (a.variant_count ?? 0));
+        break;
       default:
         sorted.sort((a, b) => a.product_name.localeCompare(b.product_name));
     }
@@ -55,10 +71,10 @@ export default function StorefrontGridPage() {
   }, [products, filters]);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="text-[11px] font-mono text-[#888894]">
-          {loading ? "Loading…" : `${visible.length} product${visible.length === 1 ? "" : "s"}`}
+    <div className="flex-1 flex flex-col p-5 gap-5 overflow-hidden">
+      <div className="flex items-center justify-between">
+        <div className="text-[13px] text-[#888894] font-mono">
+          {loading ? "Loading…" : `${visible.length} / ${products.length} products`}
         </div>
         <FilterButton />
       </div>
@@ -66,15 +82,20 @@ export default function StorefrontGridPage() {
       <ActiveFilterChips />
 
       {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-[220px] bg-white rounded-md border border-[#e9e7e3] animate-pulse" />
+            <div key={i} className="h-[340px] bg-[#f9f7f4] border border-[#ebe8e3] rounded-[10px] animate-pulse" />
           ))}
         </div>
       ) : visible.length === 0 ? (
-        <div className="text-center py-20 text-[13px] text-[#888894]">No products match.</div>
+        <div className="border border-dashed border-[#cfccc8] rounded-[10px] p-16 text-center bg-white">
+          <div className="text-[14px] font-bold text-[#1e1e24] mb-1">No matches</div>
+          <div className="text-[12px] text-[#888894]">
+            Try removing filters or clearing the search.
+          </div>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
           {visible.map((p) => (
             <StorefrontProductCard key={p.id} product={p} />
           ))}

@@ -62,3 +62,30 @@ class PushPayload(BaseModel):
     variants: list[PushVariantPayload]
     images: list[PushImagePayload]
     markup_rule: Optional[AppliedMarkupRule]
+
+
+# -------- OPS variant bundle (n8n setProductSize + setProductPrice loop) --------
+
+class OPSProductSizeInput(BaseModel):
+    product_size_id: int = 0        # 0 = create new
+    products_id: int                # OPS products_id from prior setProduct call
+    size_name: Optional[str]
+    color_name: Optional[str]
+    products_sku: Optional[str]
+    visible: int = 1
+
+
+class OPSProductPriceEntry(BaseModel):
+    product_price_id: int = 0       # 0 = create new
+    products_id: int
+    qty: int = 1
+    qty_to: int = 100
+    price: float
+    vendor_price: float
+    size_id: int = 0                # filled in after setProductSize returns size_id
+    visible: str = "1"
+
+
+class OPSVariantsBundle(BaseModel):
+    sizes: list[OPSProductSizeInput]
+    prices: list[OPSProductPriceEntry]

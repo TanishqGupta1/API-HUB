@@ -35,11 +35,6 @@ from .schemas import (
 
 log = logging.getLogger(__name__)
 
-# PromoStandards caps inventory at 500 per the spec — anything larger is
-# reported as exactly 500. Mirror that here so downstream callers don't have
-# to special-case it.
-_INVENTORY_CAP = 500
-
 
 # ---------------------------------------------------------------------------
 # zeep response walkers — tolerant of shape drift across PS implementations
@@ -121,12 +116,22 @@ class PromoStandardsClient:
         self._service = ZeepClient(self.wsdl_url, transport=transport).service
         return self._service
 
-    def _auth(self, ws_version: str) -> dict:
-        return {
+    def _auth(
+        self,
+        ws_version: str,
+        localization_country: str | None = None,
+        localization_language: str | None = None,
+    ) -> dict:
+        payload = {
             "wsVersion": ws_version,
             "id": self.auth_config.get("id", ""),
             "password": self.auth_config.get("password", ""),
         }
+        if localization_country is not None:
+            payload["localizationCountry"] = localization_country
+        if localization_language is not None:
+            payload["localizationLanguage"] = localization_language
+        return payload
 
     # -- Product Data ------------------------------------------------------
 
@@ -153,14 +158,33 @@ class PromoStandardsClient:
         return ids
 
     async def get_product(
-        self, product_id: str, ws_version: str = "2.0.0"
+        self,
+        product_id: str,
+        ws_version: str = "2.0.0",
+        localization_country: str = "us",
+        localization_language: str = "en",
     ) -> PSProductData | None:
-        return await asyncio.to_thread(self._sync_get_product, product_id, ws_version)
+        return await asyncio.to_thread(
+            self._sync_get_product,
+            product_id,
+            ws_version,
+            localization_country,
+            localization_language,
+        )
 
-    def _sync_get_product(self, product_id: str, ws_version: str) -> PSProductData | None:
+    def _sync_get_product(
+        self,
+        product_id: str,
+        ws_version: str,
+        localization_country: str,
+        localization_language: str,
+    ) -> PSProductData | None:
         svc = self._get_service()
         try:
-            response = svc.getProduct(productId=product_id, **self._auth(ws_version))
+            response = svc.getProduct(
+                productId=product_id,
+                **self._auth(ws_version, localization_country, localization_language),
+            )
         except Exception as exc:  # noqa: BLE001 — defensive: per-product failure isolation
             log.warning("getProduct(%s) failed: %s", product_id, exc)
             return None
@@ -171,6 +195,8 @@ class PromoStandardsClient:
         product_ids: list[str],
         batch_size: int = 50,
         ws_version: str = "2.0.0",
+        localization_country: str = "us",
+        localization_language: str = "en",
     ) -> list[PSProductData]:
         """Fetch products in batches. Batch size is advisory — PS getProduct is
         one-at-a-time, so the batches only govern how often we yield to the
@@ -178,18 +204,31 @@ class PromoStandardsClient:
         out: list[PSProductData] = []
         for i in range(0, len(product_ids), batch_size):
             batch = product_ids[i : i + batch_size]
-            results = await asyncio.to_thread(self._sync_fetch_batch, batch, ws_version)
+            results = await asyncio.to_thread(
+                self._sync_fetch_batch,
+                batch,
+                ws_version,
+                localization_country,
+                localization_language,
+            )
             out.extend(results)
         return out
 
     def _sync_fetch_batch(
-        self, product_ids: list[str], ws_version: str
+        self,
+        product_ids: list[str],
+        ws_version: str,
+        localization_country: str,
+        localization_language: str,
     ) -> list[PSProductData]:
         svc = self._get_service()
         out: list[PSProductData] = []
         for pid in product_ids:
             try:
-                response = svc.getProduct(productId=pid, **self._auth(ws_version))
+                response = svc.getProduct(
+                    productId=pid,
+                    **self._auth(ws_version, localization_country, localization_language),
+                )
             except Exception as exc:  # noqa: BLE001
                 log.warning("getProduct(%s) failed: %s", pid, exc)
                 continue
@@ -208,11 +247,22 @@ class PromoStandardsClient:
         category_items = _as_list(_attr(cat_container, "ProductCategory", "productCategory"))
         categories: list[str] = []
         for c in category_items:
-            # Category element can be a wrapper with .productCategory, or the
-            # raw string directly if the array holds primitives.
-            name = _text(_attr(c, "productCategory", "name")) or _text(c)
+            # SanMar uses <category>; others use <categoryName> or <productCategory>.
+            # Fall back to raw string if the element itself is a primitive.
+            name = _text(
+                _attr(c, "category", "categoryName", "productCategory", "name")
+            ) or _text(c)
             if name:
                 categories.append(name)
+
+        # description may be a list (SanMar emits one element per line) or a
+        # single string. Join lists with newlines.
+        raw_description = _attr(product, "description")
+        if isinstance(raw_description, list):
+            parts_desc = [_text(d) for d in raw_description]
+            description = "\n".join(p for p in parts_desc if p) or None
+        else:
+            description = _text(raw_description)
 
         parts_container = _attr(product, "productPartArray", "ProductPartArray")
         part_items = _as_list(_attr(parts_container, "productPart", "ProductPart"))
@@ -221,7 +271,7 @@ class PromoStandardsClient:
         return PSProductData(
             product_id=pid,
             product_name=_text(_attr(product, "productName", "name")),
-            description=_text(_attr(product, "description")),
+            description=description,
             brand=_text(_attr(product, "productBrand", "brand")),
             categories=categories,
             product_type=_text(_attr(product, "productType")) or "apparel",
@@ -282,34 +332,79 @@ class PromoStandardsClient:
         for inv_record in _as_list(inv_root):
             rec_pid = _text(_attr(inv_record, "productId")) or product_id
             parts_container = _attr(
-                inv_record, "PartInventoryArray", "partInventoryArray"
+                inv_record,
+                "PartInventoryArray",
+                "partInventoryArray",
+                "ProductVariationInventoryArray",
             )
-            part_items = _as_list(_attr(parts_container, "PartInventory", "partInventory"))
+            part_items = _as_list(
+                _attr(
+                    parts_container,
+                    "PartInventory",
+                    "partInventory",
+                    "ProductVariationInventory",
+                )
+            )
             for part in part_items:
                 part_id = _text(_attr(part, "partId", "part_id"))
                 if not part_id:
                     continue
-                raw_qty = _attr(part, "quantityAvailable", "quantity")
-                qty = self._coerce_int(raw_qty)
-                # Spec caps at 500 — enforce it here so callers never see more.
-                qty = min(qty, _INVENTORY_CAP)
-
-                warehouse = None
-                loc_container = _attr(
-                    part, "InventoryLocationArray", "inventoryLocationArray"
-                )
-                locs = _as_list(_attr(loc_container, "InventoryLocation", "inventoryLocation"))
-                if locs:
-                    warehouse = _text(
-                        _attr(locs[0], "inventoryLocationName", "name")
-                    )
-
+                qty, warehouse = self._extract_inventory_qty_and_warehouse(part)
                 yield PSInventoryLevel(
                     product_id=rec_pid,
                     part_id=part_id,
                     quantity_available=qty,
                     warehouse_code=warehouse,
                 )
+
+    def _extract_inventory_qty_and_warehouse(self, part: Any) -> tuple[int, str | None]:
+        """Return (total_quantity, primary_warehouse_name) for one part.
+
+        SanMar nests qty as ``<quantityAvailable><Quantity><value>N</value></Quantity></quantityAvailable>``
+        and repeats ``<InventoryLocation>`` with its own ``<inventoryLocationQuantity>``.
+        Aggregate across locations when per-location quantities are present;
+        otherwise fall back to the top-level ``quantityAvailable``. Primary
+        warehouse is the highest-stock location.
+        """
+        loc_container = _attr(part, "InventoryLocationArray", "inventoryLocationArray")
+        locs = _as_list(_attr(loc_container, "InventoryLocation", "inventoryLocation"))
+
+        best_qty = -1
+        best_name: str | None = None
+        sum_qty = 0
+        any_location_qty = False
+        for loc in locs:
+            loc_qty_wrapper = _attr(loc, "inventoryLocationQuantity")
+            quantity_obj = _attr(loc_qty_wrapper, "Quantity", "quantity") if loc_qty_wrapper else None
+            loc_qty_raw = _attr(quantity_obj, "value") if quantity_obj else None
+            if loc_qty_raw is None:
+                continue
+            any_location_qty = True
+            loc_qty = self._coerce_int(loc_qty_raw)
+            sum_qty += loc_qty
+            if loc_qty > best_qty:
+                best_qty = loc_qty
+                best_name = _text(
+                    _attr(loc, "inventoryLocationName", "inventoryLocationId", "name")
+                )
+
+        if any_location_qty:
+            return sum_qty, best_name
+
+        # No per-location quantities — use top-level quantityAvailable.
+        qty_container = _attr(part, "quantityAvailable", "quantity")
+        nested_q = _attr(qty_container, "Quantity") if qty_container is not None else None
+        if nested_q is not None:
+            qty = self._coerce_int(_attr(nested_q, "value"))
+        else:
+            qty = self._coerce_int(qty_container)
+
+        warehouse_name: str | None = None
+        if locs:
+            warehouse_name = _text(
+                _attr(locs[0], "inventoryLocationName", "inventoryLocationId", "name")
+            )
+        return qty, warehouse_name
 
     @staticmethod
     def _coerce_int(value: Any) -> int:
@@ -326,19 +421,50 @@ class PromoStandardsClient:
     # -- Pricing (PPC) -----------------------------------------------------
 
     async def get_pricing(
-        self, product_ids: list[str], ws_version: str = "1.0.0"
+        self,
+        product_ids: list[str],
+        ws_version: str = "1.0.0",
+        fob_id: str = "1",
+        price_type: str = "Net",
+        currency: str = "USD",
+        configuration_type: str = "Blank",
+        localization_country: str = "US",
+        localization_language: str = "EN",
     ) -> list[PSPricePoint]:
-        return await asyncio.to_thread(self._sync_get_pricing, product_ids, ws_version)
+        return await asyncio.to_thread(
+            self._sync_get_pricing,
+            product_ids,
+            ws_version,
+            fob_id,
+            price_type,
+            currency,
+            configuration_type,
+            localization_country,
+            localization_language,
+        )
 
     def _sync_get_pricing(
-        self, product_ids: list[str], ws_version: str
+        self,
+        product_ids: list[str],
+        ws_version: str,
+        fob_id: str,
+        price_type: str,
+        currency: str,
+        configuration_type: str,
+        localization_country: str,
+        localization_language: str,
     ) -> list[PSPricePoint]:
         svc = self._get_service()
         out: list[PSPricePoint] = []
         for pid in product_ids:
             try:
                 response = svc.getConfigurationAndPricing(
-                    productId=pid, **self._auth(ws_version)
+                    productId=pid,
+                    currency=currency,
+                    fobId=fob_id,
+                    priceType=price_type,
+                    configurationType=configuration_type,
+                    **self._auth(ws_version, localization_country, localization_language)
                 )
             except Exception as exc:  # noqa: BLE001
                 log.warning("getConfigurationAndPricing(%s) failed: %s", pid, exc)
@@ -380,18 +506,22 @@ class PromoStandardsClient:
     # -- Media Content -----------------------------------------------------
 
     async def get_media(
-        self, product_ids: list[str], ws_version: str = "1.0.0"
+        self, product_ids: list[str], ws_version: str = "1.1.0", media_type: str = "Image"
     ) -> list[PSMediaItem]:
-        return await asyncio.to_thread(self._sync_get_media, product_ids, ws_version)
+        return await asyncio.to_thread(self._sync_get_media, product_ids, ws_version, media_type)
 
     def _sync_get_media(
-        self, product_ids: list[str], ws_version: str
+        self, product_ids: list[str], ws_version: str, media_type: str
     ) -> list[PSMediaItem]:
         svc = self._get_service()
         out: list[PSMediaItem] = []
         for pid in product_ids:
             try:
-                response = svc.getMediaContent(productId=pid, **self._auth(ws_version))
+                response = svc.getMediaContent(
+                    productId=pid,
+                    mediaType=media_type,
+                    **self._auth(ws_version)
+                )
             except Exception as exc:  # noqa: BLE001
                 log.warning("getMediaContent(%s) failed: %s", pid, exc)
                 continue

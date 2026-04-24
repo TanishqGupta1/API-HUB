@@ -5,8 +5,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-vg_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vg_pass}
       POSTGRES_DB: ${POSTGRES_DB:-vg_hub}
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -19,6 +17,8 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - POSTGRES_URL=postgresql+asyncpg://${POSTGRES_USER:-vg_user}:${POSTGRES_PASSWORD:-vg_pass}@postgres:5432/${POSTGRES_DB:-vg_hub}
       - SECRET_KEY=${SECRET_KEY:-y0uR_s3cr3t_k3y_h3r3}
@@ -64,6 +64,7 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_INGEST_SECRET=${NEXT_PUBLIC_INGEST_SECRET:-}
       - WATCHPACK_POLLING=true
     volumes:
       - ./frontend:/app

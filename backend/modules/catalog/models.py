@@ -117,6 +117,8 @@ class ProductOption(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     required: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[int] = mapped_column(Integer, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    overridden_sort: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     product: Mapped["Product"] = relationship(back_populates="options")
     attributes: Mapped[list["ProductOptionAttribute"]] = relationship(
@@ -140,5 +142,9 @@ class ProductOptionAttribute(Base):
     title: Mapped[str] = mapped_column(String(255))
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[int] = mapped_column(Integer, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    numeric_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    overridden_sort: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     option: Mapped["ProductOption"] = relationship(back_populates="attributes")

@@ -160,7 +160,7 @@ export default function CursorTrail() {
         width: "100%",
         height: "100%",
         pointerEvents: "none",
-        zIndex: 99999,
+        zIndex: -1,
       }}
     />
   );

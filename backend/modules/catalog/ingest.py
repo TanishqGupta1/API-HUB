@@ -47,14 +47,15 @@ router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 # ---------------------------------------------------------------------------
 
 def _expected_secret() -> str:
-    value = os.getenv("INGEST_SHARED_SECRET")
+    value = os.getenv("INGEST_SHARED_SECRET", "").strip()
     if not value:
-        raise HTTPException(500, "INGEST_SHARED_SECRET not configured")
+        raise HTTPException(503, "Ingest endpoint temporarily unavailable")
     return value
 
 
 async def require_ingest_secret(x_ingest_secret: str | None = Header(default=None)) -> None:
-    if x_ingest_secret != _expected_secret():
+    expected = _expected_secret()
+    if not x_ingest_secret or x_ingest_secret != expected:
         raise HTTPException(401, "Invalid or missing X-Ingest-Secret header")
 
 

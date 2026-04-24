@@ -114,6 +114,15 @@ const NAV_ITEMS = [
           </svg>
         ),
       },
+      {
+        href: "/products/configure",
+        label: "Product Setup",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20v-8m0 0V4m0 8h8m-8 0H4" />
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -161,7 +170,14 @@ export default function SidebarNav() {
               className={`nav-item${isActive(item.href) ? " active" : ""}`}
             >
               {item.icon}
-              {item.label}
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                {item.label}
+                {item.href === "/products/configure" && (
+                  <span className="text-[9px] font-bold bg-[#f9f7f4] text-[#888894] px-1.5 py-0.5 rounded border border-[#cfccc8] ml-2">
+                    SOON
+                  </span>
+                )}
+              </span>
             </Link>
           ))}
         </div>

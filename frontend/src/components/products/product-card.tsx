@@ -33,13 +33,15 @@ export function ProductCard({ product }: ProductCardProps) {
             className="w-full h-full object-contain p-3"
           />
         ) : (
-          <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#b4b4bc]">
-            Blueprint Detail View
-          </span>
+          <div className="px-6 text-center select-none pointer-events-none opacity-20 group-hover:opacity-30 transition-opacity">
+            <span className="text-[24px] font-black uppercase tracking-tight text-[#1e1e24] line-clamp-2">
+              {product.product_name}
+            </span>
+          </div>
         )}
-        {/* Supplier badge */}
-        <div className="absolute top-3 left-3 px-[10px] py-[4px] bg-white border border-[#cfccc8] rounded
-                        font-mono text-[10px] font-bold text-[#1e4d92]">
+        {/* Supplier badge - Moved to bottom-right to prevent overlap */}
+        <div className="absolute bottom-3 right-3 px-[10px] py-[4px] bg-white/90 backdrop-blur-sm border border-[#cfccc8] rounded
+                        font-mono text-[10px] font-bold text-[#1e4d92] shadow-sm z-10">
           {badge}
         </div>
       </div>

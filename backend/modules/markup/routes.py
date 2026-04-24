@@ -9,7 +9,14 @@ from modules.catalog.ingest import require_ingest_secret
 
 from .engine import calculate_price
 from .models import MarkupRule
-from .schemas import MarkupRuleCreate, MarkupRuleRead, PushPayload
+from .schemas import (
+    MarkupRuleCreate,
+    MarkupRuleRead,
+    PushPayload,
+    OPSProductSizeInput,
+    OPSProductPriceEntry,
+    OPSVariantsBundle,
+)
 
 router = APIRouter(prefix="/api/markup-rules", tags=["markup"])
 push_router = APIRouter(prefix="/api/push", tags=["markup"])
@@ -28,6 +35,41 @@ async def push_payload(
     n8n calls this before invoking OPS `setProduct`/`setProductPrice` mutations.
     """
     return await calculate_price(db, customer_id, product_id)
+
+
+@push_router.get(
+    "/{customer_id}/product/{product_id}/ops-variants",
+    response_model=OPSVariantsBundle,
+    dependencies=[Depends(require_ingest_secret)],
+)
+async def ops_variants_bundle(
+    customer_id: UUID,
+    product_id: UUID,
+    ops_products_id: int = 0,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return sizes + prices aligned by index for n8n OPS push loop."""
+    payload = await calculate_price(db, customer_id, product_id)
+    variants = payload["variants"]
+
+    sizes = [
+        OPSProductSizeInput(
+            products_id=ops_products_id,
+            size_name=v["size"],
+            color_name=v["color"],
+            products_sku=v["sku"],
+        )
+        for v in variants
+    ]
+    prices = [
+        OPSProductPriceEntry(
+            products_id=ops_products_id,
+            price=v["final_price"] or 0.0,
+            vendor_price=v["base_price"] or 0.0,
+        )
+        for v in variants
+    ]
+    return OPSVariantsBundle(sizes=sizes, prices=prices)
 
 
 @router.get("/{customer_id}", response_model=list[MarkupRuleRead])

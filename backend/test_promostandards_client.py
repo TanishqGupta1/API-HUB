@@ -178,7 +178,14 @@ async def test_products_batch_skips_individual_failures():
 # get_inventory
 # ---------------------------------------------------------------------------
 
-async def test_inventory_cap_and_shape():
+async def test_inventory_flat_quantity_still_parses():
+    """Backwards compat: flat-int quantityAvailable + location-name-only shape.
+
+    Historically the client capped at 500; that cap is removed (SanMar reports
+    up to 3000 per warehouse × 8 warehouses). Location metadata with no qty
+    falls back to top-level quantityAvailable; warehouse_name comes from the
+    first location entry.
+    """
     svc = FakeService()
     svc.responses[("getInventoryLevels", "PC61")] = NS(
         Inventory=NS(
@@ -194,7 +201,7 @@ async def test_inventory_cap_and_shape():
                     ),
                     NS(
                         partId="PC61-NVY-L",
-                        quantityAvailable=99999,  # will be capped at 500
+                        quantityAvailable=99999,
                         InventoryLocationArray=None,
                     ),
                 ]
@@ -207,8 +214,100 @@ async def test_inventory_cap_and_shape():
 
     assert by_part["PC61-NVY-M"].quantity_available == 350
     assert by_part["PC61-NVY-M"].warehouse_code == "Seattle"
-    assert by_part["PC61-NVY-L"].quantity_available == 500  # capped
+    # Cap removed — SanMar reports up to 3000 per warehouse × 8 warehouses.
+    assert by_part["PC61-NVY-L"].quantity_available == 99999
     assert by_part["PC61-NVY-L"].warehouse_code is None
+
+
+async def test_inventory_reads_nested_quantity_value():
+    """SanMar wraps inventory qty as <quantityAvailable><Quantity><value>N</value></Quantity></quantityAvailable>."""
+    svc = FakeService()
+    svc.responses[("getInventoryLevels", "K420")] = NS(
+        Inventory=NS(
+            productId="K420",
+            PartInventoryArray=NS(
+                PartInventory=[
+                    NS(
+                        partId="92032",
+                        quantityAvailable=NS(Quantity=NS(uom="EA", value="1045")),
+                        InventoryLocationArray=None,
+                    )
+                ]
+            ),
+        )
+    )
+    levels = await _client(svc).get_inventory(["K420"])
+    assert len(levels) == 1
+    assert levels[0].part_id == "92032"
+    assert levels[0].quantity_available == 1045
+
+
+async def test_inventory_aggregates_per_warehouse_and_picks_primary():
+    """Sum per-warehouse quantities; warehouse_code = highest-stock location."""
+    svc = FakeService()
+    svc.responses[("getInventoryLevels", "K420")] = NS(
+        Inventory=NS(
+            productId="K420",
+            PartInventoryArray=NS(
+                PartInventory=[
+                    NS(
+                        partId="92032",
+                        quantityAvailable=None,
+                        InventoryLocationArray=NS(
+                            InventoryLocation=[
+                                NS(
+                                    inventoryLocationId="1",
+                                    inventoryLocationName="Seattle",
+                                    inventoryLocationQuantity=NS(
+                                        Quantity=NS(value="200")
+                                    ),
+                                ),
+                                NS(
+                                    inventoryLocationId="3",
+                                    inventoryLocationName="Dallas",
+                                    inventoryLocationQuantity=NS(
+                                        Quantity=NS(value="500")
+                                    ),
+                                ),
+                                NS(
+                                    inventoryLocationId="4",
+                                    inventoryLocationName="Reno",
+                                    inventoryLocationQuantity=NS(
+                                        Quantity=NS(value="161")
+                                    ),
+                                ),
+                            ]
+                        ),
+                    )
+                ]
+            ),
+        )
+    )
+    levels = await _client(svc).get_inventory(["K420"])
+    assert len(levels) == 1
+    assert levels[0].quantity_available == 861  # 200 + 500 + 161
+    assert levels[0].warehouse_code == "Dallas"  # highest-stock
+
+
+async def test_inventory_prefers_top_level_when_locations_empty():
+    """If top-level qty is set and no per-location qty, use top-level."""
+    svc = FakeService()
+    svc.responses[("getInventoryLevels", "PC61")] = NS(
+        Inventory=NS(
+            productId="PC61",
+            PartInventoryArray=NS(
+                PartInventory=[
+                    NS(
+                        partId="PC61-M",
+                        quantityAvailable=NS(Quantity=NS(value="42")),
+                        InventoryLocationArray=None,
+                    )
+                ]
+            ),
+        )
+    )
+    levels = await _client(svc).get_inventory(["PC61"])
+    assert levels[0].quantity_available == 42
 
 
 # ---------------------------------------------------------------------------
@@ -304,3 +403,161 @@ async def test_media_parses_content():
     assert media[0].media_type == "front"
     assert media[0].color_name == "Navy"
     assert media[1].product_id == "PC61"  # falls back to request productId
+
+
+# ---------------------------------------------------------------------------
+# Task 1: localization params on getProduct
+# ---------------------------------------------------------------------------
+
+async def test_get_product_sends_localization_defaults():
+    """SanMar requires localizationCountry + localizationLanguage on getProduct."""
+    svc = FakeService()
+    svc.responses[("getProduct", "PC61")] = NS(
+        Product=NS(productId="PC61", productName="Tee")
+    )
+    await _client(svc).get_product("PC61")
+    _, kwargs = svc.calls[-1]
+    assert kwargs["localizationCountry"] == "us"
+    assert kwargs["localizationLanguage"] == "en"
+
+
+async def test_get_product_accepts_explicit_locale():
+    svc = FakeService()
+    svc.responses[("getProduct", "PC61")] = NS(
+        Product=NS(productId="PC61")
+    )
+    await _client(svc).get_product(
+        "PC61", localization_country="ca", localization_language="fr"
+    )
+    _, kwargs = svc.calls[-1]
+    assert kwargs["localizationCountry"] == "ca"
+    assert kwargs["localizationLanguage"] == "fr"
+
+
+async def test_get_products_batch_propagates_locale():
+    svc = FakeService()
+    svc.responses["getProduct"] = NS(Product=NS(productId="X"))
+    await _client(svc).get_products_batch(["A", "B"])
+    for _, kwargs in svc.calls:
+        assert kwargs["localizationCountry"] == "us"
+        assert kwargs["localizationLanguage"] == "en"
+
+
+
+# ---------------------------------------------------------------------------
+# Task 2: product parser — SanMar <category> field + multi-description join
+# ---------------------------------------------------------------------------
+
+async def test_parse_product_reads_sanmar_category_field():
+    """SanMar wraps category name in <category>, not <categoryName>."""
+    svc = FakeService()
+    svc.responses[("getProduct", "MM1000")] = NS(
+        Product=NS(
+            productId="MM1000",
+            productName="Polo",
+            ProductCategoryArray=NS(
+                ProductCategory=[NS(category="Polos/Knits", subCategory="Cotton")]
+            ),
+        )
+    )
+    product = await _client(svc).get_product("MM1000")
+    assert product is not None
+    assert "Polos/Knits" in product.categories
+
+
+async def test_parse_product_joins_multi_description():
+    """SanMar returns several <description> elements; zeep yields a list."""
+    svc = FakeService()
+    svc.responses[("getProduct", "MM1000")] = NS(
+        Product=NS(
+            productId="MM1000",
+            description=[
+                "Crafted in heavier knit",
+                "8.1-ounce fabric",
+                "Moisture-wicking",
+            ],
+        )
+    )
+    product = await _client(svc).get_product("MM1000")
+    assert product is not None
+    assert product.description == (
+        "Crafted in heavier knit\n8.1-ounce fabric\nMoisture-wicking"
+    )
+
+
+async def test_parse_product_single_description_still_works():
+    """Backwards compat: suppliers returning one description string must still parse."""
+    svc = FakeService()
+    svc.responses[("getProduct", "PC61")] = NS(
+        Product=NS(productId="PC61", description="100% cotton")
+    )
+    product = await _client(svc).get_product("PC61")
+    assert product is not None
+    assert product.description == "100% cotton"
+
+
+# ---------------------------------------------------------------------------
+# Task 3: Media service — v1.1.0 default + required mediaType
+# ---------------------------------------------------------------------------
+
+async def test_get_media_uses_v110_and_sends_mediatype_image():
+    """SanMar requires wsVersion=1.1.0 and mediaType field."""
+    svc = FakeService()
+    svc.responses[("getMediaContent", "PC61")] = NS(MediaContentArray=None)
+    await _client(svc).get_media(["PC61"])
+    _, kwargs = svc.calls[-1]
+    assert kwargs["wsVersion"] == "1.1.0"
+    assert kwargs["mediaType"] == "Image"
+
+
+async def test_get_media_accepts_document_media_type():
+    svc = FakeService()
+    svc.responses[("getMediaContent", "PC61")] = NS(MediaContentArray=None)
+    await _client(svc).get_media(["PC61"], media_type="Document")
+    _, kwargs = svc.calls[-1]
+    assert kwargs["mediaType"] == "Document"
+
+
+# ---------------------------------------------------------------------------
+# Task 5: Pricing — required SanMar params
+# ---------------------------------------------------------------------------
+
+async def test_get_pricing_sends_required_sanmar_params():
+    """SanMar PPC requires currency/fobId/priceType/localization/configurationType."""
+    svc = FakeService()
+    svc.responses[("getConfigurationAndPricing", "K500")] = NS(
+        Configuration=NS(PartArray=None)
+    )
+    await _client(svc).get_pricing(["K500"])
+    _, kwargs = svc.calls[-1]
+    assert kwargs["currency"] == "USD"
+    assert kwargs["fobId"] == "1"
+    assert kwargs["priceType"] == "Net"
+    assert kwargs["localizationCountry"] == "US"
+    assert kwargs["localizationLanguage"] == "EN"
+    assert kwargs["configurationType"] == "Blank"
+
+
+async def test_get_pricing_accepts_explicit_overrides():
+    svc = FakeService()
+    svc.responses[("getConfigurationAndPricing", "K500")] = NS(
+        Configuration=NS(PartArray=None)
+    )
+    await _client(svc).get_pricing(
+        ["K500"],
+        currency="CAD",
+        fob_id="6",
+        price_type="List",
+        localization_country="CA",
+        localization_language="FR",
+        configuration_type="Configured",
+    )
+    _, kwargs = svc.calls[-1]
+    assert kwargs["currency"] == "CAD"
+    assert kwargs["fobId"] == "6"
+    assert kwargs["priceType"] == "List"
+    assert kwargs["localizationCountry"] == "CA"
+    assert kwargs["localizationLanguage"] == "FR"
+    assert kwargs["configurationType"] == "Configured"
+
+

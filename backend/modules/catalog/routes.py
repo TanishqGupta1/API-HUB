@@ -1,8 +1,8 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -10,31 +10,25 @@ from database import get_db
 from modules.suppliers.models import Supplier
 
 from .models import Category, Product, ProductOption, ProductVariant
-from .schemas import ProductListRead, ProductRead
+from .schemas import ProductListRead, ProductRead, OPSCategoryInput
 
 router = APIRouter(prefix="/api/products", tags=["catalog"])
 categories_router = APIRouter(prefix="/api/categories", tags=["catalog"])
 
 
 async def _category_descendants(db: AsyncSession, root_id: UUID) -> list[UUID]:
-    """Return root_id + all descendant category ids (BFS)."""
-    all_cats = (
-        await db.execute(select(Category.id, Category.parent_id))
-    ).all()
-    children_by_parent: dict[UUID, list[UUID]] = {}
-    for cid, pid in all_cats:
-        if pid is not None:
-            children_by_parent.setdefault(pid, []).append(cid)
-
-    out = [root_id]
-    stack = [root_id]
-    while stack:
-        cur = stack.pop()
-        for child in children_by_parent.get(cur, []):
-            if child not in out:
-                out.append(child)
-                stack.append(child)
-    return out
+    """Return root_id + all descendant category ids via PostgreSQL recursive CTE."""
+    cte_sql = text("""
+        WITH RECURSIVE descendants AS (
+            SELECT id FROM categories WHERE id = :root_id
+            UNION ALL
+            SELECT c.id FROM categories c
+            JOIN descendants d ON c.parent_id = d.id
+        )
+        SELECT id FROM descendants
+    """)
+    rows = (await db.execute(cte_sql, {"root_id": root_id})).fetchall()
+    return [row[0] for row in rows]
 
 
 @router.get("", response_model=list[ProductListRead])
@@ -44,7 +38,7 @@ async def list_products(
     brand: Optional[str] = None,
     search: Optional[str] = None,
     skip: int = 0,
-    limit: int = 50,
+    limit: int = Query(default=50, le=500),
     db: AsyncSession = Depends(get_db),
 ):
     variant_agg = (
@@ -173,3 +167,16 @@ async def get_category(category_id: UUID, db: AsyncSession = Depends(get_db)):
         "parent_id": str(cat.parent_id) if cat.parent_id else None,
         "sort_order": cat.sort_order,
     }
+
+
+@categories_router.get("/{category_id}/ops-input", response_model=OPSCategoryInput)
+async def get_category_ops_input(category_id: UUID, db: AsyncSession = Depends(get_db)):
+    cat = await db.get(Category, category_id)
+    if not cat:
+        raise HTTPException(404, "Category not found")
+    return OPSCategoryInput(
+        category_name=cat.name,
+        parent_id=-1,
+        status=1,
+        category_internal_name=cat.external_id or cat.name.lower().replace(" ", "_"),
+    )

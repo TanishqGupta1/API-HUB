@@ -106,6 +106,31 @@ DEMO_PRODUCTS = [
             {"color": "Smoke", "size": "M",  "sku": "AA1070-SMK-M",  "base_price": "8.50", "inventory": 200},
         ],
     },
+    {
+        "supplier_slug": "vg-ops",
+        "supplier_sku": "VG-101",
+        "product_name": "Premium Cotton Polo",
+        "brand": "VG Signature",
+        "description": "High-quality cotton polo with reinforced stitching.",
+        "product_type": "apparel",
+        "image_url": "https://placehold.co/400x400/png?text=Polo",
+        "variants": [
+            {"color": "Royal Blue", "size": "M", "sku": "VG-101-RB-M", "base_price": "19.99", "inventory": 50},
+            {"color": "Royal Blue", "size": "L", "sku": "VG-101-RB-L", "base_price": "19.99", "inventory": 45},
+        ],
+    },
+    {
+        "supplier_slug": "vg-ops",
+        "supplier_sku": "VG-202",
+        "product_name": "Performance Tech Hoodie",
+        "brand": "VG Active",
+        "description": "Moisture-wicking tech hoodie for all-day comfort.",
+        "product_type": "apparel",
+        "image_url": "https://placehold.co/400x400/png?text=Hoodie",
+        "variants": [
+            {"color": "Charcoal", "size": "L", "sku": "VG-202-CH-L", "base_price": "45.00", "inventory": 120},
+        ],
+    },
 ]
 
 
@@ -163,9 +188,57 @@ async def seed():
         
         await db.commit()
 
+        # Seed categories for vg-ops
+        from modules.catalog.models import Category
+        vg_supplier = slug_to_supplier.get("vg-ops")
+        cat_map: dict[str, Category] = {}
+        if vg_supplier:
+            demo_cats = [
+                {"external_id": "cat_1", "name": "Apparel", "sort_order": 1},
+                {"external_id": "cat_2", "name": "Outerwear", "sort_order": 2, "parent_external_id": "cat_1"},
+                {"external_id": "cat_3", "name": "Polos", "sort_order": 3, "parent_external_id": "cat_1"},
+            ]
+            for c_data in demo_cats:
+                parent_id = None
+                if "parent_external_id" in c_data:
+                    parent = cat_map.get(c_data["parent_external_id"])
+                    if parent:
+                        parent_id = parent.id
+                
+                existing_cat = (await db.execute(
+                    select(Category).where(
+                        Category.supplier_id == vg_supplier.id,
+                        Category.external_id == c_data["external_id"]
+                    )
+                )).scalar_one_or_none()
+
+                if not existing_cat:
+                    cat = Category(
+                        supplier_id=vg_supplier.id,
+                        external_id=c_data["external_id"],
+                        name=c_data["name"],
+                        sort_order=c_data["sort_order"],
+                        parent_id=parent_id
+                    )
+                    db.add(cat)
+                    await db.flush()
+                    cat_map[c_data["external_id"]] = cat
+                    print(f"  [add]  Category: {c_data['name']}")
+                else:
+                    cat_map[c_data["external_id"]] = existing_cat
+            
+            await db.commit()
+
         # Seed products
         seeded_products = []
         from decimal import Decimal
+        
+        # Product to category mapping for VG
+        vg_prod_cats = {
+            "VG-101": "cat_3", # Polos
+            "VG-202": "cat_2", # Outerwear
+        }
+
         for p_data in DEMO_PRODUCTS:
             supplier = slug_to_supplier.get(p_data["supplier_slug"])
             if not supplier:
@@ -180,7 +253,17 @@ async def seed():
                 )
             ).scalar_one_or_none()
 
+            # Assign category if it's a VG product
+            category_id = None
+            if p_data["supplier_slug"] == "vg-ops":
+                cat_ext_id = vg_prod_cats.get(p_data["supplier_sku"])
+                if cat_ext_id:
+                    category_id = cat_map.get(cat_ext_id).id
+
             if existing_product:
+                if category_id and not existing_product.category_id:
+                    existing_product.category_id = category_id
+                    await db.flush()
                 seeded_products.append(existing_product)
                 continue
 
@@ -192,6 +275,7 @@ async def seed():
                 description=p_data["description"],
                 product_type=p_data["product_type"],
                 image_url=p_data["image_url"],
+                category_id=category_id
             )
             db.add(product)
             await db.flush()
