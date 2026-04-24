@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ProductListItem } from "@/lib/types";
 import { ProductCard } from "@/components/products/product-card";
 
 export default function ProductsPage() {
-  const router = useRouter();
   const [products, setProducts] = useState<ProductListItem[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -27,6 +26,17 @@ export default function ProductsPage() {
     return () => clearTimeout(timeout);
   }, [search, typeFilter]);
 
+  const handleArchive = async (p: ProductListItem) => {
+    if (!confirm(`Archive ${p.product_name}?`)) return;
+    try {
+      await api(`/api/products/${p.id}/archive`, { method: "POST" });
+      setProducts((prev) => prev.filter((x) => x.id !== p.id));
+    } catch (err) {
+      console.error(err);
+      alert("Failed to archive product.");
+    }
+  };
+
   const types = ["Apparel", "Bags", "Drinkware", "Accessories"];
 
   return (
@@ -41,6 +51,12 @@ export default function ProductsPage() {
             32.4k products indexed across 4 normalized schemas
           </div>
         </div>
+        <Link
+          href="/products/archived"
+          className="text-[12px] font-semibold text-[#1e4d92] hover:underline"
+        >
+          View archived →
+        </Link>
       </div>
 
       {/* Filters row */}
@@ -111,7 +127,9 @@ export default function ProductsPage() {
             <p>No products yet. Connect a supplier to start syncing products.</p>
           </div>
         ) : (
-          products.map((p) => <ProductCard key={p.id} product={p} />)
+          products.map((p) => (
+            <ProductCard key={p.id} product={p} onArchive={handleArchive} />
+          ))
         )}
       </div>
     </div>

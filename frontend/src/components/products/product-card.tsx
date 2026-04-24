@@ -5,9 +5,10 @@ import type { ProductListItem } from "@/lib/types";
 
 interface ProductCardProps {
   product: ProductListItem;
+  onArchive?: (product: ProductListItem) => void;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, onArchive }: ProductCardProps) {
   const router = useRouter();
 
   const badge =
@@ -65,9 +66,23 @@ export function ProductCard({ product }: ProductCardProps) {
         <span className="text-[10px] font-bold uppercase text-[#484852]">
           {product.product_type}
         </span>
-        <span className="font-mono text-[12px] font-semibold text-[#1e4d92]">
-          {product.variant_count} variants
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[12px] font-semibold text-[#1e4d92]">
+            {product.variant_count} variants
+          </span>
+          {onArchive ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchive(product);
+              }}
+              className="text-[11px] font-semibold text-[#b93232] hover:underline cursor-pointer"
+            >
+              Archive
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
