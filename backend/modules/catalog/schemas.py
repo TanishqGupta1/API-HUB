@@ -33,6 +33,11 @@ class ProductOptionAttributeRead(BaseModel):
     title: str
     sort_order: int
     ops_attribute_id: Optional[int] = None
+    master_attribute_id: Optional[int] = None
+    attribute_key: Optional[str] = None
+    price: Optional[Decimal] = None
+    setup_cost: Optional[Decimal] = None
+    multiplier: Optional[Decimal] = None
 
     model_config = {"from_attributes": True}
 
@@ -123,6 +128,11 @@ class OptionAttributeIngest(BaseModel):
     title: str
     sort_order: int = 0
     ops_attribute_id: Optional[int] = None
+    master_attribute_id: Optional[int] = None
+    attribute_key: Optional[str] = None
+    price: Optional[Decimal] = None
+    setup_cost: Optional[Decimal] = None
+    multiplier: Optional[Decimal] = None
 
 
 class OptionIngest(BaseModel):

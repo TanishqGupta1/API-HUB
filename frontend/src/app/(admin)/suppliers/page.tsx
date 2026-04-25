@@ -130,6 +130,19 @@ function SuppliersContent() {
     }
   };
 
+  const deleteSupplier = async (s: Supplier) => {
+    if (!confirm(`Delete ${s.name}? This removes the supplier and any cached data. This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api(`/api/suppliers/${s.id}`, { method: "DELETE" });
+      setSuppliers(suppliers.filter((item) => item.id !== s.id));
+    } catch (err) {
+      console.error("Failed to delete supplier:", err);
+      alert("Delete failed: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
   const triggerSync = async (s: Supplier) => {
     if (!s.is_active) return;
     try {
@@ -266,6 +279,13 @@ function SuppliersContent() {
                         title="Sync Now"
                       >
                         Sync Now ⚡
+                      </button>
+                      <button
+                        onClick={() => deleteSupplier(s)}
+                        className="btn btn-ghost !py-1 !px-2 !text-[11px] text-[#b23a3a] hover:bg-[rgba(178,58,58,0.08)]"
+                        title="Delete supplier"
+                      >
+                        Delete
                       </button>
                     </div>
                   </td>

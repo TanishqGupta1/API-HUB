@@ -83,8 +83,14 @@ async def _run_category_import(
     wsdl_product: str,
     category_name: str,
     limit: int,
+    extension_wsdl_url: str | None = None,
 ) -> None:
-    """Fetch N products by category via PS SOAP and upsert into hub."""
+    """Fetch N products by category via PS SOAP and upsert into hub.
+
+    If ``extension_wsdl_url`` is provided (SanMar case), the category call
+    is routed to that WSDL because ``getProductInfoByCategory`` is a SanMar
+    non-PS extension, not on the standard ProductData binding.
+    """
     from modules.promostandards.client import PromoStandardsClient
     from modules.promostandards.normalizer import upsert_products
 
@@ -97,7 +103,9 @@ async def _run_category_import(
         try:
             client = PromoStandardsClient(wsdl_product, auth_config)
             products = await client.get_products_by_category(
-                category_name, limit=limit
+                category_name,
+                limit=limit,
+                extension_wsdl_url=extension_wsdl_url,
             )
             await upsert_products(
                 session, supplier_id, products, inventory=None, pricing=None, media=None
@@ -210,6 +218,15 @@ async def import_category(
     await db.commit()
     await db.refresh(job)
 
+    # SanMar's getProductInfoByCategory is a non-PS extension, not on the
+    # ProductData binding. Route via SANMAR_EXT_WSDL when the supplier is
+    # SanMar. Other PS suppliers fail fast with an empty result + warning log.
+    from modules.promostandards.client import SANMAR_EXT_WSDL
+
+    extension_wsdl_url: str | None = None
+    if (supplier.promostandards_code or "").upper() == "SANMAR":
+        extension_wsdl_url = SANMAR_EXT_WSDL
+
     background_tasks.add_task(
         _run_category_import,
         job.id,
@@ -218,6 +235,7 @@ async def import_category(
         wsdl_product,
         body.category_name,
         body.limit,
+        extension_wsdl_url,
     )
 
     return ImportCategoryResponse(

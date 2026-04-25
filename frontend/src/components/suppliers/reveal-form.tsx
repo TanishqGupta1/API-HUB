@@ -36,6 +36,7 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
   const [customType, setCustomType] = useState("Standard API"); // Maps to 'rest' or 'rest_hmac'
   
   const [creds, setCreds] = useState({ id: "", password: "" });
+  const [customerNumber, setCustomerNumber] = useState("");
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
   const [scheduleType, setScheduleType] = useState("Recommended (automatic)");
   
@@ -80,10 +81,11 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
           protocol,
           promostandards_code: isPS ? code : null,
           base_url: isPS ? null : customUrl,
-          auth_config: { 
-            id: creds.id, 
-            password: creds.password, 
-            sync_schedule: SCHEDULE_MAP[scheduleType] 
+          auth_config: {
+            id: creds.id,
+            password: creds.password,
+            ...(customerNumber ? { customer_number: customerNumber } : {}),
+            sync_schedule: SCHEDULE_MAP[scheduleType]
           },
         }),
       });
@@ -286,6 +288,26 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
                   }}
                 />
               </div>
+              {!isCustom && (
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">
+                    Customer / Account Number
+                    <span className="ml-2 text-[10px] font-normal text-gray-400 normal-case">
+                      (required for SanMar; optional for others)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    className="input-control w-full p-2.5 border rounded-lg text-sm font-mono"
+                    placeholder="e.g. 12345678"
+                    value={customerNumber}
+                    onChange={(e) => {
+                      setCustomerNumber(e.target.value);
+                      setTestStatus("idle");
+                    }}
+                  />
+                </div>
+              )}
               <p className="text-[11px] text-gray-400 leading-relaxed italic">
                 Your supplier provides these when you sign up for API access. Contact <span className="font-bold">{currentSupplierName}</span> support if you don&apos;t have them.
               </p>
