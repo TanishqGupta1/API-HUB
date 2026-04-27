@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { Supplier } from "@/lib/types";
+import { SanMarMappingPanel } from "@/components/mappings/sanmar-mapping-panel";
+import { OpsMappingPanel } from "@/components/mappings/ops-mapping-panel";
+import { FourOverMappingPanel } from "@/components/mappings/fourover-mapping-panel";
+import { ProductPreviewStrip } from "@/components/mappings/product-preview-strip";
 
 const CANONICAL_FIELDS = [
   "product_name", "supplier_sku", "brand", "description",
@@ -41,6 +45,9 @@ export default function FieldMappingPage() {
   const [mappings, setMappings] = useState<Mapping[]>(
     CANONICAL_FIELDS.map((t) => ({ source: "", target: t }))
   );
+  const [supplierSpecific, setSupplierSpecific] = useState<
+    Record<string, string>
+  >({});
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [sampleInput, setSampleInput] = useState(SAMPLE_PAYLOAD);
@@ -51,13 +58,23 @@ export default function FieldMappingPage() {
     api<Supplier>(`/api/suppliers/${supplierId}`)
       .then((s) => {
         setSupplier(s);
-        if (s.field_mappings && Object.keys(s.field_mappings).length > 0) {
+        const raw = s.field_mappings ?? {};
+        if (Object.keys(raw).length > 0) {
+          // Split base source→target entries from supplier-specific namespaced keys
+          const specific: Record<string, string> = {};
+          const baseEntries: [string, string][] = [];
+          for (const [k, v] of Object.entries(raw)) {
+            if (k.includes(".")) {
+              specific[k] = String(v);
+            } else {
+              baseEntries.push([k, String(v)]);
+            }
+          }
+          setSupplierSpecific(specific);
           setMappings((prev) =>
             prev.map((m) => {
               const source =
-                Object.entries(s.field_mappings ?? {}).find(
-                  ([, target]) => target === m.target
-                )?.[0] ?? "";
+                baseEntries.find(([, target]) => target === m.target)?.[0] ?? "";
               return { ...m, source };
             })
           );
@@ -72,8 +89,11 @@ export default function FieldMappingPage() {
   );
 
   const mappingPayload = useMemo(
-    () => Object.fromEntries(activeMappings.map((m) => [m.source, m.target])),
-    [activeMappings]
+    () => ({
+      ...Object.fromEntries(activeMappings.map((m) => [m.source, m.target])),
+      ...supplierSpecific,
+    }),
+    [activeMappings, supplierSpecific]
   );
 
   const jsonPreview = JSON.stringify(mappingPayload, null, 2);
@@ -130,6 +150,15 @@ export default function FieldMappingPage() {
           ? `${supplier.name} — map supplier data to business schema`
           : "Loading…"}
       </p>
+
+      {supplier && (
+        <div className="my-4">
+          <h2 className="text-sm font-bold uppercase tracking-[0.1em] text-[#888894] mb-2">
+            Product preview
+          </h2>
+          <ProductPreviewStrip supplierId={supplier.id} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Mapping editor */}
@@ -301,6 +330,28 @@ export default function FieldMappingPage() {
           )}
         </div>
       </div>
+
+      {supplier && (
+        <div className="mt-6">
+          {supplier.protocol === "soap" ||
+          supplier.protocol === "promostandards" ? (
+            <SanMarMappingPanel
+              supplierId={supplier.id}
+              value={supplierSpecific}
+              onChange={(next) => {
+                setSupplierSpecific(next);
+                setSaved(false);
+                setSaveError(null);
+              }}
+            />
+          ) : supplier.protocol === "ops_graphql" ? (
+            <OpsMappingPanel supplier={supplier} />
+          ) : supplier.protocol === "hmac" ||
+            supplier.protocol === "rest_hmac" ? (
+            <FourOverMappingPanel supplier={supplier} />
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

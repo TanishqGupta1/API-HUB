@@ -29,12 +29,14 @@ export function StorefrontProductCard({ product }: Props) {
       <div className="relative h-[220px] bg-[#ebe8e3] flex items-center justify-center border-b border-[#cfccc8]">
         {product.image_url ? (
           <img src={product.image_url} alt={product.product_name}
-               className="w-full h-full object-contain p-4" />
+               className="w-full h-full object-contain p-4 mix-blend-multiply" />
         ) : (
           <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#b4b4bc]">No image</span>
         )}
         <div className="absolute top-3 left-3 px-[10px] py-[4px] bg-white border border-[#cfccc8] rounded
-                        font-mono text-[10px] font-bold text-[#1e4d92]">VG</div>
+                        font-mono text-[10px] font-bold text-[#1e4d92] uppercase max-w-[140px] truncate">
+          {product.supplier_name}
+        </div>
         {product.external_catalogue === 1 && (
           <div className="absolute bottom-3 left-3 px-[8px] py-[3px] bg-[#eef4fb] border border-[#1e4d92] rounded
                           font-mono text-[9px] font-bold text-[#1e4d92]">EXTERNAL</div>

@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type {
   Product,
   ProductImage,
   Supplier,
 } from "@/lib/types";
+import { Button } from "@/components/ui/button";
 import { PublishButton } from "@/components/products/publish-button";
 import { PushHistory } from "@/components/products/push-history";
 
@@ -102,6 +104,12 @@ export default function ProductDetailPage() {
   return (
     <div id="s-product-detail">
 
+      {supplier?.protocol === "ops_graphql" && product.options?.some((o: any) => o.enabled) && (
+        <div className="bg-yellow-50 border border-yellow-300 rounded-lg px-4 py-3 mb-4 text-sm text-yellow-900">
+          <strong>Options saved to hub.</strong> OPS push is pending beta API — configure manually in OPS admin for now.
+        </div>
+      )}
+
       {/* ── Page header ─────────────────────────────────── */}
       <div className="flex items-end justify-between mb-10 pb-5 border-b-2 border-[#1e1e24]">
         <div>
@@ -122,10 +130,17 @@ export default function ProductDetailPage() {
           </div>
         </div>
         <div className="flex gap-3">
+          {supplier?.protocol === "ops_graphql" && (
+            <Link href={`/products/${product.id}/options`}>
+              <Button variant="outline" className="border-[#1e4d92] text-[#1e4d92]">
+                Configure Options
+              </Button>
+            </Link>
+          )}
           <PublishButton
             productId={id}
             onDone={() => {
-              // History will auto-refresh due to its own effect if we trigger a state change, 
+              // History will auto-refresh due to its own effect if we trigger a state change,
               // but a full fetch is safer for now.
               setTimeout(fetchData, 2000);
             }}

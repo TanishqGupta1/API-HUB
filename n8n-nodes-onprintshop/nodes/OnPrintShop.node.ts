@@ -7,6 +7,15 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
+import { productMgmtFields, productMgmtOperations } from './OnPrintShop/descriptions/ProductMgmtDescription';
+import { masterOptionFields, masterOptionOperations } from './OnPrintShop/descriptions/MasterOptionDescription';
+import { productExecute } from './OnPrintShop/execute/product';
+import { masterOptionExecute } from './OnPrintShop/execute/masterOption';
+
+function stripTrailingSlashes(url: string): string {
+	return url.replace(/\/+$/, '');
+}
+
 export class OnPrintShop implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'OnPrintShop',
@@ -101,6 +110,14 @@ export class OnPrintShop implements INodeType {
 					{
 						name: 'Store',
 						value: 'store',
+					},
+					{
+						name: 'Product Management',
+						value: 'productMgmt',
+					},
+					{
+						name: 'Master Option',
+						value: 'masterOption',
 					},
 				],
 				default: 'customer',
@@ -291,29 +308,14 @@ export class OnPrintShop implements INodeType {
 				options: [ { name: 'Get Many', value: 'getAll', action: 'Get many ship-to-multiple addresses' } ],
 				default: 'getAll',
 			},
-			// Ship To Multiple: Fetch All Pages
 			{
-				displayName: 'Fetch All Pages',
-				name: 'fetchAllPages',
-				type: 'boolean',
-				default: false,
+				displayName: 'Order ID',
+				name: 'shipToMultiple_order_id',
+				type: 'number',
+				required: true,
 				displayOptions: { show: { resource: ['shipToMultipleAddress'], operation: ['getAll'] } },
-				description: 'Automatically fetch all pages until no more records are available (ignores limit/offset)'
-			},
-			{
-				displayName: 'Query Parameters',
-				name: 'queryParameters',
-				type: 'collection',
-				placeholder: 'Add Parameter',
-				displayOptions: { show: { resource: ['shipToMultipleAddress'], operation: ['getAll'] } },
-				default: {},
-				options: [
-					{ displayName: 'Orders ID', name: 'orders_id', type: 'number', default: 0 },
-					{ displayName: 'Limit', name: 'limit', type: 'number', typeOptions: { minValue: 1, maxValue: 250 }, default: 250 },
-					{ displayName: 'Offset', name: 'offset', type: 'number', typeOptions: { minValue: 0 }, default: 0 },
-					{ displayName: 'Page Size', name: 'pageSize', type: 'number', typeOptions: { minValue: 1, maxValue: 250 }, default: 250 },
-					{ displayName: 'Page Delay (ms)', name: 'pageDelay', type: 'number', typeOptions: { minValue: 25, maxValue: 1000 }, default: 50 },
-				],
+				default: 0,
+				description: 'Order ID to fetch ship-to-multiple addresses for',
 			},
 			{
 				displayName: 'Fields',
@@ -324,15 +326,45 @@ export class OnPrintShop implements INodeType {
 					{ name: '🔘 Select All Fields', value: 'SELECT_ALL' },
 					{ name: '🔘 Deselect All Fields', value: 'DESELECT_ALL' },
 					{ name: '─────────────────────────────', value: 'SEPARATOR' },
-					{ name: 'Name', value: 'stm_name' },
-					{ name: 'Company', value: 'stm_company' },
-					{ name: 'Street', value: 'stm_street_address' },
-					{ name: 'City', value: 'stm_city' },
-					{ name: 'Postcode', value: 'stm_postcode' },
-					{ name: 'State', value: 'stm_state' },
-					{ name: 'Country', value: 'stm_country' },
+					{ name: 'Shipping Type ID', value: 'ship_to_multiple_address_shipping_type_id' },
+					{ name: 'Shipping Price', value: 'ship_to_multiple_address_shipping_price' },
+					{ name: 'Shipping Name', value: 'ship_to_multiple_address_shipping_name' },
+					{ name: 'Shipping Mode', value: 'ship_to_multiple_address_shipping_mode' },
+					{ name: 'Production Due Date', value: 'ship_to_multiple_address_production_due_date' },
+					{ name: 'Shipment Due Date', value: 'ship_to_multiple_address_shipment_due_date' },
+					{ name: 'Product Details', value: 'ship_to_multiple_address_product_details' },
+					{ name: 'Delivery Name', value: 'ship_to_multiple_address_delivery_name' },
+					{ name: 'Delivery Company', value: 'ship_to_multiple_address_delivery_company' },
+					{ name: 'Delivery Street Address', value: 'ship_to_multiple_address_delivery_street_address' },
+					{ name: 'Delivery Suburb', value: 'ship_to_multiple_address_delivery_suburb' },
+					{ name: 'Delivery City', value: 'ship_to_multiple_address_delivery_city' },
+					{ name: 'Delivery Postcode', value: 'ship_to_multiple_address_delivery_postcode' },
+					{ name: 'Delivery State', value: 'ship_to_multiple_address_delivery_state' },
+					{ name: 'Delivery Country', value: 'ship_to_multiple_address_delivery_country' },
+					{ name: 'Delivery Telephone', value: 'ship_to_multiple_address_delivery_telephone' },
+					{ name: 'Blind Address', value: 'ship_to_multiple_address_blind_address' },
+					{ name: 'Extra Field', value: 'ship_to_multiple_address_extra_field' },
 				],
-				default: [ 'stm_name', 'stm_company', 'stm_street_address', 'stm_city', 'stm_state', 'stm_country' ],
+				default: [
+					'ship_to_multiple_address_shipping_type_id',
+					'ship_to_multiple_address_shipping_price',
+					'ship_to_multiple_address_shipping_name',
+					'ship_to_multiple_address_shipping_mode',
+					'ship_to_multiple_address_production_due_date',
+					'ship_to_multiple_address_shipment_due_date',
+					'ship_to_multiple_address_product_details',
+					'ship_to_multiple_address_delivery_name',
+					'ship_to_multiple_address_delivery_company',
+					'ship_to_multiple_address_delivery_street_address',
+					'ship_to_multiple_address_delivery_suburb',
+					'ship_to_multiple_address_delivery_city',
+					'ship_to_multiple_address_delivery_postcode',
+					'ship_to_multiple_address_delivery_state',
+					'ship_to_multiple_address_delivery_country',
+					'ship_to_multiple_address_delivery_telephone',
+					'ship_to_multiple_address_blind_address',
+					'ship_to_multiple_address_extra_field',
+				],
 			},
 			// Product Stocks Ops
 			{
@@ -354,6 +386,15 @@ export class OnPrintShop implements INodeType {
 				description: 'Automatically fetch all pages until no more records are available (ignores limit/offset)'
 			},
 			{
+				displayName: 'Product ID',
+				name: 'productStocks_product_id',
+				type: 'number',
+				required: true,
+				displayOptions: { show: { resource: ['productStocks'], operation: ['getAll'] } },
+				default: 0,
+				description: 'Product ID to fetch stock records for',
+			},
+			{
 				displayName: 'Query Parameters',
 				name: 'queryParameters',
 				type: 'collection',
@@ -361,29 +402,11 @@ export class OnPrintShop implements INodeType {
 				displayOptions: { show: { resource: ['productStocks'], operation: ['getAll'] } },
 				default: {},
 				options: [
-					{ displayName: 'Product ID', name: 'product_id', type: 'number', default: 0 },
-					{ displayName: 'SKU', name: 'products_sku', type: 'string', default: '' },
 					{ displayName: 'Limit', name: 'limit', type: 'number', typeOptions: { minValue: 1, maxValue: 250 }, default: 250 },
 					{ displayName: 'Offset', name: 'offset', type: 'number', typeOptions: { minValue: 0 }, default: 0 },
 					{ displayName: 'Page Size', name: 'pageSize', type: 'number', typeOptions: { minValue: 1, maxValue: 250 }, default: 250 },
 					{ displayName: 'Page Delay (ms)', name: 'pageDelay', type: 'number', typeOptions: { minValue: 25, maxValue: 1000 }, default: 50 },
 				],
-			},
-			{
-				displayName: 'Stock Fields',
-				name: 'stockFields',
-				type: 'multiOptions',
-				displayOptions: { show: { resource: ['productStocks'], operation: ['getAll'] } },
-				options: [
-					{ name: '🔘 Select All Fields', value: 'SELECT_ALL' },
-					{ name: '🔘 Deselect All Fields', value: 'DESELECT_ALL' },
-					{ name: '─────────────────────────────', value: 'SEPARATOR' },
-					{ name: 'Product ID', value: 'product_id' },
-					{ name: 'SKU', value: 'products_sku' },
-					{ name: 'Available Quantity', value: 'available_qty' },
-					{ name: 'Reserved Quantity', value: 'reserved_qty' },
-				],
-				default: [ 'product_id', 'products_sku', 'available_qty' ],
 			},
 			// Status listings (additive)
 			{
@@ -540,7 +563,15 @@ export class OnPrintShop implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				displayOptions: { show: { resource: ['store'] } },
-				options: [ { name: 'Get Many', value: 'getAll', action: 'Get many stores' } ],
+				options: [
+					{ name: 'Get Many (Store Details)', value: 'getAll', action: 'Get many stores' },
+					{ name: 'Countries', value: 'get_countries', action: 'Get countries' },
+					{ name: 'Markup Master', value: 'get_store_markup', action: 'Get store markup masters' },
+					{ name: 'Get Payment Terms', value: 'get_payment_term_master', action: 'Get payment terms' },
+					{ name: 'Store Address', value: 'storeaddress', action: 'Get store addresses' },
+					{ name: 'Store Credit Summary (Staging)', value: 'storeCreditSummary', action: 'Get store credit summary' },
+					{ name: 'Account Summary (Staging)', value: 'accountSummary', action: 'Get account summary' },
+				],
 				default: 'getAll',
 			},
 			{
@@ -579,6 +610,168 @@ export class OnPrintShop implements INodeType {
 				name: 'store_offset',
 				type: 'number',
 				displayOptions: { show: { resource: ['store'], operation: ['getAll'] } },
+				default: 0,
+			},
+			// Store: Countries (get_countries)
+			{
+				displayName: 'Countries ID',
+				name: 'countries_countries_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['get_countries'] } },
+				default: 0,
+				description: 'Filter by countries ID (0 = no filter)',
+			},
+			{
+				displayName: 'Status',
+				name: 'countries_status',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['get_countries'] } },
+				default: 0,
+				description: 'Filter by status (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'countries_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['get_countries'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'countries_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['get_countries'] } },
+				default: 0,
+			},
+			// Store: Markup Master (get_store_markup)
+			{
+				displayName: 'Corporate Markup ID',
+				name: 'store_markup_corporate_markup_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['get_store_markup'] } },
+				default: 0,
+				description: 'Filter by corporate markup ID (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'store_markup_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['get_store_markup'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'store_markup_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['get_store_markup'] } },
+				default: 0,
+			},
+			// Store: Payment Terms (get_payment_term_master)
+			{
+				displayName: 'Term ID',
+				name: 'payment_term_term_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['get_payment_term_master'] } },
+				default: 0,
+				description: 'Filter by term ID (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'payment_term_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['get_payment_term_master'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'payment_term_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['get_payment_term_master'] } },
+				default: 0,
+			},
+			// Store: Store Address (storeaddress)
+			{
+				displayName: 'Corporate ID',
+				name: 'storeaddress_corporate_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['storeaddress'] } },
+				default: 0,
+				description: 'Filter by corporate ID (0 = no filter)',
+			},
+			{
+				displayName: 'Corporate Address ID',
+				name: 'storeaddress_corporate_address_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['storeaddress'] } },
+				default: 0,
+				description: 'Filter by corporate address ID (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'storeaddress_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['storeaddress'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'storeaddress_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['storeaddress'] } },
+				default: 0,
+			},
+			// Store: Store Credit Summary (storeCreditSummary) — Staging
+			{
+				displayName: 'Store ID',
+				name: 'storeCreditSummary_storeid',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['storeCreditSummary'] } },
+				default: 0,
+				description: 'Filter by store ID (0 = no filter)',
+			},
+			{
+				displayName: 'User ID',
+				name: 'storeCreditSummary_user_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['storeCreditSummary'] } },
+				default: 0,
+				description: 'Filter by user ID (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'storeCreditSummary_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['storeCreditSummary'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'storeCreditSummary_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['storeCreditSummary'] } },
+				default: 0,
+			},
+			// Store: Account Summary (accountSummary) — Staging
+			{
+				displayName: 'Store ID',
+				name: 'accountSummary_storeid',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['accountSummary'] } },
+				default: 0,
+				description: 'Filter by store ID (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'accountSummary_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['accountSummary'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'accountSummary_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['store'], operation: ['accountSummary'] } },
 				default: 0,
 			},
 			// Department Operations
@@ -621,8 +814,12 @@ export class OnPrintShop implements INodeType {
 				displayOptions: { show: { resource: ['department'], operation: ['getAll'] } },
 				default: 0,
 			},
+			...productMgmtOperations,
+			...productMgmtFields,
+			...masterOptionOperations,
+			...masterOptionFields,
 			// Mutations (additive)
-			// NOTE: "Update Product Stock" was removed — it used a stale contract. Use "Product > Update Stock" instead.
+			// NOTE: Prefer "Product > Update Stock" for inventory updates; "Mutation > Update Product Stock" exists to mirror the official Postman collection.
 			{
 				displayName: 'Operation',
 				name: 'operation',
@@ -631,16 +828,44 @@ export class OnPrintShop implements INodeType {
 				displayOptions: { show: { resource: ['mutation'] } },
 				options: [
 					{ name: 'Add Proof Version', value: 'addProofVersion', action: 'Add proof version to order product' },
+					{ name: 'Assign Options', value: 'setAssignOptions', action: 'Assign options to a product' },
+					{ name: 'Modify Order Product (Beta)', value: 'modifyOrderProduct', action: 'Modify order products (beta)' },
+					{ name: 'Notify User', value: 'notifyUser', action: 'Notify a user' },
 					{ name: 'Set Batch', value: 'setBatch', action: 'Create or update a batch' },
+					{ name: 'Set Customer', value: 'setCustomer', action: 'Create or update a customer' },
+					{ name: 'Set Customer Address (Staging)', value: 'setCustomerAddressDetail', action: 'Create or update a customer address (staging)' },
+					{ name: 'Set Department', value: 'setDepartment', action: 'Create or update a department' },
+					{ name: 'Set FAQ', value: 'setFaq', action: 'Create or update an FAQ' },
+					{ name: 'Set FAQ Category', value: 'setFaqCategory', action: 'Create or update an FAQ category' },
+					{ name: 'Set Master Option', value: 'setMasterOption', action: 'Create or update a master option' },
+					{ name: 'Set Master Option Attribute Price', value: 'setMasterOptionAttributePrice', action: 'Create or update master option attribute prices' },
+					{ name: 'Set Master Option Attributes', value: 'setMasterOptionAttributes', action: 'Create or update master option attributes' },
+					{ name: 'Set Master Option Range', value: 'setMasterOptionRange', action: 'Create or update master option ranges' },
+					{ name: 'Set Master Option Tags', value: 'setMasterOptionTag', action: 'Create or update master option tags' },
+					{ name: 'Set Option Formulas', value: 'setCustomFormula', action: 'Create or update custom formulas' },
+					{ name: 'Set Option Group', value: 'setOptionGroup', action: 'Create or update option groups' },
 					{ name: 'Set Order Product', value: 'setOrderProduct', action: 'Update an order product' },
+					{ name: 'Set Order (Staging)', value: 'setOrder', action: 'Create or update an order (staging)' },
 					{ name: 'Set Product', value: 'setProduct', action: 'Create or update a product' },
+					{ name: 'Set Product Additional Option (Beta)', value: 'setAdditionalOption', action: 'Create or update an additional option (beta)' },
+					{ name: 'Set Product Additional Option Attribute (Beta)', value: 'setAdditionalOptionAttributes', action: 'Create or update an additional option attribute (beta)' },
+					{ name: 'Set Product Additional Option Attribute Price (Beta)', value: 'setProductsAttributePrice', action: 'Create or update an additional option attribute price (beta)' },
 					{ name: 'Set Product Design', value: 'setProductDesign', action: 'Update product design links' },
 					{ name: 'Set Product Price', value: 'setProductPrice', action: 'Create or update product price' },
 					{ name: 'Set Product Category', value: 'setProductCategory', action: 'Create or update a product category' },
+					{ name: 'Set Product Pages', value: 'setProductPages', action: 'Create or update product pages' },
+					{ name: 'Set Product Option Rules', value: 'setProductOptionRules', action: 'Create or update product option rules' },
 					{ name: 'Set Product Size', value: 'setProductSize', action: 'Create or update product size variant' },
 					{ name: 'Set Quote', value: 'setQuote', action: 'Create or update a quote' },
+					{ name: 'Set Quantity Based Attribute Price (Beta)', value: 'setQuantityBasedAttributePrice', action: 'Create or update quantity based attribute prices (beta)' },
+					{ name: 'Set Shipment', value: 'setShipment', action: 'Create or update a shipment' },
+					{ name: 'Set Store Address', value: 'setStoreAddress', action: 'Create or update a store address' },
+					{ name: 'Set Store', value: 'setStore', action: 'Create or update a store' },
+					{ name: 'Set Store Markup', value: 'setStoreMarkup', action: 'Create or update store markup' },
+					{ name: 'Set User Basket (Test)', value: 'setUserBasket', action: 'Create or update a user basket (test)' },
 					{ name: 'Update Order Product Images', value: 'updateOrderProductImages', action: 'Update order product images' },
 					{ name: 'Update Order Status', value: 'updateOrderStatus', action: 'Update order or order product status' },
+					{ name: 'Update Product Stock', value: 'updateProductStock', action: 'Update product stock' },
 					{ name: 'Update Ziflow Link (Images)', value: 'updateZiflowLinkImages', action: 'Update ziflow link images wise' },
 				],
 				default: 'updateOrderStatus',
@@ -906,6 +1131,435 @@ export class OnPrintShop implements INodeType {
 				default: '{\n  "imagefiles": [\n    {\n      "pagename": "Front_1",\n      "ziflow_link": "",\n      "ziflow_preflight_link": ""\n    }\n  ]\n}',
 				description: 'SetOrderProductImageInput JSON with ziflow links per image',
 			},
+			// Mutation: Notify User
+			{
+				displayName: 'User Type',
+				name: 'notifyUser_usertype',
+				type: 'options',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['notifyUser'] } },
+				options: [
+					{ name: 'Admin', value: 'admin' },
+					{ name: 'Customer', value: 'customer' },
+				],
+				default: 'admin',
+			},
+			{
+				displayName: 'Customer ID',
+				name: 'notifyUser_cust_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['mutation'], operation: ['notifyUser'] } },
+				default: 0,
+				description: 'Customer ID (0 = omit)',
+			},
+			{
+				displayName: 'Input (JSON)',
+				name: 'notifyUser_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['notifyUser'] } },
+				default: '{\n  \"cc\": \"\",\n  \"body\": \"<h1>Hello</h1>\",\n  \"subject\": \"\"\n}',
+				description: 'UserNotifyInput JSON with cc, body (HTML), subject',
+			},
+			// Mutation: Set Shipment
+			{
+				displayName: 'Order ID',
+				name: 'setShipment_order_id',
+				type: 'number',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setShipment'] } },
+				default: 0,
+			},
+			{
+				displayName: 'Shipment ID',
+				name: 'setShipment_shipment_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['mutation'], operation: ['setShipment'] } },
+				default: 0,
+				description: 'Shipment ID (0 to create new)',
+			},
+			{
+				displayName: 'Tracking Number',
+				name: 'setShipment_tracking_number',
+				type: 'string',
+				displayOptions: { show: { resource: ['mutation'], operation: ['setShipment'] } },
+				default: '',
+			},
+			{
+				displayName: 'Shipment Info (JSON)',
+				name: 'setShipment_shipmentinfo',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setShipment'] } },
+				default: '[\n  {\n    \"packageinfo\": [\n      {\n        \"weight\": 0,\n        \"length\": 0,\n        \"width\": 0,\n        \"height\": 0,\n        \"tracking\": \"\",\n        \"opdata\": [\n          { \"opid\": 0, \"qty\": \"1\" }\n        ]\n      }\n    ]\n  }\n]',
+				description: 'shipmentinfo JSON (array with packageinfo) per OPS contract',
+			},
+			// Mutation: Set Customer (direct mutation)
+			{
+				displayName: 'Customer ID',
+				name: 'setCustomer_customer_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['mutation'], operation: ['setCustomer'] } },
+				default: 0,
+				description: 'Customer ID (0 to create new)',
+			},
+			{
+				displayName: 'Input (JSON)',
+				name: 'setCustomer_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setCustomer'] } },
+				default: '{\n  \"registration_type\": 0,\n  \"corporateid\": 0,\n  \"departmentid\": 0,\n  \"first_name\": \"\",\n  \"last_name\": \"\",\n  \"email\": \"\",\n  \"password\": \"\",\n  \"set_password\": 1,\n  \"phone_no\": \"\",\n  \"company_name\": \"\",\n  \"user_group\": 0,\n  \"secondary_emails\": \"\",\n  \"status\": 1,\n  \"tax_exemption\": 0,\n  \"payon_account\": 0,\n  \"payon_limit\": 0\n}',
+				description: 'SetCustomerInput JSON object',
+			},
+			// Mutation: Set Customer Address Detail (Staging)
+			{
+				displayName: 'Input (JSON)',
+				name: 'setCustomerAddressDetail_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setCustomerAddressDetail'] } },
+				default: '{\n  \"user_id\": 0,\n  \"address_book_id\": 0,\n  \"firstname\": \"\",\n  \"lastname\": \"\",\n  \"companyname\": \"\",\n  \"street_address\": \"\",\n  \"suburb\": \"\",\n  \"postcode\": \"\",\n  \"city\": \"\",\n  \"state\": \"\",\n  \"country\": \"\",\n  \"phone_number\": \"\"\n}',
+				description: 'CustomerAddressInput JSON object',
+			},
+			// Mutation: Set Product Option Rules
+			{
+				displayName: 'Input (JSON)',
+				name: 'setProductOptionRules_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setProductOptionRules'] } },
+				default: '{\n  \"rule_id\": 0,\n  \"rule_name\": \"\",\n  \"rule_type\": \"\",\n  \"delete\": 0\n}',
+				description: 'ProductOptionRulesInput JSON object',
+			},
+			// Mutation: Set Custom Formula
+			{
+				displayName: 'Input (JSON)',
+				name: 'setCustomFormula_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setCustomFormula'] } },
+				default: '{\n  \"formula_id\": 0,\n  \"formula_label\": \"\",\n  \"formula_syntax\": \"\",\n  \"delete\": 0\n}',
+				description: 'CustomFormulaInput JSON object',
+			},
+			// Mutation: Set Option Group
+			{
+				displayName: 'Input (JSON)',
+				name: 'setOptionGroup_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setOptionGroup'] } },
+				default: '{\n  \"prod_add_opt_group_id\": 0,\n  \"opt_group_name\": \"\",\n  \"use_for\": \"0\",\n  \"display_style\": \"0\",\n  \"option_count\": 0,\n  \"is_collapse\": \"0\",\n  \"sort_order\": 0,\n  \"delete\": 0\n}',
+				description: 'OptionGroupInput JSON object',
+			},
+			// Mutation: Set Master Option Tag
+			{
+				displayName: 'Input (JSON)',
+				name: 'setMasterOptionTag_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setMasterOptionTag'] } },
+				default: '{\n  \"master_option_tag_id\": 0,\n  \"master_option_tag_name\": \"\",\n  \"delete\": 0\n}',
+				description: 'MasterOptionTagInput JSON object',
+			},
+			// Mutation: Set Master Option Attributes
+			{
+				displayName: 'Input (JSON)',
+				name: 'setMasterOptionAttributes_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setMasterOptionAttributes'] } },
+				default: '{\n  \"master_attribute_id\": 0,\n  \"master_option_id\": 0,\n  \"label\": \"\",\n  \"delete\": 0\n}',
+				description: 'MasterOptionAttributesInput JSON object',
+			},
+			// Mutation: Set Master Option Range
+			{
+				displayName: 'Input (JSON)',
+				name: 'setMasterOptionRange_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setMasterOptionRange'] } },
+				default: '{\n  \"option_id\": 0,\n  \"ranges\": [\n    { \"from_range\": 1, \"to_range\": 1, \"delete\": 0 }\n  ]\n}',
+				description: 'MasterOptionRangeInput JSON object',
+			},
+			// Mutation: Set Master Option Attribute Price
+			{
+				displayName: 'Input (JSON)',
+				name: 'setMasterOptionAttributePrice_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setMasterOptionAttributePrice'] } },
+				default: '{\n  \"attr_id\": 0,\n  \"delete\": 0,\n  \"prices\": [\n    { \"range_id\": 0, \"price\": 0, \"vendor_price\": 0, \"site_admin_markup\": 0 }\n  ]\n}',
+				description: 'MasterOptionAttributePriceInput JSON object',
+			},
+			// Mutation: Set Master Option
+			{
+				displayName: 'Input (JSON)',
+				name: 'setMasterOption_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setMasterOption'] } },
+				default: '{\n  \"master_option_id\": 0,\n  \"title\": \"\",\n  \"description\": \"\",\n  \"options_type\": \"combo\",\n  \"status\": \"1\",\n  \"delete\": 0\n}',
+				description: 'MasterOptionInput JSON object',
+			},
+			// Mutation: Assign Options
+			{
+				displayName: 'Input (JSON)',
+				name: 'setAssignOptions_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setAssignOptions'] } },
+				default: '{\n  \"products_id\": 0,\n  \"master_option_id\": 0,\n  \"attribute_ids\": [],\n  \"setup_cost\": 0\n}',
+				description: 'AssignOptionsInput JSON object',
+			},
+			// Mutation: Set Product Pages
+			{
+				displayName: 'Input (JSON)',
+				name: 'setProductPages_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setProductPages'] } },
+				default: '{\n  \"pages_id\": 0,\n  \"products_id\": 0,\n  \"page_title\": \"\",\n  \"sort_order\": 0,\n  \"visible\": \"1\"\n}',
+				description: 'ProductPagesInput JSON object',
+			},
+			// Mutation: Set Store Address
+			{
+				displayName: 'Input (JSON)',
+				name: 'setStoreAddress_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setStoreAddress'] } },
+				default: '{\n  \"corporate_address_id\": 0,\n  \"corporate_id\": 0,\n  \"department_id\": 0,\n  \"office_name\": \"\",\n  \"available_to\": \"c\",\n  \"corporate_address\": \"\",\n  \"city\": \"\",\n  \"state\": \"\",\n  \"country\": \"\",\n  \"postcode\": \"\",\n  \"phone_number\": \"\",\n  \"status\": \"1\",\n  \"delete\": 0\n}',
+				description: 'StoreAddressInput JSON object',
+			},
+			// Mutation: Set Department
+			{
+				displayName: 'Input (JSON)',
+				name: 'setDepartment_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setDepartment'] } },
+				default: '{\n  \"department_id\": 0,\n  \"corporate_id\": 0,\n  \"name\": \"\",\n  \"email_to\": \"\",\n  \"status\": \"1\",\n  \"delete\": 0\n}',
+				description: 'DepartmentInput JSON object',
+			},
+			// Mutation: Set Store
+			{
+				displayName: 'Input (JSON)',
+				name: 'setStore_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setStore'] } },
+				default: '{\n  \"corporate_id\": 0,\n  \"email\": \"\",\n  \"username\": \"\",\n  \"password\": \"\",\n  \"corporate_name\": \"\",\n  \"status\": \"1\"\n}',
+				description: 'StoreInput JSON object',
+			},
+			// Mutation: Set Store Markup
+			{
+				displayName: 'Input (JSON)',
+				name: 'setStoreMarkup_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setStoreMarkup'] } },
+				default: '{\n  \"corporate_markup_id\": 0,\n  \"markup_title\": \"\",\n  \"markup_details\": \"\",\n  \"status\": \"1\",\n  \"appliedon\": \"1\",\n  \"delete\": 0\n}',
+				description: 'StoreMarkupInput JSON object',
+			},
+			// Mutation: Set FAQ Category
+			{
+				displayName: 'Input (JSON)',
+				name: 'setFaqCategory_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setFaqCategory'] } },
+				default: '{\n  \"faqcat_id\": 0,\n  \"faq_category_name\": \"\",\n  \"status\": \"1\",\n  \"sort_order\": 0,\n  \"delete\": 0\n}',
+				description: 'FaqCategoryInput JSON object',
+			},
+			// Mutation: Set FAQ
+			{
+				displayName: 'Input (JSON)',
+				name: 'setFaq_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setFaq'] } },
+				default: '{\n  \"faq_id\": 0,\n  \"faqcat_id\": 0,\n  \"status\": \"1\",\n  \"sort_order\": 0,\n  \"faq_type\": \"G\",\n  \"faq_question\": \"\",\n  \"faq_answer\": \"\"\n}',
+				description: 'FaqInput JSON object',
+			},
+			// Mutation: Set Order (Staging)
+			{
+				displayName: 'User ID',
+				name: 'setOrder_userid',
+				type: 'number',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setOrder'] } },
+				default: 0,
+			},
+			{
+				displayName: 'Order ID',
+				name: 'setOrder_order_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['mutation'], operation: ['setOrder'] } },
+				default: 0,
+				description: 'Order ID (0 to create new)',
+			},
+			{
+				displayName: 'Order Title',
+				name: 'setOrder_order_title',
+				type: 'string',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setOrder'] } },
+				default: '',
+			},
+			{
+				displayName: 'Shipping Type ID',
+				name: 'setOrder_selectedShippingType',
+				type: 'number',
+				displayOptions: { show: { resource: ['mutation'], operation: ['setOrder'] } },
+				default: 0,
+			},
+			{
+				displayName: 'Input (JSON)',
+				name: 'setOrder_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setOrder'] } },
+				default: '{\n  \"productsArr\": []\n}',
+				description: 'SetOrderInput JSON object with productsArr',
+			},
+			// Mutation: Set User Basket (TEST)
+			{
+				displayName: 'User ID',
+				name: 'setUserBasket_userId',
+				type: 'number',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setUserBasket'] } },
+				default: 0,
+			},
+			{
+				displayName: 'Action',
+				name: 'setUserBasket_action',
+				type: 'string',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setUserBasket'] } },
+				default: 'add',
+				description: 'e.g. add, update, remove',
+			},
+			{
+				displayName: 'Basket ID',
+				name: 'setUserBasket_basketId',
+				type: 'number',
+				displayOptions: { show: { resource: ['mutation'], operation: ['setUserBasket'] } },
+				default: 0,
+				description: 'Basket ID (0 to create new)',
+			},
+			{
+				displayName: 'Item Index',
+				name: 'setUserBasket_itemIndex',
+				type: 'number',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setUserBasket'] } },
+				default: 0,
+			},
+			{
+				displayName: 'Input (JSON)',
+				name: 'setUserBasket_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setUserBasket'] } },
+				default: '{\n  \"items\": []\n}',
+				description: 'SetUserBasketInput JSON object',
+			},
+			// Mutation: Modify Order Product (Beta)
+			{
+				displayName: 'Order ID',
+				name: 'modifyOrderProduct_orderid',
+				type: 'number',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['modifyOrderProduct'] } },
+				default: 0,
+			},
+			{
+				displayName: 'Input (JSON)',
+				name: 'modifyOrderProduct_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['modifyOrderProduct'] } },
+				default: '{\n  \"productArr\": []\n}',
+				description: 'ModifyOrderProductInput JSON object',
+			},
+			// Mutation: Additional Option (Beta)
+			{
+				displayName: 'Input (JSON)',
+				name: 'setAdditionalOption_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setAdditionalOption'] } },
+				default: '{\n  \"prod_add_opt_id\": 0,\n  \"products_id\": 0,\n  \"title\": \"\",\n  \"options_type\": \"radio\",\n  \"status\": \"1\",\n  \"delete\": 0\n}',
+				description: 'AdditionalOptionInput JSON object',
+			},
+			{
+				displayName: 'Input (JSON)',
+				name: 'setAdditionalOptionAttributes_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setAdditionalOptionAttributes'] } },
+				default: '{\n  \"attribute_id\": 0,\n  \"prod_add_opt_id\": 0,\n  \"label\": \"\",\n  \"status\": \"1\",\n  \"delete\": 0\n}',
+				description: 'AdditionalOptionAttributesInput JSON object',
+			},
+			{
+				displayName: 'Input (JSON)',
+				name: 'setProductsAttributePrice_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setProductsAttributePrice'] } },
+				default: '{\n  \"attribute_id\": 0,\n  \"size_from\": 0,\n  \"size_to\": 0,\n  \"attributes_price\": 0,\n  \"vendor_price\": 0,\n  \"site_admin_markup\": 0,\n  \"delete\": 0\n}',
+				description: 'ProductsAttributePriceInput JSON object',
+			},
+			{
+				displayName: 'Input (JSON)',
+				name: 'setQuantityBasedAttributePrice_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['setQuantityBasedAttributePrice'] } },
+				default: '{\n  \"attribute_id\": 0,\n  \"size_from\": 0,\n  \"size_to\": 0,\n  \"quantity_from\": 0,\n  \"quantity_to\": 0,\n  \"attribute_price\": 0,\n  \"vendor_price\": 0,\n  \"site_admin_markup\": 0,\n  \"delete\": 0\n}',
+				description: 'QuantityBasedAttributePriceInput JSON object',
+			},
+			// Mutation: Update Product Stock
+			{
+				displayName: 'Stock ID',
+				name: 'updateProductStock_stock_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['mutation'], operation: ['updateProductStock'] } },
+				default: 0,
+				description: 'Stock ID (recommended). If provided, product SKU is optional.',
+			},
+			{
+				displayName: 'Product SKU',
+				name: 'updateProductStock_product_sku',
+				type: 'string',
+				displayOptions: { show: { resource: ['mutation'], operation: ['updateProductStock'] } },
+				default: '',
+				description: 'Product SKU (optional if Stock ID provided)',
+			},
+			{
+				displayName: 'Action',
+				name: 'updateProductStock_action',
+				type: 'options',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['updateProductStock'] } },
+				options: [
+					{ name: 'Add', value: 'Add' },
+					{ name: 'Remove', value: 'Remove' },
+					{ name: 'Reset', value: 'Reset' },
+				],
+				default: 'Add',
+			},
+			{
+				displayName: 'Input (JSON)',
+				name: 'updateProductStock_input',
+				type: 'json',
+				required: true,
+				displayOptions: { show: { resource: ['mutation'], operation: ['updateProductStock'] } },
+				default: '{\n  \"stock_quantity\": 0,\n  \"comment\": \"\"\n}',
+				description: 'UpdateProductStockInput JSON object',
+			},
 			// Customer Operations
 			{
 				displayName: 'Operation',
@@ -931,6 +1585,12 @@ export class OnPrintShop implements INodeType {
 						action: 'Get many customers',
 					},
 					{
+						name: 'Get User Basket (Test)',
+						value: 'getUserBasket',
+						description: 'Get user basket by user ID',
+						action: 'Get a user basket',
+					},
+					{
 						name: 'Create',
 						value: 'create',
 						description: 'Create a new customer',
@@ -944,6 +1604,21 @@ export class OnPrintShop implements INodeType {
 					},
 				],
 				default: 'get',
+			},
+			// Customer: Get User Basket (getUserBasket) — TEST
+			{
+				displayName: 'User ID',
+				name: 'userBasket_user_id',
+				type: 'number',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['customer'],
+						operation: ['getUserBasket'],
+					},
+				},
+				default: 0,
+				description: 'User ID to fetch basket for',
 			},
 			// Customer: Get - Email Field
 			{
@@ -2759,6 +3434,48 @@ export class OnPrintShop implements INodeType {
 						action: 'Get many product options rules',
 					},
 					{
+						name: 'Get Master Option Tag',
+						value: 'getMasterOptionTag',
+						description: 'Get master option tags',
+						action: 'Get master option tags',
+					},
+					{
+						name: 'Get Option Group',
+						value: 'getOptionGroup',
+						description: 'Get option groups',
+						action: 'Get option groups',
+					},
+					{
+						name: 'Get Option Formulas',
+						value: 'getCustomFormula',
+						description: 'Get custom formulas',
+						action: 'Get custom formulas',
+					},
+					{
+						name: 'Get Master Option Ranges',
+						value: 'getMasterOptionRange',
+						description: 'Get master option ranges',
+						action: 'Get master option ranges',
+					},
+					{
+						name: 'Get FAQ Categories',
+						value: 'get_faq_category',
+						description: 'Get FAQ categories',
+						action: 'Get FAQ categories',
+					},
+					{
+						name: 'Get Additional Options (Staging)',
+						value: 'product_additional_options',
+						description: 'Get product additional options (staging)',
+						action: 'Get product additional options',
+					},
+					{
+						name: 'Get Attribute Prices (Staging)',
+						value: 'products_attribute_price',
+						description: 'Get product attribute prices (staging)',
+						action: 'Get product attribute prices',
+					},
+					{
 						name: 'Get Prices',
 						value: 'getPrices',
 						description: 'Get prices for a product',
@@ -2820,6 +3537,199 @@ export class OnPrintShop implements INodeType {
 					},
 				],
 				default: 'getSimple',
+			},
+			// Product: Master Option Tag (getMasterOptionTag)
+			{
+				displayName: 'Master Option Tag ID',
+				name: 'masterOptionTag_master_option_tag_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getMasterOptionTag'] } },
+				default: 0,
+				description: 'Filter by master option tag ID (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'masterOptionTag_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getMasterOptionTag'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'masterOptionTag_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getMasterOptionTag'] } },
+				default: 0,
+			},
+			// Product: Option Group (getOptionGroup)
+			{
+				displayName: 'Product Additional Option Group ID',
+				name: 'optionGroup_prod_add_opt_group_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getOptionGroup'] } },
+				default: 0,
+				description: 'Filter by product additional option group ID (0 = no filter)',
+			},
+			{
+				displayName: 'Use For',
+				name: 'optionGroup_use_for',
+				type: 'string',
+				displayOptions: { show: { resource: ['product'], operation: ['getOptionGroup'] } },
+				default: '',
+				description: 'Filter by use_for (optional)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'optionGroup_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getOptionGroup'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'optionGroup_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getOptionGroup'] } },
+				default: 0,
+			},
+			// Product: Option Formulas (getCustomFormula)
+			{
+				displayName: 'Formula ID',
+				name: 'customFormula_formula_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getCustomFormula'] } },
+				default: 0,
+				description: 'Filter by formula ID (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'customFormula_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getCustomFormula'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'customFormula_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getCustomFormula'] } },
+				default: 0,
+			},
+			// Product: Master Option Ranges (getMasterOptionRange)
+			{
+				displayName: 'Range ID',
+				name: 'masterOptionRange_range_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getMasterOptionRange'] } },
+				default: 0,
+				description: 'Filter by range ID (0 = no filter)',
+			},
+			{
+				displayName: 'Option ID',
+				name: 'masterOptionRange_option_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getMasterOptionRange'] } },
+				default: 0,
+				description: 'Filter by option ID (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'masterOptionRange_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getMasterOptionRange'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'masterOptionRange_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['getMasterOptionRange'] } },
+				default: 0,
+			},
+			// Product: FAQ Category (get_faq_category)
+			{
+				displayName: 'FAQ Category ID',
+				name: 'faqCategory_faqcat_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['get_faq_category'] } },
+				default: 0,
+				description: 'Filter by FAQ category ID (0 = no filter)',
+			},
+			{
+				displayName: 'Status',
+				name: 'faqCategory_status',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['get_faq_category'] } },
+				default: 0,
+				description: 'Filter by status (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'faqCategory_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['get_faq_category'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'faqCategory_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['get_faq_category'] } },
+				default: 0,
+			},
+			// Product: Additional Options (product_additional_options) — Staging
+			{
+				displayName: 'Products ID',
+				name: 'additionalOptions_products_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['product_additional_options'] } },
+				default: 0,
+				description: 'Filter by products ID (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'additionalOptions_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['product_additional_options'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'additionalOptions_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['product_additional_options'] } },
+				default: 0,
+			},
+			// Product: Attribute Price (products_attribute_price) — Staging
+			{
+				displayName: 'Attribute ID',
+				name: 'attributePrice_attribute_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['products_attribute_price'] } },
+				default: 0,
+				description: 'Filter by attribute ID (0 = no filter)',
+			},
+			{
+				displayName: 'Size ID',
+				name: 'attributePrice_size_id',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['products_attribute_price'] } },
+				default: 0,
+				description: 'Filter by size ID (0 = no filter)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'attributePrice_limit',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['products_attribute_price'] } },
+				default: 10,
+			},
+			{
+				displayName: 'Offset',
+				name: 'attributePrice_offset',
+				type: 'number',
+				displayOptions: { show: { resource: ['product'], operation: ['products_attribute_price'] } },
+				default: 0,
 			},
 			// Product: Get Simple - Product ID
 			{
@@ -3642,8 +4552,8 @@ export class OnPrintShop implements INodeType {
 				type: 'multiOptions',
 				displayOptions: {
 					show: {
-						resource: ['product'],
-						operation: ['getStock'],
+						resource: ['product', 'productStocks'],
+						operation: ['getStock', 'getAll'],
 					},
 				},
 				options: [
@@ -3835,12 +4745,20 @@ export class OnPrintShop implements INodeType {
 				{ name: 'Formula', value: 'formula' },
 				{ name: 'Weight Setting', value: 'weight_setting' },
 				{ name: 'Price Range Lookup', value: 'price_range_lookup' },
-				{ name: 'Custom Lookup', value: 'custom_lookup' },
 				{ name: 'Additional Lookup Details', value: 'additional_lookup_details' },
 				{ name: 'Hide From Calc', value: 'hide_from_calc' },
 				{ name: 'Enable Assoc Qty', value: 'enable_assoc_qty' },
 				{ name: 'Allow Price Cal', value: 'allow_price_cal' },
 				{ name: 'Hire Designer Option', value: 'hire_designer_option' },
+				{ name: 'Required', value: 'required' },
+				{ name: 'Display In Calculator', value: 'display_in_calculator' },
+				{ name: 'Option Position', value: 'option_position' },
+				{ name: 'Desc Position', value: 'desc_position' },
+				{ name: 'Display Above Size', value: 'display_above_size' },
+				{ name: 'Presentation Group', value: 'presentation_group' },
+				{ name: 'Export Group ID', value: 'prod_add_opt_export_group_id' },
+				{ name: 'Exclude Setup Cost Reorder', value: 'exclude_setup_cost_reorder' },
+				{ name: 'Master Option Tag', value: 'master_option_tag' },
 				{ name: 'Attributes', value: 'attributes' },
 			],
 			default: [
@@ -3852,6 +4770,25 @@ export class OnPrintShop implements INodeType {
 				'status',
 				'sort_order',
 				'options_type',
+				'linear_formula',
+				'formula',
+				'weight_setting',
+				'price_range_lookup',
+				'additional_lookup_details',
+				'hide_from_calc',
+				'enable_assoc_qty',
+				'allow_price_cal',
+				'hire_designer_option',
+				'required',
+				'display_in_calculator',
+				'option_position',
+				'desc_position',
+				'display_above_size',
+				'presentation_group',
+				'prod_add_opt_export_group_id',
+				'exclude_setup_cost_reorder',
+				'master_option_tag',
+				'attributes',
 			],
 			description: 'Select master options fields to return. All fields selected by default.',
 		},
@@ -3921,12 +4858,20 @@ export class OnPrintShop implements INodeType {
 				{ name: 'Formula', value: 'formula' },
 				{ name: 'Weight Setting', value: 'weight_setting' },
 				{ name: 'Price Range Lookup', value: 'price_range_lookup' },
-				{ name: 'Custom Lookup', value: 'custom_lookup' },
 				{ name: 'Additional Lookup Details', value: 'additional_lookup_details' },
 				{ name: 'Hide From Calc', value: 'hide_from_calc' },
 				{ name: 'Enable Assoc Qty', value: 'enable_assoc_qty' },
 				{ name: 'Allow Price Cal', value: 'allow_price_cal' },
 				{ name: 'Hire Designer Option', value: 'hire_designer_option' },
+				{ name: 'Required', value: 'required' },
+				{ name: 'Display In Calculator', value: 'display_in_calculator' },
+				{ name: 'Option Position', value: 'option_position' },
+				{ name: 'Desc Position', value: 'desc_position' },
+				{ name: 'Display Above Size', value: 'display_above_size' },
+				{ name: 'Presentation Group', value: 'presentation_group' },
+				{ name: 'Export Group ID', value: 'prod_add_opt_export_group_id' },
+				{ name: 'Exclude Setup Cost Reorder', value: 'exclude_setup_cost_reorder' },
+				{ name: 'Master Option Tag', value: 'master_option_tag' },
 				{ name: 'Attributes', value: 'attributes' },
 			],
 			default: [
@@ -3938,6 +4883,25 @@ export class OnPrintShop implements INodeType {
 				'status',
 				'sort_order',
 				'options_type',
+				'linear_formula',
+				'formula',
+				'weight_setting',
+				'price_range_lookup',
+				'additional_lookup_details',
+				'hide_from_calc',
+				'enable_assoc_qty',
+				'allow_price_cal',
+				'hire_designer_option',
+				'required',
+				'display_in_calculator',
+				'option_position',
+				'desc_position',
+				'display_above_size',
+				'presentation_group',
+				'prod_add_opt_export_group_id',
+				'exclude_setup_cost_reorder',
+				'master_option_tag',
+				'attributes',
 			],
 			description: 'Select master options fields to return. All fields selected by default.',
 		},
@@ -3978,17 +4942,25 @@ export class OnPrintShop implements INodeType {
 				{ name: 'Rule ID', value: 'rule_id' },
 				{ name: 'Rule Name', value: 'rule_name' },
 				{ name: 'Rule Type', value: 'rule_type' },
-				{ name: 'Condition', value: 'condition' },
-				{ name: 'Action', value: 'action' },
+				{ name: 'Source Option Attribute IDs', value: 'source_option_attribute_ids' },
+				{ name: 'Hide Option IDs', value: 'hide_option_ids' },
+				{ name: 'Hide Option Attribute IDs', value: 'hide_option_attribute_ids' },
+				{ name: 'Status', value: 'status' },
 				{ name: 'Sort Order', value: 'sort_order' },
+				{ name: 'Comparison Value', value: 'comparison_value' },
+				{ name: 'Disabled For Admin', value: 'disabled_for_admin' },
 			],
 			default: [
 				'rule_id',
 				'rule_name',
 				'rule_type',
-				'condition',
-				'action',
+				'source_option_attribute_ids',
+				'hide_option_ids',
+				'hide_option_attribute_ids',
+				'status',
 				'sort_order',
+				'comparison_value',
+				'disabled_for_admin',
 			],
 			description: 'Select options rules fields to return. All fields selected by default.',
 		},
@@ -4049,17 +5021,25 @@ export class OnPrintShop implements INodeType {
 				{ name: 'Rule ID', value: 'rule_id' },
 				{ name: 'Rule Name', value: 'rule_name' },
 				{ name: 'Rule Type', value: 'rule_type' },
-				{ name: 'Condition', value: 'condition' },
-				{ name: 'Action', value: 'action' },
+				{ name: 'Source Option Attribute IDs', value: 'source_option_attribute_ids' },
+				{ name: 'Hide Option IDs', value: 'hide_option_ids' },
+				{ name: 'Hide Option Attribute IDs', value: 'hide_option_attribute_ids' },
+				{ name: 'Status', value: 'status' },
 				{ name: 'Sort Order', value: 'sort_order' },
+				{ name: 'Comparison Value', value: 'comparison_value' },
+				{ name: 'Disabled For Admin', value: 'disabled_for_admin' },
 			],
 			default: [
 				'rule_id',
 				'rule_name',
 				'rule_type',
-				'condition',
-				'action',
+				'source_option_attribute_ids',
+				'hide_option_ids',
+				'hide_option_attribute_ids',
+				'status',
 				'sort_order',
+				'comparison_value',
+				'disabled_for_admin',
 			],
 			description: 'Select options rules fields to return. All fields selected by default.',
 		},
@@ -4097,24 +5077,24 @@ export class OnPrintShop implements INodeType {
 				{ name: '🔘 Select All Fields', value: 'SELECT_ALL' },
 				{ name: '🔘 Deselect All Fields', value: 'DESELECT_ALL' },
 				{ name: '─────────────────────────────', value: 'SEPARATOR' },
-				{ name: 'Price ID', value: 'price_id' },
-				{ name: 'Price Type', value: 'price_type' },
-				{ name: 'Price Value', value: 'price_value' },
-				{ name: 'Currency', value: 'currency' },
-				{ name: 'Minimum Quantity', value: 'min_quantity' },
-				{ name: 'Maximum Quantity', value: 'max_quantity' },
-				{ name: 'Valid From', value: 'valid_from' },
-				{ name: 'Valid To', value: 'valid_to' },
+				{ name: 'Size ID', value: 'size_id' },
+				{ name: 'Price', value: 'price' },
+				{ name: 'Vendor Price', value: 'vendor_price' },
+				{ name: 'Qty From', value: 'qty_from' },
+				{ name: 'Qty To', value: 'qty_to' },
+				{ name: 'Products ID', value: 'products_id' },
+				{ name: 'User Type ID', value: 'user_type_id' },
+				{ name: 'Corporate ID', value: 'corporate_id' },
 			],
 			default: [
-				'price_id',
-				'price_type',
-				'price_value',
-				'currency',
-				'min_quantity',
-				'max_quantity',
-				'valid_from',
-				'valid_to',
+				'size_id',
+				'price',
+				'vendor_price',
+				'qty_from',
+				'qty_to',
+				'products_id',
+				'user_type_id',
+				'corporate_id',
 			],
 			description: 'Select prices fields to return. All fields selected by default.',
 		},
@@ -4172,24 +5152,24 @@ export class OnPrintShop implements INodeType {
 				{ name: '🔘 Select All Fields', value: 'SELECT_ALL' },
 				{ name: '🔘 Deselect All Fields', value: 'DESELECT_ALL' },
 				{ name: '─────────────────────────────', value: 'SEPARATOR' },
-				{ name: 'Price ID', value: 'price_id' },
-				{ name: 'Price Type', value: 'price_type' },
-				{ name: 'Price Value', value: 'price_value' },
-				{ name: 'Currency', value: 'currency' },
-				{ name: 'Minimum Quantity', value: 'min_quantity' },
-				{ name: 'Maximum Quantity', value: 'max_quantity' },
-				{ name: 'Valid From', value: 'valid_from' },
-				{ name: 'Valid To', value: 'valid_to' },
+				{ name: 'Size ID', value: 'size_id' },
+				{ name: 'Price', value: 'price' },
+				{ name: 'Vendor Price', value: 'vendor_price' },
+				{ name: 'Qty From', value: 'qty_from' },
+				{ name: 'Qty To', value: 'qty_to' },
+				{ name: 'Products ID', value: 'products_id' },
+				{ name: 'User Type ID', value: 'user_type_id' },
+				{ name: 'Corporate ID', value: 'corporate_id' },
 			],
 			default: [
-				'price_id',
-				'price_type',
-				'price_value',
-				'currency',
-				'min_quantity',
-				'max_quantity',
-				'valid_from',
-				'valid_to',
+				'size_id',
+				'price',
+				'vendor_price',
+				'qty_from',
+				'qty_to',
+				'products_id',
+				'user_type_id',
+				'corporate_id',
 			],
 			description: 'Select prices fields to return. All fields selected by default.',
 		},
@@ -4227,22 +5207,22 @@ export class OnPrintShop implements INodeType {
 				{ name: '🔘 Select All Fields', value: 'SELECT_ALL' },
 				{ name: '🔘 Deselect All Fields', value: 'DESELECT_ALL' },
 				{ name: '─────────────────────────────', value: 'SEPARATOR' },
-				{ name: 'Option Price ID', value: 'option_price_id' },
 				{ name: 'Attribute ID', value: 'attr_id' },
-				{ name: 'Option Value', value: 'option_value' },
-				{ name: 'Price Adjustment', value: 'price_adjustment' },
-				{ name: 'Price Adjustment Type', value: 'price_adjustment_type' },
-				{ name: 'Currency', value: 'currency' },
-				{ name: 'Sort Order', value: 'sort_order' },
+				{ name: 'Range ID', value: 'range_id' },
+				{ name: 'Price', value: 'price' },
+				{ name: 'Vendor Price', value: 'vendor_price' },
+				{ name: 'From Range', value: 'from_range' },
+				{ name: 'To Range', value: 'to_range' },
+				{ name: 'Site Admin Markup', value: 'site_admin_markup' },
 			],
 			default: [
-				'option_price_id',
 				'attr_id',
-				'option_value',
-				'price_adjustment',
-				'price_adjustment_type',
-				'currency',
-				'sort_order',
+				'range_id',
+				'price',
+				'vendor_price',
+				'from_range',
+				'to_range',
+				'site_admin_markup',
 			],
 			description: 'Select option prices fields to return. All fields selected by default.',
 		},
@@ -4300,22 +5280,22 @@ export class OnPrintShop implements INodeType {
 				{ name: '🔘 Select All Fields', value: 'SELECT_ALL' },
 				{ name: '🔘 Deselect All Fields', value: 'DESELECT_ALL' },
 				{ name: '─────────────────────────────', value: 'SEPARATOR' },
-				{ name: 'Option Price ID', value: 'option_price_id' },
 				{ name: 'Attribute ID', value: 'attr_id' },
-				{ name: 'Option Value', value: 'option_value' },
-				{ name: 'Price Adjustment', value: 'price_adjustment' },
-				{ name: 'Price Adjustment Type', value: 'price_adjustment_type' },
-				{ name: 'Currency', value: 'currency' },
-				{ name: 'Sort Order', value: 'sort_order' },
+				{ name: 'Range ID', value: 'range_id' },
+				{ name: 'Price', value: 'price' },
+				{ name: 'Vendor Price', value: 'vendor_price' },
+				{ name: 'From Range', value: 'from_range' },
+				{ name: 'To Range', value: 'to_range' },
+				{ name: 'Site Admin Markup', value: 'site_admin_markup' },
 			],
 			default: [
-				'option_price_id',
 				'attr_id',
-				'option_value',
-				'price_adjustment',
-				'price_adjustment_type',
-				'currency',
-				'sort_order',
+				'range_id',
+				'price',
+				'vendor_price',
+				'from_range',
+				'to_range',
+				'site_admin_markup',
 			],
 			description: 'Select option prices fields to return. All fields selected by default.',
 		},
@@ -4905,30 +5885,87 @@ export class OnPrintShop implements INodeType {
 		const returnData: IDataObject[] = [];
 
 		const credentials = await this.getCredentials('onPrintShopApi');
-		const baseUrl = credentials.baseUrl as string || 'https://api.onprintshop.com';
-		const tokenUrl = credentials.tokenUrl as string || 'https://api.onprintshop.com/oauth/token';
+		const baseUrl = stripTrailingSlashes((credentials.baseUrl as string) || 'https://api.onprintshop.com');
+		const tokenUrl = stripTrailingSlashes((credentials.tokenUrl as string) || 'https://api.onprintshop.com/oauth/token');
 		const clientId = credentials.clientId as string;
 		const clientSecret = credentials.clientSecret as string;
+
+		const getErrorMessage = (error: unknown): string => {
+			if (error instanceof Error) return error.message;
+			return String(error);
+		};
+
+		const getJsonParameter = (parameterName: string, itemIndex: number): IDataObject => {
+			const value = this.getNodeParameter(parameterName, itemIndex) as unknown;
+			if (typeof value === 'string') {
+				const trimmed = value.trim();
+				if (!trimmed) return {};
+				try {
+					return JSON.parse(trimmed) as IDataObject;
+				} catch (error) {
+					throw new NodeOperationError(
+						this.getNode(),
+						`Invalid JSON in "${parameterName}": ${getErrorMessage(error)}`,
+					);
+				}
+			}
+			if (value && typeof value === 'object') return value as IDataObject;
+			if (value === null || value === undefined) return {};
+			throw new NodeOperationError(this.getNode(), `"${parameterName}" must be valid JSON`);
+		};
 
 		// Get OAuth2 access token
 		let accessToken: string;
 		try {
-			const tokenResponse = await this.helpers.request({
-				method: 'POST',
-				url: tokenUrl,
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: {
-					grant_type: 'client_credentials',
-					client_id: clientId,
-					client_secret: clientSecret,
-				},
-				json: true,
-			});
-			accessToken = tokenResponse.access_token;
+			const tokenResponse =
+				// Primary: JSON body (some OPS deployments accept this)
+				await this.helpers.request({
+					method: 'POST',
+					url: tokenUrl,
+					headers: { 'Content-Type': 'application/json' },
+					body: {
+						grant_type: 'client_credentials',
+						client_id: clientId,
+						client_secret: clientSecret,
+					},
+					json: true,
+				}).catch(async (firstError: unknown) => {
+					// Fallback 1: x-www-form-urlencoded (common OAuth2 client_credentials behavior)
+					try {
+						return await this.helpers.request({
+							method: 'POST',
+							url: tokenUrl,
+							form: {
+								grant_type: 'client_credentials',
+								client_id: clientId,
+								client_secret: clientSecret,
+							},
+							json: true,
+						});
+					} catch (secondError: unknown) {
+						// Fallback 2: Basic auth + form (RFC 6749 / many servers)
+						const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+						return await this.helpers.request({
+							method: 'POST',
+							url: tokenUrl,
+							headers: { Authorization: `Basic ${basicAuth}` },
+							form: { grant_type: 'client_credentials' },
+							json: true,
+						}).catch(() => {
+							throw firstError;
+						});
+					}
+				});
+
+			accessToken = tokenResponse?.access_token;
+			if (!accessToken) {
+				throw new NodeOperationError(
+					this.getNode(),
+					'Failed to get access token: response did not include "access_token"',
+				);
+			}
 		} catch (error) {
-			throw new NodeOperationError(this.getNode(), `Failed to get access token: ${error.message}`);
+			throw new NodeOperationError(this.getNode(), `Failed to get access token: ${getErrorMessage(error)}`);
 		}
 
 		for (let i = 0; i < items.length; i++) {
@@ -5142,70 +6179,68 @@ export class OnPrintShop implements INodeType {
 				}
 
 				if (resource === 'shipToMultipleAddress' && operation === 'getAll') {
-					const queryParameters = this.getNodeParameter('queryParameters', i) as IDataObject;
-					const stmFieldsSelected = this.getNodeParameter('stmFields', i) as string[];
-					const fetchAllPages = this.getNodeParameter('fetchAllPages', i, false) as boolean || false;
+					const order_id = this.getNodeParameter('shipToMultiple_order_id', i) as number;
+					if (!order_id) throw new NodeOperationError(this.getNode(), 'Order ID is required');
 
-					const stmFields = stmFieldsSelected.filter(f => !f.startsWith('SELECT_') && f !== 'DESELECT_ALL' && f !== 'SEPARATOR').join('\n\t\t\t\t\t\t\t');
+					const stmFieldsSelected = this.getNodeParameter('stmFields', i) as string[];
+					const stmFields = stmFieldsSelected
+						.filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
+						.join('\n\t\t\t\t\t\t\t\t\t');
 
 					const query = `
-						query orders ($orders_id: Int, $limit: Int, $offset: Int) {
-							orders (orders_id: $orders_id, limit: $limit, offset: $offset) {
-								orders { ship_to_multiple_detail { ${stmFields} } }
-								totalOrders
+						query shipToMultipleAddress ($order_id: Int) {
+							shipToMultipleAddress (order_id: $order_id) {
+								shipToMultipleAddress {
+									${stmFields}
+								}
 							}
 						}
 					`;
 
-					let results: IDataObject[] = [];
-					let offset = 0; const pageSize = Math.min((queryParameters.pageSize as number) || 250, 250);
-					let adaptiveDelay = Math.max((queryParameters.pageDelay as number) || 50, 25);
-					let hasMorePages = true; let pageCount = 0; const maxPages = 100;
+					const variables: IDataObject = { order_id };
+					const responseData = await this.helpers.request({
+						method: 'POST',
+						url: `${baseUrl}/api/`,
+						headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+						body: { query: query.trim(), variables },
+						json: true,
+					});
 
-					if (fetchAllPages) {
-						while (hasMorePages && pageCount < maxPages) {
-							const requestStartTime = Date.now();
-							const variables: IDataObject = { limit: pageSize, offset };
-							if (queryParameters.orders_id) variables.orders_id = Number(queryParameters.orders_id);
-							const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: query.trim(), variables }, json: true });
-							if (responseData && responseData.data && responseData.data.orders) {
-								const orders = responseData.data.orders.orders || [];
-								for (const o of orders) { if (o && o.ship_to_multiple_detail) results.push(o.ship_to_multiple_detail); }
-								offset += pageSize; pageCount++; hasMorePages = orders.length === pageSize;
-								const responseTime = Date.now() - requestStartTime;
-								if (responseTime < 100) adaptiveDelay = Math.max(25, adaptiveDelay * 0.8); else if (responseTime > 500) adaptiveDelay = Math.min(1000, adaptiveDelay * 1.25);
-								if (hasMorePages) await new Promise(r => setTimeout(r, Math.round(adaptiveDelay)));
-							} else if (responseData && responseData.errors) {
-								throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
-							} else { hasMorePages = false; }
+					if (responseData && responseData.data && responseData.data.shipToMultipleAddress) {
+						const rows = responseData.data.shipToMultipleAddress.shipToMultipleAddress || [];
+						if (Array.isArray(rows)) {
+							for (const row of rows) returnData.push({ ...row, _order_id: order_id });
+						} else if (rows) {
+							returnData.push({ ...rows, _order_id: order_id });
 						}
-						returnData.push(...results);
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
 					} else {
-						const variables: IDataObject = {};
-						if (queryParameters.orders_id) variables.orders_id = Number(queryParameters.orders_id);
-						if (queryParameters.limit) variables.limit = queryParameters.limit; if (queryParameters.offset) variables.offset = queryParameters.offset;
-						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: query.trim(), variables }, json: true });
-						if (responseData && responseData.data && responseData.data.orders) {
-							const orders = responseData.data.orders.orders || [];
-							for (const o of orders) { if (o && o.ship_to_multiple_detail) returnData.push(o.ship_to_multiple_detail); }
-						} else if (responseData && responseData.errors) {
-							throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
-						} else { returnData.push({ error: 'Unexpected response format from API' }); }
+						throw new NodeOperationError(this.getNode(), 'Unexpected response format from API');
 					}
 				}
 
 				if (resource === 'productStocks' && operation === 'getAll') {
+					const productId = this.getNodeParameter('productStocks_product_id', i) as number;
+					if (!productId) {
+						throw new NodeOperationError(this.getNode(), 'Product ID is required');
+					}
+
 					const queryParameters = this.getNodeParameter('queryParameters', i) as IDataObject;
 					const stockFieldsSelected = this.getNodeParameter('stockFields', i) as string[];
 					const fetchAllPages = this.getNodeParameter('fetchAllPages', i, false) as boolean || false;
 
-					const stockFields = stockFieldsSelected.filter(f => !f.startsWith('SELECT_') && f !== 'DESELECT_ALL' && f !== 'SEPARATOR').join('\n\t\t\t\t\t\t\t');
+					const stockFields = stockFieldsSelected
+						.filter(f => !f.startsWith('SELECT_') && !f.startsWith('DESELECT_') && f !== 'SEPARATOR')
+						.join('\n\t\t\t\t\t\t\t');
 
 					const query = `
-						query products ($product_id: Int, $products_sku: String, $limit: Int, $offset: Int) {
-							products (product_id: $product_id, products_sku: $products_sku, limit: $limit, offset: $offset) {
-								products { stock_detail { ${stockFields} } }
-								totalProducts
+						query productStocks ($product_id: Int!, $limit: Int, $offset: Int) {
+							productStocks (product_id: $product_id, limit: $limit, offset: $offset) {
+								productStocks {
+									${stockFields}
+								}
+								totalProductStocks
 							}
 						}
 					`;
@@ -5218,15 +6253,12 @@ export class OnPrintShop implements INodeType {
 					if (fetchAllPages) {
 						while (hasMorePages && pageCount < maxPages) {
 							const requestStartTime = Date.now();
-							const variables: IDataObject = { limit: pageSize, offset };
-							const qp = queryParameters || {} as IDataObject;
-							if (qp.product_id) variables.product_id = Number(qp.product_id);
-							if (qp.products_sku) variables.products_sku = String(qp.products_sku);
+							const variables: IDataObject = { product_id: productId, limit: pageSize, offset };
 							const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: query.trim(), variables }, json: true });
-							if (responseData && responseData.data && responseData.data.products) {
-								const products = responseData.data.products.products || [];
-								for (const p of products) { if (p && p.stock_detail) results.push(p.stock_detail); }
-								offset += pageSize; pageCount++; hasMorePages = products.length === pageSize;
+							if (responseData && responseData.data && responseData.data.productStocks) {
+								const stocks = responseData.data.productStocks.productStocks || [];
+								for (const s of stocks) results.push({ ...s, _totalProductStocks: responseData.data.productStocks.totalProductStocks });
+								offset += pageSize; pageCount++; hasMorePages = stocks.length === pageSize;
 								const responseTime = Date.now() - requestStartTime;
 								if (responseTime < 100) adaptiveDelay = Math.max(25, adaptiveDelay * 0.8); else if (responseTime > 500) adaptiveDelay = Math.min(1000, adaptiveDelay * 1.25);
 								if (hasMorePages) await new Promise(r => setTimeout(r, Math.round(adaptiveDelay)));
@@ -5236,14 +6268,15 @@ export class OnPrintShop implements INodeType {
 						}
 						returnData.push(...results);
 					} else {
-						const variables: IDataObject = {};
-						if (queryParameters.product_id) variables.product_id = Number(queryParameters.product_id);
-						if (queryParameters.products_sku) variables.products_sku = String(queryParameters.products_sku);
-						if (queryParameters.limit) variables.limit = queryParameters.limit; if (queryParameters.offset) variables.offset = queryParameters.offset;
+						const variables: IDataObject = { product_id: productId };
+						if (queryParameters.limit) variables.limit = queryParameters.limit;
+						if (queryParameters.offset) variables.offset = queryParameters.offset;
 						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: query.trim(), variables }, json: true });
-						if (responseData && responseData.data && responseData.data.products) {
-							const products = responseData.data.products.products || [];
-							for (const p of products) { if (p && p.stock_detail) returnData.push(p.stock_detail); }
+						if (responseData && responseData.data && responseData.data.productStocks) {
+							const stocks = responseData.data.productStocks.productStocks || [];
+							for (const s of stocks) {
+								returnData.push({ ...s, _totalProductStocks: responseData.data.productStocks.totalProductStocks });
+							}
 						} else if (responseData && responseData.errors) {
 							throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
 						} else { returnData.push({ error: 'Unexpected response format from API' }); }
@@ -5349,6 +6382,135 @@ export class OnPrintShop implements INodeType {
 					}
 				}
 
+				if (resource === 'store' && operation === 'get_countries') {
+					const variables: IDataObject = {};
+					const countries_id = this.getNodeParameter('countries_countries_id', i) as number;
+					const status = this.getNodeParameter('countries_status', i) as number;
+					const limit = this.getNodeParameter('countries_limit', i) as number;
+					const offset = this.getNodeParameter('countries_offset', i) as number;
+					if (countries_id) variables.countries_id = countries_id;
+					if (status) variables.status = status;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query get_countries($countries_id: Int, $status: Int, $limit: Int, $offset: Int) { get_countries(countries_id: $countries_id, status: $status, limit: $limit, offset: $offset) { countries { countries_id countries_name countries_iso_code_2 countries_iso_code_3 status } totalCountries } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.get_countries) {
+						const rows = responseData.data.get_countries.countries || [];
+						for (const row of rows) { returnData.push({ ...row, _totalCountries: responseData.data.get_countries.totalCountries }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+				}
+
+				if (resource === 'store' && operation === 'get_store_markup') {
+					const variables: IDataObject = {};
+					const corporate_markup_id = this.getNodeParameter('store_markup_corporate_markup_id', i) as number;
+					const limit = this.getNodeParameter('store_markup_limit', i) as number;
+					const offset = this.getNodeParameter('store_markup_offset', i) as number;
+					if (corporate_markup_id) variables.corporate_markup_id = corporate_markup_id;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query get_store_markup($corporate_markup_id: Int, $limit: Int, $offset: Int) { get_store_markup(corporate_markup_id: $corporate_markup_id, limit: $limit, offset: $offset) { store_markup { corporate_markup_id markup_title markup_details status appliedon } totalStoreMarkup } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.get_store_markup) {
+						const rows = responseData.data.get_store_markup.store_markup || [];
+						for (const row of rows) { returnData.push({ ...row, _totalStoreMarkup: responseData.data.get_store_markup.totalStoreMarkup }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+				}
+
+				if (resource === 'store' && operation === 'get_payment_term_master') {
+					const variables: IDataObject = {};
+					const term_id = this.getNodeParameter('payment_term_term_id', i) as number;
+					const limit = this.getNodeParameter('payment_term_limit', i) as number;
+					const offset = this.getNodeParameter('payment_term_offset', i) as number;
+					if (term_id) variables.term_id = term_id;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query get_payment_term_master($term_id: Int, $limit: Int, $offset: Int) { get_payment_term_master(term_id: $term_id, limit: $limit, offset: $offset) { payment_term_master { term_id term_details default_term check_order status term_title term_description } totalPaymentTermMaster } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.get_payment_term_master) {
+						const rows = responseData.data.get_payment_term_master.payment_term_master || [];
+						for (const row of rows) { returnData.push({ ...row, _totalPaymentTermMaster: responseData.data.get_payment_term_master.totalPaymentTermMaster }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+				}
+
+				if (resource === 'store' && operation === 'storeaddress') {
+					const variables: IDataObject = {};
+					const corporate_id = this.getNodeParameter('storeaddress_corporate_id', i) as number;
+					const corporate_address_id = this.getNodeParameter('storeaddress_corporate_address_id', i) as number;
+					const limit = this.getNodeParameter('storeaddress_limit', i) as number;
+					const offset = this.getNodeParameter('storeaddress_offset', i) as number;
+					if (corporate_id) variables.corporate_id = corporate_id;
+					if (corporate_address_id) variables.corporate_address_id = corporate_address_id;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query storeaddress($corporate_id: Int, $corporate_address_id: Int, $limit: Int, $offset: Int) { storeaddress(corporate_id: $corporate_id, corporate_address_id: $corporate_address_id, limit: $limit, offset: $offset) { storeaddress { office_name corporate_address_id address_flag corporate_id department_id available_to corporate_address suburb city postcode state country country_iso_code phone_number status extrafield receiver_name companyname } totalStoreAddress } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.storeaddress) {
+						const rows = responseData.data.storeaddress.storeaddress || [];
+						for (const row of rows) { returnData.push({ ...row, _totalStoreAddress: responseData.data.storeaddress.totalStoreAddress }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+				}
+
+				if (resource === 'store' && operation === 'storeCreditSummary') {
+					const variables: IDataObject = {};
+					const storeid = this.getNodeParameter('storeCreditSummary_storeid', i) as number;
+					const user_id = this.getNodeParameter('storeCreditSummary_user_id', i) as number;
+					const limit = this.getNodeParameter('storeCreditSummary_limit', i) as number;
+					const offset = this.getNodeParameter('storeCreditSummary_offset', i) as number;
+					if (storeid) variables.storeid = storeid;
+					if (user_id) variables.user_id = user_id;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query storeCreditSummary($storeid: Int, $user_id: Int, $limit: Int, $offset: Int) { storeCreditSummary(storeid: $storeid, user_id: $user_id, limit: $limit, offset: $offset) { storeCreditSummary { user_id storeid customer_name store_name tran_type transaction_msg order_id transaction_date_time maintain_by comments } totalStoreCreditSummary remainingCredit } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.storeCreditSummary) {
+						const result = responseData.data.storeCreditSummary;
+						const rows = result.storeCreditSummary || [];
+						for (const row of rows) {
+							returnData.push({
+								...row,
+								_totalStoreCreditSummary: result.totalStoreCreditSummary,
+								_remainingCredit: result.remainingCredit,
+							});
+						}
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+				}
+
+				if (resource === 'store' && operation === 'accountSummary') {
+					const variables: IDataObject = {};
+					const storeid = this.getNodeParameter('accountSummary_storeid', i) as number;
+					const limit = this.getNodeParameter('accountSummary_limit', i) as number;
+					const offset = this.getNodeParameter('accountSummary_offset', i) as number;
+					if (storeid) variables.storeid = storeid;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query accountSummary($storeid: Int, $limit: Int, $offset: Int) { accountSummary(storeid: $storeid, limit: $limit, offset: $offset) { accountSummary { storeid department_id amount type comments paymethod duedate term_title date_added } totalAccountSummary remainingInvoiceAmount remainingPaidLimit } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.accountSummary) {
+						const result = responseData.data.accountSummary;
+						const rows = result.accountSummary || [];
+						for (const row of rows) {
+							returnData.push({
+								...row,
+								_totalAccountSummary: result.totalAccountSummary,
+								_remainingInvoiceAmount: result.remainingInvoiceAmount,
+								_remainingPaidLimit: result.remainingPaidLimit,
+							});
+						}
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+				}
+
 				if (resource === 'department' && operation === 'getAll') {
 					const variables: IDataObject = {};
 					const departmentId = this.getNodeParameter('department_departmentId', i) as number;
@@ -5374,14 +6536,20 @@ export class OnPrintShop implements INodeType {
 						const type = this.getNodeParameter('statusUpdateType', i) as string;
 						const variables: IDataObject = {
 							type,
-							input: JSON.parse(this.getNodeParameter('updateOrderStatusInput', i) as string),
+							input: getJsonParameter('updateOrderStatusInput', i),
 						};
 						if (type === 'order') {
 							const orders_id = this.getNodeParameter('orders_id', i) as number;
-							if (orders_id) variables.orders_id = orders_id;
+							if (!orders_id) {
+								throw new NodeOperationError(this.getNode(), 'Orders ID is required when Type is "Order"');
+							}
+							variables.orders_id = orders_id;
 						} else {
 							const orders_products_id = this.getNodeParameter('orders_products_id', i) as number;
-							if (orders_products_id) variables.orders_products_id = orders_products_id;
+							if (!orders_products_id) {
+								throw new NodeOperationError(this.getNode(), 'Orders Products ID is required when Type is "Product"');
+							}
+							variables.orders_products_id = orders_products_id;
 						}
 						const mutation = `mutation updateOrderStatus ($type: OrderStatusUpdateTypeEnum!, $orders_id: Int, $orders_products_id: Int, $input: UpdateOrderStatusInput!) { updateOrderStatus (type: $type, orders_id: $orders_id, orders_products_id: $orders_products_id, input: $input) { result message } }`;
 						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
@@ -5392,7 +6560,7 @@ export class OnPrintShop implements INodeType {
 						const order_product_id = this.getNodeParameter('setOrderProduct_order_product_id', i) as number;
 						const width = this.getNodeParameter('setOrderProduct_width', i) as number;
 						const height = this.getNodeParameter('setOrderProduct_height', i) as number;
-						const input = JSON.parse(this.getNodeParameter('setOrderProduct_input', i) as string);
+						const input = getJsonParameter('setOrderProduct_input', i);
 						const variables: IDataObject = { input };
 						if (order_product_id) variables.order_product_id = order_product_id;
 						if (width) variables.width = width;
@@ -5404,7 +6572,7 @@ export class OnPrintShop implements INodeType {
 					}
 					if (operation === 'setBatch') {
 						const batch_id = this.getNodeParameter('setBatch_batch_id', i) as number;
-						const input = JSON.parse(this.getNodeParameter('setBatch_input', i) as string);
+						const input = getJsonParameter('setBatch_input', i);
 						const variables: IDataObject = { batch_id, input };
 						const mutation = `mutation setBatch ($batch_id: Int, $input: SetBatchMasterInput!) { setBatch (batch_id: $batch_id, input: $input) { result message batch_id batch_link batch_pdf_link } }`;
 						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
@@ -5412,28 +6580,28 @@ export class OnPrintShop implements INodeType {
 						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
 					}
 					if (operation === 'setProduct') {
-						const input = JSON.parse(this.getNodeParameter('setProduct_input', i) as string);
+						const input = getJsonParameter('setProduct_input', i);
 						const mutation = `mutation setProduct ($input: ProductInput!) { setProduct (input: $input) { result message products_id } }`;
 						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
 						if (responseData && responseData.data && responseData.data.setProduct) returnData.push(responseData.data.setProduct);
 						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
 					}
 					if (operation === 'setProductPrice') {
-						const input = JSON.parse(this.getNodeParameter('setProductPrice_input', i) as string);
+						const input = getJsonParameter('setProductPrice_input', i);
 						const mutation = `mutation setProductPrice ($input: ProductPriceInput!) { setProductPrice (input: $input) { result message product_price_id } }`;
 						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
 						if (responseData && responseData.data && responseData.data.setProductPrice) returnData.push(responseData.data.setProductPrice);
 						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
 					}
 					if (operation === 'setProductSize') {
-						const input = JSON.parse(this.getNodeParameter('setProductSize_input', i) as string);
+						const input = getJsonParameter('setProductSize_input', i);
 						const mutation = `mutation setProductSize ($input: ProductSizeInput!) { setProductSize (input: $input) { result message product_size_id } }`;
 						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
 						if (responseData && responseData.data && responseData.data.setProductSize) returnData.push(responseData.data.setProductSize);
 						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
 					}
 					if (operation === 'setProductCategory') {
-						const input = JSON.parse(this.getNodeParameter('setProductCategory_input', i) as string);
+						const input = getJsonParameter('setProductCategory_input', i);
 						const mutation = `mutation setProductCategory ($input: ProductCategoryInput!) { setProductCategory (input: $input) { result message category_id } }`;
 						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
 						if (responseData && responseData.data && responseData.data.setProductCategory) returnData.push(responseData.data.setProductCategory);
@@ -5444,7 +6612,7 @@ export class OnPrintShop implements INodeType {
 						const quote_id = this.getNodeParameter('setQuote_quote_id', i) as number;
 						const quote_title = this.getNodeParameter('setQuote_quote_title', i) as string;
 						const selectedShippingType = this.getNodeParameter('setQuote_selectedShippingType', i) as string;
-						const input = JSON.parse(this.getNodeParameter('setQuote_input', i) as string);
+						const input = getJsonParameter('setQuote_input', i);
 						const variables: IDataObject = { userid, quote_title, input };
 						if (quote_id) variables.quote_id = quote_id;
 						if (selectedShippingType) variables.selectedShippingType = selectedShippingType;
@@ -5468,7 +6636,7 @@ export class OnPrintShop implements INodeType {
 					}
 					if (operation === 'updateOrderProductImages') {
 						const order_product_id = this.getNodeParameter('updateOrderProductImages_order_product_id', i) as number;
-						const input = JSON.parse(this.getNodeParameter('updateOrderProductImages_input', i) as string);
+						const input = getJsonParameter('updateOrderProductImages_input', i);
 						const variables: IDataObject = { input };
 						if (order_product_id) variables.order_product_id = order_product_id;
 						const mutation = `mutation setOrderProductImage ($order_product_id: Int, $input: SetOrderProductImageInput!) { setOrderProductImage (order_product_id: $order_product_id, input: $input) { result message } }`;
@@ -5480,7 +6648,7 @@ export class OnPrintShop implements INodeType {
 						const order_product_id = this.getNodeParameter('addProofVersion_order_product_id', i) as number;
 						const add_version_file_only = this.getNodeParameter('addProofVersion_add_version_file_only', i) as number;
 						const ask_for_approval = this.getNodeParameter('addProofVersion_ask_for_approval', i) as number;
-						const input = JSON.parse(this.getNodeParameter('addProofVersion_input', i) as string);
+						const input = getJsonParameter('addProofVersion_input', i);
 						const variables: IDataObject = { update_ziflow_link_only: 0, add_version_file_only, ask_for_approval, input };
 						if (order_product_id) variables.order_product_id = order_product_id;
 						const mutation = `mutation setOrderProductImage ($order_product_id: Int, $update_ziflow_link_only: Int, $add_version_file_only: Int, $ask_for_approval: Int, $input: SetOrderProductImageInput!) { setOrderProductImage (order_product_id: $order_product_id, update_ziflow_link_only: $update_ziflow_link_only, add_version_file_only: $add_version_file_only, ask_for_approval: $ask_for_approval, input: $input) { result message } }`;
@@ -5490,12 +6658,238 @@ export class OnPrintShop implements INodeType {
 					}
 					if (operation === 'updateZiflowLinkImages') {
 						const order_product_id = this.getNodeParameter('updateZiflowLinkImages_order_product_id', i) as number;
-						const input = JSON.parse(this.getNodeParameter('updateZiflowLinkImages_input', i) as string);
+						const input = getJsonParameter('updateZiflowLinkImages_input', i);
 						const variables: IDataObject = { update_ziflow_link_only: 1, input };
 						if (order_product_id) variables.order_product_id = order_product_id;
 						const mutation = `mutation setOrderProductImage ($order_product_id: Int, $update_ziflow_link_only: Int, $input: SetOrderProductImageInput!) { setOrderProductImage (order_product_id: $order_product_id, update_ziflow_link_only: $update_ziflow_link_only, input: $input) { result message } }`;
 						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
 						if (responseData && responseData.data && responseData.data.setOrderProductImage) returnData.push(responseData.data.setOrderProductImage);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'notifyUser') {
+						const usertype = this.getNodeParameter('notifyUser_usertype', i) as string;
+						const cust_id = this.getNodeParameter('notifyUser_cust_id', i) as number;
+						const input = getJsonParameter('notifyUser_input', i);
+						const variables: IDataObject = { usertype, input };
+						if (cust_id) variables.cust_id = cust_id;
+						const mutation = `mutation notifyUser ($usertype: UserNotifyTypeEnum!, $cust_id: Int, $input: UserNotifyInput!) { notifyUser (cust_id: $cust_id, usertype: $usertype, input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+						if (responseData && responseData.data && responseData.data.notifyUser) returnData.push(responseData.data.notifyUser);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setShipment') {
+						const order_id = this.getNodeParameter('setShipment_order_id', i) as number;
+						const shipment_id = this.getNodeParameter('setShipment_shipment_id', i) as number;
+						const tracking_number = this.getNodeParameter('setShipment_tracking_number', i) as string;
+						const shipmentinfo = getJsonParameter('setShipment_shipmentinfo', i);
+						const variables: IDataObject = { order_id, shipment_id, tracking_number, shipmentinfo };
+						const mutation = `mutation setShipment ($order_id: Int,$shipment_id: Int,$tracking_number: String, $shipmentinfo: JSON) { setShipment (order_id: $order_id, shipment_id: $shipment_id, tracking_number: $tracking_number, shipmentinfo: $shipmentinfo) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+						if (responseData && responseData.data && responseData.data.setShipment) returnData.push(responseData.data.setShipment);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setCustomer') {
+						const customer_id = this.getNodeParameter('setCustomer_customer_id', i) as number;
+						const input = getJsonParameter('setCustomer_input', i);
+						const variables: IDataObject = { customer_id, input };
+						const mutation = `mutation setCustomer ($customer_id: Int, $input: SetCustomerInput!) { setCustomer (customer_id: $customer_id, input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+						if (responseData && responseData.data && responseData.data.setCustomer) returnData.push(responseData.data.setCustomer);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setCustomerAddressDetail') {
+						const input = getJsonParameter('setCustomerAddressDetail_input', i);
+						const mutation = `mutation setCustomerAddressDetail ($input: CustomerAddressInput!) { setCustomerAddressDetail (input: $input) { result message address_book_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setCustomerAddressDetail) returnData.push(responseData.data.setCustomerAddressDetail);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setProductOptionRules') {
+						const input = getJsonParameter('setProductOptionRules_input', i);
+						const mutation = `mutation setProductOptionRules ($input: ProductOptionRulesInput!) { setProductOptionRules (input: $input) { result message rule_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setProductOptionRules) returnData.push(responseData.data.setProductOptionRules);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setCustomFormula') {
+						const input = getJsonParameter('setCustomFormula_input', i);
+						const mutation = `mutation setCustomFormula ($input: CustomFormulaInput!) { setCustomFormula (input: $input) { result message formula_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setCustomFormula) returnData.push(responseData.data.setCustomFormula);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setOptionGroup') {
+						const input = getJsonParameter('setOptionGroup_input', i);
+						const mutation = `mutation setOptionGroup ($input: OptionGroupInput!) { setOptionGroup (input: $input) { result message prod_add_opt_group_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setOptionGroup) returnData.push(responseData.data.setOptionGroup);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setMasterOptionTag') {
+						const input = getJsonParameter('setMasterOptionTag_input', i);
+						const mutation = `mutation setMasterOptionTag ($input: MasterOptionTagInput!) { setMasterOptionTag (input: $input) { result message master_option_tag_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setMasterOptionTag) returnData.push(responseData.data.setMasterOptionTag);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setMasterOptionAttributes') {
+						const input = getJsonParameter('setMasterOptionAttributes_input', i);
+						const mutation = `mutation setMasterOptionAttributes ($input: MasterOptionAttributesInput!) { setMasterOptionAttributes (input: $input) { result message master_attribute_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setMasterOptionAttributes) returnData.push(responseData.data.setMasterOptionAttributes);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setMasterOptionRange') {
+						const input = getJsonParameter('setMasterOptionRange_input', i);
+						const mutation = `mutation setMasterOptionRange ($input: MasterOptionRangeInput!) { setMasterOptionRange (input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setMasterOptionRange) returnData.push(responseData.data.setMasterOptionRange);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setMasterOptionAttributePrice') {
+						const input = getJsonParameter('setMasterOptionAttributePrice_input', i);
+						const mutation = `mutation setMasterOptionAttributePrice ($input: MasterOptionAttributePriceInput!) { setMasterOptionAttributePrice (input: $input) { result message } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setMasterOptionAttributePrice) returnData.push(responseData.data.setMasterOptionAttributePrice);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setMasterOption') {
+						const input = getJsonParameter('setMasterOption_input', i);
+						const mutation = `mutation setMasterOption ($input: MasterOptionInput!) { setMasterOption (input: $input) { result message master_option_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setMasterOption) returnData.push(responseData.data.setMasterOption);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setAssignOptions') {
+						const input = getJsonParameter('setAssignOptions_input', i);
+						const mutation = `mutation setAssignOptions ($input: AssignOptionsInput!) { setAssignOptions (input: $input) { result message product_option_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setAssignOptions) returnData.push(responseData.data.setAssignOptions);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setProductPages') {
+						const input = getJsonParameter('setProductPages_input', i);
+						const mutation = `mutation setProductPages ($input: ProductPagesInput!) { setProductPages (input: $input) { result message product_page_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setProductPages) returnData.push(responseData.data.setProductPages);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setStoreAddress') {
+						const input = getJsonParameter('setStoreAddress_input', i);
+						const mutation = `mutation setStoreAddress ($input: StoreAddressInput!) { setStoreAddress (input: $input) { result message corporate_address_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setStoreAddress) returnData.push(responseData.data.setStoreAddress);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setDepartment') {
+						const input = getJsonParameter('setDepartment_input', i);
+						const mutation = `mutation setDepartment ($input: DepartmentInput!) { setDepartment (input: $input) { result message department_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setDepartment) returnData.push(responseData.data.setDepartment);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setStore') {
+						const input = getJsonParameter('setStore_input', i);
+						const mutation = `mutation setStore ($input: StoreInput!) { setStore (input: $input) { result message corporate_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setStore) returnData.push(responseData.data.setStore);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setStoreMarkup') {
+						const input = getJsonParameter('setStoreMarkup_input', i);
+						const mutation = `mutation setStoreMarkup ($input: StoreMarkupInput!) { setStoreMarkup (input: $input) { result message corporate_markup_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setStoreMarkup) returnData.push(responseData.data.setStoreMarkup);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setFaqCategory') {
+						const input = getJsonParameter('setFaqCategory_input', i);
+						const mutation = `mutation setFaqCategory($input: FaqCategoryInput!) { setFaqCategory(input: $input) { result message faqcat_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setFaqCategory) returnData.push(responseData.data.setFaqCategory);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setFaq') {
+						const input = getJsonParameter('setFaq_input', i);
+						const mutation = `mutation setFaq($input: FaqInput!) { setFaq(input: $input) { result message faq_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setFaq) returnData.push(responseData.data.setFaq);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setOrder') {
+						const userid = this.getNodeParameter('setOrder_userid', i) as number;
+						const order_id = this.getNodeParameter('setOrder_order_id', i) as number;
+						const order_title = this.getNodeParameter('setOrder_order_title', i) as string;
+						const selectedShippingType = this.getNodeParameter('setOrder_selectedShippingType', i) as number;
+						const input = getJsonParameter('setOrder_input', i);
+						const variables: IDataObject = { userid, order_title, input };
+						if (order_id) variables.order_id = order_id;
+						if (selectedShippingType) variables.selectedShippingType = selectedShippingType;
+						const mutation = `mutation setOrder ($userid: Int!, $order_id: Int, $selectedShippingType: Int, $order_title: String!, $input: SetOrderInput!) { setOrder (userid: $userid, order_title: $order_title, selectedShippingType: $selectedShippingType, order_id: $order_id, input: $input) { result message order_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+						if (responseData && responseData.data && responseData.data.setOrder) returnData.push(responseData.data.setOrder);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setUserBasket') {
+						const userId = this.getNodeParameter('setUserBasket_userId', i) as number;
+						const action = this.getNodeParameter('setUserBasket_action', i) as string;
+						const basketId = this.getNodeParameter('setUserBasket_basketId', i) as number;
+						const itemIndex = this.getNodeParameter('setUserBasket_itemIndex', i) as number;
+						const input = getJsonParameter('setUserBasket_input', i);
+						const variables: IDataObject = { userId, action, basketId, itemIndex, input };
+						const mutation = `mutation setUserBasket ($userId: Int!, $action: String!, $basketId: Int, $itemIndex: Int!, $input: SetUserBasketInput!) { setUserBasket (userId: $userId, action: $action, basketId: $basketId, itemIndex: $itemIndex, input: $input) { result message basket_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+						if (responseData && responseData.data && responseData.data.setUserBasket) returnData.push(responseData.data.setUserBasket);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'modifyOrderProduct') {
+						const orderid = this.getNodeParameter('modifyOrderProduct_orderid', i) as number;
+						const input = getJsonParameter('modifyOrderProduct_input', i);
+						const variables: IDataObject = { orderid, input };
+						const mutation = `mutation modifyOrderProduct ($orderid: Int!, $input: ModifyOrderProductInput!) { modifyOrderProduct (orderid: $orderid, input: $input) { result message results { success message orderProductId } } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+						if (responseData && responseData.data && responseData.data.modifyOrderProduct) returnData.push(responseData.data.modifyOrderProduct);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setAdditionalOption') {
+						const input = getJsonParameter('setAdditionalOption_input', i);
+						const mutation = `mutation setAdditionalOption($input: AdditionalOptionInput!) { setAdditionalOption(input: $input) { result message prod_add_opt_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setAdditionalOption) returnData.push(responseData.data.setAdditionalOption);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setAdditionalOptionAttributes') {
+						const input = getJsonParameter('setAdditionalOptionAttributes_input', i);
+						const mutation = `mutation setAdditionalOptionAttributes($input: AdditionalOptionAttributesInput!) { setAdditionalOptionAttributes(input: $input) { result message attribute_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setAdditionalOptionAttributes) returnData.push(responseData.data.setAdditionalOptionAttributes);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setProductsAttributePrice') {
+						const input = getJsonParameter('setProductsAttributePrice_input', i);
+						const mutation = `mutation setProductsAttributePrice($input: ProductsAttributePriceInput!) { setProductsAttributePrice(input: $input) { result message attribute_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setProductsAttributePrice) returnData.push(responseData.data.setProductsAttributePrice);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'setQuantityBasedAttributePrice') {
+						const input = getJsonParameter('setQuantityBasedAttributePrice_input', i);
+						const mutation = `mutation setQuantityBasedAttributePrice($input: QuantityBasedAttributePriceInput!) { setQuantityBasedAttributePrice(input: $input) { result message attribute_id } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
+						if (responseData && responseData.data && responseData.data.setQuantityBasedAttributePrice) returnData.push(responseData.data.setQuantityBasedAttributePrice);
+						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					}
+					if (operation === 'updateProductStock') {
+						const stock_id = this.getNodeParameter('updateProductStock_stock_id', i) as number;
+						const product_sku = this.getNodeParameter('updateProductStock_product_sku', i) as string;
+						const action = this.getNodeParameter('updateProductStock_action', i) as string;
+						const input = getJsonParameter('updateProductStock_input', i);
+						const variables: IDataObject = { action, input };
+						if (stock_id) variables.stock_id = stock_id;
+						if (product_sku) variables.product_sku = product_sku;
+						const mutation = `mutation updateProductStock ($stock_id: Int, $product_sku: String, $action: UpdateProductStockActionEnum!, $input: UpdateProductStockInput!) { updateProductStock (stock_id: $stock_id, product_sku: $product_sku, action: $action, input: $input) { result message stock_id stock_quantity } }`;
+						const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+						if (responseData && responseData.data && responseData.data.updateProductStock) returnData.push(responseData.data.updateProductStock);
 						else if (responseData && responseData.errors) throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
 					}
 				}
@@ -5950,6 +7344,34 @@ export class OnPrintShop implements INodeType {
 								'Unexpected response format from API',
 							);
 						}
+					}
+				}
+
+				if (resource === 'customer' && operation === 'getUserBasket') {
+					const user_id = this.getNodeParameter('userBasket_user_id', i) as number;
+					if (!user_id) throw new NodeOperationError(this.getNode(), 'User ID is required');
+
+					const query = `query getUserBasket( $user_id: Int!) { getUserBasket( user_id: $user_id ) { baskets { basket_id user_id cart_detail cart_count date } totalBaskets } }`;
+					const responseData = await this.helpers.request({
+						method: 'POST',
+						url: `${baseUrl}/api/`,
+						headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+						body: { query, variables: { user_id } },
+						json: true,
+					});
+
+					if (responseData && responseData.data && responseData.data.getUserBasket) {
+						const baskets = responseData.data.getUserBasket.baskets || [];
+						const totalBaskets = responseData.data.getUserBasket.totalBaskets;
+						if (Array.isArray(baskets)) {
+							for (const basket of baskets) returnData.push({ ...basket, _totalBaskets: totalBaskets });
+						} else if (baskets) {
+							returnData.push({ ...baskets, _totalBaskets: totalBaskets });
+						}
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					} else {
+						throw new NodeOperationError(this.getNode(), 'Unexpected response format from API');
 					}
 				}
 
@@ -7214,7 +8636,7 @@ export class OnPrintShop implements INodeType {
 			if (resource === 'product' && operation === 'getMasterOptions') {
 					// Get product master options
 					const masterOptionIdStr = this.getNodeParameter('masterOptionId', i) as string;
-					const selectedFields = this.getNodeParameter('masterOptionsFields', i, []) as string[];
+					const selectedFields = this.getNodeParameter('masterOptionsFields', i) as string[];
 					
 					// Validate Master Option ID is provided
 					if (!masterOptionIdStr || masterOptionIdStr.trim() === '') {
@@ -7239,7 +8661,13 @@ export class OnPrintShop implements INodeType {
 					};
 
 					// Build fields string from selected fields
-					const fieldsString = selectedFields.length > 0 ? selectedFields.join('\n\t\t\t\t\t\t') : 'master_option_id\ntitle\ndescription\noption_key\npricing_method\nstatus\nsort_order\noptions_type\nlinear_formula\nformula\nweight_setting\nprice_range_lookup\ncustom_lookup\nadditional_lookup_details\nhide_from_calc\nenable_assoc_qty\nallow_price_cal\nhire_designer_option\nattributes';
+					const fieldsString = selectedFields
+						.filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
+						.join('\n\t\t\t\t\t\t');
+
+					if (!fieldsString) {
+						throw new NodeOperationError(this.getNode(), 'Select at least one Master Options Field');
+					}
 
 					// Build the GraphQL query for product master options
 					const query = `
@@ -7305,7 +8733,7 @@ export class OnPrintShop implements INodeType {
 			if (resource === 'product' && operation === 'getManyMasterOptions') {
 				// Get master options for many products
 				const queryParameters = this.getNodeParameter('queryParametersManyMasterOptions', i) as IDataObject;
-				const selectedFields = this.getNodeParameter('masterOptionsFieldsMany', i, []) as string[];
+				const selectedFields = this.getNodeParameter('masterOptionsFieldsMany', i) as string[];
 				
 				// Build variables object
 				const variables: IDataObject = {};
@@ -7314,7 +8742,13 @@ export class OnPrintShop implements INodeType {
 				if (queryParameters.offset) variables.offset = queryParameters.offset;
 
 				// Build fields string from selected fields
-				const fieldsString = selectedFields.length > 0 ? selectedFields.join('\n\t\t\t\t\t\t') : 'master_option_id\ntitle\ndescription\noption_key\npricing_method\nstatus\nsort_order\noptions_type\nlinear_formula\nformula\nweight_setting\nprice_range_lookup\ncustom_lookup\nadditional_lookup_details\nhide_from_calc\nenable_assoc_qty\nallow_price_cal\nhire_designer_option\nattributes';
+				const fieldsString = selectedFields
+					.filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
+					.join('\n\t\t\t\t\t\t');
+
+				if (!fieldsString) {
+					throw new NodeOperationError(this.getNode(), 'Select at least one Master Options Field');
+				}
 
 				// Build the GraphQL query for many product master options
 				const query = `
@@ -7380,6 +8814,7 @@ export class OnPrintShop implements INodeType {
 			if (resource === 'product' && operation === 'getOptionsRules') {
 					// Get product options rules
 					const ruleIdStr = this.getNodeParameter('ruleId', i) as string;
+					const optionsRulesFieldsSelected = this.getNodeParameter('optionsRulesFields', i) as string[];
 					
 					// Validate Rule ID is provided
 					if (!ruleIdStr || ruleIdStr.trim() === '') {
@@ -7403,21 +8838,20 @@ export class OnPrintShop implements INodeType {
 						rule_id: ruleId,
 					};
 
+					const optionsRulesFields = optionsRulesFieldsSelected
+						.filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
+						.join('\n\t\t\t\t\t\t\t\t\t');
+
+					if (!optionsRulesFields) {
+						throw new NodeOperationError(this.getNode(), 'Select at least one Options Rules Field');
+					}
+
 					// Build the GraphQL query for product options rules
 					const query = `
 						query product_option_rules ($rule_id: Int!) {
 							product_option_rules (rule_id: $rule_id) {
 								product_option_rules {
-									rule_id
-									rule_name
-									rule_type
-									source_option_attribute_ids
-									hide_option_ids
-									hide_option_attribute_ids
-									status
-									sort_order
-									comparison_value
-									disabled_for_admin
+									${optionsRulesFields}
 								}
 								total_product_option_rules
 							}
@@ -7476,28 +8910,31 @@ export class OnPrintShop implements INodeType {
 			if (resource === 'product' && operation === 'getManyOptionsRules') {
 				// Get options rules for many products
 				const queryParameters = this.getNodeParameter('queryParametersManyOptionsRules', i) as IDataObject;
+				const optionsRulesFieldsSelected = this.getNodeParameter('optionsRulesFieldsMany', i) as string[];
 				
 				// Build variables object
 				const variables: IDataObject = {};
-				if (queryParameters.rule_id) variables.rule_id = parseInt(queryParameters.rule_id as string, 10);
+				if (queryParameters.rule_id) {
+					const parsedRuleId = parseInt(queryParameters.rule_id as string, 10);
+					if (!isNaN(parsedRuleId)) variables.rule_id = parsedRuleId;
+				}
 				if (queryParameters.limit) variables.limit = queryParameters.limit;
 				if (queryParameters.offset) variables.offset = queryParameters.offset;
+
+				const optionsRulesFields = optionsRulesFieldsSelected
+					.filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
+					.join('\n\t\t\t\t\t\t\t\t\t');
+
+				if (!optionsRulesFields) {
+					throw new NodeOperationError(this.getNode(), 'Select at least one Options Rules Field');
+				}
 
 				// Build the GraphQL query for many product options rules
 				const query = `
 					query product_option_rules ($rule_id: Int, $limit: Int, $offset: Int) {
 						product_option_rules (rule_id: $rule_id, limit: $limit, offset: $offset) {
 							product_option_rules {
-								rule_id
-								rule_name
-								rule_type
-								source_option_attribute_ids
-								hide_option_ids
-								hide_option_attribute_ids
-								status
-								sort_order
-								comparison_value
-								disabled_for_admin
+								${optionsRulesFields}
 							}
 							total_product_option_rules
 						}
@@ -7556,6 +8993,7 @@ export class OnPrintShop implements INodeType {
 			if (resource === 'product' && operation === 'getPrices') {
 					// Get product pricing information
 					const productUuidStr = this.getNodeParameter('productIdPrices', i) as string;
+					const pricesFieldsSelected = this.getNodeParameter('pricesFields', i) as string[];
 					
 					// Validate Product UUID is provided
 					if (!productUuidStr || productUuidStr.trim() === '') {
@@ -7570,14 +9008,22 @@ export class OnPrintShop implements INodeType {
 						product_uuid: productUuidStr,
 					};
 
+					const pricesFields = pricesFieldsSelected
+						.filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
+						.join('\n\t\t\t\t\t\t\t\t\t');
+
+					if (!pricesFields) {
+						throw new NodeOperationError(this.getNode(), 'Select at least one Prices Field');
+					}
+
 				// Build the GraphQL query for product prices
 				const query = `
 					query product_price ($product_uuid: String!) {
 						product_price (product_uuid: $product_uuid) {
 							product_price {
-								size_id
-								price
+								${pricesFields}
 							}
+							total_product_price
 						}
 					}
 				`;
@@ -7601,19 +9047,29 @@ export class OnPrintShop implements INodeType {
 				if (responseData && responseData.data && responseData.data.product_price) {
 					const response = responseData.data.product_price;
 					const productPrices = response.product_price;
+					const totalProductPrice = response.total_product_price;
+
 					if (Array.isArray(productPrices)) {
 						productPrices.forEach((price: IDataObject) => {
 							returnData.push({
 								...price,
 								_operation: 'getPrices',
 								_productUuid: productUuidStr,
+								_totalProductPrice: totalProductPrice,
 							});
 						});
-					} else {
+					} else if (productPrices) {
 						returnData.push({
 							...productPrices,
 							_operation: 'getPrices',
 							_productUuid: productUuidStr,
+							_totalProductPrice: totalProductPrice,
+						});
+					} else {
+						returnData.push({
+							_operation: 'getPrices',
+							_productUuid: productUuidStr,
+							_totalProductPrice: totalProductPrice,
 						});
 					}
 				} else if (responseData && responseData.errors) {
@@ -7632,6 +9088,7 @@ export class OnPrintShop implements INodeType {
 			if (resource === 'product' && operation === 'getManyPrices') {
 				// Get prices for many products
 				const queryParameters = this.getNodeParameter('queryParametersManyPrices', i) as IDataObject;
+				const pricesFieldsSelected = this.getNodeParameter('pricesFieldsMany', i) as string[];
 				
 				// Build variables object
 				const variables: IDataObject = {};
@@ -7639,14 +9096,22 @@ export class OnPrintShop implements INodeType {
 				if (queryParameters.limit) variables.limit = queryParameters.limit;
 				if (queryParameters.offset) variables.offset = queryParameters.offset;
 
+				const pricesFields = pricesFieldsSelected
+					.filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
+					.join('\n\t\t\t\t\t\t\t\t\t');
+
+				if (!pricesFields) {
+					throw new NodeOperationError(this.getNode(), 'Select at least one Prices Field');
+				}
+
 				// Build the GraphQL query for many product prices
 				const query = `
 					query product_price ($product_uuid: String, $limit: Int, $offset: Int) {
 						product_price (product_uuid: $product_uuid, limit: $limit, offset: $offset) {
 							product_price {
-								size_id
-								price
+								${pricesFields}
 							}
+							total_product_price
 						}
 					}
 				`;
@@ -7670,17 +9135,25 @@ export class OnPrintShop implements INodeType {
 				if (responseData && responseData.data && responseData.data.product_price) {
 					const response = responseData.data.product_price;
 					const productPrices = response.product_price;
+					const totalProductPrice = response.total_product_price;
 					if (Array.isArray(productPrices)) {
 						productPrices.forEach((price: IDataObject) => {
 							returnData.push({
 								...price,
 								_operation: 'getManyPrices',
+								_totalProductPrice: totalProductPrice,
 							});
 						});
-					} else {
+					} else if (productPrices) {
 						returnData.push({
 							...productPrices,
 							_operation: 'getManyPrices',
+							_totalProductPrice: totalProductPrice,
+						});
+					} else {
+						returnData.push({
+							_operation: 'getManyPrices',
+							_totalProductPrice: totalProductPrice,
 						});
 					}
 				} else if (responseData && responseData.errors) {
@@ -7701,6 +9174,7 @@ export class OnPrintShop implements INodeType {
 			if (resource === 'product' && operation === 'getOptionPrices') {
 					// Get product option pricing information
 					const attrIdStr = this.getNodeParameter('productIdOptionPrices', i) as string;
+					const optionPricesFieldsSelected = this.getNodeParameter('optionPricesFields', i) as string[];
 					
 					// Validate Attribute ID is provided
 					if (!attrIdStr || attrIdStr.trim() === '') {
@@ -7724,17 +9198,20 @@ export class OnPrintShop implements INodeType {
 						attr_id: attrId,
 					};
 
+					const optionPricesFields = optionPricesFieldsSelected
+						.filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
+						.join('\n\t\t\t\t\t\t\t\t\t');
+
+					if (!optionPricesFields) {
+						throw new NodeOperationError(this.getNode(), 'Select at least one Option Prices Field');
+					}
+
 					// Build the GraphQL query for product option prices
 					const query = `
 						query product_options_price ($attr_id: Int!) {
 							product_options_price (attr_id: $attr_id) {
 								product_options_price {
-									attr_id
-									price
-									vendor_price
-									from_range
-									to_range
-									site_admin_markup
+									${optionPricesFields}
 								}
 								total_product_option_price
 							}
@@ -7793,24 +9270,31 @@ export class OnPrintShop implements INodeType {
 			if (resource === 'product' && operation === 'getManyOptionPrices') {
 				// Get option prices for many products
 				const queryParameters = this.getNodeParameter('queryParametersManyOptionPrices', i) as IDataObject;
+				const optionPricesFieldsSelected = this.getNodeParameter('optionPricesFieldsMany', i) as string[];
 				
 				// Build variables object
 				const variables: IDataObject = {};
-				if (queryParameters.attr_id) variables.attr_id = parseInt(queryParameters.attr_id as string, 10);
+				if (queryParameters.attr_id) {
+					const parsedAttrId = parseInt(queryParameters.attr_id as string, 10);
+					if (!isNaN(parsedAttrId)) variables.attr_id = parsedAttrId;
+				}
 				if (queryParameters.limit) variables.limit = queryParameters.limit;
 				if (queryParameters.offset) variables.offset = queryParameters.offset;
+
+				const optionPricesFields = optionPricesFieldsSelected
+					.filter(field => !field.startsWith('SELECT_ALL') && !field.startsWith('DESELECT_ALL') && field !== 'SEPARATOR')
+					.join('\n\t\t\t\t\t\t\t\t\t');
+
+				if (!optionPricesFields) {
+					throw new NodeOperationError(this.getNode(), 'Select at least one Option Prices Field');
+				}
 
 				// Build the GraphQL query for many product option prices
 				const query = `
 					query product_options_price ($attr_id: Int, $limit: Int, $offset: Int) {
 						product_options_price (attr_id: $attr_id, limit: $limit, offset: $offset) {
 							product_options_price {
-								attr_id
-								price
-								vendor_price
-								from_range
-								to_range
-								site_admin_markup
+								${optionPricesFields}
 							}
 							total_product_option_price
 						}
@@ -8217,6 +9701,163 @@ export class OnPrintShop implements INodeType {
 							'Unexpected response format from API',
 						);
 					}
+				}
+
+				if (resource === 'product' && operation === 'getMasterOptionTag') {
+					const variables: IDataObject = {};
+					const master_option_tag_id = this.getNodeParameter('masterOptionTag_master_option_tag_id', i) as number;
+					const limit = this.getNodeParameter('masterOptionTag_limit', i) as number;
+					const offset = this.getNodeParameter('masterOptionTag_offset', i) as number;
+					if (master_option_tag_id) variables.master_option_tag_id = master_option_tag_id;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query getMasterOptionTag ($master_option_tag_id: Int, $limit: Int, $offset: Int) { getMasterOptionTag (master_option_tag_id: $master_option_tag_id, limit: $limit, offset: $offset) { masterOptionTag { master_option_tag_id master_option_tag_name } totalMasterOptionTag } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.getMasterOptionTag) {
+						const rows = responseData.data.getMasterOptionTag.masterOptionTag || [];
+						for (const row of rows) { returnData.push({ ...row, _totalMasterOptionTag: responseData.data.getMasterOptionTag.totalMasterOptionTag }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					} else {
+						throw new NodeOperationError(this.getNode(), 'Unexpected response format from API');
+					}
+				}
+
+				if (resource === 'product' && operation === 'getOptionGroup') {
+					const variables: IDataObject = {};
+					const prod_add_opt_group_id = this.getNodeParameter('optionGroup_prod_add_opt_group_id', i) as number;
+					const use_for = this.getNodeParameter('optionGroup_use_for', i) as string;
+					const limit = this.getNodeParameter('optionGroup_limit', i) as number;
+					const offset = this.getNodeParameter('optionGroup_offset', i) as number;
+					if (prod_add_opt_group_id) variables.prod_add_opt_group_id = prod_add_opt_group_id;
+					if (use_for) variables.use_for = use_for;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query getOptionGroup ($prod_add_opt_group_id: Int,$use_for: String, $limit: Int, $offset: Int) { getOptionGroup (prod_add_opt_group_id: $prod_add_opt_group_id,use_for: $use_for, limit: $limit, offset: $offset) { optionGroup { prod_add_opt_group_id opt_group_name use_for display_style option_count is_collapse sort_order } totalOptionGroup } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.getOptionGroup) {
+						const rows = responseData.data.getOptionGroup.optionGroup || [];
+						for (const row of rows) { returnData.push({ ...row, _totalOptionGroup: responseData.data.getOptionGroup.totalOptionGroup }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					} else {
+						throw new NodeOperationError(this.getNode(), 'Unexpected response format from API');
+					}
+				}
+
+				if (resource === 'product' && operation === 'getCustomFormula') {
+					const variables: IDataObject = {};
+					const formula_id = this.getNodeParameter('customFormula_formula_id', i) as number;
+					const limit = this.getNodeParameter('customFormula_limit', i) as number;
+					const offset = this.getNodeParameter('customFormula_offset', i) as number;
+					if (formula_id) variables.formula_id = formula_id;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query getCustomFormula ($formula_id: Int, $limit: Int, $offset: Int) { getCustomFormula (formula_id: $formula_id, limit: $limit, offset: $offset) { customFormula { formula_id formula_label formula_syntax } totalCustomFormula } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.getCustomFormula) {
+						const rows = responseData.data.getCustomFormula.customFormula || [];
+						for (const row of rows) { returnData.push({ ...row, _totalCustomFormula: responseData.data.getCustomFormula.totalCustomFormula }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					} else {
+						throw new NodeOperationError(this.getNode(), 'Unexpected response format from API');
+					}
+				}
+
+				if (resource === 'product' && operation === 'getMasterOptionRange') {
+					const variables: IDataObject = {};
+					const range_id = this.getNodeParameter('masterOptionRange_range_id', i) as number;
+					const option_id = this.getNodeParameter('masterOptionRange_option_id', i) as number;
+					const limit = this.getNodeParameter('masterOptionRange_limit', i) as number;
+					const offset = this.getNodeParameter('masterOptionRange_offset', i) as number;
+					if (range_id) variables.range_id = range_id;
+					if (option_id) variables.option_id = option_id;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query getMasterOptionRange ($range_id: Int, $option_id: Int, $limit: Int, $offset: Int) { getMasterOptionRange (range_id: $range_id, option_id: $option_id, limit: $limit, offset: $offset) { masterOptionRange { range_id option_id from_range to_range } totalMasterOptionRange } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.getMasterOptionRange) {
+						const rows = responseData.data.getMasterOptionRange.masterOptionRange || [];
+						for (const row of rows) { returnData.push({ ...row, _totalMasterOptionRange: responseData.data.getMasterOptionRange.totalMasterOptionRange }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					} else {
+						throw new NodeOperationError(this.getNode(), 'Unexpected response format from API');
+					}
+				}
+
+				if (resource === 'product' && operation === 'get_faq_category') {
+					const variables: IDataObject = {};
+					const faqcat_id = this.getNodeParameter('faqCategory_faqcat_id', i) as number;
+					const status = this.getNodeParameter('faqCategory_status', i) as number;
+					const limit = this.getNodeParameter('faqCategory_limit', i) as number;
+					const offset = this.getNodeParameter('faqCategory_offset', i) as number;
+					if (faqcat_id) variables.faqcat_id = faqcat_id;
+					if (status) variables.status = status;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query get_faq_category($faqcat_id: Int, $status: Int, $limit: Int, $offset: Int) { get_faq_category(faqcat_id: $faqcat_id, status: $status, limit: $limit, offset: $offset) { faq_category { faqcat_id status sort_order faq_category_name } totalFaqCategory } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.get_faq_category) {
+						const rows = responseData.data.get_faq_category.faq_category || [];
+						for (const row of rows) { returnData.push({ ...row, _totalFaqCategory: responseData.data.get_faq_category.totalFaqCategory }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					} else {
+						throw new NodeOperationError(this.getNode(), 'Unexpected response format from API');
+					}
+				}
+
+				if (resource === 'product' && operation === 'product_additional_options') {
+					const variables: IDataObject = {};
+					const products_id = this.getNodeParameter('additionalOptions_products_id', i) as number;
+					const limit = this.getNodeParameter('additionalOptions_limit', i) as number;
+					const offset = this.getNodeParameter('additionalOptions_offset', i) as number;
+					if (products_id) variables.products_id = products_id;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query product_additional_options ($products_id: Int, $limit: Int, $offset: Int) { product_additional_options (products_id: $products_id, limit: $limit, offset: $offset) { product_additional_options { prod_add_opt_id title description options_type sort_order status apply_multiplication applicable_for required price_calculate_type hire_designer_option option_key master_option_id attributes } total_product_additional_options } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.product_additional_options) {
+						const rows = responseData.data.product_additional_options.product_additional_options || [];
+						for (const row of rows) { returnData.push({ ...row, _total_product_additional_options: responseData.data.product_additional_options.total_product_additional_options }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					} else {
+						throw new NodeOperationError(this.getNode(), 'Unexpected response format from API');
+					}
+				}
+
+				if (resource === 'product' && operation === 'products_attribute_price') {
+					const variables: IDataObject = {};
+					const attribute_id = this.getNodeParameter('attributePrice_attribute_id', i) as number;
+					const size_id = this.getNodeParameter('attributePrice_size_id', i) as number;
+					const limit = this.getNodeParameter('attributePrice_limit', i) as number;
+					const offset = this.getNodeParameter('attributePrice_offset', i) as number;
+					if (attribute_id) variables.attribute_id = attribute_id;
+					if (size_id) variables.size_id = size_id;
+					if (limit) variables.limit = limit;
+					if (offset) variables.offset = offset;
+					const query = `query products_attribute_price($attribute_id: Int, $size_id: Int, $limit: Int, $offset: Int) { products_attribute_price(attribute_id: $attribute_id, size_id: $size_id, limit: $limit, offset: $offset) { products_attribute_price { attribute_price_id attribute_id size_id quantity quantity_to attributes_price extra_page_price } total_products_attribute_price } }`;
+					const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query, variables }, json: true });
+					if (responseData && responseData.data && responseData.data.products_attribute_price) {
+						const rows = responseData.data.products_attribute_price.products_attribute_price || [];
+						for (const row of rows) { returnData.push({ ...row, _total_products_attribute_price: responseData.data.products_attribute_price.total_products_attribute_price }); }
+					} else if (responseData && responseData.errors) {
+						throw new NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+					} else {
+						throw new NodeOperationError(this.getNode(), 'Unexpected response format from API');
+					}
+				}
+
+				if (resource === 'productMgmt') {
+					const result = await productExecute.call(this, i);
+					returnData.push(...result.map(item => item.json));
+				}
+				if (resource === 'masterOption') {
+					const result = await masterOptionExecute.call(this, i);
+					returnData.push(...result.map(item => item.json));
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {

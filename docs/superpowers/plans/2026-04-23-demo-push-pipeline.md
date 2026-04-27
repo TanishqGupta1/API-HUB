@@ -1,6 +1,6 @@
 # Demo Push Pipeline — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Ship end-to-end demo pipeline — SanMar SOAP → hub → per-row Push → n8n ops-push → VG staging OPS, with master→product option conversion at the backend and a mapping/merge table for source↔target linkage. OPS beta per-product-option mutations stubbed.
 
@@ -21,14 +21,14 @@
 - Create: `backend/modules/push_mappings/models.py`
 - Modify: `backend/main.py` (register model import)
 
-- [ ] **Step 1: Create module dir + empty `__init__.py`**
+- [x] **Step 1: Create module dir + empty `__init__.py`**
 
 ```bash
 mkdir -p backend/modules/push_mappings
 touch backend/modules/push_mappings/__init__.py
 ```
 
-- [ ] **Step 2: Write `backend/modules/push_mappings/models.py`**
+- [x] **Step 2: Write `backend/modules/push_mappings/models.py`**
 
 ```python
 import uuid as uuid_mod
@@ -103,14 +103,14 @@ class PushMappingOption(Base):
     push_mapping: Mapped[PushMapping] = relationship(back_populates="options")
 ```
 
-- [ ] **Step 3: Register model import in `backend/main.py`**
+- [x] **Step 3: Register model import in `backend/main.py`**
 
 Near other `import modules.XXX.models` lines at top of file, add:
 ```python
 import modules.push_mappings.models  # noqa: F401
 ```
 
-- [ ] **Step 4: Restart api to trigger `Base.metadata.create_all`**
+- [x] **Step 4: Restart api to trigger `Base.metadata.create_all`**
 
 Run: `docker compose restart api && sleep 4`
 
@@ -122,7 +122,7 @@ docker compose exec -T postgres psql -U vg_user -d vg_hub -c "\d push_mapping_op
 
 Expected: both tables print column listings with FK + unique constraints.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/modules/push_mappings/__init__.py backend/modules/push_mappings/models.py backend/main.py
@@ -136,7 +136,7 @@ git commit -m "feat(push_mappings): add push_mappings + push_mapping_options tab
 **Files:**
 - Create: `backend/modules/push_mappings/schemas.py`
 
-- [ ] **Step 1: Write `backend/modules/push_mappings/schemas.py`**
+- [x] **Step 1: Write `backend/modules/push_mappings/schemas.py`**
 
 ```python
 from datetime import datetime
@@ -228,7 +228,7 @@ class OPSProductOption(BaseModel):
     source_master_option_id: Optional[int] = None
 ```
 
-- [ ] **Step 2: Parse check**
+- [x] **Step 2: Parse check**
 
 ```bash
 cd backend && source .venv/bin/activate && python -c "from modules.push_mappings.schemas import PushMappingUpsert, PushMappingRead, OPSProductOption, OPSProductAttribute; print('ok')"
@@ -236,7 +236,7 @@ cd backend && source .venv/bin/activate && python -c "from modules.push_mappings
 
 Expected: `ok`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/modules/push_mappings/schemas.py
@@ -253,7 +253,7 @@ git commit -m "feat(push_mappings): Pydantic schemas (Upsert, Read, OPS product-
 - Modify: `backend/main.py` (register router)
 - Test: `backend/tests/test_push_mappings.py`
 
-- [ ] **Step 1: Write `backend/modules/push_mappings/service.py`**
+- [x] **Step 1: Write `backend/modules/push_mappings/service.py`**
 
 ```python
 from datetime import datetime, timezone
@@ -357,7 +357,7 @@ async def soft_delete_mapping(db: AsyncSession, mapping_id: UUID) -> bool:
     return True
 ```
 
-- [ ] **Step 2: Write `backend/modules/push_mappings/routes.py`**
+- [x] **Step 2: Write `backend/modules/push_mappings/routes.py`**
 
 ```python
 from typing import Optional
@@ -406,7 +406,7 @@ async def delete_mapping(mapping_id: UUID, db: AsyncSession = Depends(get_db)):
     return {"status": "deleted"}
 ```
 
-- [ ] **Step 3: Register router in `backend/main.py`**
+- [x] **Step 3: Register router in `backend/main.py`**
 
 Add import near other router imports:
 ```python
@@ -418,7 +418,7 @@ Add with other `app.include_router` calls:
 app.include_router(push_mappings_router)
 ```
 
-- [ ] **Step 4: Write failing test `backend/tests/test_push_mappings.py`**
+- [x] **Step 4: Write failing test `backend/tests/test_push_mappings.py`**
 
 ```python
 import os
@@ -545,7 +545,7 @@ async def test_delete_marks_status():
         assert row["status"] == "deleted"
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 docker compose restart api && sleep 4
@@ -554,7 +554,7 @@ docker compose exec -T api pytest tests/test_push_mappings.py -v
 
 Expected: 4 PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/modules/push_mappings/service.py backend/modules/push_mappings/routes.py backend/main.py backend/tests/test_push_mappings.py

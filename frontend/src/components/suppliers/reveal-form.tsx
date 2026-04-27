@@ -10,12 +10,6 @@ interface Props {
   onCancel: () => void;
 }
 
-const POPULAR_SUPPLIERS = [
-  { name: "SanMar", code: "SANMAR", type: "ps" },
-  { name: "S&S Activewear", code: "SSACT", type: "ps" },
-  { name: "alphabroder", code: "ALPHA", type: "ps" },
-  { name: "4Over", code: "4OVER", type: "custom" },
-];
 
 const SCHEDULE_MAP: Record<string, any> = {
   "Recommended (automatic)": { inv: "30min", price: "daily", prod: "daily", img: "weekly" },
@@ -36,6 +30,7 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
   const [customType, setCustomType] = useState("Standard API"); // Maps to 'rest' or 'rest_hmac'
   
   const [creds, setCreds] = useState({ id: "", password: "" });
+  const [customerNumber, setCustomerNumber] = useState("");
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
   const [scheduleType, setScheduleType] = useState("Recommended (automatic)");
   
@@ -50,11 +45,28 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
 
   const handleTestConnection = async () => {
     setTestStatus("testing");
-    await new Promise((r) => setTimeout(r, 1500));
-    // Demo logic: succeed if both fields have content
-    if (creds.id && creds.password) {
-      setTestStatus("ok");
-    } else {
+    try {
+      const isPS = !isCustom;
+      const protocol = isPS 
+        ? "promostandards"
+        : (customType === "Secure API (signed requests)" ? "hmac" : "rest");
+      
+      const res = await api<any>("/api/suppliers/test", {
+        method: "POST",
+        body: JSON.stringify({
+          protocol,
+          promostandards_code: isPS ? selectedPS?.Code : null,
+          auth_config: { id: creds.id, password: creds.password }
+        })
+      });
+
+      if (res.ok) {
+        setTestStatus("ok");
+      } else {
+        setTestStatus("fail");
+      }
+    } catch (err) {
+      console.error("Test connection failed:", err);
       setTestStatus("fail");
     }
   };
@@ -64,13 +76,11 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
     try {
       const isPS = !isCustom;
       
-      // Fallback for demo if selectedPS is somehow null but we think it's a PS integration
-      // (This can happen if the POPULAR_SUPPLIERS code isn't perfectly matched in psCompanies)
-      const name = isPS ? (selectedPS?.Name || "Mock Supplier") : customName;
+      const name = isPS ? selectedPS!.Name : customName;
       const protocol = isPS 
         ? "promostandards"
         : (customType === "Secure API (signed requests)" ? "hmac" : "rest");
-      const code = isPS ? (selectedPS?.Code || "MOCK") : customName.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+      const code = isPS ? selectedPS!.Code : customName.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
       
       const supplier = await api<Supplier>("/api/suppliers", {
         method: "POST",
@@ -80,10 +90,11 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
           protocol,
           promostandards_code: isPS ? code : null,
           base_url: isPS ? null : customUrl,
-          auth_config: { 
-            id: creds.id, 
-            password: creds.password, 
-            sync_schedule: SCHEDULE_MAP[scheduleType] 
+          auth_config: {
+            id: creds.id,
+            password: creds.password,
+            ...(customerNumber ? { customer_number: customerNumber } : {}),
+            sync_schedule: SCHEDULE_MAP[scheduleType]
           },
         }),
       });
@@ -151,32 +162,19 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
                   <div className="mb-6">
                     <div className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Popular Suppliers</div>
                     <div className="grid grid-cols-2 gap-3">
-                      {POPULAR_SUPPLIERS.map((s) => (
+                      {psCompanies.slice(0, 4).map((s) => (
                         <button
-                          key={s.code}
+                          key={s.Code}
                           onClick={() => {
-                            if (s.type === "ps") {
-                              const company = psCompanies.find(c => c.Code === s.code);
-                              if (company) {
-                                setSelectedPS(company);
-                              } else {
-                                // Fallback mock object if API doesn't return exactly this code
-                                setSelectedPS({ Code: s.code, Name: s.name } as PSCompany);
-                              }
-                              setIsCustom(false);
-                            } else {
-                              setIsCustom(true);
-                              setCustomName(s.name);
-                              setCustomUrl("https://api.4over.com");
-                              setCustomType("Secure API (signed requests)");
-                            }
+                            setSelectedPS(s);
+                            setIsCustom(false);
                             setStep(2);
                           }}
                           className="flex items-center justify-between p-4 border rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all group"
                         >
                           <div className="text-left">
-                            <div className="font-bold text-sm text-gray-800">{s.name}</div>
-                            <div className="text-[10px] text-gray-500 font-mono">{s.code}</div>
+                            <div className="font-bold text-sm text-gray-800">{s.Name}</div>
+                            <div className="text-[10px] text-gray-500 font-mono">{s.Code}</div>
                           </div>
                           <div className="text-blue-400 group-hover:text-blue-600 transition-colors">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -286,6 +284,26 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
                   }}
                 />
               </div>
+              {!isCustom && (
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">
+                    Customer / Account Number
+                    <span className="ml-2 text-[10px] font-normal text-gray-400 normal-case">
+                      (required for SanMar; optional for others)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    className="input-control w-full p-2.5 border rounded-lg text-sm font-mono"
+                    placeholder="e.g. 12345678"
+                    value={customerNumber}
+                    onChange={(e) => {
+                      setCustomerNumber(e.target.value);
+                      setTestStatus("idle");
+                    }}
+                  />
+                </div>
+              )}
               <p className="text-[11px] text-gray-400 leading-relaxed italic">
                 Your supplier provides these when you sign up for API access. Contact <span className="font-bold">{currentSupplierName}</span> support if you don&apos;t have them.
               </p>

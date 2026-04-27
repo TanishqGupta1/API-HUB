@@ -1,18 +1,14 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { PSCompany, Supplier } from "@/lib/types";
 import RevealForm from "@/components/suppliers/reveal-form";
+import { Button } from "@/components/ui/button";
 
-/* ── Demo product baselines per supplier slug ── */
-const PROD_BASELINE: Record<string, number> = {
-  sanmar: 12450,
-  "ss-activewear": 8201,
-  alphabroder: 11800,
-  "4over": 1240,
-};
+
 
 /* ── Relative time helper ── */
 function timeAgo(dateStr: string): string {
@@ -25,40 +21,6 @@ function timeAgo(dateStr: string): string {
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
 }
-
-/* ── PS Directory static list ── */
-const COS: PSCompany[] = [
-  { Code: "SANMAR", Name: "SanMar Corporation", Type: "Supplier" },
-  { Code: "SS", Name: "S&S Activewear", Type: "Supplier" },
-  { Code: "ALPHA", Name: "alphabroder", Type: "Supplier" },
-  { Code: "HIT", Name: "Hit Promotional Products", Type: "Supplier" },
-  { Code: "PCNA", Name: "Polyconcept North America", Type: "Supplier" },
-  { Code: "GEMLINE", Name: "Gemline", Type: "Supplier" },
-  { Code: "EVANS", Name: "Evans Manufacturing", Type: "Supplier" },
-  { Code: "STORMCREEK", Name: "Storm Creek", Type: "Supplier" },
-  { Code: "SNUGZ", Name: "Snugz USA", Type: "Supplier" },
-  { Code: "LOGOMARK", Name: "Logomark", Type: "Supplier" },
-  { Code: "CHARLES", Name: "Charles River Apparel", Type: "Supplier" },
-  { Code: "AUGUSTA", Name: "Augusta Sportswear", Type: "Supplier" },
-  { Code: "TRIMARK", Name: "Trimark Sportswear", Type: "Supplier" },
-  { Code: "LEED", Name: "Leeds / PCNA", Type: "Supplier" },
-  { Code: "BUDGETCAP", Name: "Budget Cap Inc", Type: "Supplier" },
-  { Code: "CAPAMER", Name: "Cap America", Type: "Supplier" },
-  { Code: "CUTTER", Name: "Cutter & Buck", Type: "Supplier" },
-  { Code: "FLEXFIT", Name: "Flexfit / Yupoong", Type: "Supplier" },
-  { Code: "GILDANUSA", Name: "Gildan USA", Type: "Supplier" },
-  { Code: "HANES", Name: "Hanesbrands", Type: "Supplier" },
-  { Code: "NEXTLEVEL", Name: "Next Level Apparel", Type: "Supplier" },
-  { Code: "OGIO", Name: "OGIO International", Type: "Supplier" },
-  { Code: "PORTAUTH", Name: "Port Authority", Type: "Supplier" },
-  { Code: "SPORTTEK", Name: "Sport-Tek", Type: "Supplier" },
-  { Code: "UNDERARMOUR", Name: "Under Armour Corporate", Type: "Supplier" },
-  { Code: "VANTAGE", Name: "Vantage Apparel", Type: "Supplier" },
-  { Code: "NORTH_END", Name: "North End / Ash City", Type: "Supplier" },
-  { Code: "DEVON_JONES", Name: "Devon & Jones", Type: "Supplier" },
-  { Code: "HARRITON", Name: "Harriton", Type: "Supplier" },
-  { Code: "WEATHERPROOF", Name: "Weatherproof Garment", Type: "Supplier" },
-];
 
 interface PushLogEntry {
   supplier_name: string | null;
@@ -79,9 +41,11 @@ function SuppliersContent() {
     Promise.all([
       api<Supplier[]>("/api/suppliers"),
       api<PushLogEntry[]>("/api/push-log?limit=100"),
+      api<PSCompany[]>("/api/ps-directory/companies"),
     ])
-      .then(([sups, logs]) => {
+      .then(([sups, logs, companies]) => {
         setSuppliers(sups);
+        setPsCompanies(companies);
         // Build map: supplier_name (lowercase) → most recent pushed_at
         const map: Record<string, string> = {};
         for (const log of logs) {
@@ -103,7 +67,6 @@ function SuppliersContent() {
 
   const openForm = () => {
     setShowAdd(true);
-    if (psCompanies.length === 0) setPsCompanies(COS);
   };
 
   const handleCancel = () => {
@@ -112,8 +75,50 @@ function SuppliersContent() {
   };
 
   const handleSaved = (s: Supplier) => {
-    setSuppliers([s, ...suppliers]);
+    setSuppliers((prev) => {
+      const exists = prev.find((item) => item.id === s.id);
+      if (exists) {
+        return prev.map((item) => (item.id === s.id ? s : item));
+      }
+      return [s, ...prev];
+    });
     setShowAdd(false);
+  };
+
+  const toggleActive = async (s: Supplier) => {
+    try {
+      const updated = await api<Supplier>(`/api/suppliers/${s.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: !s.is_active }),
+      });
+      setSuppliers(suppliers.map((item) => (item.id === updated.id ? updated : item)));
+    } catch (err) {
+      console.error("Failed to toggle supplier status:", err);
+    }
+  };
+
+  const deleteSupplier = async (s: Supplier) => {
+    if (!confirm(`Delete ${s.name}? This removes the supplier and any cached data. This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api(`/api/suppliers/${s.id}`, { method: "DELETE" });
+      setSuppliers(suppliers.filter((item) => item.id !== s.id));
+    } catch (err) {
+      console.error("Failed to delete supplier:", err);
+      alert("Delete failed: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const triggerSync = async (s: Supplier) => {
+    if (!s.is_active) return;
+    try {
+      await api(`/api/sync/${s.id}/products`, { method: "POST" });
+      router.push("/sync");
+    } catch (err) {
+      console.error("Failed to trigger sync:", err);
+      alert("Sync failed: " + (err instanceof Error ? err.message : String(err)));
+    }
   };
 
   /** Find the most recent push timestamp for a supplier by name */
@@ -130,10 +135,9 @@ function SuppliersContent() {
     return "—";
   };
 
-  /** Real DB count + demo baseline, formatted */
+  /** Real DB count formatted */
   const getProductCount = (s: Supplier): string => {
-    const baseline = PROD_BASELINE[s.slug] ?? 0;
-    const total = s.product_count + baseline;
+    const total = s.product_count;
     if (total === 0) return "0";
     return total >= 1000
       ? `${(total / 1000).toFixed(1)}k`
@@ -181,12 +185,20 @@ function SuppliersContent() {
                 <th>Last Push</th>
                 <th>Products</th>
                 <th>Status</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {suppliers.map((s) => (
                 <tr key={s.id}>
-                  <td className="cell-primary">{s.name}</td>
+                  <td className="cell-primary">
+                    <Link 
+                      href={`/mappings/${s.id}`}
+                      className="hover:text-[var(--blue)] hover:underline transition-colors cursor-pointer"
+                    >
+                      {s.name}
+                    </Link>
+                  </td>
                   <td>
                     <span className="cell-tag">
                       {s.promostandards_code || "API"}
@@ -196,15 +208,52 @@ function SuppliersContent() {
                   <td className="cell-mono">{getLastPush(s.name)}</td>
                   <td className="cell-mono">{getProductCount(s)}</td>
                   <td>
-                    {s.is_active ? (
-                      <span className="badge badge-ok">
-                        <span className="badge-dot"></span> Active
-                      </span>
-                    ) : (
-                      <span className="text-[12px] font-semibold text-[#888894]">
-                        Inactive
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleActive(s)}
+                      className="bg-transparent border-none p-0 cursor-pointer outline-none block"
+                      title={s.is_active ? "Deactivate supplier" : "Activate supplier"}
+                    >
+                      {s.is_active ? (
+                        <span className="badge badge-ok">
+                          <span className="badge-dot"></span> Active
+                        </span>
+                      ) : (
+                        <span className="text-[12px] font-semibold text-[#888894] hover:text-[#484852] transition-colors">
+                          Inactive
+                        </span>
+                      )}
+                    </button>
+                  </td>
+                  <td className="text-right">
+                    <div className="inline-flex items-center gap-2 justify-end">
+                      {(s.protocol === "soap" || s.protocol === "promostandards") && (
+                        <Link href={`/suppliers/${s.id}/import`}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-[#1e4d92] text-[#1e4d92]"
+                          >
+                            Import Products
+                          </Button>
+                        </Link>
+                      )}
+                      <button
+                        onClick={() => triggerSync(s)}
+                        disabled={!s.is_active}
+                        className={`btn btn-ghost !py-1 !px-2 !text-[11px] ${!s.is_active ? "opacity-30 grayscale cursor-not-allowed" : "text-[var(--blue)]"}`}
+                        title="Sync Now"
+                      >
+                        Sync Now ⚡
+                      </button>
+                      <button
+                        onClick={() => deleteSupplier(s)}
+                        className="btn btn-ghost !py-1 !px-2 !text-[11px] text-[#b23a3a] hover:bg-[rgba(178,58,58,0.08)]"
+                        title="Delete supplier"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

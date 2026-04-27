@@ -1,0 +1,103 @@
+{
+  "id": "ops-master-options-pull-001",
+  "name": "OPS → Hub (Master Options)",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ops-master-options-pull",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "trigger-001",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 320]
+    },
+    {
+      "parameters": {
+        "resource": "product",
+        "operation": "getManyMasterOptions",
+        "queryParametersManyMasterOptions": { "limit": 100, "offset": 0 },
+        "masterOptionsFieldsMany": [
+          "master_option_id", "title", "description", "option_key",
+          "pricing_method", "status", "sort_order", "options_type",
+          "hide_from_calc", "enable_assoc_qty", "allow_price_cal",
+          "hire_designer_option", "attributes"
+        ]
+      },
+      "id": "ops-001",
+      "name": "OPS: Get Master Options",
+      "type": "n8n-nodes-onprintshop.onPrintShop",
+      "typeVersion": 1,
+      "position": [460, 320],
+      "credentials": {
+        "onPrintShopApi": {
+          "id": "ops-creds",
+          "name": "OnPrintShop"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const mo = item.json;\n  let attrs = mo.attributes;\n  if (typeof attrs === 'string') {\n    try { attrs = JSON.parse(attrs); } catch { attrs = []; }\n  }\n  if (!Array.isArray(attrs)) attrs = [];\n  return {\n    json: {\n      ops_master_option_id: parseInt(mo.master_option_id, 10),\n      title: mo.title,\n      option_key: mo.option_key || null,\n      options_type: mo.options_type || null,\n      pricing_method: mo.pricing_method || null,\n      status: parseInt(mo.status ?? 1, 10),\n      sort_order: parseInt(mo.sort_order ?? 0, 10),\n      description: mo.description || null,\n      master_option_tag: mo.master_option_tag || null,\n      attributes: attrs.map(a => ({\n        ops_attribute_id: parseInt(a.attribute_id ?? a.master_attribute_id ?? a.id, 10),\n        title: a.title || a.name || '',\n        sort_order: parseInt(a.sort_order ?? 0, 10),\n        default_price: parseFloat(a.price ?? a.setup_cost ?? a.default_price ?? 0),\n        raw_json: a,\n      })),\n      raw_json: mo,\n    }\n  };\n});"
+      },
+      "id": "code-001",
+      "name": "Shape Master Options",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/ingest/master-options",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Ingest-Secret", "value": "={{ $env.INGEST_SHARED_SECRET }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $items().map(i => i.json) }}",
+        "options": {},
+        "onError": "continueErrorOutput"
+      },
+      "id": "http-001",
+      "name": "POST /ingest/master-options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const err = $input.first().json;\nreturn [{ json: { event: 'ops_master_options_sync_failed', error: err.message || JSON.stringify(err), timestamp: new Date().toISOString() }}];"
+      },
+      "id": "code-error-001",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 450]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{ "node": "OPS: Get Master Options", "type": "main", "index": 0 }]]
+    },
+    "OPS: Get Master Options": {
+      "main": [[{ "node": "Shape Master Options", "type": "main", "index": 0 }]]
+    },
+    "Shape Master Options": {
+      "main": [[{ "node": "POST /ingest/master-options", "type": "main", "index": 0 }]]
+    },
+    "POST /ingest/master-options": {
+      "error": [[{ "node": "Format Error", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": false }
+}

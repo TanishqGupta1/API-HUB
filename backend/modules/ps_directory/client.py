@@ -1,8 +1,9 @@
 import httpx
+import os
 
-PS_DIRECTORY_URL = (
-    "https://services.promostandards.org"
-    "/WebServiceRepository/WebServiceRepository.svc/json"
+PS_DIRECTORY_URL = os.getenv(
+    "PS_DIRECTORY_URL",
+    "https://services.promostandards.org/WebServiceRepository/WebServiceRepository.svc/json"
 )
 
 
@@ -19,7 +20,7 @@ async def get_ps_endpoints(company_code: str) -> list[dict]:
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{PS_DIRECTORY_URL}/companies/{company_code}/endpoints",
-            timeout=30,
+            timeout=60,
         )
         resp.raise_for_status()
         return resp.json()

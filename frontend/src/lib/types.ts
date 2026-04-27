@@ -96,6 +96,7 @@ export interface Product {
   ops_product_id: string | null;
   external_catalogue: number | null;
   last_synced: string | null;
+  archived_at: string | null;
   variants: Variant[];
   images: ProductImage[];
   options: ProductOption[];
@@ -125,6 +126,7 @@ export interface ProductListItem {
   price_min: number | null;
   price_max: number | null;
   total_inventory: number | null;
+  archived_at: string | null;
 }
 
 /* ─── Category (hierarchical) ────────────────────────────────────────────── */
@@ -135,6 +137,21 @@ export interface Category {
   name: string;
   parent_id: string | null;
   sort_order: number;
+}
+
+/* ─── Supplier Category Browse (for import picker) ───────────────────────── */
+export interface SupplierCategoryBrowse {
+  name: string;
+  slug: string | null;
+  product_count: number | null;
+  preview_image_url: string | null;
+}
+
+export interface ImportCategoryResponse {
+  job_id: string;
+  status: string;
+  category_name: string;
+  limit: number;
 }
 
 /* ─── Customer ───────────────────────────────────────────────────────────── */
@@ -214,4 +231,55 @@ export interface ProductPushLogRead {
   status: "pushed" | "failed" | "skipped";
   error: string | null;
   pushed_at: string;
+}
+
+/* ─── Master Options ─────────────────────────────────────────────────────── */
+export interface MasterOptionAttribute {
+  id: string;
+  ops_attribute_id: number;
+  title: string;
+  sort_order: number;
+  default_price: number | null;
+}
+
+export interface MasterOption {
+  id: string;
+  ops_master_option_id: number;
+  title: string;
+  option_key: string | null;
+  options_type: string | null;
+  pricing_method: string | null;
+  status: number;
+  sort_order: number;
+  description: string | null;
+  master_option_tag: string | null;
+  attributes: MasterOptionAttribute[];
+}
+
+export interface MasterOptionsSyncStatus {
+  total: number;
+  last_synced_at: string | null;
+}
+
+/* Per-product config */
+export interface AttributeConfigItem {
+  attribute_id: string | null;
+  ops_attribute_id: number;
+  title: string;
+  attribute_key: string | null;
+  enabled: boolean;
+  price: number;
+  numeric_value: number;
+  sort_order: number;
+}
+
+export interface OptionConfigItem {
+  master_option_id: string;
+  ops_master_option_id: number;
+  title: string;
+  option_key: string | null;
+  options_type: string | null;
+  master_option_tag: string | null;
+  enabled: boolean;
+  attributes: AttributeConfigItem[];
 }

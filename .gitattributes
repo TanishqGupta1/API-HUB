@@ -1,0 +1,3 @@
+n8n-nodes-onprintshop/dist/** linguist-generated=true
+n8n-nodes-onprintshop/dist/** -diff
+frontend/tsconfig.tsbuildinfo linguist-generated=true
