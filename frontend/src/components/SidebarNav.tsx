@@ -115,7 +115,7 @@ const NAV_ITEMS = [
         ),
       },
       {
-        href: "/products/configure",
+        href: "/products/setup",
         label: "Product Setup",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -172,11 +172,6 @@ export default function SidebarNav() {
               {item.icon}
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                 {item.label}
-                {item.href === "/products/configure" && (
-                  <span className="text-[9px] font-bold bg-[#f9f7f4] text-[#888894] px-1.5 py-0.5 rounded border border-[#cfccc8] ml-2">
-                    SOON
-                  </span>
-                )}
               </span>
             </Link>
           ))}

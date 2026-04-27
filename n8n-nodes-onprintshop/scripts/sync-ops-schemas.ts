@@ -3,6 +3,15 @@ import * as path from 'path';
 import * as https from 'https';
 import { IncomingMessage } from 'http';
 
+const DOTENV_PATH = path.join(__dirname, '../.env');
+if (fs.existsSync(DOTENV_PATH)) {
+	const env = fs.readFileSync(DOTENV_PATH, 'utf8');
+	env.split('\n').forEach(line => {
+		const [key, value] = line.split('=');
+		if (key && value) process.env[key.trim()] = value.trim();
+	});
+}
+
 const TOKEN = process.env.GITHUB_TOKEN;
 const REPO = 'VisualGraphxLLC/ops-automation-knowledge-pack';
 const BASE_URL = `https://api.github.com/repos/${REPO}/contents/docs/operations`;

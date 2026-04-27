@@ -16,6 +16,7 @@ import modules.push_log.models  # noqa: F401
 import modules.sync_jobs.models  # noqa: F401
 import modules.master_options.models  # noqa: F401
 import modules.push_mappings.models  # noqa: F401
+import modules.ops_config.models  # noqa: F401
 
 from modules.suppliers.models import Supplier
 from modules.catalog.models import Product, ProductVariant
@@ -34,6 +35,7 @@ from modules.sync_jobs.routes import router as sync_jobs_router
 from modules.ops_push.routes import router as ops_push_router
 from modules.push_candidates.routes import router as push_candidates_router
 from modules.push_mappings.routes import router as push_mappings_router
+from modules.ops_config.routes import router as ops_config_router
 from modules.suppliers.category_import import router as category_import_router
 
 
@@ -115,6 +117,7 @@ app.include_router(sync_jobs_router)
 app.include_router(ops_push_router)
 app.include_router(push_candidates_router)
 app.include_router(push_mappings_router)
+app.include_router(ops_config_router)
 app.include_router(category_import_router)
 app.include_router(promostandards_sync_router)
 
