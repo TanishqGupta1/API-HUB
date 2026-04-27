@@ -10,6 +10,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<ProductListItem[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "vg" | "supplier">("all");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,6 +40,15 @@ export default function ProductsPage() {
 
   const types = ["Apparel", "Bags", "Drinkware", "Accessories"];
 
+  // Client-side source filter
+  const isVg = (p: ProductListItem) =>
+    (p.supplier_name ?? "").toLowerCase().includes("visual graphics");
+  const displayedProducts = products.filter((p) => {
+    if (sourceFilter === "vg") return isVg(p);
+    if (sourceFilter === "supplier") return !isVg(p);
+    return true;
+  });
+
   return (
     <div id="s-products">
       {/* Page header */}
@@ -57,6 +67,28 @@ export default function ProductsPage() {
         >
           View archived →
         </Link>
+      </div>
+
+      {/* Source filter tabs */}
+      <div className="flex items-center gap-2 mb-4">
+        {(["all", "vg", "supplier"] as const).map((s) => {
+          const labels = { all: "All Products", vg: "★ VG Products", supplier: "↓ Supplier Products" };
+          return (
+            <button
+              key={s}
+              onClick={() => setSourceFilter(s)}
+              className={`px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
+                ${sourceFilter === s
+                  ? s === "vg"
+                    ? "bg-[#1e4d92] text-white border-[#1e4d92]"
+                    : "bg-[#1e1e24] text-white border-[#1e1e24]"
+                  : "bg-white text-[#484852] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
+                }`}
+            >
+              {labels[s]}
+            </button>
+          );
+        })}
       </div>
 
       {/* Filters row */}
@@ -111,7 +143,7 @@ export default function ProductsPage() {
 
         {/* Result count */}
         <div className="ml-auto font-mono text-[11px] text-[#888894]">
-          {loading ? "Loading products..." : `${products.length.toLocaleString()} results`}
+          {loading ? "Loading products..." : `${displayedProducts.length.toLocaleString()} results`}
         </div>
       </div>
 
@@ -127,7 +159,7 @@ export default function ProductsPage() {
             <p>No products yet. Connect a supplier to start syncing products.</p>
           </div>
         ) : (
-          products.map((p) => (
+          displayedProducts.map((p) => (
             <ProductCard key={p.id} product={p} onArchive={handleArchive} />
           ))
         )}

@@ -100,6 +100,14 @@ export function ProductCard({ product, onArchive }: ProductCardProps) {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {/* Price range */}
+          {product.price_min != null && (
+            <span className="font-mono text-[12px] font-semibold text-[#247a52]">
+              {product.price_max != null && product.price_max !== product.price_min
+                ? `$${Number(product.price_min).toFixed(2)}–$${Number(product.price_max).toFixed(2)}`
+                : `$${Number(product.price_min).toFixed(2)}`}
+            </span>
+          )}
           <span className="font-mono text-[12px] font-semibold text-[#1e4d92]">
             {product.variant_count} variants
           </span>
