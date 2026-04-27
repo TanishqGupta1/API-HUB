@@ -75,7 +75,13 @@ function SuppliersContent() {
   };
 
   const handleSaved = (s: Supplier) => {
-    setSuppliers([s, ...suppliers]);
+    setSuppliers((prev) => {
+      const exists = prev.find((item) => item.id === s.id);
+      if (exists) {
+        return prev.map((item) => (item.id === s.id ? s : item));
+      }
+      return [s, ...prev];
+    });
     setShowAdd(false);
   };
 

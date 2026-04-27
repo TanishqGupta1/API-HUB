@@ -1,13 +1,7 @@
-import asyncio
-from database import async_session
-from modules.suppliers.models import Supplier
+import json
 from modules.promostandards.resolver import resolve_wsdl_url
 
-async def run():
-    async with async_session() as db:
-        s = await db.get(Supplier, '6a67507b-a360-4d02-9200-b9aefb911f40')
-        print("SanMar endpoint_cache type:", type(s.endpoint_cache))
-        print("SanMar WSDL:", resolve_wsdl_url(s.endpoint_cache, 'product_data'))
+endpoints = json.loads('[{"URL": "https://services.alphabroder.com/productData2/wsdl/ProductDataService.wsdl", "Service": {"WSDL": "https://promostandards.org/wp-content/uploads/2025/07/ProductData2-0-0-1.zip", "Status": "Production", "Version": "2.0.0", "ServiceType": {"Code": "Product", "Name": "Product Data"}}, "TestURL": "https://devservices.alphabroder.com/productData2/wsdl/ProductDataService.wsdl"}]')
 
-if __name__ == '__main__':
-    asyncio.run(run())
+res = resolve_wsdl_url(endpoints, "product_data")
+print(f"Result: {res}")

@@ -133,10 +133,28 @@ class PromoStandardsClient:
     def _get_service(self) -> Any:
         if self._service is not None:
             return self._service
+        # xml_huge_tree is needed for suppliers that return very large XML responses.
         from zeep.settings import Settings
         settings = Settings(strict=False, xml_huge_tree=True)
-        transport = Transport(cache=SqliteCache(), timeout=30, operation_timeout=120)
-        self._service = ZeepClient(self.wsdl_url, transport=transport, settings=settings).service
+        transport = Transport(
+            cache=SqliteCache(), timeout=30, operation_timeout=120
+        )
+
+        try:
+            self._service = ZeepClient(
+                self.wsdl_url, transport=transport, settings=settings
+            ).service
+        except ValueError as e:
+            if "no default service defined" in str(e).lower() and "?wsdl" not in self.wsdl_url.lower():
+                # Some .NET services return HTML at the base URL and require ?wsdl
+                retry_url = self.wsdl_url + ("&wsdl" if "?" in self.wsdl_url else "?wsdl")
+                log.info("No default service at %s, retrying with %s", self.wsdl_url, retry_url)
+                self._service = ZeepClient(
+                    retry_url, transport=transport, settings=settings
+                ).service
+            else:
+                raise
+        
         return self._service
 
     def _auth(

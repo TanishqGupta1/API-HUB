@@ -18,17 +18,21 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/cderamos-2ct/n8n-nodes-onprintshop"
+    "url": "https://github.com/VisualGraphxLLC/API-HUB.git",
+    "directory": "n8n-nodes-onprintshop"
   },
   "main": "index.js",
   "scripts": {
     "build": "tsc && gulp build:icons",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "sync:ops": "npx ts-node scripts/sync-ops-schemas.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "package.json",
+    "README.md"
   ],
   "n8n": {
     "n8nNodesApiVersion": 1,
@@ -38,6 +42,9 @@
     "nodes": [
       "dist/nodes/OnPrintShop.node.js"
     ]
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",

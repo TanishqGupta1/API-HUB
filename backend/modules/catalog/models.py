@@ -72,7 +72,7 @@ class ProductVariant(Base):
 
     id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
     product_id: Mapped[uuid_mod.UUID] = mapped_column(
-        ForeignKey("products.id", ondelete="CASCADE")
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
     )
     color: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -92,7 +92,7 @@ class ProductImage(Base):
 
     id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
     product_id: Mapped[uuid_mod.UUID] = mapped_column(
-        ForeignKey("products.id", ondelete="CASCADE")
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
     )
     url: Mapped[str] = mapped_column(Text)
     image_type: Mapped[str] = mapped_column(String(50), default="front")
@@ -110,7 +110,7 @@ class ProductOption(Base):
 
     id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
     product_id: Mapped[uuid_mod.UUID] = mapped_column(
-        ForeignKey("products.id", ondelete="CASCADE")
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
     )
     ops_option_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     master_option_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

@@ -49,6 +49,9 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE product_option_attributes ADD COLUMN IF NOT EXISTS overridden_sort INTEGER",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE NULL",
     "CREATE INDEX IF NOT EXISTS idx_products_archived_at ON products(archived_at)",
+    "CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)",
+    "CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images(product_id)",
+    "CREATE INDEX IF NOT EXISTS idx_product_options_product_id ON product_options(product_id)",
 ]
 
 
