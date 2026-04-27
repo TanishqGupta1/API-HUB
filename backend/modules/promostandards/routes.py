@@ -346,10 +346,21 @@ async def trigger_product_sync(
             resolve_wsdl_url(endpoints, "media"),
             limit,
         )
-    elif supplier.protocol in ("rest", "rest_hmac", "ops_graphql"):
-        # Placeholder for REST/GraphQL background task — wiring B2/G2 requirement
+    elif supplier.protocol in ("rest", "rest_hmac"):
+        if not supplier.base_url:
+            raise HTTPException(
+                400, f"Supplier '{supplier.name}' has no base_url configured"
+            )
         job = await _create_job(db, supplier, job_type="full_sync")
-        # background_tasks.add_task(_run_rest_sync, job.id, supplier)
+        background_tasks.add_task(
+            _run_rest_sync,
+            job.id,
+            supplier.id,
+            supplier.protocol,
+            supplier.base_url,
+            _get_auth_config(supplier),
+            dict(supplier.field_mappings or {}) if supplier.field_mappings else None,
+        )
     else:
         raise HTTPException(400, f"Sync not implemented for protocol '{supplier.protocol}'")
 
