@@ -71,7 +71,6 @@ export default function SyncJobsPage() {
   const [filterSupplier, setFilterSupplier] = useState("");
   const [filterStatus,   setFilterStatus]   = useState("");
   const [filterJobType,  setFilterJobType]  = useState("");
-  const [expandedError,  setExpandedError]  = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -194,7 +193,7 @@ export default function SyncJobsPage() {
         <table className="w-full text-sm min-w-[720px]">
           <thead>
             <tr className="border-b border-[#cfccc8]">
-              {["Supplier", "Job Type", "Status", "Records", "Duration", "Started", "Error"].map((h) => (
+              {["Supplier", "Job Type", "Status", "Records", "Duration", "Started"].map((h) => (
                 <th
                   key={h}
                   className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide text-[#484852] font-mono"
@@ -242,42 +241,7 @@ export default function SyncJobsPage() {
                   <td className="px-5 py-4 text-xs text-[#484852] font-mono">
                     {fmtStarted(j.started_at)}
                   </td>
-
-                  {/* Error */}
-                  <td className="px-5 py-4">
-                    {j.error_log ? (
-                      <button
-                        onClick={() => setExpandedError(expandedError === j.id ? null : j.id)}
-                        className="text-xs font-medium flex items-center gap-1 text-[#b93232] font-mono"
-                      >
-                        {j.error_log.split("\n")[0].slice(0, 40)}
-                        {j.error_log.length > 40 && "…"}
-                        <span
-                          className={`inline-block transition-transform duration-150 ${
-                            expandedError === j.id ? "rotate-180" : ""
-                          }`}
-                        >
-                          ▼
-                        </span>
-                      </button>
-                    ) : (
-                      <span className="text-[#484852]">—</span>
-                    )}
-                  </td>
                 </tr>
-
-                {/* Expanded error log */}
-                {expandedError === j.id && j.error_log && (
-                  <tr className="border-t border-[#cfccc8]">
-                    <td colSpan={7} className="px-5 py-4 bg-[#fef9f9]">
-                      <pre
-                        className="text-xs rounded-md p-4 overflow-auto max-h-48 whitespace-pre-wrap bg-[#fdf2f2] text-[#b93232] font-mono border border-[#fbd9d9]"
-                      >
-                        {j.error_log}
-                      </pre>
-                    </td>
-                  </tr>
-                )}
               </React.Fragment>
             ))}
 

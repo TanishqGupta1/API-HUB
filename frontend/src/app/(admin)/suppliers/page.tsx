@@ -1,302 +1,193 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import type { PSCompany, Supplier } from "@/lib/types";
-import RevealForm from "@/components/suppliers/reveal-form";
+import { Supplier } from "@/lib/types";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-
-
-
-/* ── Relative time helper ── */
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min} min ago`;
-  const hrs = Math.floor(min / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
-
-interface PushLogEntry {
-  supplier_name: string | null;
-  pushed_at: string;
-}
-
-function SuppliersContent() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [lastPushMap, setLastPushMap] = useState<Record<string, string>>({});
-  const [showAdd, setShowAdd] = useState(false);
-  const [psCompanies, setPsCompanies] = useState<PSCompany[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const searchParams = useSearchParams();
-  const router = useRouter();
-
-  useEffect(() => {
-    Promise.all([
-      api<Supplier[]>("/api/suppliers"),
-      api<PushLogEntry[]>("/api/push-log?limit=100"),
-      api<PSCompany[]>("/api/ps-directory/companies"),
-    ])
-      .then(([sups, logs, companies]) => {
-        setSuppliers(sups);
-        setPsCompanies(companies);
-        // Build map: supplier_name (lowercase) → most recent pushed_at
-        const map: Record<string, string> = {};
-        for (const log of logs) {
-          if (!log.supplier_name) continue;
-          const key = log.supplier_name.toLowerCase();
-          if (!map[key] || log.pushed_at > map[key]) {
-            map[key] = log.pushed_at;
-          }
-        }
-        setLastPushMap(map);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (searchParams.get("new") === "true") openForm();
-  }, [searchParams]);
-
-  const openForm = () => {
-    setShowAdd(true);
-  };
-
-  const handleCancel = () => {
-    setShowAdd(false);
-    if (searchParams.has("new")) router.push("/suppliers");
-  };
-
-  const handleSaved = (s: Supplier) => {
-    setSuppliers((prev) => {
-      const exists = prev.find((item) => item.id === s.id);
-      if (exists) {
-        return prev.map((item) => (item.id === s.id ? s : item));
-      }
-      return [s, ...prev];
-    });
-    setShowAdd(false);
-  };
-
-  const toggleActive = async (s: Supplier) => {
-    try {
-      const updated = await api<Supplier>(`/api/suppliers/${s.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ is_active: !s.is_active }),
-      });
-      setSuppliers(suppliers.map((item) => (item.id === updated.id ? updated : item)));
-    } catch (err) {
-      console.error("Failed to toggle supplier status:", err);
-    }
-  };
-
-  const deleteSupplier = async (s: Supplier) => {
-    if (!confirm(`Delete ${s.name}? This removes the supplier and any cached data. This cannot be undone.`)) {
-      return;
-    }
-    try {
-      await api(`/api/suppliers/${s.id}`, { method: "DELETE" });
-      setSuppliers(suppliers.filter((item) => item.id !== s.id));
-    } catch (err) {
-      console.error("Failed to delete supplier:", err);
-      alert("Delete failed: " + (err instanceof Error ? err.message : String(err)));
-    }
-  };
-
-  const triggerSync = async (s: Supplier) => {
-    if (!s.is_active) return;
-    try {
-      await api(`/api/sync/${s.id}/products`, { method: "POST" });
-      router.push("/sync");
-    } catch (err) {
-      console.error("Failed to trigger sync:", err);
-      alert("Sync failed: " + (err instanceof Error ? err.message : String(err)));
-    }
-  };
-
-  /** Find the most recent push timestamp for a supplier by name */
-  const getLastPush = (supplierName: string): string => {
-    const key = supplierName.toLowerCase();
-    if (lastPushMap[key]) return timeAgo(lastPushMap[key]);
-    // Fuzzy: check if any push-log supplier name contains ours or vice versa
-    for (const [k, v] of Object.entries(lastPushMap)) {
-      const firstWord = key.split(" ")[0];
-      if (k.includes(firstWord) || firstWord.includes(k.split(" ")[0])) {
-        return timeAgo(v);
-      }
-    }
-    return "—";
-  };
-
-  /** Real DB count formatted */
-  const getProductCount = (s: Supplier): string => {
-    const total = s.product_count;
-    if (total === 0) return "0";
-    return total >= 1000
-      ? `${(total / 1000).toFixed(1)}k`
-      : total.toLocaleString();
-  };
-
-  return (
-    <div className="screen active" id="s-suppliers">
-      <div className="page-header">
-        <div>
-          <div className="page-title">
-            {showAdd ? "Add Supplier" : "Connected Suppliers"}
-          </div>
-          <div className="page-subtitle">
-            {showAdd
-              ? "Connect a new vendor to the Integration Hub"
-              : "Managing endpoint configurations for PromoStandards vendors"}
-          </div>
-        </div>
-        {!showAdd ? (
-          <button className="btn btn-primary" onClick={openForm}>
-            + Connect New
-          </button>
-        ) : (
-          <button className="btn btn-ghost" onClick={() => setShowAdd(false)}>
-            Cancel
-          </button>
-        )}
-      </div>
-
-      {showAdd ? (
-        <RevealForm
-          psCompanies={psCompanies}
-          onSaved={handleSaved}
-          onCancel={handleCancel}
-        />
-      ) : (
-        <div className="panel">
-          <table>
-            <thead>
-              <tr>
-                <th>Supplier</th>
-                <th>ID / Code</th>
-                <th>Method</th>
-                <th>Last Push</th>
-                <th>Products</th>
-                <th>Status</th>
-                <th className="text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {suppliers.map((s) => (
-                <tr key={s.id}>
-                  <td className="cell-primary">
-                    <Link 
-                      href={`/mappings/${s.id}`}
-                      className="hover:text-[var(--blue)] hover:underline transition-colors cursor-pointer"
-                    >
-                      {s.name}
-                    </Link>
-                  </td>
-                  <td>
-                    <span className="cell-tag">
-                      {s.promostandards_code || "API"}
-                    </span>
-                  </td>
-                  <td className="cell-mono">{s.protocol.toUpperCase()}</td>
-                  <td className="cell-mono">{getLastPush(s.name)}</td>
-                  <td className="cell-mono">{getProductCount(s)}</td>
-                  <td>
-                    <button
-                      type="button"
-                      onClick={() => toggleActive(s)}
-                      className="bg-transparent border-none p-0 cursor-pointer outline-none block"
-                      title={s.is_active ? "Deactivate supplier" : "Activate supplier"}
-                    >
-                      {s.is_active ? (
-                        <span className="badge badge-ok">
-                          <span className="badge-dot"></span> Active
-                        </span>
-                      ) : (
-                        <span className="text-[12px] font-semibold text-[#888894] hover:text-[#484852] transition-colors">
-                          Inactive
-                        </span>
-                      )}
-                    </button>
-                  </td>
-                  <td className="text-right">
-                    <div className="inline-flex items-center gap-2 justify-end">
-                      {(s.protocol === "soap" || s.protocol === "promostandards") && (
-                        <Link href={`/suppliers/${s.id}/import`}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-[#1e4d92] text-[#1e4d92]"
-                          >
-                            Import Products
-                          </Button>
-                        </Link>
-                      )}
-                      <button
-                        onClick={() => triggerSync(s)}
-                        disabled={!s.is_active}
-                        className={`btn btn-ghost !py-1 !px-2 !text-[11px] ${!s.is_active ? "opacity-30 grayscale cursor-not-allowed" : "text-[var(--blue)]"}`}
-                        title="Sync Now"
-                      >
-                        Sync Now ⚡
-                      </button>
-                      <button
-                        onClick={() => deleteSupplier(s)}
-                        className="btn btn-ghost !py-1 !px-2 !text-[11px] text-[#b23a3a] hover:bg-[rgba(178,58,58,0.08)]"
-                        title="Delete supplier"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {!loading && suppliers.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="p-10 text-center text-[#484852] text-[14px]"
-                  >
-                    No suppliers connected. Click &quot;+ Connect New&quot; to begin.
-                  </td>
-                </tr>
-              )}
-
-              {loading && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="p-10 text-center text-[#484852] text-[14px] font-mono"
-                  >
-                    Connecting...
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
+import { Badge } from "@/components/ui/badge";
+import { 
+  Plus, 
+  Settings2, 
+  RefreshCcw, 
+  Globe, 
+  Database, 
+  ShieldCheck, 
+  ChevronRight,
+  MoreVertical,
+  Activity
+} from "lucide-react";
 
 export default function SuppliersPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="p-10 text-[#484852]">
-          Loading...
-        </div>
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await api<Supplier[]>("/api/suppliers");
+        setSuppliers(data);
+      } catch (e) {
+        console.error("Failed to load suppliers", e);
+      } finally {
+        setLoading(false);
       }
-    >
-      <SuppliersContent />
-    </Suspense>
+    }
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh] flex-col gap-4">
+        <div className="w-10 h-10 border-[3px] border-[#1e4d92] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-[#888894] font-medium animate-pulse">Scanning Supplier Network...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 max-w-7xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-3xl font-black text-[#1e1e24] tracking-tight flex items-center gap-3">
+            <Globe className="w-8 h-8 text-[#1e4d92]" />
+            Supplier Directory
+          </h1>
+          <p className="text-[#888894] mt-1 font-medium">Manage and monitor your external data sources.</p>
+        </div>
+        <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10 px-8 h-11" asChild>
+          <Link href="/suppliers/new">
+            <Plus className="w-4 h-4 mr-2" />
+            Add New Supplier
+          </Link>
+        </Button>
+      </div>
+
+      {/* Stats Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+         <div className="bg-[#f9f7f4] border border-[#cfccc8] rounded-2xl p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-white border border-[#cfccc8] flex items-center justify-center text-[#1e4d92] shadow-sm">
+               <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+               <div className="text-[10px] font-black uppercase tracking-widest text-[#888894]">Connected</div>
+               <div className="text-xl font-black text-[#1e1e24] leading-tight">{suppliers.filter(s => s.is_active).length} Suppliers</div>
+            </div>
+         </div>
+         <div className="bg-[#f9f7f4] border border-[#cfccc8] rounded-2xl p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-white border border-[#cfccc8] flex items-center justify-center text-[#1e4d92] shadow-sm">
+               <Database className="w-5 h-5" />
+            </div>
+            <div>
+               <div className="text-[10px] font-black uppercase tracking-widest text-[#888894]">Total Inventory</div>
+               <div className="text-xl font-black text-[#1e1e24] leading-tight">
+                 {suppliers.reduce((acc, s) => acc + (s.product_count || 0), 0).toLocaleString()} Products
+               </div>
+            </div>
+         </div>
+         <div className="bg-[#f9f7f4] border border-[#cfccc8] rounded-2xl p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-white border border-[#cfccc8] flex items-center justify-center text-[#1e4d92] shadow-sm">
+               <Activity className="w-5 h-5" />
+            </div>
+            <div>
+               <div className="text-[10px] font-black uppercase tracking-widest text-[#888894]">Active Protocols</div>
+               <div className="text-xl font-black text-[#1e1e24] leading-tight">
+                 {new Set(suppliers.map(s => s.protocol)).size} Methods
+               </div>
+            </div>
+         </div>
+      </div>
+
+      {/* Supplier Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {suppliers.map((s) => (
+          <Card key={s.id} className="border-[#cfccc8] overflow-hidden bg-white hover:border-[#1e4d92] transition-all hover:shadow-xl hover:shadow-blue-900/5 group">
+            <div className="p-6 space-y-6">
+              
+              {/* Top Row: Name & Protocol */}
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-[#f9f7f4] border border-[#cfccc8] flex items-center justify-center text-xl font-black text-[#1e4d92] group-hover:bg-[#1e4d92] group-hover:text-white group-hover:border-[#1e4d92] transition-all duration-300">
+                    {s.name[0]}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-[#1e1e24] tracking-tight group-hover:text-[#1e4d92] transition-colors">{s.name}</h3>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <Badge variant="outline" className="bg-[#f9f7f4] border-[#cfccc8] text-[#888894] font-black text-[9px] uppercase tracking-widest h-5">
+                        {s.protocol}
+                      </Badge>
+                      <span className="text-[10px] font-bold text-[#888894] uppercase tracking-widest">ID: {s.slug}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className={`w-2 h-2 rounded-full mt-2 ${s.is_active ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-[#cfccc8]'}`} />
+              </div>
+
+              {/* Stats & Info Row */}
+              <div className="grid grid-cols-3 gap-4 border-y border-[#f2f0ed] py-4">
+                <div>
+                  <div className="text-[9px] font-black uppercase tracking-widest text-[#888894] mb-1">Products</div>
+                  <div className="font-mono font-black text-[#1e1e24] text-sm">{s.product_count?.toLocaleString() || 0}</div>
+                </div>
+                <div>
+                  <div className="text-[9px] font-black uppercase tracking-widest text-[#888894] mb-1">Status</div>
+                  <div className={`text-[10px] font-black uppercase tracking-tight ${s.is_active ? 'text-emerald-600' : 'text-[#888894]'}`}>
+                    {s.is_active ? 'Online' : 'Paused'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] font-black uppercase tracking-widest text-[#888894] mb-1">Auth Type</div>
+                  <div className="text-[10px] font-black uppercase tracking-tight text-[#1e1e24]">
+                    {s.protocol === 'soap' ? 'SOAP XML' : s.protocol === 'sftp' ? 'SSH Key' : 'REST API'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Bar */}
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" className="h-9 px-3 border border-transparent hover:border-[#cfccc8] text-[11px] font-bold text-[#888894] uppercase tracking-wider" asChild>
+                    <Link href={`/suppliers/${s.id}`}>
+                      <Settings2 className="w-3.5 h-3.5 mr-2" />
+                      Configure
+                    </Link>
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-9 px-3 border border-transparent hover:border-[#cfccc8] text-[11px] font-bold text-[#888894] uppercase tracking-wider" asChild>
+                    <Link href={`/mappings/${s.id}`}>
+                      <RefreshCcw className="w-3.5 h-3.5 mr-2" />
+                      Mappings
+                    </Link>
+                  </Button>
+                </div>
+                <Button size="sm" className="h-9 w-9 p-0 bg-[#f9f7f4] hover:bg-[#1e4d92] text-[#1e4d92] hover:text-white border border-[#cfccc8] transition-all rounded-xl" asChild>
+                   <Link href={`/suppliers/${s.id}`}>
+                     <ChevronRight className="w-4 h-4" />
+                   </Link>
+                </Button>
+              </div>
+
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {!loading && suppliers.length === 0 && (
+        <div className="text-center py-20 bg-[#f9f7f4] rounded-3xl border-2 border-dashed border-[#cfccc8]">
+          <div className="w-16 h-16 rounded-2xl bg-white border border-[#cfccc8] flex items-center justify-center text-3xl mx-auto mb-6 shadow-sm">📡</div>
+          <h3 className="text-xl font-black text-[#1e1e24] mb-2 tracking-tight">No Suppliers Connected</h3>
+          <p className="text-[13px] text-[#888894] max-w-sm mx-auto font-medium leading-relaxed mb-6">
+            Start building your data hub by connecting your first supplier via SOAP, REST, or SFTP.
+          </p>
+          <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-black text-xs uppercase tracking-widest px-8" asChild>
+            <Link href="/suppliers/new">Register Now</Link>
+          </Button>
+        </div>
+      )}
+
+    </div>
   );
 }
