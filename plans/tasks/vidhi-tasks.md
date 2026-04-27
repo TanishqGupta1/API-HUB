@@ -11,6 +11,8 @@
 
 3 tasks — 1 backend, 1 n8n, 1 frontend. Task 4 blocks Task 5 (n8n calls the endpoint you build). Task 6 parallel, no blockers after Sinchana ships.
 
+**Sprint status (2026-04-27):** ✅ Task 4 DONE · ✅ Task 5 DONE · ✅ Task 6 DONE — all 3 Vidhi tasks complete.
+
 **Depends on Sinchana:**
 - Task 4 needs `OPSProductOption` / `OPSProductAttribute` schemas from her Task 2
 - Task 5 needs her POST `/api/push-mappings` endpoint (Task 3)
@@ -19,7 +21,12 @@ Pre-work: same merge-conflict resolution as rest of team.
 
 ---
 
-## Task 4 — `GET /api/push/{customer_id}/product/{product_id}/ops-options` endpoint
+## Task 4 — `GET /api/push/{customer_id}/product/{product_id}/ops-options` endpoint ✅ DONE
+
+**Status:** Implemented and verified in codebase.
+- `OPSProductAttributeSchema` + `OPSProductOptionSchema` → `backend/modules/markup/schemas.py:97,106`
+- Endpoint `/{customer_id}/product/{product_id}/ops-options` → `backend/modules/markup/routes.py:82`
+- Tests → `backend/tests/test_ops_options_endpoint.py`
 
 **Files:**
 - Modify: `backend/modules/markup/schemas.py` (append schemas — OPSProductOptionSchema, OPSProductAttributeSchema)
@@ -50,7 +57,14 @@ Run: `docker compose exec -T api pytest tests/test_ops_options_endpoint.py -v` �
 
 ---
 
-## Task 5 — n8n `ops-push` workflow: add 4 nodes
+## Task 5 — n8n `ops-push` workflow: add 4 nodes ✅ DONE
+
+**Status:** All 4 nodes present in `n8n-workflows/ops-push.json` with correct connection chain (lines 247–401):
+- `Get /ops-options` (HTTP GET)
+- `Stub Apply Options` (Code)
+- `Build Push Mapping` (Code)
+- `POST /push-mappings` (HTTP POST)
+Connection routing: `OPS: Set Product Price → Get /ops-options → Stub Apply Options → Build Push Mapping → POST /push-mappings → POST Push Log` ✅
 
 **File:** `n8n-workflows/ops-push.json` (modify)
 
@@ -92,7 +106,11 @@ Expected: `Successfully imported 1 workflow`. Open n8n UI → verify 4 new nodes
 
 ---
 
-## Task 6 — Frontend: per-row "Push to OPS" button on `/products` catalog
+## Task 6 — Frontend: per-row "Push to OPS" button on `/products` catalog ✅ DONE
+
+**Status:** Component exists at `frontend/src/components/products/push-row-action.tsx` and is integrated per-product via `product-card.tsx:5,79` (used by `/products` page through the card component). Functional outcome matches spec.
+
+> Implementation note: hooked into `product-card.tsx` rather than directly into `products/page.tsx` as the plan suggested — same end-user behavior (per-row push button).
 
 **Files:**
 - Create: `frontend/src/components/products/push-row-action.tsx` (new component)

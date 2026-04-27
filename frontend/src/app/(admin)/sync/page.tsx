@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { SyncJob } from "@/lib/types";
 
@@ -14,6 +14,32 @@ function fmtDuration(startedAt: string, finishedAt: string | null): string {
   const rem = s % 60;
   if (m < 60) return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
   return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function timeAgo(iso: string): string {
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+type HealthInfo = { color: string; bgColor: string; dot: string; label: string };
+
+function healthFor(iso: string | null, lastStatus?: string): HealthInfo {
+  if (!iso) {
+    if (lastStatus === "failed")
+      return { color: "#b93232", bgColor: "#b9323222", dot: "bg-[#b93232]", label: "Error" };
+    return { color: "#888894", bgColor: "#88889422", dot: "bg-[#888894]", label: "Never synced" };
+  }
+  const hours = (Date.now() - new Date(iso).getTime()) / 1000 / 3600;
+  if (hours < 1)
+    return { color: "#247a52", bgColor: "#247a5222", dot: "bg-[#247a52]", label: "Fresh" };
+  if (hours < 24)
+    return { color: "#d4a017", bgColor: "#d4a01722", dot: "bg-[#d4a017]", label: "Stale" };
+  return { color: "#b93232", bgColor: "#b9323222", dot: "bg-[#b93232]", label: "Outdated" };
 }
 
 function fmtStarted(iso: string): string {
@@ -116,6 +142,46 @@ export default function SyncJobsPage() {
   // Supplier options derived from data
   const supplierNames = Array.from(new Set(jobs.map((j) => j.supplier_name))).sort();
 
+  // Per-supplier health badges — derived from ALL jobs (unfiltered wouldn't matter since we load all)
+  const perSupplierHealth = useMemo(() => {
+    const successMap = new Map<string, SyncJob>();
+    const attemptMap = new Map<string, SyncJob>();
+
+    jobs.forEach((j) => {
+      const jTime = new Date(j.finished_at ?? j.started_at).getTime();
+      const prevAttempt = attemptMap.get(j.supplier_id);
+      if (!prevAttempt || jTime > new Date(prevAttempt.finished_at ?? prevAttempt.started_at).getTime()) {
+        attemptMap.set(j.supplier_id, j);
+      }
+      if (j.status !== "completed") return;
+      const prevSuccess = successMap.get(j.supplier_id);
+      if (!prevSuccess || jTime > new Date(prevSuccess.finished_at ?? prevSuccess.started_at).getTime()) {
+        successMap.set(j.supplier_id, j);
+      }
+    });
+
+    const seen = new Set<string>();
+    const entries: {
+      id: string;
+      name: string;
+      lastSuccessIso: string | null;
+      lastAttempt: SyncJob | null;
+      health: HealthInfo;
+    }[] = [];
+
+    jobs.forEach((j) => {
+      if (seen.has(j.supplier_id)) return;
+      seen.add(j.supplier_id);
+      const lastSuccess = successMap.get(j.supplier_id);
+      const lastAttempt = attemptMap.get(j.supplier_id) ?? null;
+      const lastSuccessIso = lastSuccess?.finished_at ?? lastSuccess?.started_at ?? null;
+      const health = healthFor(lastSuccessIso, lastAttempt?.status);
+      entries.push({ id: j.supplier_id, name: j.supplier_name, lastSuccessIso, lastAttempt, health });
+    });
+
+    return entries.sort((a, b) => a.name.localeCompare(b.name));
+  }, [jobs]);
+
   const STATUSES = ["completed", "running", "failed", "pending"];
   const JOB_TYPES = [
     { value: "full_sync", label: "Full Refresh" },
@@ -177,6 +243,42 @@ export default function SyncJobsPage() {
           </select>
         </div>
       </div>
+
+      {/* Per-supplier health strip */}
+      {perSupplierHealth.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {perSupplierHealth.map(({ id, name, lastSuccessIso, lastAttempt, health }) => {
+            const displayTime = lastSuccessIso
+              ? timeAgo(lastSuccessIso)
+              : lastAttempt
+              ? timeAgo(lastAttempt.finished_at ?? lastAttempt.started_at)
+              : null;
+            return (
+              <div
+                key={id}
+                className="inline-flex items-center gap-2 px-3 py-[7px] rounded-lg border border-[#cfccc8] bg-white hover:border-[#1e4d92] transition-colors"
+                title={`${name} — ${health.label}${displayTime ? ` · ${displayTime}` : ""}`}
+              >
+                {/* Colored status dot */}
+                <span className={`w-2 h-2 rounded-full shrink-0 ${health.dot}`} />
+                {/* Supplier name */}
+                <span className="text-[12px] font-semibold text-[#1e1e24]">{name}</span>
+                {/* Health label pill */}
+                <span
+                  className="text-[10px] font-bold font-mono uppercase px-[6px] py-[2px] rounded"
+                  style={{ background: health.bgColor, color: health.color }}
+                >
+                  {health.label}
+                </span>
+                {/* Time ago */}
+                {displayTime && (
+                  <span className="text-[11px] text-[#888894] font-mono">{displayTime}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Divider */}
       <div className="mb-5 border-b border-[#cfccc8]" />

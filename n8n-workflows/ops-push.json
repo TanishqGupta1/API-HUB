@@ -240,6 +240,66 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [2660, 740]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://host.docker.internal:8000/api/push/{{ $('Parse Params').item.json.customer_id }}/product/{{ $('Parse Params').item.json.product_id }}/ops-options",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Ingest-Secret", "value": "={{ $env.INGEST_SHARED_SECRET }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1111111-0020-0000-0000-000000000020",
+      "name": "Get /ops-options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2880, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// STUB: OPS beta mutations (setAdditionalOption, setAdditionalOptionAttributes,\n// setProductsAttributePrice) are not yet shipped.\n// When they ship, replace this Code node with:\n//   1. Split In Batches over options\n//   2. OPS: setAdditionalOption (per option) → captures target_ops_option_id\n//   3. Split In Batches over attributes\n//   4. OPS: setAdditionalOptionAttributes → captures target_ops_attribute_id\n//   5. OPS: setProductsAttributePrice → applies price\n// For now: annotate each attribute with null target IDs and pass through.\nconst options = $input.all().map(i => i.json);\nconsole.log('[STUB] ops-push options payload:', JSON.stringify(options));\nreturn options.map(opt => ({\n  json: {\n    ...opt,\n    _stub: true,\n    target_ops_option_id: null,\n    attributes: (opt.attributes || []).map(a => ({\n      ...a,\n      target_ops_attribute_id: null,\n    })),\n  }\n}));"
+      },
+      "id": "a1111111-0021-0000-0000-000000000021",
+      "name": "Stub Apply Options",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build push_mappings payload. Requires:\n//  - upstream OPS: Set Product output has products_id\n//  - Parse Params has product_id, customer_id\n//  - Get Push Payload has product.supplier_sku and customer.ops_base_url\nconst params = $('Parse Params').item.json;\nconst payload = $('Get Push Payload').item.json;\nconst setProd = $('OPS: Set Product').item.json;\nconst opsOpts = $input.all().map(i => i.json);\n\nconst flatOptions = [];\nfor (const opt of opsOpts) {\n  for (const a of (opt.attributes || [])) {\n    flatOptions.push({\n      source_master_option_id: opt.source_master_option_id,\n      source_master_attribute_id: a.source_master_attribute_id,\n      source_option_key: opt.option_key,\n      source_attribute_key: a.source_attribute_key || a.title,\n      target_ops_option_id: opt.target_ops_option_id,\n      target_ops_attribute_id: a.target_ops_attribute_id,\n      title: a.title,\n      price: a.price,\n      sort_order: a.sort_order,\n    });\n  }\n}\n\nreturn [{\n  json: {\n    source_system: payload.product?.source_system || 'sanmar',\n    source_product_id: params.product_id,\n    source_supplier_sku: payload.product?.supplier_sku || null,\n    customer_id: params.customer_id,\n    target_ops_base_url: payload.customer?.ops_base_url || '',\n    target_ops_product_id: setProd.products_id,\n    options: flatOptions,\n  }\n}];"
+      },
+      "id": "a1111111-0022-0000-0000-000000000022",
+      "name": "Build Push Mapping",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3320, 460]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/push-mappings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Ingest-Secret", "value": "={{ $env.INGEST_SHARED_SECRET }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "a1111111-0023-0000-0000-000000000023",
+      "name": "POST /push-mappings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3540, 460]
     }
   ],
   "connections": {
@@ -319,8 +379,28 @@
     },
     "OPS: Set Product Price": {
       "main": [
-        [{"node": "POST Push Log", "type": "main", "index": 0}],
+        [{"node": "Get /ops-options", "type": "main", "index": 0}],
         [{"node": "Error Handler", "type": "main", "index": 0}]
+      ]
+    },
+    "Get /ops-options": {
+      "main": [
+        [{"node": "Stub Apply Options", "type": "main", "index": 0}]
+      ]
+    },
+    "Stub Apply Options": {
+      "main": [
+        [{"node": "Build Push Mapping", "type": "main", "index": 0}]
+      ]
+    },
+    "Build Push Mapping": {
+      "main": [
+        [{"node": "POST /push-mappings", "type": "main", "index": 0}]
+      ]
+    },
+    "POST /push-mappings": {
+      "main": [
+        [{"node": "POST Push Log", "type": "main", "index": 0}]
       ]
     },
     "POST Push Log": {

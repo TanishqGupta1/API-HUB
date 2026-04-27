@@ -1,11 +1,15 @@
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from database import get_db
 from modules.catalog.ingest import require_ingest_secret
+from modules.catalog.models import ProductOption
+from modules.master_options.models import MasterOption, MasterOptionAttribute
 
 from .engine import calculate_price
 from .models import MarkupRule
@@ -16,6 +20,8 @@ from .schemas import (
     OPSProductSizeInput,
     OPSProductPriceEntry,
     OPSVariantsBundle,
+    OPSProductOptionSchema,
+    OPSProductAttributeSchema,
 )
 
 router = APIRouter(prefix="/api/markup-rules", tags=["markup"])
@@ -70,6 +76,82 @@ async def ops_variants_bundle(
         for v in variants
     ]
     return OPSVariantsBundle(sizes=sizes, prices=prices)
+
+
+@push_router.get(
+    "/{customer_id}/product/{product_id}/ops-options",
+    response_model=list[OPSProductOptionSchema],
+    dependencies=[Depends(require_ingest_secret)],
+)
+async def ops_product_options(
+    customer_id: UUID,
+    product_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Product-scoped OPS option shape (strips master_option_id from core).
+
+    Converts the hub's master-option-based product config into the shape
+    OPS expects on per-product push. master_option_id / ops_attribute_id
+    are intentionally excluded from the core body — they're retained only
+    as source_master_* fields for traceback into push_mappings.
+    """
+    po_rows = (
+        await db.execute(
+            select(ProductOption)
+            .where(
+                ProductOption.product_id == product_id,
+                ProductOption.enabled == True,  # noqa: E712
+            )
+            .options(selectinload(ProductOption.attributes))
+        )
+    ).scalars().all()
+
+    mo_ids = {po.master_option_id for po in po_rows if po.master_option_id is not None}
+    moa_map: dict[tuple[int, int], Optional[str]] = {}
+    if mo_ids:
+        moas = (
+            await db.execute(
+                select(MasterOption, MasterOptionAttribute)
+                .join(
+                    MasterOptionAttribute,
+                    MasterOption.id == MasterOptionAttribute.master_option_id,
+                )
+                .where(MasterOption.ops_master_option_id.in_(mo_ids))
+            )
+        ).all()
+        for mo, ma in moas:
+            raw = ma.raw_json or {}
+            attr_key = raw.get("attribute_key") if isinstance(raw, dict) else None
+            moa_map[(mo.ops_master_option_id, ma.ops_attribute_id)] = attr_key
+
+    out: list[OPSProductOptionSchema] = []
+    for po in po_rows:
+        enabled_attrs = [a for a in po.attributes if a.enabled]
+        if not enabled_attrs:
+            continue
+        attrs_out = [
+            OPSProductAttributeSchema(
+                title=a.title,
+                price=float(a.price or 0),
+                numeric_value=float(a.numeric_value or 0),
+                sort_order=a.overridden_sort if a.overridden_sort is not None else a.sort_order,
+                source_master_attribute_id=a.ops_attribute_id,
+                source_attribute_key=moa_map.get(
+                    (po.master_option_id, a.ops_attribute_id)
+                ),
+            )
+            for a in sorted(enabled_attrs, key=lambda x: x.sort_order)
+        ]
+        out.append(
+            OPSProductOptionSchema(
+                option_key=po.option_key,
+                title=po.title or "",
+                options_type=po.options_type,
+                attributes=attrs_out,
+                source_master_option_id=po.master_option_id,
+            )
+        )
+    return out
 
 
 @router.get("/{customer_id}", response_model=list[MarkupRuleRead])
