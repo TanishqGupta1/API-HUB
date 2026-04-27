@@ -73,13 +73,20 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const supplierLastSync = new Map<string, SyncJob>();
+  // Track last SUCCESSFUL sync per supplier (for health color thresholds)
+  const supplierLastSuccess = new Map<string, SyncJob>();
+  // Track last ATTEMPT per supplier (any status — shows "Error" when never succeeded)
+  const supplierLastAttempt = new Map<string, SyncJob>();
   jobs.forEach((j) => {
-    if (j.status !== "completed") return;
-    const prev = supplierLastSync.get(j.supplier_id);
     const jTime = new Date(j.finished_at ?? j.started_at).getTime();
-    if (!prev || jTime > new Date(prev.finished_at ?? prev.started_at).getTime()) {
-      supplierLastSync.set(j.supplier_id, j);
+    const prevAttempt = supplierLastAttempt.get(j.supplier_id);
+    if (!prevAttempt || jTime > new Date(prevAttempt.finished_at ?? prevAttempt.started_at).getTime()) {
+      supplierLastAttempt.set(j.supplier_id, j);
+    }
+    if (j.status !== "completed") return;
+    const prevSuccess = supplierLastSuccess.get(j.supplier_id);
+    if (!prevSuccess || jTime > new Date(prevSuccess.finished_at ?? prevSuccess.started_at).getTime()) {
+      supplierLastSuccess.set(j.supplier_id, j);
     }
   });
 
@@ -155,9 +162,16 @@ export default function Dashboard() {
             </div>
           ) : (
             suppliers.map((s) => {
-              const last = supplierLastSync.get(s.id);
-              const lastIso = last?.finished_at ?? last?.started_at ?? null;
-              const h = healthFor(lastIso);
+              const lastSuccess = supplierLastSuccess.get(s.id);
+              const lastAttempt = supplierLastAttempt.get(s.id);
+              const lastIso = lastSuccess?.finished_at ?? lastSuccess?.started_at ?? null;
+              // Health: green/amber/red by successful-sync age; red "Error" if last attempt failed; grey "Never synced" otherwise
+              const h = lastIso
+                ? healthFor(lastIso)
+                : lastAttempt?.status === "failed"
+                ? { color: "var(--red)", label: "Error" }
+                : { color: "var(--ink-muted)", label: "Never synced" };
+              const attemptIso = lastAttempt?.finished_at ?? lastAttempt?.started_at ?? null;
               return (
                 <Link
                   key={s.id}
@@ -169,17 +183,25 @@ export default function Dashboard() {
                       {s.name}
                     </div>
                     <span
-                      className="text-[10px] font-semibold px-2 py-0.5 rounded-[10px] whitespace-nowrap"
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded-[10px] whitespace-nowrap flex items-center gap-1"
                       style={{
                         background: h.color + "22",
                         color: h.color,
                       }}
                     >
+                      <span
+                        className="inline-block w-[6px] h-[6px] rounded-full"
+                        style={{ background: h.color }}
+                      />
                       {h.label}
                     </span>
                   </div>
                   <div className="text-[11px] text-[#888894] font-mono">
-                    Last sync: {lastIso ? timeAgo(lastIso) : "—"}
+                    {lastIso
+                      ? `Last sync: ${timeAgo(lastIso)}`
+                      : attemptIso
+                      ? `Last attempt: ${timeAgo(attemptIso)}`
+                      : "Last sync: —"}
                   </div>
                   <div className="text-[11px] text-[#888894] font-mono">
                     Products: {s.product_count}

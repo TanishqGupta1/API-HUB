@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MarkupRuleCreate(BaseModel):
@@ -89,3 +89,23 @@ class OPSProductPriceEntry(BaseModel):
 class OPSVariantsBundle(BaseModel):
     sizes: list[OPSProductSizeInput]
     prices: list[OPSProductPriceEntry]
+
+
+# -------- OPS product-scoped option shape (strips master_option_id) --------
+
+
+class OPSProductAttributeSchema(BaseModel):
+    title: str
+    price: float = 0.0
+    sort_order: int = 0
+    numeric_value: float = 0.0
+    source_master_attribute_id: Optional[int] = None
+    source_attribute_key: Optional[str] = None
+
+
+class OPSProductOptionSchema(BaseModel):
+    option_key: str
+    title: str
+    options_type: Optional[str] = None
+    attributes: list[OPSProductAttributeSchema] = Field(default_factory=list)
+    source_master_option_id: Optional[int] = None
