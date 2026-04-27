@@ -1,0 +1,35 @@
+# docker-compose.override.yml — local dev overrides.
+#
+# Auto-merged with docker-compose.yml when running `docker compose ...` from
+# this directory. The base compose.yml is now production-shaped (multi-stage
+# Dockerfile, no --reload, Next.js standalone CMD). This file restores the
+# dev experience: volume-mounted source + reload CMDs + the dev-stage build
+# target. Skip this file in CI/prod by passing `-f docker-compose.yml`
+# explicitly.
+
+services:
+  api:
+    # uvicorn auto-reload watches the bind-mounted ./backend so edits land
+    # without a restart. CMD here overrides the production CMD in the image.
+    command:
+      - uvicorn
+      - main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+
+  frontend:
+    # Build only the deps stage — that's the smallest image with node_modules
+    # ready to run `npm run dev`. The full multi-stage build creates a
+    # standalone bundle that's incompatible with the source-mount workflow.
+    build:
+      context: ./frontend
+      target: deps
+    command:
+      - npm
+      - run
+      - dev
+    environment:
+      - NODE_ENV=development
