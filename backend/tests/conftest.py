@@ -24,6 +24,11 @@ from database import Base, async_session, engine  # noqa: E402
 from main import app  # noqa: E402
 
 TEST_SUPPLIER_SLUGS = ("vg-ops-test", "vg-ops-inactive")
+TEST_CUSTOMER_OPS_URLS = (
+    "https://test.ops.com",
+    "https://test2.ops.com",
+    "https://test3.ops.com",
+)
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
@@ -34,12 +39,26 @@ async def _create_schema():
     await engine.dispose()
 
 
-async def _cleanup_test_suppliers() -> None:
-    """Delete any lingering rows created by test fixtures.
+async def _cleanup_test_customers() -> None:
+    """Delete sentinel Customer rows + everything that cascades from them.
 
-    Cleans sync_jobs, then cascades through products/variants/images/categories
-    via each test-supplier's FK, then the supplier rows themselves.
+    `customers.id` has ON DELETE CASCADE FKs from push_mappings, markup_rules,
+    and push_log, so a single DELETE on customers cleans the whole tree.
     """
+    from modules.customers.models import Customer
+
+    async with async_session() as s:
+        await s.execute(
+            delete(Customer).where(
+                Customer.ops_base_url.in_(TEST_CUSTOMER_OPS_URLS)
+            )
+        )
+        await s.commit()
+
+
+async def _cleanup_test_suppliers() -> None:
+    """Delete any lingering supplier rows + their owned products / variants /
+    images / categories / sync_jobs."""
     from modules.catalog.models import Category, Product, ProductImage, ProductVariant
     from modules.suppliers.models import Supplier
     from modules.sync_jobs.models import SyncJob
@@ -76,8 +95,10 @@ async def _cleanup_test_suppliers() -> None:
 
 @pytest_asyncio.fixture(autouse=True)
 async def _cleanup_around_test():
+    await _cleanup_test_customers()
     await _cleanup_test_suppliers()
     yield
+    await _cleanup_test_customers()
     await _cleanup_test_suppliers()
 
 
