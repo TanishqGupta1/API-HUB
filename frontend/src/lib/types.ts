@@ -96,6 +96,7 @@ export interface Product {
   ops_product_id: string | null;
   external_catalogue: number | null;
   last_synced: string | null;
+  archived_at: string | null;
   variants: Variant[];
   images: ProductImage[];
   options: ProductOption[];
@@ -125,6 +126,7 @@ export interface ProductListItem {
   price_min: number | null;
   price_max: number | null;
   total_inventory: number | null;
+  archived_at: string | null;
 }
 
 /* ─── Category (hierarchical) ────────────────────────────────────────────── */
@@ -135,6 +137,21 @@ export interface Category {
   name: string;
   parent_id: string | null;
   sort_order: number;
+}
+
+/* ─── Supplier Category Browse (for import picker) ───────────────────────── */
+export interface SupplierCategoryBrowse {
+  name: string;
+  slug: string | null;
+  product_count: number | null;
+  preview_image_url: string | null;
+}
+
+export interface ImportCategoryResponse {
+  job_id: string;
+  status: string;
+  category_name: string;
+  limit: number;
 }
 
 /* ─── Customer ───────────────────────────────────────────────────────────── */

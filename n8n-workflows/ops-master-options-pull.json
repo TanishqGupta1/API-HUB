@@ -1,6 +1,6 @@
 {
   "id": "ops-master-options-pull-001",
-  "name": "OPS → Hub (Master Options)",
+  "name": "OPS \u2192 Hub (Master Options)",
   "active": true,
   "nodes": [
     {
@@ -14,25 +14,43 @@
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [240, 320]
+      "position": [
+        240,
+        320
+      ]
     },
     {
       "parameters": {
         "resource": "product",
         "operation": "getManyMasterOptions",
-        "queryParametersManyMasterOptions": { "limit": 100, "offset": 0 },
+        "queryParametersManyMasterOptions": {
+          "limit": 100,
+          "offset": 0
+        },
         "masterOptionsFieldsMany": [
-          "master_option_id", "title", "description", "option_key",
-          "pricing_method", "status", "sort_order", "options_type",
-          "hide_from_calc", "enable_assoc_qty", "allow_price_cal",
-          "hire_designer_option", "attributes"
+          "master_option_id",
+          "title",
+          "description",
+          "option_key",
+          "pricing_method",
+          "status",
+          "sort_order",
+          "options_type",
+          "hide_from_calc",
+          "enable_assoc_qty",
+          "allow_price_cal",
+          "hire_designer_option",
+          "attributes"
         ]
       },
       "id": "ops-001",
       "name": "OPS: Get Master Options",
       "type": "n8n-nodes-onprintshop.onPrintShop",
       "typeVersion": 1,
-      "position": [460, 320],
+      "position": [
+        460,
+        320
+      ],
       "credentials": {
         "onPrintShopApi": {
           "id": "ops-creds",
@@ -48,7 +66,10 @@
       "name": "Shape Master Options",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 320]
+      "position": [
+        680,
+        320
+      ]
     },
     {
       "parameters": {
@@ -57,8 +78,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-Ingest-Secret", "value": "={{ $env.INGEST_SHARED_SECRET }}" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -71,7 +98,11 @@
       "name": "POST /ingest/master-options",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 320]
+      "position": [
+        900,
+        320
+      ],
+      "executeOnce": true
     },
     {
       "parameters": {
@@ -81,23 +112,60 @@
       "name": "Format Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 450]
+      "position": [
+        1100,
+        450
+      ]
     }
   ],
   "connections": {
     "Webhook Trigger": {
-      "main": [[{ "node": "OPS: Get Master Options", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "OPS: Get Master Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "OPS: Get Master Options": {
-      "main": [[{ "node": "Shape Master Options", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Shape Master Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Shape Master Options": {
-      "main": [[{ "node": "POST /ingest/master-options", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "POST /ingest/master-options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "POST /ingest/master-options": {
-      "error": [[{ "node": "Format Error", "type": "main", "index": 0 }]]
+      "error": [
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
-  "meta": { "templateCredsSetupCompleted": false }
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
 }

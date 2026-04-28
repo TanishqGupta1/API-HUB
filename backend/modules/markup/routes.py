@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from database import get_db
 from modules.catalog.ingest import require_ingest_secret
-from modules.catalog.models import ProductOption, ProductOptionAttribute
+from modules.catalog.models import ProductOption
 from modules.master_options.models import MasterOption, MasterOptionAttribute
 
 from .engine import calculate_price
@@ -88,14 +88,13 @@ async def ops_product_options(
     product_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """Return product-scoped option shape for OPS push.
+    """Product-scoped OPS option shape (strips master_option_id from core).
 
-    Converts hub's master-option-based config into a product-scoped shape.
-    Output intentionally excludes master_option_id + ops_attribute_id from the
-    core push body — those are kept only as source_* fields for traceability
-    in push_mappings.
+    Converts the hub's master-option-based product config into the shape
+    OPS expects on per-product push. master_option_id / ops_attribute_id
+    are intentionally excluded from the core body — they're retained only
+    as source_master_* fields for traceback into push_mappings.
     """
-    # Load enabled product options with attributes
     po_rows = (
         await db.execute(
             select(ProductOption)
@@ -107,11 +106,10 @@ async def ops_product_options(
         )
     ).scalars().all()
 
-    # Lookup master option attribute_keys via raw_json on MasterOptionAttribute
     mo_ids = {po.master_option_id for po in po_rows if po.master_option_id is not None}
     moa_map: dict[tuple[int, int], Optional[str]] = {}
     if mo_ids:
-        rows = (
+        moas = (
             await db.execute(
                 select(MasterOption, MasterOptionAttribute)
                 .join(
@@ -121,7 +119,7 @@ async def ops_product_options(
                 .where(MasterOption.ops_master_option_id.in_(mo_ids))
             )
         ).all()
-        for mo, ma in rows:
+        for mo, ma in moas:
             raw = ma.raw_json or {}
             attr_key = raw.get("attribute_key") if isinstance(raw, dict) else None
             moa_map[(mo.ops_master_option_id, ma.ops_attribute_id)] = attr_key
@@ -136,9 +134,7 @@ async def ops_product_options(
                 title=a.title,
                 price=float(a.price or 0),
                 numeric_value=float(a.numeric_value or 0),
-                sort_order=(
-                    a.overridden_sort if a.overridden_sort is not None else a.sort_order
-                ),
+                sort_order=a.overridden_sort if a.overridden_sort is not None else a.sort_order,
                 source_master_attribute_id=a.ops_attribute_id,
                 source_attribute_key=moa_map.get(
                     (po.master_option_id, a.ops_attribute_id)

@@ -33,6 +33,11 @@ class ProductOptionAttributeRead(BaseModel):
     title: str
     sort_order: int
     ops_attribute_id: Optional[int] = None
+    master_attribute_id: Optional[int] = None
+    attribute_key: Optional[str] = None
+    price: Optional[Decimal] = None
+    setup_cost: Optional[Decimal] = None
+    multiplier: Optional[Decimal] = None
 
     model_config = {"from_attributes": True}
 
@@ -66,6 +71,7 @@ class ProductRead(BaseModel):
     ops_product_id: Optional[str]
     external_catalogue: Optional[int] = None
     last_synced: Optional[datetime]
+    archived_at: Optional[datetime] = None
     variants: list[VariantRead] = []
     images: list[ProductImageRead] = []
     options: list[ProductOptionRead] = []
@@ -90,6 +96,7 @@ class ProductListRead(BaseModel):
     price_min: Optional[Decimal] = None
     price_max: Optional[Decimal] = None
     total_inventory: int = 0
+    archived_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -121,6 +128,11 @@ class OptionAttributeIngest(BaseModel):
     title: str
     sort_order: int = 0
     ops_attribute_id: Optional[int] = None
+    master_attribute_id: Optional[int] = None
+    attribute_key: Optional[str] = None
+    price: Optional[Decimal] = None
+    setup_cost: Optional[Decimal] = None
+    multiplier: Optional[Decimal] = None
 
 
 class OptionIngest(BaseModel):
@@ -143,6 +155,7 @@ class ProductIngest(BaseModel):
     product_type: str = "apparel"
     image_url: Optional[str] = None
     ops_product_id: Optional[str] = None
+    external_catalogue: Optional[int] = None
     category_external_id: Optional[str] = None
     category_name: Optional[str] = None
     variants: list[VariantIngest] = Field(default_factory=list)

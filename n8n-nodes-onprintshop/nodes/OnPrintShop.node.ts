@@ -7,6 +7,11 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
+import { productMgmtFields, productMgmtOperations } from './OnPrintShop/descriptions/ProductMgmtDescription';
+import { masterOptionFields, masterOptionOperations } from './OnPrintShop/descriptions/MasterOptionDescription';
+import { productExecute } from './OnPrintShop/execute/product';
+import { masterOptionExecute } from './OnPrintShop/execute/masterOption';
+
 function stripTrailingSlashes(url: string): string {
 	return url.replace(/\/+$/, '');
 }
@@ -105,6 +110,14 @@ export class OnPrintShop implements INodeType {
 					{
 						name: 'Store',
 						value: 'store',
+					},
+					{
+						name: 'Product Management',
+						value: 'productMgmt',
+					},
+					{
+						name: 'Master Option',
+						value: 'masterOption',
 					},
 				],
 				default: 'customer',
@@ -801,6 +814,10 @@ export class OnPrintShop implements INodeType {
 				displayOptions: { show: { resource: ['department'], operation: ['getAll'] } },
 				default: 0,
 			},
+			...productMgmtOperations,
+			...productMgmtFields,
+			...masterOptionOperations,
+			...masterOptionFields,
 			// Mutations (additive)
 			// NOTE: Prefer "Product > Update Stock" for inventory updates; "Mutation > Update Product Stock" exists to mirror the official Postman collection.
 			{
@@ -9832,6 +9849,15 @@ export class OnPrintShop implements INodeType {
 					} else {
 						throw new NodeOperationError(this.getNode(), 'Unexpected response format from API');
 					}
+				}
+
+				if (resource === 'productMgmt') {
+					const result = await productExecute.call(this, i);
+					returnData.push(...result.map(item => item.json));
+				}
+				if (resource === 'masterOption') {
+					const result = await masterOptionExecute.call(this, i);
+					returnData.push(...result.map(item => item.json));
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {

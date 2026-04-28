@@ -8,6 +8,7 @@ import type {
   Product,
   ProductImage,
   Supplier,
+  OptionConfigItem,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { PublishButton } from "@/components/products/publish-button";
@@ -34,8 +35,10 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const [product, setProduct] = useState<Product | null>(null);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
+  const [options, setOptions] = useState<OptionConfigItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeImageTab, setActiveImageTab] = useState<string>("front");
+  const [pushStepsOpen, setPushStepsOpen] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -46,6 +49,15 @@ export default function ProductDetailPage() {
       try {
         const sup = await api<Supplier>(`/api/suppliers/${p.supplier_id}`);
         setSupplier(sup);
+        // Fetch options config for VG/OPS products
+        if (sup.protocol === "ops_graphql") {
+          try {
+            const opts = await api<OptionConfigItem[]>(`/api/products/${id}/options-config`);
+            setOptions(opts);
+          } catch {
+            setOptions([]);
+          }
+        }
       } catch (err) {
         console.warn("supplier fetch failed", err);
       }
@@ -104,11 +116,18 @@ export default function ProductDetailPage() {
   return (
     <div id="s-product-detail">
 
-      {supplier?.protocol === "ops_graphql" && product.options?.some((o: any) => o.enabled) && (
-        <div className="bg-yellow-50 border border-yellow-300 rounded-lg px-4 py-3 mb-4 text-sm text-yellow-900">
-          <strong>Options saved to hub.</strong> OPS push is pending beta API — configure manually in OPS admin for now.
-        </div>
-      )}
+      {/* Source badge bar */}
+      <div className="flex items-center gap-2 mb-4">
+        {supplier?.protocol === "ops_graphql" ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-[#1e4d92] text-white">
+            ★ VG PRODUCT — owned by Visual Graphics OPS
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border border-[#cfccc8] text-[#484852] bg-white">
+            ↓ SUPPLIER PRODUCT — sourced from {product.supplier_name}
+          </span>
+        )}
+      </div>
 
       {/* ── Page header ─────────────────────────────────── */}
       <div className="flex items-end justify-between mb-10 pb-5 border-b-2 border-[#1e1e24]">
@@ -346,10 +365,132 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
+      {/* ── Product Options (VG products only) ───────────── */}
+      {supplier?.protocol === "ops_graphql" && (
+        <div className="bg-white border border-[#cfccc8] rounded-lg shadow-[4px_6px_0_rgba(30,77,146,0.08)] overflow-hidden mb-8">
+          <div className="flex items-center justify-between px-6 py-4 bg-[#ebe8e3] border-b border-[#cfccc8]">
+            <div>
+              <div className="text-[14px] font-bold uppercase tracking-[0.05em] text-[#1e1e24]">
+                Product Options
+              </div>
+              <div className="text-[11px] text-[#888894] font-mono mt-0.5">
+                Configure print options (substrate, ink type, laminate…) before pushing to OPS
+              </div>
+            </div>
+            <Link href={`/products/${product.id}/options`}>
+              <button className="px-4 py-2 text-[12px] font-semibold rounded-md border border-[#1e4d92] text-[#1e4d92] bg-white hover:bg-[#eef4fb] transition-colors">
+                {options.length > 0 ? `Manage Options (${options.length})` : "Configure Options →"}
+              </button>
+            </Link>
+          </div>
+          <div className="p-6">
+            {options.length === 0 ? (
+              <div className="text-center py-6 text-[#888894]">
+                <div className="text-[28px] mb-2">⚙️</div>
+                <div className="text-[14px] font-semibold text-[#1e1e24] mb-1">No options configured yet</div>
+                <div className="text-[12px] mb-4">
+                  Options control what customers can choose when ordering — substrate, print sides, ink type, finish, etc.
+                </div>
+                <Link href={`/products/${product.id}/options`}>
+                  <button className="px-5 py-2 text-[13px] font-semibold rounded-md bg-[#1e4d92] text-white hover:bg-[#173d74] transition-colors">
+                    Open Options Configuration
+                  </button>
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                {options.slice(0, 6).map((opt) => (
+                  <div
+                    key={opt.master_option_id}
+                    className={`flex items-center justify-between px-4 py-3 rounded-lg border ${
+                      opt.enabled
+                        ? "border-[#247a52] bg-[#f0f9f4]"
+                        : "border-[#cfccc8] bg-[#f9f7f4]"
+                    }`}
+                  >
+                    <div>
+                      <div className="text-[12px] font-semibold text-[#1e1e24]">{opt.title}</div>
+                      <div className="text-[10px] text-[#888894] font-mono mt-0.5">
+                        {opt.attributes.filter((a) => a.enabled).length}/{opt.attributes.length} active
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        opt.enabled
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-stone-100 text-stone-500"
+                      }`}
+                    >
+                      <span className={`w-[5px] h-[5px] rounded-full ${opt.enabled ? "bg-emerald-500" : "bg-stone-400"}`} />
+                      {opt.enabled ? "On" : "Off"}
+                    </span>
+                  </div>
+                ))}
+                {options.length > 6 && (
+                  <Link href={`/products/${product.id}/options`}>
+                    <div className="flex items-center justify-center px-4 py-3 rounded-lg border border-dashed border-[#1e4d92] text-[#1e4d92] text-[12px] font-semibold hover:bg-[#eef4fb] cursor-pointer transition-colors h-full">
+                      +{options.length - 6} more →
+                    </div>
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── How Push to OPS Works ─────────────────────────── */}
+      <div className="bg-white border border-[#cfccc8] rounded-lg shadow-[4px_6px_0_rgba(30,77,146,0.08)] overflow-hidden mb-8">
+        <button
+          onClick={() => setPushStepsOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-6 py-4 bg-[#ebe8e3] border-b border-[#cfccc8] text-left"
+        >
+          <div className="text-[14px] font-bold uppercase tracking-[0.05em] text-[#1e1e24]">
+            How to Push to OPS
+          </div>
+          <span className="text-[#888894] text-[12px] font-mono">
+            {pushStepsOpen ? "▲ collapse" : "▼ expand"}
+          </span>
+        </button>
+        {pushStepsOpen && (
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+              {[
+                { step: "1", icon: "📦", title: "Product data fetched", desc: "Hub pulls name, variants, images, pricing from supplier API" },
+                { step: "2", icon: "💲", title: "Markup applied", desc: "Markup rules calculate final customer-facing price from base_price" },
+                { step: "3", icon: "🚀", title: "n8n sends to OPS", desc: "Workflow calls OPS GraphQL: setProduct → setProductSize → setProductPrice → setProductImage" },
+                { step: "4", icon: "✅", title: "Push logged", desc: "OPS product ID saved here. Re-pushing the same product updates it instead of creating a duplicate" },
+              ].map(({ step, icon, title, desc }) => (
+                <div key={step} className="flex flex-col gap-2 p-4 rounded-lg border border-[#cfccc8] bg-[#f9f7f4]">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-[#1e4d92] text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                      {step}
+                    </span>
+                    <span className="text-[18px]">{icon}</span>
+                  </div>
+                  <div className="text-[12px] font-bold text-[#1e1e24]">{title}</div>
+                  <div className="text-[11px] text-[#888894] leading-relaxed">{desc}</div>
+                </div>
+              ))}
+            </div>
+            <div className="text-[12px] text-[#484852] bg-[#eef4fb] border border-[rgba(30,77,146,0.2)] rounded-lg px-4 py-3">
+              <strong className="text-[#1e4d92]">To push this product:</strong> click <strong>Publish to OPS</strong> above → select a customer/storefront → confirm.
+              The job runs in the background via n8n. Check push history below for status.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Storefront Push History ──────────────────────── */}
       <div className="bg-white border border-[#cfccc8] rounded-lg shadow-[4px_6px_0_rgba(30,77,146,0.08)] overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 bg-[#ebe8e3] border-b border-[#cfccc8]">
-          <div className="text-[14px] font-bold uppercase tracking-[0.05em] text-[#1e1e24]">
-            Storefront Push History
+          <div>
+            <div className="text-[14px] font-bold uppercase tracking-[0.05em] text-[#1e1e24]">
+              Storefront Push History
+            </div>
+            <div className="text-[11px] text-[#888894] font-mono mt-0.5">
+              Every time this product was sent to an OPS storefront
+            </div>
           </div>
         </div>
         <div className="p-6">

@@ -1,3 +1,4 @@
+import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -123,8 +124,9 @@ async def duplicate_from(
 @router.post("/sync", dependencies=[Depends(require_ingest_secret)])
 async def trigger_sync():
     """Trigger the n8n master options pull workflow."""
+    workflow_id = os.getenv("MASTER_OPTIONS_SYNC_WORKFLOW_ID", "ops-master-options-pull-001")
     try:
-        return await trigger_workflow_by_id("ops-master-options-pull-001")
+        return await trigger_workflow_by_id(workflow_id)
     except Exception as e:
         print(f"Warning: n8n trigger failed ({e}). Please execute manually in n8n UI.")
-        return {"triggered": False, "message": "Please execute 'OPS → Hub (Master Options)' manually in n8n."}
+        return {"triggered": False, "message": f"Please execute workflow '{workflow_id}' manually in n8n."}

@@ -19,7 +19,7 @@ Stock and pricing are **not** in this workflow yet — they're separate OPS quer
 - Postgres running: `docker compose up -d postgres`
 - FastAPI running on host :8000 (`uvicorn main:app --port 8000` from `backend/`)
 - n8n running: `docker compose up -d n8n`
-- VG OPS supplier seeded: `python backend/seed_demo.py`
+- VG OPS supplier seeded (if your DB is empty): `python backend/seed_demo.py` (or just start FastAPI in development — it auto-creates a `vg-ops` supplier row on boot)
 - VG supplier active in DB:
   ```bash
   docker exec api-hub-postgres-1 psql -U vg_user -d vg_hub \
@@ -63,7 +63,7 @@ Stock and pricing are **not** in this workflow yet — they're separate OPS quer
 
 | Node in red | Cause | Fix |
 |---|---|---|
-| `Resolve VG SID` — "VG OPS supplier not seeded" | seed_demo not run | `python backend/seed_demo.py` |
+| `Resolve VG SID` — "VG OPS supplier not seeded" | seed missing | Start FastAPI in development (auto-creates `vg-ops`) or run `python backend/seed_demo.py` |
 | `Resolve VG SID` — "is_active=false" | Supplier gate | SQL UPDATE shown above |
 | `OPS: Get Categories` — 401 / 403 | Bad OAuth2 cred | Re-enter client id/secret in n8n credential editor |
 | `POST /ingest/*` — 401 "Invalid or missing X-Ingest-Secret" | n8n's `INGEST_SHARED_SECRET` env ≠ FastAPI's | Compare `docker exec api-hub-n8n-1 env \| grep INGEST` to the value in repo `.env`; re-run `docker compose up -d n8n` |

@@ -10,6 +10,7 @@ interface Props {
 }
 
 const N8N_URL = process.env.NEXT_PUBLIC_N8N_URL ?? "http://localhost:5678";
+const PUSH_WORKFLOW_ID = process.env.NEXT_PUBLIC_PUSH_WORKFLOW_ID ?? "vg-ops-push-001";
 
 export function PublishButton({ productId, onDone }: Props) {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -35,7 +36,7 @@ export function PublishButton({ productId, onDone }: Props) {
     try {
       // Fires the single-product push path via n8n proxy
       const res = await api<{ triggered: boolean }>(
-        `/api/n8n/workflows/vg-ops-push-001/trigger?product_id=${productId}&customer_id=${customerId}`,
+        `/api/n8n/workflows/${PUSH_WORKFLOW_ID}/trigger?product_id=${productId}&customer_id=${customerId}`,
         { method: "POST" },
       );
       if (res.triggered) {
@@ -75,7 +76,7 @@ export function PublishButton({ productId, onDone }: Props) {
           {busy ? "Pushing…" : "Publish to OPS"}
         </button>
         <a
-          href={`${N8N_URL}/workflow/vg-ops-push-001`}
+          href={`${N8N_URL}/workflow/${PUSH_WORKFLOW_ID}`}
           target="_blank" rel="noopener noreferrer"
           className="text-[11px] font-bold text-[#888894] hover:text-[#1e4d92] flex items-center transition-colors ml-2"
         >

@@ -1,6 +1,6 @@
 {
   "id": "vg-ops-pull-001",
-  "name": "VG OPS → Hub (Categories + Products)",
+  "name": "VG OPS \u2192 Hub (Categories + Products)",
   "active": false,
   "nodes": [
     {
@@ -9,7 +9,10 @@
       "name": "When clicking 'Execute workflow'",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [240, 320]
+      "position": [
+        240,
+        320
+      ]
     },
     {
       "parameters": {
@@ -20,7 +23,10 @@
       "name": "Get Suppliers",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 320]
+      "position": [
+        460,
+        320
+      ]
     },
     {
       "parameters": {
@@ -30,66 +36,10 @@
       "name": "Resolve VG SID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 320]
-    },
-    {
-      "parameters": {
-        "resource": "product",
-        "operation": "getManyCategories",
-        "returnAll": true,
-        "limit": 100,
-        "queryParametersManyCategories": {},
-        "additionalFields": {}
-      },
-      "id": "9a1b1111-0004-0000-0000-000000000004",
-      "name": "OPS: Get Categories",
-      "type": "n8n-nodes-onprintshop.onPrintShop",
-      "typeVersion": 1,
-      "position": [900, 220],
-      "credentials": {
-        "onPrintShopApi": {
-          "id": "",
-          "name": "VG OnPrintShop"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// n8n's OnPrintShop node flattens the GraphQL response: one item per category.\n// Each json has: category_id, parent_id (-1 for root), category_name, sort_order,\n// status (0=inactive), category_url, category_image, short_description.\nconst rows = $input.all().flatMap((item) => {\n  const j = item.json ?? {};\n  if (Array.isArray(j)) return j;\n  const nested = j?.data?.product_category?.product_category;\n  if (Array.isArray(nested)) return nested;\n  return [j];\n});\n\nconst parentOf = (c) => {\n  const raw = c.parent_id ?? c.parent_category_id ?? c.parentId;\n  if (raw === undefined || raw === null) return null;\n  const s = String(raw);\n  // OPS uses -1 for \"no parent\" (root-level category).\n  if (s === '-1' || s === '0') return null;\n  return s;\n};\n\nreturn rows\n  .filter((c) => c && (c.category_id ?? c.categoryId ?? c.id))\n  .map((c) => ({\n    json: {\n      external_id: String(c.category_id ?? c.categoryId ?? c.id),\n      name: c.category_name ?? c.name ?? 'Unnamed',\n      parent_external_id: parentOf(c),\n      sort_order: Number(c.sort_order ?? c.display_order ?? 0),\n    },\n  }));"
-      },
-      "id": "9a1b1111-0005-0000-0000-000000000005",
-      "name": "Shape Categories",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1120, 220]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=http://host.docker.internal:8000/api/ingest/{{ $('Resolve VG SID').item.json.vg_sid }}/categories",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Ingest-Secret",
-              "value": "={{ $env.INGEST_SHARED_SECRET }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ $items().map(i => i.json) }}",
-        "options": {}
-      },
-      "id": "9a1b1111-0006-0000-0000-000000000006",
-      "name": "POST /ingest/categories",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1340, 220]
+      "position": [
+        680,
+        320
+      ]
     },
     {
       "parameters": {
@@ -128,7 +78,10 @@
       "name": "OPS: Get Products Detailed",
       "type": "n8n-nodes-onprintshop.onPrintShop",
       "typeVersion": 1,
-      "position": [900, 420],
+      "position": [
+        900,
+        420
+      ],
       "credentials": {
         "onPrintShopApi": {
           "id": "",
@@ -138,13 +91,16 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build category map from the prior Shape Categories node.\nconst catItems = $('Shape Categories').all();\nconst catMap = new Map(catItems.map((i) => [i.json.external_id, i.json.name]));\n\n// Flatten any OPS response shape:\n//  A) { data: { products_details: { products: [...] } } }\n//  B) flat product objects per item\nconst flatProducts = $input.all().flatMap((item) => {\n  const j = item.json ?? {};\n  const nested = j?.data?.products_details?.products;\n  if (Array.isArray(nested)) return nested;\n  if (Array.isArray(j)) return j;\n  if (j && typeof j === 'object' && (j.products_id || j.product_id || j.id)) return [j];\n  return [];\n});\n\nreturn flatProducts.map((p) => {\n  const catExt = p.default_category_id ? String(p.default_category_id) : null;\n  const variants = (p.product_size ?? []).map((s) => ({\n    part_id: String(s.product_size_id ?? s.size_id ?? ''),\n    color: s.product_default_color ?? s.color ?? null,\n    size: s.product_size_label ?? s.size_label ?? null,\n    sku: s.product_size_sku ?? String(s.product_size_id ?? ''),\n    base_price: null,\n    inventory: null,\n    warehouse: null,\n  }));\n\n  const images = [];\n  if (p.small_image) images.push({ url: p.small_image, image_type: 'front', color: null, sort_order: 0 });\n  if (p.large_image && p.large_image !== p.small_image) {\n    images.push({ url: p.large_image, image_type: 'back', color: null, sort_order: 1 });\n  }\n\n  const options = (p.product_additional_options ?? [])\n    .map((o, i) => {\n      const key = o.option_key ?? o.optionKey ?? '';\n      const title = o.title ?? o.option_title ?? o.optionTitle ?? key ?? 'Option';\n      return {\n        option_key: String(key),\n        title: String(title),\n        options_type: o.options_type ?? o.optionsType ?? null,\n        sort_order: Number(o.sort_order ?? o.sortOrder ?? i),\n        master_option_id: o.master_option_id != null ? Number(o.master_option_id) : null,\n        ops_option_id: o.product_additional_option_id != null ? Number(o.product_additional_option_id) : null,\n        required: Boolean(o.required),\n        attributes: o.attributes ?? [],\n      };\n    })\n    .filter((o) => o.option_key);\n\n  return {\n    json: {\n      supplier_sku: p.products_sku ?? p.main_sku ?? String(p.products_id ?? p.product_id ?? ''),\n      product_name: p.products_title ?? p.product_name ?? 'Untitled',\n      brand: p.brand_name ?? null,\n      description: p.products_description ?? p.description ?? null,\n      product_type: 'apparel',\n      image_url: p.small_image ?? p.large_image ?? null,\n      ops_product_id: String(p.products_id ?? p.product_id ?? ''),\n      external_catalogue: p.externalCatalogue != null ? Number(p.externalCatalogue) : null,\n      category_external_id: catExt,\n      category_name: catExt ? (catMap.get(catExt) ?? null) : null,\n      variants,\n      images,\n      options,\n    },\n  };\n});"
+        "jsCode": "// Categories disabled \u2014 empty catMap so category_name falls through to default_category_name.\nconst catMap = new Map();\n\n// Flatten any OPS response shape:\n//  A) { data: { products_details: { products: [...] } } }\n//  B) flat array of products\n//  C) single product object per item\nconst flatProducts = $input.all().flatMap((item) => {\n  const j = item.json ?? {};\n  const nested = j?.data?.products_details?.products;\n  if (Array.isArray(nested)) return nested;\n  if (Array.isArray(j)) return j;\n  if (j && typeof j === 'object' && (j.products_id || j.product_id || j.id)) return [j];\n  return [];\n});\n\nconst stripHtml = (s) => (typeof s === 'string'\n  ? s.replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n     .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n     .replace(/<[^>]+>/g, '')\n     .replace(/&nbsp;/g, ' ')\n     .replace(/\\s+/g, ' ')\n     .trim() || null\n  : null);\n\n// \"Decals - General Performance (Arlon - 510MT)\" -> \"Arlon\"\nconst brandFromInternalName = (s) => {\n  if (typeof s !== 'string') return null;\n  const m = s.match(/\\(([^)]+)\\)\\s*$/);\n  if (!m) return null;\n  return (m[1].split(/\\s*-\\s*/)[0] || '').trim() || null;\n};\n\n// \"Through Cut_Knife|2\" -> \"Through Cut\", \"None_lamMaterial\" -> \"None\", \"Rectangle|1\" -> \"Rectangle\"\nconst titleFromAttributeKey = (k) => {\n  if (typeof k !== 'string' || !k) return 'Untitled';\n  const beforePipe = k.split('|')[0];\n  const beforeUnderscore = beforePipe.split('_')[0];\n  return beforeUnderscore.trim() || beforePipe.trim() || 'Untitled';\n};\n\nconst toNum = (v) => (v == null || v === '' ? null : Number(v));\n\nreturn flatProducts.map((p) => {\n  const productId = p.products_id ?? p.product_id ?? p.id;\n  const productIdStr = productId != null ? String(productId) : '';\n  const catExt = p.default_category_id != null ? String(p.default_category_id) : null;\n\n  const variants = (p.product_size ?? []).map((s) => {\n    const sizeId = s.product_size_id ?? s.size_id;\n    const sizeIdStr = sizeId != null ? String(sizeId) : '';\n    return {\n      part_id: sizeIdStr,\n      color: s.product_default_color ?? s.color ?? null,\n      size: s.product_size_label ?? s.size_label ?? s.size_title ?? null,\n      sku: s.product_size_sku ?? (sizeIdStr ? `${productIdStr}-${sizeIdStr}` : null),\n      base_price: null,\n      inventory: null,\n      warehouse: null,\n    };\n  });\n\n  const images = [];\n  if (p.small_image) images.push({ url: p.small_image, image_type: 'front', color: null, sort_order: 0 });\n  if (p.large_image && p.large_image !== p.small_image) {\n    images.push({ url: p.large_image, image_type: 'back', color: null, sort_order: 1 });\n  }\n\n  const options = (p.product_additional_options ?? [])\n    .map((o, i) => {\n      const key = o.option_key ?? o.optionKey ?? '';\n      const rawTitle = o.title ?? o.option_title ?? o.optionTitle ?? '';\n      const title = (typeof rawTitle === 'string' && rawTitle.trim()) || key || 'Option';\n      const firstProdAddOptId = Array.isArray(o.attributes) && o.attributes[0]?.prod_add_opt_id;\n      const opsOptionId = o.product_additional_option_id ?? (firstProdAddOptId != null ? firstProdAddOptId : null);\n      const reqRaw = o.required;\n      const required = !(reqRaw == null || reqRaw === '' || reqRaw === '0' || reqRaw === 0 || reqRaw === false);\n\n      // Remap each OPS attribute to backend OptionAttributeIngest shape.\n      // Backend requires `title: str` \u2014 derive from attribute_key.\n      const rawAttrs = Array.isArray(o.attributes) ? o.attributes : [];\n      const attributes = rawAttrs.map((a) => ({\n        title: titleFromAttributeKey(a.attribute_key),\n        sort_order: Number(a.sort_order ?? 0),\n        ops_attribute_id: a.attribute_id != null ? Number(a.attribute_id) : null,\n        master_attribute_id: a.master_attribute_id != null ? Number(a.master_attribute_id) : null,\n        attribute_key: typeof a.attribute_key === 'string' ? a.attribute_key : null,\n        price: null,\n        setup_cost: toNum(a.setup_cost),\n        multiplier: toNum(a.multiplier),\n      }));\n\n      return {\n        option_key: String(key),\n        title: String(title),\n        options_type: o.options_type ?? o.optionsType ?? null,\n        sort_order: Number(o.sort_order ?? o.sortOrder ?? i),\n        master_option_id: o.master_option_id != null ? Number(o.master_option_id) : null,\n        ops_option_id: null,\n        required,\n        attributes,\n      };\n    })\n    .filter((o) => o.option_key);\n\n  return {\n    json: {\n      supplier_sku: p.products_sku ?? p.main_sku ?? productIdStr,\n      product_name: p.products_title ?? p.product_name ?? 'Untitled',\n      brand: p.brand_name ?? brandFromInternalName(p.products_internal_name),\n      description:\n        stripHtml(p.short_description) ||\n        stripHtml(p.long_description) ||\n        stripHtml(p.long_description_two) ||\n        null,\n      product_type: p.predefined_product_type === '1' || p.predefined_product_type === 1 ? 'apparel' : 'standard',\n      image_url: p.small_image ?? p.large_image ?? null,\n      ops_product_id: productIdStr,\n      external_catalogue: 1,\n      category_external_id: catExt,\n      category_name: catExt ? (catMap.get(catExt) ?? p.default_category_name ?? null) : null,\n      variants,\n      images,\n      options,\n    },\n  };\n});\n"
       },
       "id": "9a1b1111-0008-0000-0000-000000000008",
       "name": "Shape Products",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1120, 420]
+      "position": [
+        1120,
+        420
+      ]
     },
     {
       "parameters": {
@@ -172,7 +128,10 @@
       "name": "POST /ingest/products",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 420]
+      "position": [
+        1340,
+        420
+      ]
     }
   ],
   "connections": {
@@ -199,39 +158,6 @@
       ]
     },
     "Resolve VG SID": {
-      "main": [
-        [
-          {
-            "node": "OPS: Get Categories",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "OPS: Get Categories": {
-      "main": [
-        [
-          {
-            "node": "Shape Categories",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Shape Categories": {
-      "main": [
-        [
-          {
-            "node": "POST /ingest/categories",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "POST /ingest/categories": {
       "main": [
         [
           {

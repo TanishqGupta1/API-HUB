@@ -2,6 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OnPrintShop = void 0;
 const n8n_workflow_1 = require("n8n-workflow");
+const ProductMgmtDescription_1 = require("./OnPrintShop/descriptions/ProductMgmtDescription");
+const MasterOptionDescription_1 = require("./OnPrintShop/descriptions/MasterOptionDescription");
+const product_1 = require("./OnPrintShop/execute/product");
+const masterOption_1 = require("./OnPrintShop/execute/masterOption");
 function stripTrailingSlashes(url) {
     return url.replace(/\/+$/, '');
 }
@@ -100,6 +104,14 @@ class OnPrintShop {
                         {
                             name: 'Store',
                             value: 'store',
+                        },
+                        {
+                            name: 'Product Management',
+                            value: 'productMgmt',
+                        },
+                        {
+                            name: 'Master Option',
+                            value: 'masterOption',
                         },
                     ],
                     default: 'customer',
@@ -796,6 +808,10 @@ class OnPrintShop {
                     displayOptions: { show: { resource: ['department'], operation: ['getAll'] } },
                     default: 0,
                 },
+                ...ProductMgmtDescription_1.productMgmtOperations,
+                ...ProductMgmtDescription_1.productMgmtFields,
+                ...MasterOptionDescription_1.masterOptionOperations,
+                ...MasterOptionDescription_1.masterOptionFields,
                 // Mutations (additive)
                 // NOTE: Prefer "Product > Update Stock" for inventory updates; "Mutation > Update Product Stock" exists to mirror the official Postman collection.
                 {
@@ -9770,6 +9786,14 @@ class OnPrintShop {
                     else {
                         throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'Unexpected response format from API');
                     }
+                }
+                if (resource === 'productMgmt') {
+                    const result = await product_1.productExecute.call(this, i);
+                    returnData.push(...result.map(item => item.json));
+                }
+                if (resource === 'masterOption') {
+                    const result = await masterOption_1.masterOptionExecute.call(this, i);
+                    returnData.push(...result.map(item => item.json));
                 }
             }
             catch (error) {

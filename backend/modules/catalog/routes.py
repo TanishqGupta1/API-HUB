@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -37,6 +38,7 @@ async def list_products(
     category_id: Optional[UUID] = None,
     brand: Optional[str] = None,
     search: Optional[str] = None,
+    archived: bool = False,
     skip: int = 0,
     limit: int = Query(default=50, le=500),
     db: AsyncSession = Depends(get_db),
@@ -63,6 +65,10 @@ async def list_products(
         )
         .outerjoin(variant_agg, variant_agg.c.product_id == Product.id)
     )
+    if archived:
+        query = query.where(Product.archived_at.is_not(None))
+    else:
+        query = query.where(Product.archived_at.is_(None))
     if supplier_id:
         query = query.where(Product.supplier_id == supplier_id)
     if category_id:
@@ -95,6 +101,27 @@ async def list_products(
         data.supplier_name = supplier_map.get(prod.supplier_id)
         out.append(data)
     return out
+
+
+@router.post("/{product_id}/archive")
+async def archive_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
+    prod = await db.get(Product, product_id)
+    if not prod:
+        raise HTTPException(404, "Product not found")
+    if prod.archived_at is None:
+        prod.archived_at = datetime.now(timezone.utc)
+        await db.commit()
+    return {"archived": True, "archived_at": prod.archived_at}
+
+
+@router.post("/{product_id}/restore")
+async def restore_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
+    prod = await db.get(Product, product_id)
+    if not prod:
+        raise HTTPException(404, "Product not found")
+    prod.archived_at = None
+    await db.commit()
+    return {"archived": False}
 
 
 @router.get("/{product_id}", response_model=ProductRead)

@@ -92,10 +92,7 @@ class OPSVariantsBundle(BaseModel):
 
 
 # -------- OPS product-scoped option shape (strips master_option_id) --------
-#
-# Outbound to customer OPS = product options only, never master options.
-# Core fields deliberately exclude master_option_id / ops_attribute_id.
-# Those survive as source_* fields so push_mappings can trace hub master → OPS.
+
 
 class OPSProductAttributeSchema(BaseModel):
     title: str

@@ -139,3 +139,34 @@ async def save_supplier_mappings(
     supplier.field_mappings = body
     await db.commit()
     return {"saved": True, "supplier_id": str(supplier_id), "mappings": body}
+@router.post("/test")
+async def test_supplier_connection(body: dict):
+    """Test connection to a supplier before adding it.
+    
+    If it's a PromoStandards supplier, we check if the code exists in the directory.
+    If it's a custom REST supplier, we could do a ping.
+    """
+    protocol = body.get("protocol")
+    if protocol == "promostandards":
+        code = body.get("promostandards_code")
+        if not code:
+            return {"ok": False, "error": "Missing PromoStandards code"}
+        
+        # Check if company exists in directory
+        from modules.ps_directory.client import get_ps_companies
+        try:
+            companies = await get_ps_companies()
+            exists = any(c.get("Code") == code for c in companies)
+            if exists:
+                return {"ok": True, "message": f"Supplier {code} found in PromoStandards directory"}
+            else:
+                return {"ok": False, "error": f"Supplier {code} not found in directory"}
+        except Exception as e:
+            return {"ok": False, "error": f"Directory check failed: {str(e)}"}
+    
+    # For custom REST/HMAC, we just return OK if creds are present for now,
+    # but we've removed the frontend hardcode.
+    if body.get("auth_config", {}).get("id") and body.get("auth_config", {}).get("password"):
+        return {"ok": True, "message": "Credentials format valid"}
+        
+    return {"ok": False, "error": "Invalid configuration or missing credentials"}

@@ -48,6 +48,9 @@ class Product(Base):
     ops_product_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     external_catalogue: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     last_synced: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     variants: Mapped[list["ProductVariant"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
@@ -69,7 +72,7 @@ class ProductVariant(Base):
 
     id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
     product_id: Mapped[uuid_mod.UUID] = mapped_column(
-        ForeignKey("products.id", ondelete="CASCADE")
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
     )
     color: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -89,7 +92,7 @@ class ProductImage(Base):
 
     id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
     product_id: Mapped[uuid_mod.UUID] = mapped_column(
-        ForeignKey("products.id", ondelete="CASCADE")
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
     )
     url: Mapped[str] = mapped_column(Text)
     image_type: Mapped[str] = mapped_column(String(50), default="front")
@@ -107,7 +110,7 @@ class ProductOption(Base):
 
     id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
     product_id: Mapped[uuid_mod.UUID] = mapped_column(
-        ForeignKey("products.id", ondelete="CASCADE")
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
     )
     ops_option_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     master_option_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -139,11 +142,15 @@ class ProductOptionAttribute(Base):
         ForeignKey("product_options.id", ondelete="CASCADE")
     )
     ops_attribute_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    master_attribute_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    attribute_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     title: Mapped[str] = mapped_column(String(255))
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[int] = mapped_column(Integer, default=1)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    setup_cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    multiplier: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     numeric_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     overridden_sort: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 

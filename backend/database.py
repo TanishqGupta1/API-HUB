@@ -7,7 +7,9 @@ import hashlib
 from typing import Any, Optional
 
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent.parent / ".env")
+_dotenv_path = Path(__file__).parent.parent / ".env"
+if _dotenv_path.exists():
+    load_dotenv(_dotenv_path)
 
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import Text, TypeDecorator
@@ -16,9 +18,12 @@ from sqlalchemy.orm import DeclarativeBase
 
 log = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv(
-    "POSTGRES_URL", "postgresql+asyncpg://vg_user:vg_pass@localhost:5432/vg_hub"
-)
+DATABASE_URL = os.getenv("POSTGRES_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "POSTGRES_URL environment variable is required. "
+        "Set it via .env for local dev or via container env/Secrets Manager in production."
+    )
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 ALLOW_UNENCRYPTED_LEGACY = os.getenv("ALLOW_UNENCRYPTED_LEGACY", "").lower() in {"1", "true", "yes"}

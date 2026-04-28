@@ -25,7 +25,13 @@ def _key() -> str:
 
 
 def _base() -> str:
-    return os.getenv("N8N_BASE_URL", "http://localhost:5678").rstrip("/")
+    url = os.getenv("N8N_BASE_URL")
+    if not url:
+        raise RuntimeError(
+            "N8N_BASE_URL environment variable is required. "
+            "Set it to http://n8n:5678 (docker-compose) or an internal service URL in production."
+        )
+    return url.rstrip("/")
 
 
 def _webhook_base() -> str:

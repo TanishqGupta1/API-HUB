@@ -165,6 +165,11 @@ async def _upsert_options(
                     title=str(title),
                     sort_order=int(attr.get("sort_order") or 0),
                     ops_attribute_id=attr.get("ops_attribute_id"),
+                    master_attribute_id=attr.get("master_attribute_id"),
+                    attribute_key=attr.get("attribute_key"),
+                    multiplier=attr.get("multiplier"),
+                    setup_cost=attr.get("setup_cost"),
+                    price=attr.get("price"),
                     status=1,
                 )
             )

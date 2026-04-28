@@ -27,11 +27,13 @@ export function PushRowAction({ productId, productName }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    api<Customer[]>("/api/customers").then((list) => {
-      setCustomers(list);
-      const first = list.find((c) => c.is_active);
-      if (first) setCustomerId(first.id);
-    });
+    api<Customer[]>("/api/customers")
+      .then((list) => {
+        setCustomers(list);
+        const first = list.find((c) => c.is_active);
+        if (first) setCustomerId(first.id);
+      })
+      .catch((e) => setMessage(e instanceof Error ? e.message : String(e)));
   }, [open]);
 
   async function run() {
@@ -67,10 +69,7 @@ export function PushRowAction({ productId, productName }: Props) {
           Push to OPS
         </Button>
       </DialogTrigger>
-      <DialogContent
-        className="max-w-md"
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-      >
+      <DialogContent className="max-w-md" onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle>Push to OPS</DialogTitle>
         </DialogHeader>
@@ -84,7 +83,8 @@ export function PushRowAction({ productId, productName }: Props) {
             <option value="">Select Storefront…</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id} disabled={!c.is_active}>
-                {c.name} {c.is_active ? "" : "(inactive)"}
+                {c.name}
+                {c.is_active ? "" : " (inactive)"}
               </option>
             ))}
           </select>

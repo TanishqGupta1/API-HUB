@@ -44,15 +44,8 @@ async def _load_active_supplier(db: AsyncSession, supplier_id: UUID) -> Supplier
 
 
 def _get_auth_config(supplier: Supplier) -> dict:
-    """Return auth_config, overriding with env vars for SanMar if present."""
-    auth = dict(supplier.auth_config or {})
-    if supplier.slug == "sanmar":
-        env_id = os.getenv("SANMAR_ID")
-        env_password = os.getenv("SANMAR_PASSWORD")
-        if env_id and env_password:
-            auth["id"] = env_id
-            auth["password"] = env_password
-    return auth
+    """Return auth_config from the database."""
+    return dict(supplier.auth_config or {})
 
 
 async def _ensure_no_active_job(
@@ -346,10 +339,21 @@ async def trigger_product_sync(
             resolve_wsdl_url(endpoints, "media"),
             limit,
         )
-    elif supplier.protocol in ("rest", "rest_hmac", "ops_graphql"):
-        # Placeholder for REST/GraphQL background task — wiring B2/G2 requirement
+    elif supplier.protocol in ("rest", "rest_hmac"):
+        if not supplier.base_url:
+            raise HTTPException(
+                400, f"Supplier '{supplier.name}' has no base_url configured"
+            )
         job = await _create_job(db, supplier, job_type="full_sync")
-        # background_tasks.add_task(_run_rest_sync, job.id, supplier)
+        background_tasks.add_task(
+            _run_rest_sync,
+            job.id,
+            supplier.id,
+            supplier.protocol,
+            supplier.base_url,
+            _get_auth_config(supplier),
+            dict(supplier.field_mappings or {}) if supplier.field_mappings else None,
+        )
     else:
         raise HTTPException(400, f"Sync not implemented for protocol '{supplier.protocol}'")
 

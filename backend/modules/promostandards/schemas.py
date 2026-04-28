@@ -64,3 +64,17 @@ class PSMediaItem(BaseModel):
     url: str
     media_type: str = "front"  # front, back, side, swatch, detail
     color_name: str | None = None
+
+
+class PSCategoryData(BaseModel):
+    """A browseable supplier catalog category.
+
+    Not from PromoStandards spec — SanMar ships a fixed ~40-category list in
+    their Web Services Integration Guide (see sanmar/SanMar-Web-Services-
+    Integration-Guide-24.3.pdf p25-33). Other suppliers may provide categories
+    via their own endpoints; this schema is the common return shape.
+    """
+    name: str
+    slug: str | None = None
+    product_count: int | None = None
+    preview_image_url: str | None = None

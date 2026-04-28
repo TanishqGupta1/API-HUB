@@ -110,7 +110,7 @@ export default function APIRegistryPage() {
             color: "var(--blue)", 
             fontSize: "11px" 
           }}>
-            BASE_URL: http://localhost:8000
+            API_HOST: {process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}
           </span>
         </div>
       </div>
