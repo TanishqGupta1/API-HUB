@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import type { Supplier } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,7 +68,7 @@ export default function ImportFromSupplierPage() {
         const updated = await api<SyncJob>(`/api/sync-jobs/${job.id}`);
         setJob(updated);
       } catch (e) {
-        console.error(e);
+        log.error("Job status check failed", e);
       }
     }, 2000);
     return () => clearInterval(interval);

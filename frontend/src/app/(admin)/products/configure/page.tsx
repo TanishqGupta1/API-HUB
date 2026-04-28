@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import type { MasterOption, MasterOptionsSyncStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,7 @@ export default function MasterOptionsCatalogPage() {
       await new Promise((r) => setTimeout(r, 3000));
       await load();
     } catch (e) {
-      console.error(e);
+      log.error("Sync failed", e);
       const n8nUrl = process.env.NEXT_PUBLIC_N8N_URL || "http://localhost:5678";
       alert(`Sync failed. Check n8n at ${n8nUrl}.`);
     } finally {

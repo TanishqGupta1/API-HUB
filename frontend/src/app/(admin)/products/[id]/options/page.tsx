@@ -103,7 +103,7 @@ export default function ConfigureProductOptionsPage() {
           <p className="text-sm text-[#888894] max-w-[500px] mx-auto">
             {product?.product_name} is sourced from <strong>{supplier.name}</strong> ({supplier.protocol}).
             Master options apply only to products pushed to OPS storefronts (Visual Graphics OPS).
-            Upstream wholesale suppliers like SanMar, 4Over, and S&S don't use this configuration.
+            Upstream wholesale suppliers like SanMar, 4Over, and S&S don&apos;t use this configuration.
           </p>
         </div>
       </div>

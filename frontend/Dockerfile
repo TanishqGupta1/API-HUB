@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.6
-
 # deps — install node_modules. Dev override targets this stage and runs `npm run dev`.
 FROM node:20-alpine AS deps
 WORKDIR /app

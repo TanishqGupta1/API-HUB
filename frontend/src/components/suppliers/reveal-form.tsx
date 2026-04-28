@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import type { PSCompany, Supplier } from "@/lib/types";
 
 interface Props {
@@ -66,7 +67,7 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
         setTestStatus("fail");
       }
     } catch (err) {
-      console.error("Test connection failed:", err);
+      log.error("Test connection failed:", err);
       setTestStatus("fail");
     }
   };
@@ -105,7 +106,7 @@ export default function RevealForm({ psCompanies, onSaved, onCancel }: Props) {
       }, 1500);
 
     } catch (e) {
-      console.error(e);
+      log.error("Test connection failed", e);
       alert("Failed to activate supplier.");
     } finally {
       setSaving(false);

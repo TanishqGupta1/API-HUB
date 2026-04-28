@@ -254,7 +254,7 @@ export default function NewSupplierPage() {
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div className="md:col-span-2 space-y-6">
-          <Card className="p-6 border-[#cfccc8] shadow-sm space-y-6">
+          <Card className="p-6 border-[#cfccc8] shadow-sm flex flex-col gap-6">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-[#1e4d92] border-b border-[#f2f0ed] pb-4">
               <Globe className="w-3.5 h-3.5" />
               Core Identity
