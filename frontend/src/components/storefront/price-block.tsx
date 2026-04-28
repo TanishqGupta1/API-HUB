@@ -5,6 +5,7 @@ import type { Variant } from "@/lib/types";
 interface PriceBlockProps {
   variant: Variant | null;
   fallback?: Variant[];
+  adjustment?: number;
 }
 
 function fmt(amount: number | null | undefined): string {
@@ -12,7 +13,7 @@ function fmt(amount: number | null | undefined): string {
   return `$${Number(amount).toFixed(2)}`;
 }
 
-export function PriceBlock({ variant, fallback = [] }: PriceBlockProps) {
+export function PriceBlock({ variant, fallback = [], adjustment = 0 }: PriceBlockProps) {
   if (variant?.base_price !== null && variant?.base_price !== undefined) {
     return (
       <div className="flex flex-col gap-1">
@@ -20,8 +21,16 @@ export function PriceBlock({ variant, fallback = [] }: PriceBlockProps) {
           Price
         </div>
         <div className="font-mono text-[28px] font-extrabold text-[#1e4d92] leading-none">
-          {fmt(variant.base_price)}
+          {fmt((variant.base_price ?? 0) + adjustment)}
         </div>
+        {adjustment !== 0 && (
+          <div className="text-[11px] font-mono text-[#484852]">
+            Base {fmt(variant.base_price)}
+            <span className={adjustment > 0 ? "text-[#1e7a3c] ml-1" : "text-[#b93232] ml-1"}>
+              {adjustment > 0 ? `+${fmt(adjustment)}` : fmt(adjustment)} options
+            </span>
+          </div>
+        )}
         {variant.inventory !== null && (
           <div className="text-[12px] text-[#484852] font-medium">
             {variant.inventory > 0
