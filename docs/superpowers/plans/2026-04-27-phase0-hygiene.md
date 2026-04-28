@@ -47,7 +47,7 @@
 
 **Sentinel:** all leaked customer rows have `ops_base_url` matching `https://test%.ops.com` — safe to filter on.
 
-- [ ] **Step 1: Write the failing regression test**
+- [x] **Step 1: Write the failing regression test**
 
 Create `backend/tests/test_conftest_isolation.py`:
 
@@ -88,12 +88,12 @@ async def test_test_customers_do_not_survive_cleanup():
     )
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && pytest tests/test_conftest_isolation.py -v`
 Expected: FAIL — `AssertionError: Cleanup leak: 12 sentinel Test Customer rows still in DB.`
 
-- [ ] **Step 3: Modify `backend/tests/conftest.py`**
+- [x] **Step 3: Modify `backend/tests/conftest.py`**
 
 Replace the section from `TEST_SUPPLIER_SLUGS = ...` through the end of `_cleanup_around_test` with this:
 
@@ -179,12 +179,12 @@ async def _cleanup_around_test():
 
 Leave `seed_supplier`, `inactive_supplier`, `db`, and `client` fixtures unchanged.
 
-- [ ] **Step 4: Run the new test + the full push_mappings suite to verify**
+- [x] **Step 4: Run the new test + the full push_mappings suite to verify**
 
 Run: `cd backend && pytest tests/test_conftest_isolation.py tests/test_push_mappings.py -v`
 Expected: ALL PASS. The isolation test confirms no leaked rows; push_mappings tests still pass because their own customer rows get cleaned between tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/tests/conftest.py backend/tests/test_conftest_isolation.py
@@ -205,7 +205,7 @@ clears the full tree. Regression test asserts no sentinel rows survive."
 
 **Why:** Tests currently load the dev `.env` (`Path(__file__).parent.parent.parent / ".env"`), so `pytest` runs against `vg_hub` — a real dev database with live data. Even with Task 1's cleanup, an interrupted test still has a window where it's writing to the dev DB. Make the URL overridable so CI / local devs can point at a throwaway DB.
 
-- [ ] **Step 1: Modify the top of `backend/tests/conftest.py`**
+- [x] **Step 1: Modify the top of `backend/tests/conftest.py`**
 
 Replace lines 1-25 (everything before `TEST_SUPPLIER_SLUGS`) with:
 
@@ -248,12 +248,12 @@ from main import app  # noqa: E402
 
 (The constants and fixtures from Task 1 remain below.)
 
-- [ ] **Step 2: Verify default-path tests still pass**
+- [x] **Step 2: Verify default-path tests still pass**
 
 Run: `cd backend && pytest tests/ -q`
 Expected: all green. (No `TEST_DATABASE_URL` set → falls through to `.env`'s `POSTGRES_URL`.)
 
-- [ ] **Step 3: Verify TEST_DATABASE_URL override works**
+- [x] **Step 3: Verify TEST_DATABASE_URL override works**
 
 Set up a throwaway db once:
 ```bash
@@ -263,7 +263,7 @@ docker compose exec -T postgres psql -U vg_user -d postgres -c "CREATE DATABASE 
 Run: `cd backend && TEST_DATABASE_URL='postgresql+asyncpg://vg_user:vg_pass@localhost:5432/vg_hub_test' pytest tests/ -q`
 Expected: all green; tables auto-created in `vg_hub_test`; dev DB row counts unchanged.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/tests/conftest.py
@@ -283,7 +283,7 @@ unchanged — when the env var isn't set we still load the dev .env."
 
 **Why:** Every other router declares `APIRouter(prefix="/api/...", tags=...)` and uses bare paths in decorators (e.g. `@router.get("")`). `push_log` is the lone exception (`APIRouter(tags=["push_log"])` + `@router.get("/api/push-log")` + `@router.post("/api/push-log")` + `@router.get("/api/products/{product_id}/push-status")`). CR #5. The push-status route lives under a different namespace (`/api/products/...`) so the cleanest fix is two routers.
 
-- [ ] **Step 1: Add a regression test that pins the route paths**
+- [x] **Step 1: Add a regression test that pins the route paths**
 
 Append to `backend/tests/test_route.py` (create the file if it does not exist; if it exists, just append):
 
@@ -312,12 +312,12 @@ async def test_push_status_route_is_registered_under_products(client: AsyncClien
     assert r.status_code == 200, r.text
 ```
 
-- [ ] **Step 2: Run the new tests to verify they pass against the current code**
+- [x] **Step 2: Run the new tests to verify they pass against the current code**
 
 Run: `cd backend && pytest tests/test_route.py -v`
 Expected: PASS. They pin current behaviour so the refactor can't move paths.
 
-- [ ] **Step 3: Replace `backend/modules/push_log/routes.py:13` and decorators**
+- [x] **Step 3: Replace `backend/modules/push_log/routes.py:13` and decorators**
 
 Edit `backend/modules/push_log/routes.py`:
 
@@ -337,7 +337,7 @@ push_status_router = APIRouter(prefix="/api/products", tags=["push_log"])
 
 4. Change line 91 from `@router.get("/api/products/{product_id}/push-status", response_model=list[ProductPushStatus])` to `@push_status_router.get("/{product_id}/push-status", response_model=list[ProductPushStatus])`.
 
-- [ ] **Step 4: Wire the second router in `backend/main.py`**
+- [x] **Step 4: Wire the second router in `backend/main.py`**
 
 In `backend/main.py:26`, change:
 ```python
@@ -353,17 +353,17 @@ In the routers section (~line 110), after `app.include_router(push_log_router)` 
 app.include_router(push_status_router)
 ```
 
-- [ ] **Step 5: Re-run the regression tests**
+- [x] **Step 5: Re-run the regression tests**
 
 Run: `cd backend && pytest tests/test_route.py -v`
 Expected: PASS. Same paths, no behaviour change for callers.
 
-- [ ] **Step 6: Verify against the live stack**
+- [x] **Step 6: Verify against the live stack**
 
 Run: `curl -sf http://127.0.0.1:8000/api/push-log?limit=1 | head -c 80 && echo`
 Expected: JSON array (possibly empty), no 404.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/modules/push_log/routes.py backend/main.py backend/tests/test_route.py

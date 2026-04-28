@@ -10,10 +10,11 @@ from modules.customers.models import Customer
 from .models import ProductPushLog
 from .schemas import ProductPushStatus, PushLogCreate, PushLogRead
 
-router = APIRouter(tags=["push_log"])
+router = APIRouter(prefix="/api/push-log", tags=["push_log"])
+push_status_router = APIRouter(prefix="/api/products", tags=["push_log"])
 
 
-@router.get("/api/push-log", response_model=list[PushLogRead])
+@router.get("", response_model=list[PushLogRead])
 async def list_push_logs(
     product_id: UUID | None = None,
     customer_id: UUID | None = None,
@@ -54,7 +55,7 @@ async def list_push_logs(
 
 
 
-@router.post("/api/push-log", response_model=PushLogRead, status_code=201)
+@router.post("", response_model=PushLogRead, status_code=201)
 async def create_push_log(body: PushLogCreate, db: AsyncSession = Depends(get_db)):
     from modules.catalog.models import Product
     from modules.suppliers.models import Supplier
@@ -88,7 +89,7 @@ async def create_push_log(body: PushLogCreate, db: AsyncSession = Depends(get_db
     return PushLogRead.model_validate(log)
 
 
-@router.get("/api/products/{product_id}/push-status", response_model=list[ProductPushStatus])
+@push_status_router.get("/{product_id}/push-status", response_model=list[ProductPushStatus])
 async def get_push_status(product_id: UUID, db: AsyncSession = Depends(get_db)):
     # Single query: latest log per customer for this product using subquery
     subq = (
