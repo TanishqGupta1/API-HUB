@@ -23,7 +23,7 @@ from modules.catalog.models import Product, ProductVariant
 from modules.suppliers.routes import router as suppliers_router
 from modules.customers.routes import router as customers_router
 from modules.markup.routes import router as markup_router, push_router as markup_push_router
-from modules.push_log.routes import router as push_log_router
+from modules.push_log.routes import router as push_log_router, push_status_router
 from modules.catalog.routes import router as catalog_router, categories_router
 from modules.catalog.ingest import router as catalog_ingest_router
 from modules.master_options.ingest import router as master_options_ingest_router
@@ -105,6 +105,7 @@ app.include_router(customers_router)
 app.include_router(markup_router)
 app.include_router(markup_push_router)
 app.include_router(push_log_router)
+app.include_router(push_status_router)
 app.include_router(ps_router)
 app.include_router(catalog_router)
 app.include_router(categories_router)
