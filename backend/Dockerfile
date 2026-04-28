@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.6
-
 FROM python:3.12-slim AS builder
 WORKDIR /app
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import { Customer } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ export default function StorefrontsPage() {
         const data = await api<Customer[]>("/api/customers");
         setCustomers(data);
       } catch (e) {
-        console.error("Failed to load storefronts", e);
+        log.error("Failed to load storefronts", e);
       } finally {
         setLoading(false);
       }

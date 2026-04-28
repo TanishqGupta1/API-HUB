@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import type {
   Product,
   ProductImage,
@@ -59,10 +60,10 @@ export default function ProductDetailPage() {
           }
         }
       } catch (err) {
-        console.warn("supplier fetch failed", err);
+        log.warn("supplier fetch failed", err);
       }
     } catch (e) {
-      console.error(e);
+      log.error("Product fetch failed", e);
     } finally {
       setLoading(false);
     }

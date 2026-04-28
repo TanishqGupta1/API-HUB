@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { api } from "@/lib/api";
 import type { Category, ProductListItem, Supplier } from "@/lib/types";
 import { SearchProvider, useSearch } from "./search-context";
@@ -83,10 +83,12 @@ export function StorefrontShell({
   }, []);
 
   return (
-    <SearchProvider>
-      <ShellInner data={data} trailingSegment={trailingSegment}>
-        {children}
-      </ShellInner>
-    </SearchProvider>
+    <Suspense fallback={null}>
+      <SearchProvider>
+        <ShellInner data={data} trailingSegment={trailingSegment}>
+          {children}
+        </ShellInner>
+      </SearchProvider>
+    </Suspense>
   );
 }

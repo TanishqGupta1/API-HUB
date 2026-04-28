@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import type { ProductListItem } from "@/lib/types";
 import { ProductCard } from "@/components/products/product-card";
 
@@ -21,7 +22,7 @@ export default function ProductsPage() {
       if (typeFilter) params.set("type", typeFilter);
       api<ProductListItem[]>(`/api/products?${params.toString()}`)
         .then(setProducts)
-        .catch(console.error)
+        .catch(log.error)
         .finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(timeout);
@@ -33,7 +34,7 @@ export default function ProductsPage() {
       await api(`/api/products/${p.id}/archive`, { method: "POST" });
       setProducts((prev) => prev.filter((x) => x.id !== p.id));
     } catch (err) {
-      console.error(err);
+      log.error(err);
       alert("Failed to archive product.");
     }
   };

@@ -16,7 +16,7 @@ export function FourOverMappingPanel({ supplier }: Props) {
       </h3>
       <p className="text-sm text-[#888894]">
         Supplier-specific options coming soon. For now, configure base field
-        mappings above to pipe 4Over's HMAC REST data into the hub schema.
+        mappings above to pipe 4Over&apos;s HMAC REST data into the hub schema.
       </p>
     </div>
   );
