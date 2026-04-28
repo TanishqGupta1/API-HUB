@@ -1,14 +1,19 @@
 """Seed demo supplier and product data for local development."""
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Load .env before importing database (which reads os.getenv at import time)
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+from sqlalchemy import delete, select
+
 from database import Base, async_session, engine
 from modules.catalog.models import Product, ProductVariant
+from modules.customers.models import Customer
+from modules.push_log.models import ProductPushLog
 from modules.suppliers.models import Supplier
 
 # Import all models so create_all registers them
@@ -140,11 +145,6 @@ async def seed():
         await conn.run_sync(Base.metadata.create_all)
 
     async with async_session() as db:
-        from sqlalchemy import select, delete
-        from modules.customers.models import Customer
-        from modules.push_log.models import ProductPushLog
-        from datetime import datetime, timezone, timedelta
-
         # Build slug -> supplier map
         slug_to_supplier: dict[str, Supplier] = {}
 
