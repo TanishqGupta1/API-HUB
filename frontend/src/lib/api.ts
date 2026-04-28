@@ -21,7 +21,8 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     let message: string;
     if (contentType.includes("application/json")) {
       const json = await res.json().catch(() => null);
-      message = json?.detail ?? JSON.stringify(json) ?? res.statusText;
+      const detail = json?.detail ?? json;
+      message = typeof detail === "string" ? detail : JSON.stringify(detail);
     } else {
       message = await res.text().catch(() => res.statusText);
       // Truncate HTML responses to avoid flooding the UI

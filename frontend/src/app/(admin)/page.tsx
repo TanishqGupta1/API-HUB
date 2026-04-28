@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -78,7 +79,7 @@ export default function AdminDashboard() {
         setRecentJobs(j);
         setSuppliers(sup);
       } catch (e) {
-        console.error("Failed to load dashboard stats", e);
+        log.error("Failed to load dashboard stats", e);
       } finally {
         setLoading(false);
       }

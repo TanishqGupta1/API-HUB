@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 
 // --- Components ---
 
@@ -25,7 +26,7 @@ function APIEntry({ method, path, desc, blueprint }: { method: string; path: str
             finalPath = path.replace("{supplier_id}", sid).replace("{id}", sid);
           }
         } catch (e) {
-          console.warn("Failed to fetch fallback ID for placeholder", e);
+          log.warn("Failed to fetch fallback ID for placeholder", e);
         }
       }
 

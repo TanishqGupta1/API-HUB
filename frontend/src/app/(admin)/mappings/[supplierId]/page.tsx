@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import type { Supplier } from "@/lib/types";
 import { SanMarMappingPanel } from "@/components/mappings/sanmar-mapping-panel";
 import { OpsMappingPanel } from "@/components/mappings/ops-mapping-panel";
@@ -80,7 +81,7 @@ export default function FieldMappingPage() {
           );
         }
       })
-      .catch(console.error);
+      .catch(log.error);
   }, [supplierId]);
 
   const activeMappings = useMemo(
