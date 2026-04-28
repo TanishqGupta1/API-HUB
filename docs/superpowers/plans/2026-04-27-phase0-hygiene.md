@@ -383,12 +383,12 @@ into a second router so each router has a single namespace."
 
 **Why:** Cosmetic but caught by CR #7. Imports are cheap on repeat (Python caches `sys.modules`) but reading the import inside a loop body suggests the import is conditional, which it isn't.
 
-- [ ] **Step 1: Find every in-loop import in seed_demo.py**
+- [x] **Step 1: Find every in-loop import in seed_demo.py**
 
 Run: `grep -n '    from sqlalchemy' backend/seed_demo.py`
 Expected: at least line 143 prints. Note the line numbers.
 
-- [ ] **Step 2: Move every match to the top imports block**
+- [x] **Step 2: Move every match to the top imports block**
 
 Open `backend/seed_demo.py:1-12` and ensure the top imports include:
 ```python
@@ -397,12 +397,12 @@ from sqlalchemy import delete, select
 
 Then delete each in-body `from sqlalchemy import …` line found in step 1.
 
-- [ ] **Step 3: Re-run the script to confirm no behaviour change**
+- [x] **Step 3: Re-run the script to confirm no behaviour change**
 
 Run: `cd backend && python seed_demo.py`
 Expected: same output as before (idempotent seed).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/seed_demo.py

@@ -11,7 +11,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 from sqlalchemy import delete, select
 
 from database import Base, async_session, engine
-from modules.catalog.models import Product, ProductVariant
+from modules.catalog.models import Category, Product, ProductVariant
 from modules.customers.models import Customer
 from modules.push_log.models import ProductPushLog
 from modules.suppliers.models import Supplier
@@ -189,7 +189,6 @@ async def seed():
         await db.commit()
 
         # Seed categories for vg-ops
-        from modules.catalog.models import Category
         vg_supplier = slug_to_supplier.get("vg-ops")
         cat_map: dict[str, Category] = {}
         if vg_supplier:
