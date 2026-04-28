@@ -34,7 +34,7 @@ Every supplier sends product data in their own shape. SanMar calls a field `prod
 ### Command 1 — full test suite
 
 ```bash
-cd /Users/PD/API-HUB/backend && source .venv/bin/activate
+cd "$(git rev-parse --show-toplevel)/backend" && source .venv/bin/activate
 python test_fourover_normalizer.py
 ```
 
@@ -192,7 +192,7 @@ part[0].attributes:  {'coating': 'UV'}
 
 Run:
 ```bash
-cd /Users/PD/API-HUB/backend && source .venv/bin/activate
+cd "$(git rev-parse --show-toplevel)/backend" && source .venv/bin/activate
 python test_fourover_normalizer.py && python test_fourover_client.py
 ```
 
@@ -257,7 +257,7 @@ Caption: *"The `attributes` field defaults to `{}` for SanMar's apparel-style va
 
 ```bash
 # 1. Pull latest
-cd /Users/PD/API-HUB
+cd "$(git rev-parse --show-toplevel)"
 git fetch origin
 git checkout Vidhi
 git pull origin Vidhi

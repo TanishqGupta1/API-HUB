@@ -50,11 +50,11 @@ Backend running on port 8001 and frontend on port 3002 (or 3000):
 
 ```bash
 # Terminal 1 — Backend
-cd /Users/PD/API-HUB/backend && source .venv/bin/activate
+cd "$(git rev-parse --show-toplevel)/backend" && source .venv/bin/activate
 uvicorn main:app --reload --port 8001
 
 # Terminal 2 — Frontend (install first if node_modules missing)
-cd /Users/PD/API-HUB/frontend
+cd "$(git rev-parse --show-toplevel)/frontend"
 npm install   # only needed once
 npm run dev -- --port 3002
 ```
@@ -68,7 +68,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8001
 Seed data must be present (suppliers in DB):
 
 ```bash
-cd /Users/PD/API-HUB/backend && source .venv/bin/activate
+cd "$(git rev-parse --show-toplevel)/backend" && source .venv/bin/activate
 python3 seed_demo.py
 ```
 
