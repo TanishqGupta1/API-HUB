@@ -5,6 +5,10 @@ a fresh session, committed, and then cleaned up by the autouse cleanup
 fixture after each test. This avoids asyncpg "another operation in progress"
 errors that occur when the same session is shared between the test and the
 FastAPI app's request handler.
+
+Database selection: by default we load the dev .env so engineers can run the
+suite locally against the same Postgres they're already running. Set
+TEST_DATABASE_URL to point pytest at a separate database (recommended for CI).
 """
 import os
 from pathlib import Path
@@ -13,6 +17,12 @@ import pytest_asyncio
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
+
+# If TEST_DATABASE_URL is set, override POSTGRES_URL before `database` is imported
+# so the engine is built against the test DB.
+_test_db_url = os.environ.get("TEST_DATABASE_URL")
+if _test_db_url:
+    os.environ["POSTGRES_URL"] = _test_db_url
 
 os.environ["INGEST_SHARED_SECRET"] = "test-secret-do-not-use-in-prod"
 
