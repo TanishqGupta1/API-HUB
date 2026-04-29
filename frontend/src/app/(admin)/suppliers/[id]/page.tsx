@@ -134,16 +134,8 @@ export default function SupplierDetailPage() {
             
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-[11px] font-bold text-[#888894] uppercase tracking-widest">Base API URL</label>
-                <Input 
-                  value={supplier.base_url || ""}
-                  onChange={(e) => setSupplier({...supplier, base_url: e.target.value})}
-                  className="h-11 border-[#cfccc8] font-mono text-[13px]"
-                />
-              </div>
-              <div className="space-y-2">
                 <label className="text-[11px] font-bold text-[#888894] uppercase tracking-widest">PromoStandards Code</label>
-                <Input 
+                <Input
                   value={supplier.promostandards_code || ""}
                   onChange={(e) => setSupplier({...supplier, promostandards_code: e.target.value})}
                   className="h-11 border-[#cfccc8] font-mono text-[13px]"

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { Category, Product } from "@/lib/types";
+import type { Category, OptionConfigItem, Product } from "@/lib/types";
 import { PDPLayout } from "@/components/storefront/pdp-layout";
 import { ImageGallery } from "@/components/storefront/image-gallery";
 import { VariantPicker } from "@/components/storefront/variant-picker";
@@ -23,6 +23,8 @@ export default function VGProductDetailPage() {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [optionAdj, setOptionAdj] = useState(0);
+  const [priceLookup, setPriceLookup] = useState<Map<number, number>>(new Map());
 
   useEffect(() => {
     if (!productId) return;
@@ -39,6 +41,18 @@ export default function VGProductDetailPage() {
             setCategory(await api<Category>(`/api/categories/${catId}`));
           } catch { /* ignore */ }
         }
+        try {
+          const configs = await api<OptionConfigItem[]>(`/api/products/${productId}/options-config`);
+          const lookup = new Map<number, number>();
+          configs.forEach((opt) => {
+            opt.attributes.forEach((attr) => {
+              if (attr.enabled && Number(attr.price) !== 0) {
+                lookup.set(attr.ops_attribute_id, Number(attr.price));
+              }
+            });
+          });
+          setPriceLookup(lookup);
+        } catch { /* options-config is optional — non-OPS products won't have it */ }
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
@@ -94,7 +108,7 @@ export default function VGProductDetailPage() {
         </div>
       </div>
 
-      <PriceBlock variant={selectedVariant} fallback={product.variants} />
+      <PriceBlock variant={selectedVariant} fallback={product.variants} adjustment={optionAdj} />
 
       {product.variants.length > 0 && (
         <div className="py-5 border-t border-dashed border-[#cfccc8]">
@@ -106,7 +120,11 @@ export default function VGProductDetailPage() {
         </div>
       )}
 
-      <ProductOptions options={product.options} />
+      <ProductOptions
+        options={product.options}
+        priceLookup={priceLookup}
+        onPriceChange={setOptionAdj}
+      />
 
       <div className="flex gap-3 pt-2">
         <button type="button" onClick={() => router.back()}

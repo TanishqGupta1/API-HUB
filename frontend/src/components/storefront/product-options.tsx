@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { ProductOption, ProductOptionAttribute } from "@/lib/types";
 
@@ -35,7 +35,13 @@ function defaultAttrId(opt: ProductOption): string | null {
   return (def ?? attrs[0])?.id ?? null;
 }
 
-export function ProductOptions({ options }: { options: ProductOption[] | undefined | null }) {
+interface ProductOptionsProps {
+  options: ProductOption[] | undefined | null;
+  priceLookup?: Map<number, number>;
+  onPriceChange?: (adjustment: number) => void;
+}
+
+export function ProductOptions({ options, priceLookup, onPriceChange }: ProductOptionsProps) {
   const sorted = useMemo(
     () =>
       (options ?? [])
@@ -54,6 +60,18 @@ export function ProductOptions({ options }: { options: ProductOption[] | undefin
   const [picked, setPicked] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(visible.map((o) => [o.id, defaultAttrId(o)])),
   );
+
+  useEffect(() => {
+    if (!priceLookup || !onPriceChange) return;
+    let total = 0;
+    visible.forEach((opt) => {
+      const attr = opt.attributes.find((a) => a.id === picked[opt.id]);
+      if (attr?.ops_attribute_id != null) {
+        total += priceLookup.get(attr.ops_attribute_id) ?? 0;
+      }
+    });
+    onPriceChange(total);
+  }, [picked, visible, priceLookup, onPriceChange]);
 
   if (visible.length === 0) return null;
 
@@ -95,6 +113,7 @@ export function ProductOptions({ options }: { options: ProductOption[] | undefin
                 <div className="flex flex-wrap gap-1 justify-end">
                   {attrs.map((a) => {
                     const active = picked[opt.id] === a.id;
+                    const mod = a.ops_attribute_id != null ? priceLookup?.get(a.ops_attribute_id) : undefined;
                     return (
                       <button
                         key={a.id}
@@ -108,6 +127,11 @@ export function ProductOptions({ options }: { options: ProductOption[] | undefin
                         }
                       >
                         {a.title}
+                        {mod != null && mod !== 0 && (
+                          <span className={`ml-1 text-[10px] font-mono ${active ? "text-blue-200" : mod > 0 ? "text-[#1e7a3c]" : "text-[#b93232]"}`}>
+                            {mod > 0 ? `+$${mod.toFixed(2)}` : `-$${Math.abs(mod).toFixed(2)}`}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -121,11 +145,14 @@ export function ProductOptions({ options }: { options: ProductOption[] | undefin
                   className="h-8 px-2 text-[12px] border border-[#e9e7e3] rounded-md bg-[#f9f7f4] text-[#1e1e24] font-medium focus:outline-none focus:border-[#1e4d92] min-w-0 max-w-full"
                 >
                   {!opt.required ? <option value="">—</option> : null}
-                  {attrs.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.title}
-                    </option>
-                  ))}
+                  {attrs.map((a) => {
+                    const mod = a.ops_attribute_id != null ? priceLookup?.get(a.ops_attribute_id) : undefined;
+                    return (
+                      <option key={a.id} value={a.id}>
+                        {a.title}{mod != null && mod !== 0 ? (mod > 0 ? ` (+$${mod.toFixed(2)})` : ` (-$${Math.abs(mod).toFixed(2)})`) : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               )}
             </div>
