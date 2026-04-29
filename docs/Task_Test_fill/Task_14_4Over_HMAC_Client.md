@@ -37,7 +37,7 @@ Most APIs accept a password. 4Over doesn't. Every single request to 4Over must c
 ### Command 1 — launched Python REPL
 
 ```bash
-cd /Users/PD/API-HUB/backend && source .venv/bin/activate
+cd "$(git rev-parse --show-toplevel)/backend" && source .venv/bin/activate
 python
 ```
 
@@ -178,7 +178,7 @@ Take screenshots of these three things:
 
 Run in terminal:
 ```bash
-cd /Users/PD/API-HUB/backend && source .venv/bin/activate
+cd "$(git rev-parse --show-toplevel)/backend" && source .venv/bin/activate
 python -c "
 from modules.rest_connector.fourover_client import FourOverClient
 c = FourOverClient('https://sandbox-api.4over.com', {'api_key': 'my_key', 'private_key': 'my_secret'})
@@ -192,7 +192,7 @@ Caption: *"Live signature generated on my machine. Notice the 64-character HMAC 
 
 Run in terminal:
 ```bash
-cd /Users/PD/API-HUB/backend && source .venv/bin/activate
+cd "$(git rev-parse --show-toplevel)/backend" && source .venv/bin/activate
 python test_fourover_client.py
 ```
 
@@ -202,7 +202,7 @@ Caption: *"All 9 unit tests pass. Covers signature correctness, HTTP transport, 
 
 Run in terminal:
 ```bash
-cd /Users/PD/API-HUB/backend && source .venv/bin/activate
+cd "$(git rev-parse --show-toplevel)/backend" && source .venv/bin/activate
 python -c "
 import hmac, hashlib
 from modules.rest_connector.fourover_client import FourOverClient
@@ -267,7 +267,7 @@ If a teammate wants to run these tests on their machine:
 
 ```bash
 # 1. Pull latest
-cd /Users/PD/API-HUB
+cd "$(git rev-parse --show-toplevel)"
 git fetch origin
 git checkout Vidhi
 git pull origin Vidhi

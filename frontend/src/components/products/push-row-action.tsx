@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
+import { api } from "@/lib/api";
+import type { Customer } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,8 +12,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { api } from "@/lib/api";
-import type { Customer } from "@/lib/types";
 
 interface Props {
   productId: string;

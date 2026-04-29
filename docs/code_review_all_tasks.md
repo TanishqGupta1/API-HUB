@@ -43,6 +43,8 @@ POSTGRES_URL=postgresql+asyncpg://vg_user:vg_pass@localhost:5432/vg_hub
 
 **Fix:** Either revert `docker-compose.yml` back to `"5432:5432"`, or update `.env` to use port 5434. Reverting docker-compose is preferred — it's the standard port.
 
+**Status (2026-04-27): RESOLVED.** docker-compose.yml no longer exposes postgres on the host; n8n + api hit it on the docker network. Service-internal port stays 5432.
+
 ---
 
 ### Issue 2: `load_dotenv` points to wrong path
@@ -66,6 +68,8 @@ If you run `uvicorn main:app` directly without Docker, `SECRET_KEY` will be empt
 - Change path to `Path(__file__).parent.parent / ".env"` (goes up to repo root), OR
 - Remove `load_dotenv` entirely and use `docker compose` or shell env vars (cleaner)
 
+**Status (2026-04-27): RESOLVED.** backend/database.py:10 + backend/seed_demo.py:8 now use Path(__file__).parent.parent / ".env".
+
 ---
 
 ### Issue 3: shadcn/ui not installed (Task 9)
@@ -81,6 +85,8 @@ The spec requires `npx shadcn@latest add button card input table badge separator
 npx shadcn@latest init -d
 npx shadcn@latest add button card input table badge separator scroll-area
 ```
+
+**Status (2026-04-27): RESOLVED.** frontend/package.json declares the @radix-ui/* primitives and frontend/src/components/ui/ contains the shadcn-generated files.
 
 ---
 
@@ -105,6 +111,8 @@ Loads ALL customers, then runs a **separate query per customer**. With 100 custo
 **Impact:** Acceptable for V0 with a few test customers. Will become a performance problem when real customers are added.
 
 **Fix (later):** Use a single query with `DISTINCT ON` or a window function to get the latest push log per customer in one round-trip.
+
+**Status (2026-04-27): RESOLVED.** backend/modules/push_log/routes.py:91-126 uses a GROUP BY subquery + a single Customer fetch — two queries total.
 
 ---
 
@@ -132,6 +140,8 @@ router = APIRouter(tags=["push_log"])  # no prefix
 **Fix:** The push_log routes span two URL namespaces (`/api/push-log` and `/api/products/{id}/push-status`), so a single prefix doesn't work cleanly. Options:
 - Split into two routers (one for `/api/push-log`, one added to the catalog router), OR
 - Leave as-is and document why it's different
+
+**Status (2026-04-27): RESOLVED in this plan (Task 3).**
 
 ---
 
@@ -164,6 +174,8 @@ variant_counts = (
 )
 ```
 
+**Status (2026-04-27): RESOLVED.** backend/modules/catalog/routes.py:46-67 uses a variant_agg subquery for variant_count + price_min/max + total_inventory.
+
 ---
 
 ## MINOR Issues
@@ -186,6 +198,8 @@ Python caches these so it works, but it's messy. Imports belong at the top of th
 
 **Fix:** Move `from sqlalchemy import select` and `from decimal import Decimal` to the top imports section.
 
+**Status (2026-04-27): RESOLVED in this plan (Task 4).**
+
 ---
 
 ### Issue 8: Dashboard hardcoded data (Task 9)
@@ -195,6 +209,8 @@ Python caches these so it works, but it's messy. Imports belong at the top of th
 Dashboard shows static sample data (4 vendors, 32.4k SKUs) instead of calling `api<Stats>("/api/stats")`. The API endpoint exists and works.
 
 **Fix:** Replace hardcoded values with a `useEffect` + `api()` call.
+
+**Status (2026-04-27): RESOLVED.** frontend/src/app/(admin)/page.tsx:67 calls api<Stats>("/api/stats") and renders live values.
 
 ---
 
@@ -209,6 +225,8 @@ All reference `/Users/PD/API-HUB` — Vidhi's local machine path:
 - `docs/Task_Test_fill/Task_20_Push_Log.md` line 60
 
 **Fix:** Replace with relative paths or use `cd api-hub` instead.
+
+**Status (2026-04-27): RESOLVED in this plan (Task 8).**
 
 ---
 

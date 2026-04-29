@@ -58,7 +58,7 @@ This table has a **foreign key** to the `customers` table (Task 18). You must cr
 Backend must be running and you need a customer in the database:
 
 ```bash
-cd /Users/PD/API-HUB
+cd "$(git rev-parse --show-toplevel)"
 docker compose up -d postgres
 cd backend && source .venv/bin/activate
 uvicorn main:app --reload --port 8001
