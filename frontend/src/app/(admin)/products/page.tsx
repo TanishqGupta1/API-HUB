@@ -7,26 +7,35 @@ import { log } from "@/lib/log";
 import type { ProductListItem } from "@/lib/types";
 import { ProductCard } from "@/components/products/product-card";
 
+interface Category { id: string; name: string; }
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<ProductListItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | "vg" | "supplier">("all");
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api<Category[]>("/api/categories")
+      .then(setCategories)
+      .catch(log.error);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
     const timeout = setTimeout(() => {
       const params = new URLSearchParams({ limit: "50" });
       if (search) params.set("search", search);
-      if (typeFilter) params.set("type", typeFilter);
+      if (categoryId) params.set("category_id", categoryId);
       api<ProductListItem[]>(`/api/products?${params.toString()}`)
         .then(setProducts)
         .catch(log.error)
         .finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(timeout);
-  }, [search, typeFilter]);
+  }, [search, categoryId]);
 
   const handleArchive = async (p: ProductListItem) => {
     if (!confirm(`Archive ${p.product_name}?`)) return;
@@ -38,8 +47,6 @@ export default function ProductsPage() {
       alert("Failed to archive product.");
     }
   };
-
-  const types = ["Apparel", "Bags", "Drinkware", "Accessories"];
 
   // Client-side source filter
   const isVg = (p: ProductListItem) =>
@@ -77,7 +84,7 @@ export default function ProductsPage() {
           return (
             <button
               key={s}
-              onClick={() => setSourceFilter(s)}
+              onClick={() => { setSourceFilter(s); setCategoryId(""); }}
               className={`px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
                 ${sourceFilter === s
                   ? s === "vg"
@@ -117,28 +124,28 @@ export default function ProductsPage() {
           />
         </div>
 
-        {/* Type filter tags */}
+        {/* Category filter tags */}
         <button
-          onClick={() => setTypeFilter("")}
+          onClick={() => setCategoryId("")}
           className={`px-4 py-2 rounded-md border text-[12px] font-semibold cursor-pointer transition-all duration-150
-            ${typeFilter === ""
+            ${categoryId === ""
               ? "bg-[#1e4d92] text-white border-[#1e4d92]"
               : "bg-white text-[#1e1e24] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
             }`}
         >
           All
         </button>
-        {types.map((t) => (
+        {categories.map((c) => (
           <button
-            key={t}
-            onClick={() => setTypeFilter(t)}
+            key={c.id}
+            onClick={() => setCategoryId(c.id)}
             className={`px-4 py-2 rounded-md border text-[12px] font-semibold cursor-pointer transition-all duration-150
-              ${typeFilter === t
+              ${categoryId === c.id
                 ? "bg-[#1e4d92] text-white border-[#1e4d92]"
                 : "bg-white text-[#1e1e24] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
               }`}
           >
-            {t}
+            {c.name}
           </button>
         ))}
 
