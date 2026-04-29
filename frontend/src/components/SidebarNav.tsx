@@ -159,7 +159,23 @@ export default function SidebarNav() {
     if (href === "/") return pathname === "/";
     // Strip query params for comparison
     const base = href.split("?")[0];
-    return pathname.startsWith(base);
+    
+    if (pathname === base) return true;
+    
+    if (pathname.startsWith(`${base}/`)) {
+      if (base === "/products") {
+        if (
+          pathname.startsWith("/products/configure") ||
+          pathname.startsWith("/products/setup") ||
+          pathname.startsWith("/products/archived")
+        ) {
+          return false;
+        }
+      }
+      return true;
+    }
+    
+    return false;
   };
 
   return (

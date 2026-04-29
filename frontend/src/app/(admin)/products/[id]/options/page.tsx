@@ -17,6 +17,7 @@ export default function ConfigureProductOptionsPage() {
   const [dirty, setDirty] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [savingAll, setSavingAll] = useState(false);
+  const [savedAll, setSavedAll] = useState(false);
   const [search, setSearch] = useState("");
   const [tag, setTag] = useState("");
 
@@ -42,12 +43,29 @@ export default function ConfigureProductOptionsPage() {
   }, [cards]);
 
   const visible = useMemo(() => {
-    return cards.filter((c) => {
+    let result = cards;
+
+    // Smart Filter: If it's an apparel product (like a Toddler T-Shirt), hide signage options
+    if (product) {
+      const pName = (product.product_name || "").toLowerCase();
+      const pType = (product.product_type || "").toLowerCase();
+      const isApparel = pName.includes("shirt") || pName.includes("tee") || pName.includes("hoodie") || pType.includes("apparel") || (supplier?.name || "").toLowerCase().includes("sanmar");
+      
+      if (isApparel) {
+        const signageKeywords = ["laminate", "substrate", "ink", "finish", "packaging", "binding", "paper"];
+        result = result.filter(o => {
+          const t = (o.title || o.option_key || "").toLowerCase();
+          return !signageKeywords.some(kw => t.includes(kw));
+        });
+      }
+    }
+
+    return result.filter((c) => {
       if (tag && c.master_option_tag !== tag) return false;
       if (search && !c.title.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [cards, search, tag]);
+  }, [cards, search, tag, product, supplier]);
 
   const updateCard = (idx: number, next: OptionConfigItem) => {
     setCards((prev) => prev.map((c, i) => (i === idx ? next : c)));
@@ -68,12 +86,17 @@ export default function ConfigureProductOptionsPage() {
 
   const saveAll = async () => {
     setSavingAll(true);
+    setSavedAll(false);
     try {
       await api(`/api/products/${id}/options-config`, {
         method: "PUT",
         body: JSON.stringify(cards),
       });
       setDirty(new Set());
+      setSavedAll(true);
+      setTimeout(() => setSavedAll(false), 2000);
+    } catch (err) {
+      alert("Failed to save all.");
     } finally {
       setSavingAll(false);
     }
@@ -91,6 +114,8 @@ export default function ConfigureProductOptionsPage() {
   
   if (loading) return <div className="p-6 text-[#888894]">Loading…</div>;
 
+  if (loading) return <div className="p-6 text-[#888894]">Loading…</div>;
+
   return (
     <div className="flex flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
@@ -104,10 +129,10 @@ export default function ConfigureProductOptionsPage() {
         </div>
         <Button
           onClick={saveAll}
-          disabled={savingAll || dirty.size === 0}
-          className="bg-[#1e4d92] hover:bg-[#173d74]"
+          disabled={savingAll || savedAll || (!savedAll && dirty.size === 0)}
+          className={savedAll ? "bg-green-600 hover:bg-green-700" : "bg-[#1e4d92] hover:bg-[#173d74]"}
         >
-          {savingAll ? "Saving..." : `Save All ${dirty.size ? `(${dirty.size})` : ""}`}
+          {savingAll ? "Saving..." : savedAll ? "Saved!" : `Save All ${dirty.size ? `(${dirty.size})` : ""}`}
         </Button>
       </div>
 

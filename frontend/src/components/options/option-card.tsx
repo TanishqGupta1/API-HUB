@@ -18,6 +18,7 @@ interface Props {
 export function OptionCard({ card, dirty, onChange, onSave, onDelete }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const visible = expanded ? card.attributes : card.attributes.slice(0, 5);
 
@@ -28,7 +29,16 @@ export function OptionCard({ card, dirty, onChange, onSave, onDelete }: Props) {
 
   const handleSave = async () => {
     setSaving(true);
-    try { await onSave(); } finally { setSaving(false); }
+    setSaved(false);
+    try { 
+      await onSave(); 
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      alert("Failed to save.");
+    } finally { 
+      setSaving(false); 
+    }
   };
 
   return (
@@ -66,10 +76,10 @@ export function OptionCard({ card, dirty, onChange, onSave, onDelete }: Props) {
         <Button
           size="sm"
           onClick={handleSave}
-          disabled={!dirty || saving}
-          className="bg-[#1e4d92] hover:bg-[#173d74]"
+          disabled={!dirty || saving || saved}
+          className={saved ? "bg-green-600 hover:bg-green-700" : "bg-[#1e4d92] hover:bg-[#173d74]"}
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? "Saving..." : saved ? "Saved!" : "Save"}
         </Button>
       </div>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import DOMPurify from "isomorphic-dompurify";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type { MasterOption, MasterOptionsSyncStatus } from "@/lib/types";
@@ -221,9 +222,10 @@ export default function MasterOptionsCatalogPage() {
                 {isOpen && (
                   <div className="px-5 pb-5 pt-2 border-t border-dashed border-[#ebe8e3] flex flex-col gap-3">
                     {mo.description && (
-                      <div className="text-[12px] text-[#484852] bg-[#f9f7f4] p-3 rounded border border-[#ebe8e3]">
-                        {mo.description}
-                      </div>
+                      <div 
+                        className="text-[12px] text-[#484852] bg-[#f9f7f4] p-3 rounded border border-[#ebe8e3] prose-storefront"
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(mo.description) }}
+                      />
                     )}
                     {mo.attributes.length === 0 ? (
                       <div className="text-sm text-[#888894] italic py-4 text-center">

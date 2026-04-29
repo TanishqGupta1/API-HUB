@@ -251,8 +251,26 @@ export default function ProductOptionsPage() {
   }, [productId, customerId]);
 
   const filteredOptions = useMemo(() => {
-    if (!search.trim() && tag === "all") return options;
-    return options
+    let result = options;
+    const selectedProduct = productsList.find((p) => p.id === productId);
+    
+    // Smart Filter: If it's an apparel product (like a Toddler T-Shirt), hide signage options
+    if (selectedProduct) {
+      const pName = (selectedProduct.product_name || "").toLowerCase();
+      const pType = (selectedProduct.product_type || "").toLowerCase();
+      const isApparel = pName.includes("shirt") || pName.includes("tee") || pName.includes("hoodie") || pType.includes("apparel") || (selectedProduct.supplier_name || "").toLowerCase().includes("sanmar");
+      
+      if (isApparel) {
+        const signageKeywords = ["laminate", "substrate", "ink", "finish", "packaging", "binding", "paper"];
+        result = result.filter(o => {
+          const t = (o.title || o.option_key || "").toLowerCase();
+          return !signageKeywords.some(kw => t.includes(kw));
+        });
+      }
+    }
+
+    if (!search.trim() && tag === "all") return result;
+    return result
       .map((opt) => {
         const filteredAttrs = opt.attributes.filter((a: any) =>
           a.title.toLowerCase().includes(search.toLowerCase())
@@ -261,7 +279,7 @@ export default function ProductOptionsPage() {
         return { ...opt, attributes: search.trim() ? filteredAttrs : opt.attributes };
       })
       .filter(Boolean);
-  }, [options, search, tag]);
+  }, [options, search, tag, productsList, productId]);
 
   const updateAttr = (optionKey: string, attrId: string, field: string, value: any) => {
     setOptions((prev) =>
