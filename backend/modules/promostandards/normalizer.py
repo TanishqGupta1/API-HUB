@@ -61,6 +61,7 @@ async def upsert_products(
     inventory: list[PSInventoryLevel] | None = None,
     pricing: list[PSPricePoint] | None = None,
     media: list[PSMediaItem] | None = None,
+    category_id: UUID | None = None,
 ) -> int:
     """Full upsert: products + variants + images.
 
@@ -99,6 +100,7 @@ async def upsert_products(
                 "description": p.description,
                 "product_type": p.product_type or "apparel",
                 "image_url": p.primary_image_url,
+                "category_id": category_id,
                 "last_synced": now,
             }
             for p in batch
@@ -115,6 +117,7 @@ async def upsert_products(
                     "description": pg_insert(Product).excluded.description,
                     "product_type": pg_insert(Product).excluded.product_type,
                     "image_url": pg_insert(Product).excluded.image_url,
+                    "category_id": pg_insert(Product).excluded.category_id,
                     "last_synced": pg_insert(Product).excluded.last_synced,
                 },
             )

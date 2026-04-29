@@ -46,12 +46,11 @@ SANMAR_EXT_WSDL = (
 # (sanmar/SanMar-Web-Services-Integration-Guide-24.3.pdf p25-33). Not a SOAP
 # endpoint — just the strings their `getProductInfoByCategory` accepts.
 SANMAR_CATEGORIES = [
-    "Accessories", "Activewear", "Aprons", "Bags", "Caps",
-    "Drinkware", "Eyewear", "Golf Shirts", "Headwear", "Infant & Toddler",
-    "Juniors & Young Men", "Ladies", "Outerwear", "Pants & Shorts",
-    "Performance", "Polos/Knits", "Safety", "Sweatshirts/Fleece",
-    "T-Shirts", "Tall", "Towels & Blankets", "Woven Shirts", "Workwear",
-    "Youth", "Shoes", "Scrubs", "Sports Shirts",
+    "Accessories", "Activewear", "Bags", "Caps", "Golf Shirts", 
+    "Headwear", "Infant & Toddler", "Outerwear", 
+    "Pants & Shorts", "Performance", "Polos/Knits", "Safety", 
+    "Sweatshirts/Fleece", "T-Shirts", "Tall", "Woven Shirts", 
+    "Youth", "Shoes", "Scrubs",
 ]
 
 log = logging.getLogger(__name__)
@@ -396,7 +395,7 @@ class PromoStandardsClient:
             # on this client stay pointed at the original PS service.
             try:
                 transport = Transport(
-                    cache=SqliteCache(), timeout=30, operation_timeout=180
+                    cache=SqliteCache(), timeout=60, operation_timeout=300
                 )
                 svc = ZeepClient(extension_wsdl_url, transport=transport).service
             except Exception as exc:  # noqa: BLE001

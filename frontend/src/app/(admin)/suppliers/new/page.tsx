@@ -54,9 +54,9 @@ const PROTOCOLS: ProtocolDef[] = [
     base_url_label: "PS Directory base URL",
     base_url_default: "https://promostandards.org/api",
     fields: [
-      { key: "id", label: "Username (id)", required: true, placeholder: "your sanmar.com username" },
+      { key: "id", label: "Username (id)", required: true, placeholder: "your username" },
       { key: "password", label: "Password", type: "password", required: true },
-      { key: "customer_number", label: "Customer Number", type: "number", placeholder: "157718" },
+      { key: "customer_number", label: "Customer Number", type: "number", placeholder: "e.g. 12345" },
     ],
   },
   {
@@ -266,7 +266,7 @@ export default function NewSupplierPage() {
                   Supplier Name
                 </label>
                 <Input
-                  placeholder="e.g. SanMar"
+                  placeholder="e.g. Acme Corp"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="h-11 border-[#cfccc8] focus:ring-[#1e4d92]"
@@ -278,7 +278,7 @@ export default function NewSupplierPage() {
                   System Slug (Unique)
                 </label>
                 <Input
-                  placeholder="e.g. sanmar"
+                  placeholder="e.g. acme-corp"
                   value={slug}
                   onChange={(e) =>
                     setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-"))
@@ -313,7 +313,7 @@ export default function NewSupplierPage() {
                   PromoStandards Code (lookup key)
                 </label>
                 <Input
-                  placeholder="SANMAR"
+                  placeholder="e.g. ACME"
                   value={promostandardsCode}
                   onChange={(e) => setPromostandardsCode(e.target.value.toUpperCase())}
                   className="h-11 border-[#cfccc8] font-mono"
@@ -363,9 +363,9 @@ export default function NewSupplierPage() {
             </div>
 
             <div className="text-[10px] font-mono text-[#b4b4bc] border-t border-dashed border-[#ebe8e3] pt-3">
-              Field shape inferred from protocol. SanMar PromoStandards uses{" "}
+              Field shape inferred from protocol. PromoStandards typically uses{" "}
               <code className="text-[#1e4d92]">id</code> /{" "}
-              <code className="text-[#1e4d92]">password</code> per their PO Integration Guide v24.3.
+              <code className="text-[#1e4d92]">password</code> per the PO Integration Guide.
             </div>
           </Card>
         </div>
@@ -389,7 +389,7 @@ export default function NewSupplierPage() {
                   <Zap className="w-3.5 h-3.5" />
                 </div>
                 <p className="text-[11px] font-medium leading-relaxed">
-                  Use the SanMar preset above to prefill the protocol + cred shape from the
+                  Use the presets above to prefill the protocol + cred shape from the
                   Integration Guide.
                 </p>
               </div>

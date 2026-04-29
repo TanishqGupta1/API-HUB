@@ -1,0 +1,22 @@
+[
+  {
+    "master_option_id": "dda04efe-0c78-4496-a687-799f29cb8881",
+    "ops_master_option_id": 50,
+    "title": "Print Sides",
+    "enabled": true,
+    "attributes": [
+      {
+        "ops_attribute_id": 132,
+        "title": "Single",
+        "enabled": true,
+        "price": 0.00
+      },
+      {
+        "ops_attribute_id": 1017,
+        "title": "Double",
+        "enabled": true,
+        "price": 2.50
+      }
+    ]
+  }
+]

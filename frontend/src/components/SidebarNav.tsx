@@ -58,6 +58,15 @@ const NAV_ITEMS = [
           </svg>
         ),
       },
+      {
+        href: "/products/configure",
+        label: "Master Options",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -150,7 +159,23 @@ export default function SidebarNav() {
     if (href === "/") return pathname === "/";
     // Strip query params for comparison
     const base = href.split("?")[0];
-    return pathname.startsWith(base);
+    
+    if (pathname === base) return true;
+    
+    if (pathname.startsWith(`${base}/`)) {
+      if (base === "/products") {
+        if (
+          pathname.startsWith("/products/configure") ||
+          pathname.startsWith("/products/setup") ||
+          pathname.startsWith("/products/archived")
+        ) {
+          return false;
+        }
+      }
+      return true;
+    }
+    
+    return false;
   };
 
   return (

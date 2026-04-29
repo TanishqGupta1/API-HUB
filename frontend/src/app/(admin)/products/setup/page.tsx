@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search,
   ChevronLeft,
@@ -34,18 +35,20 @@ const VISIBLE_LIMIT = 6;
 
 function OptionCard({
   option,
+  productId,
   onUpdateAttr,
   onToggle,
-  onSave,
-  onDelete,
+  onRefresh,
 }: {
   option: any;
+  productId: string;
   onUpdateAttr: (attrId: string, field: string, value: any) => void;
   onToggle: (enabled: boolean) => void;
-  onSave: () => void;
-  onDelete: () => void;
+  onRefresh: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const sortedAttrs = useMemo(
     () => [...option.attributes].sort((a, b) => a.sort_order - b.sort_order),
@@ -54,6 +57,50 @@ function OptionCard({
 
   const visible = showAll ? sortedAttrs : sortedAttrs.slice(0, VISIBLE_LIMIT);
   const hasMore = sortedAttrs.length > VISIBLE_LIMIT;
+
+  const handleSaveCard = async () => {
+    setIsSaving(true);
+    try {
+      // Save individual option state
+      await api(`/api/products/${productId}/options/${option.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: option.enabled }),
+      });
+
+      // Save each attribute (concurrently)
+      await Promise.all(
+        option.attributes.map((attr: any) =>
+          api(`/api/products/${productId}/options/${option.id}/attributes/${attr.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              price: attr.price,
+              sort_order: attr.sort_order,
+              enabled: attr.enabled,
+            }),
+          })
+        )
+      );
+      toast.success("Saved successfully");
+    } catch (e: any) {
+      toast.error(`Save failed: ${e.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteCard = async () => {
+    if (!confirm("Delete this option group entirely?")) return;
+    setIsDeleting(true);
+    try {
+      await api(`/api/products/${productId}/options/${option.id}`, { method: "DELETE" });
+      toast.success("Deleted successfully");
+      onRefresh();
+    } catch (e: any) {
+      toast.error(`Delete failed: ${e.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="bg-white border border-[#e2e8f0] flex flex-col shadow-sm">
@@ -132,19 +179,21 @@ function OptionCard({
         <div className="flex items-center gap-2">
           <Button
             variant="default"
-            onClick={onSave}
+            disabled={isSaving}
+            onClick={handleSaveCard}
             className="h-8 px-3 bg-[#3b82f6] hover:bg-[#2563eb] text-white text-[11px] font-bold rounded-none"
           >
             <Save className="w-3.5 h-3.5 mr-1.5" />
-            Save
+            {isSaving ? "..." : "Save"}
           </Button>
           <Button
             variant="outline"
-            onClick={onDelete}
+            disabled={isDeleting}
+            onClick={handleDeleteCard}
             className="h-8 px-3 border-[#fecaca] bg-white text-[#ef4444] hover:bg-[#fef2f2] text-[11px] font-bold rounded-none"
           >
             <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-            Delete
+            {isDeleting ? "..." : "Delete"}
           </Button>
         </div>
       </div>
@@ -155,6 +204,7 @@ function OptionCard({
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function ProductOptionsPage() {
+  const router = useRouter();
   const [options, setOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -165,6 +215,15 @@ export default function ProductOptionsPage() {
 
   const [customers, setCustomers] = useState<any[]>([]);
   const [productsList, setProductsList] = useState<any[]>([]);
+
+  const fetchOptions = async (pid: string) => {
+    try {
+      const data = await api<any>(`/api/products/${pid}`);
+      setOptions(data.options || []);
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -188,19 +247,30 @@ export default function ProductOptionsPage() {
       setOptions([]);
       return;
     }
-    (async () => {
-      try {
-        const data = await api<any>(`/api/products/${productId}`);
-        setOptions(data.options || []);
-      } catch (e: any) {
-        toast.error(e.message);
-      }
-    })();
+    fetchOptions(productId);
   }, [productId, customerId]);
 
   const filteredOptions = useMemo(() => {
-    if (!search.trim() && tag === "all") return options;
-    return options
+    let result = options;
+    const selectedProduct = productsList.find((p) => p.id === productId);
+    
+    // Smart Filter: If it's an apparel product (like a Toddler T-Shirt), hide signage options
+    if (selectedProduct) {
+      const pName = (selectedProduct.product_name || "").toLowerCase();
+      const pType = (selectedProduct.product_type || "").toLowerCase();
+      const isApparel = pName.includes("shirt") || pName.includes("tee") || pName.includes("hoodie") || pType.includes("apparel") || (selectedProduct.supplier_name || "").toLowerCase().includes("sanmar");
+      
+      if (isApparel) {
+        const signageKeywords = ["laminate", "substrate", "ink", "finish", "packaging", "binding", "paper"];
+        result = result.filter(o => {
+          const t = (o.title || o.option_key || "").toLowerCase();
+          return !signageKeywords.some(kw => t.includes(kw));
+        });
+      }
+    }
+
+    if (!search.trim() && tag === "all") return result;
+    return result
       .map((opt) => {
         const filteredAttrs = opt.attributes.filter((a: any) =>
           a.title.toLowerCase().includes(search.toLowerCase())
@@ -209,7 +279,7 @@ export default function ProductOptionsPage() {
         return { ...opt, attributes: search.trim() ? filteredAttrs : opt.attributes };
       })
       .filter(Boolean);
-  }, [options, search, tag]);
+  }, [options, search, tag, productsList, productId]);
 
   const updateAttr = (optionKey: string, attrId: string, field: string, value: any) => {
     setOptions((prev) =>
@@ -226,29 +296,25 @@ export default function ProductOptionsPage() {
     );
   };
 
-  const toggleOption = async (optionKey: string, enabled: boolean) => {
+  const toggleOption = (optionKey: string, enabled: boolean) => {
     setOptions((prev) =>
       prev.map((o) => (o.option_key === optionKey ? { ...o, enabled } : o))
     );
-    toast.info(`${optionKey} ${enabled ? "enabled" : "disabled"}`);
-  };
-
-  const saveOption = async (optionKey: string) => {
-    const opt = options.find((o) => o.option_key === optionKey);
-    if (!opt) return;
-    toast.success(`Saved configuration for ${opt.title}`);
-  };
-
-  const deleteOption = async (optionKey: string) => {
-    setOptions((prev) => prev.filter((o) => o.option_key !== optionKey));
-    toast.success("Option group removed from view");
   };
 
   const handleSaveAll = async () => {
+    if (!productId) return;
     setSavingAll(true);
     try {
-      await new Promise(r => setTimeout(r, 1000));
-      toast.success("All product configurations synchronized");
+      // Send the entire options tree for bulk save
+      await api(`/api/products/${productId}/options/bulk-save`, {
+        method: "POST",
+        body: JSON.stringify(options),
+      });
+      toast.success("Saved successfully");
+      fetchOptions(productId);
+    } catch (e: any) {
+      toast.error(`Save All failed: ${e.message}`);
     } finally {
       setSavingAll(false);
     }
@@ -257,6 +323,7 @@ export default function ProductOptionsPage() {
   const handleReset = () => {
     setSearch("");
     setTag("all");
+    if (productId) fetchOptions(productId);
   };
 
   if (loading) {
@@ -288,6 +355,7 @@ export default function ProductOptionsPage() {
             <Button
               variant="default"
               className="h-8 px-4 bg-[#22c55e] hover:bg-[#16a34a] text-white text-[11px] font-black uppercase tracking-widest rounded-none shadow-sm"
+              onClick={() => toast.info("Duplication logic is pending backend implementation.")}
             >
               <Copy className="w-3.5 h-3.5 mr-1.5" />
               Duplicate Options
@@ -295,6 +363,7 @@ export default function ProductOptionsPage() {
             <Button
               variant="outline"
               className="h-8 px-4 border-[#cbd5e1] bg-white text-[#475569] text-[11px] font-black uppercase tracking-widest rounded-none hover:bg-[#f1f5f9] shadow-sm"
+              onClick={() => router.back()}
             >
               <ChevronLeft className="w-3.5 h-3.5 mr-1" />
               Back
@@ -397,13 +466,13 @@ export default function ProductOptionsPage() {
               {filteredOptions.map((opt) => (
                 <OptionCard
                   key={opt.id}
+                  productId={productId}
                   option={opt}
                   onUpdateAttr={(attrId, field, value) =>
                     updateAttr(opt.option_key, attrId, field, value)
                   }
                   onToggle={(enabled) => toggleOption(opt.option_key, enabled)}
-                  onSave={() => saveOption(opt.option_key)}
-                  onDelete={() => deleteOption(opt.option_key)}
+                  onRefresh={() => fetchOptions(productId)}
                 />
               ))}
             </div>

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import { Customer } from "@/lib/types";
@@ -26,6 +27,7 @@ export default function StorefrontsPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     async function load() {
@@ -74,7 +76,7 @@ export default function StorefrontsPage() {
           </h1>
           <p className="text-[#888894] mt-1 font-medium">Manage and publish to your independent storefront instances.</p>
         </div>
-        <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10 px-8 h-11" onClick={() => setShowAdd(true)}>
+        <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10 px-8 h-11" onClick={() => router.push('/customers/new')}>
           <Plus className="w-4 h-4 mr-2" />
           Add Storefront
         </Button>
@@ -116,7 +118,11 @@ export default function StorefrontsPage() {
       {/* Storefront Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {customers.map((c) => (
-          <Card key={c.id} className="border-[#cfccc8] overflow-hidden bg-white hover:border-[#1e4d92] transition-all hover:shadow-xl hover:shadow-blue-900/5 group">
+          <Card 
+            key={c.id} 
+            onClick={() => router.push(`/customers/${c.id}`)}
+            className="border-[#cfccc8] overflow-hidden bg-white hover:border-[#1e4d92] transition-all hover:shadow-xl hover:shadow-blue-900/5 group cursor-pointer"
+          >
             <div className="p-6 space-y-6">
               
               {/* Header: Name & Status */}
@@ -146,9 +152,11 @@ export default function StorefrontsPage() {
                       {c.ops_base_url.replace('https://', '')}
                     </span>
                  </div>
-                 <a href={c.ops_base_url} target="_blank" className="text-[#888894] hover:text-[#1e4d92]">
-                    <ExternalLink className="w-3.5 h-3.5" />
-                 </a>
+                 <div onClick={(e) => e.stopPropagation()}>
+                   <a href={c.ops_base_url} target="_blank" className="text-[#888894] hover:text-[#1e4d92]">
+                      <ExternalLink className="w-3.5 h-3.5" />
+                   </a>
+                 </div>
               </div>
 
               {/* Metrics Row */}
@@ -174,7 +182,15 @@ export default function StorefrontsPage() {
               {/* Actions */}
               <div className="flex items-center justify-between pt-1">
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" className="h-9 px-3 border border-transparent hover:border-[#cfccc8] text-[11px] font-bold text-[#888894] uppercase tracking-wider">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-9 px-3 border border-transparent hover:border-[#cfccc8] text-[11px] font-bold text-[#888894] uppercase tracking-wider"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/customers/${c.id}`);
+                    }}
+                  >
                     <Settings2 className="w-3.5 h-3.5 mr-2" />
                     Configure
                   </Button>
@@ -182,12 +198,22 @@ export default function StorefrontsPage() {
                     variant="ghost" 
                     size="sm" 
                     className={`h-9 px-3 border border-transparent hover:border-[#cfccc8] text-[11px] font-bold uppercase tracking-wider ${c.is_active ? 'text-rose-600' : 'text-emerald-600'}`}
-                    onClick={() => handleDeactivate(c.id, c.is_active)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeactivate(c.id, c.is_active);
+                    }}
                   >
                     {c.is_active ? 'Deactivate' : 'Activate'}
                   </Button>
                 </div>
-                <Button size="sm" className="h-9 w-9 p-0 bg-[#f9f7f4] hover:bg-[#1e4d92] text-[#1e4d92] hover:text-white border border-[#cfccc8] transition-all rounded-xl">
+                <Button 
+                  size="sm" 
+                  className="h-9 w-9 p-0 bg-[#f9f7f4] hover:bg-[#1e4d92] text-[#1e4d92] hover:text-white border border-[#cfccc8] transition-all rounded-xl"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push(`/customers/${c.id}`);
+                  }}
+                >
                     <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
@@ -205,7 +231,7 @@ export default function StorefrontsPage() {
           <p className="text-[13px] text-[#888894] max-w-sm mx-auto font-medium leading-relaxed mb-6">
             Connect your OnPrintShop instances to start publishing normalized product data across your network.
           </p>
-          <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-black text-xs uppercase tracking-widest px-8" onClick={() => setShowAdd(true)}>
+          <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-black text-xs uppercase tracking-widest px-8" onClick={() => router.push('/customers/new')}>
             Add First Instance
           </Button>
         </div>

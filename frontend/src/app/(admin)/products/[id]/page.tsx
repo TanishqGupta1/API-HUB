@@ -385,57 +385,10 @@ export default function ProductDetailPage() {
             </Link>
           </div>
           <div className="p-6">
-            {options.length === 0 ? (
-              <div className="text-center py-6 text-[#888894]">
-                <div className="text-[28px] mb-2">⚙️</div>
-                <div className="text-[14px] font-semibold text-[#1e1e24] mb-1">No options configured yet</div>
-                <div className="text-[12px] mb-4">
-                  Options control what customers can choose when ordering — substrate, print sides, ink type, finish, etc.
-                </div>
-                <Link href={`/products/${product.id}/options`}>
-                  <button className="px-5 py-2 text-[13px] font-semibold rounded-md bg-[#1e4d92] text-white hover:bg-[#173d74] transition-colors">
-                    Open Options Configuration
-                  </button>
-                </Link>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                {options.slice(0, 6).map((opt) => (
-                  <div
-                    key={opt.master_option_id}
-                    className={`flex items-center justify-between px-4 py-3 rounded-lg border ${
-                      opt.enabled
-                        ? "border-[#247a52] bg-[#f0f9f4]"
-                        : "border-[#cfccc8] bg-[#f9f7f4]"
-                    }`}
-                  >
-                    <div>
-                      <div className="text-[12px] font-semibold text-[#1e1e24]">{opt.title}</div>
-                      <div className="text-[10px] text-[#888894] font-mono mt-0.5">
-                        {opt.attributes.filter((a) => a.enabled).length}/{opt.attributes.length} active
-                      </div>
-                    </div>
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        opt.enabled
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-stone-100 text-stone-500"
-                      }`}
-                    >
-                      <span className={`w-[5px] h-[5px] rounded-full ${opt.enabled ? "bg-emerald-500" : "bg-stone-400"}`} />
-                      {opt.enabled ? "On" : "Off"}
-                    </span>
-                  </div>
-                ))}
-                {options.length > 6 && (
-                  <Link href={`/products/${product.id}/options`}>
-                    <div className="flex items-center justify-center px-4 py-3 rounded-lg border border-dashed border-[#1e4d92] text-[#1e4d92] text-[12px] font-semibold hover:bg-[#eef4fb] cursor-pointer transition-colors h-full">
-                      +{options.length - 6} more →
-                    </div>
-                  </Link>
-                )}
-              </div>
-            )}
+            <div className="text-[13px] text-[#484852] leading-relaxed">
+              Options control what customers can choose when ordering (substrate, print sides, ink type, finish, etc.). 
+              Click the button above to view and assign these options for this specific product.
+            </div>
           </div>
         </div>
       )}
