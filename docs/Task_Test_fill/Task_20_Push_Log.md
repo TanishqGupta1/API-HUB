@@ -57,7 +57,7 @@ The push-status endpoint lets the frontend (and n8n) query the latest push resul
 Backend running, at least one customer and one product in the database:
 
 ```bash
-cd /Users/PD/API-HUB/backend && source .venv/bin/activate
+cd "$(git rev-parse --show-toplevel)/backend" && source .venv/bin/activate
 uvicorn main:app --reload --port 8001
 ```
 

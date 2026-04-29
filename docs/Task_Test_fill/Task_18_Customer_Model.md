@@ -68,7 +68,7 @@ Once saved, the secret cannot be retrieved through the API. Only someone with di
 Backend must be running:
 
 ```bash
-cd /Users/PD/API-HUB
+cd "$(git rev-parse --show-toplevel)"
 docker compose up -d postgres
 cd backend && source .venv/bin/activate
 uvicorn main:app --reload --port 8001

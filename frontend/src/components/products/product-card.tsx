@@ -133,6 +133,14 @@ export function ProductCard({ product, onArchive }: ProductCardProps) {
       >
         <PushRowAction productId={product.id} productName={product.product_name} />
       </div>
+
+      {/* Action row — Push to OPS */}
+      <div
+        className="flex items-center justify-end px-5 py-2 bg-white border-t border-[#cfccc8]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <PushRowAction productId={product.id} productName={product.product_name} />
+      </div>
     </div>
   );
 }
