@@ -74,7 +74,7 @@ export default function StorefrontsPage() {
           </h1>
           <p className="text-[#888894] mt-1 font-medium">Manage and publish to your independent storefront instances.</p>
         </div>
-        <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10 px-8 h-11" onClick={() => setShowAdd(true)}>
+        <Button className="bg-[#1e4d92] hover:bg-[#173d74] text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10 px-8 h-11" onClick={() => setShowAdd(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Add Storefront
         </Button>
@@ -205,7 +205,7 @@ export default function StorefrontsPage() {
           <p className="text-[13px] text-[#888894] max-w-sm mx-auto font-medium leading-relaxed mb-6">
             Connect your OnPrintShop instances to start publishing normalized product data across your network.
           </p>
-          <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-black text-xs uppercase tracking-widest px-8" onClick={() => setShowAdd(true)}>
+          <Button className="bg-[#1e4d92] hover:bg-[#173d74] text-white font-black text-xs uppercase tracking-widest px-8" onClick={() => setShowAdd(true)}>
             Add First Instance
           </Button>
         </div>

@@ -105,7 +105,7 @@ export default function SupplierDetailPage() {
             Delete
           </Button>
           <Button 
-            className="bg-[#1e4d92] hover:bg-[#173d74] font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10 px-8"
+            className="bg-[#1e4d92] hover:bg-[#173d74] text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10 px-8"
             onClick={handleSave}
             disabled={saving}
           >

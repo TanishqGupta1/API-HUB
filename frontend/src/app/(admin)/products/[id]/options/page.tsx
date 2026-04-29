@@ -124,7 +124,7 @@ export default function ConfigureProductOptionsPage() {
         <Button
           onClick={saveAll}
           disabled={savingAll || dirty.size === 0}
-          className="bg-[#1e4d92] hover:bg-[#173d74]"
+          className="bg-[#1e4d92] hover:bg-[#173d74] text-white"
         >
           {savingAll ? "Saving..." : `Save All ${dirty.size ? `(${dirty.size})` : ""}`}
         </Button>

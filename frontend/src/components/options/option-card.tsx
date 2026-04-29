@@ -67,7 +67,7 @@ export function OptionCard({ card, dirty, onChange, onSave, onDelete }: Props) {
           size="sm"
           onClick={handleSave}
           disabled={!dirty || saving}
-          className="bg-[#1e4d92] hover:bg-[#173d74]"
+          className="bg-[#1e4d92] hover:bg-[#173d74] text-white"
         >
           {saving ? "Saving..." : "Save"}
         </Button>
