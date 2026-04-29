@@ -27,10 +27,8 @@ export default function ConfigureProductOptionsPage() {
         setProduct(p);
         const sup = await api<Supplier>(`/api/suppliers/${p.supplier_id}`);
         setSupplier(sup);
-        if (sup.protocol === "ops_graphql") {
-          const cfg = await api<OptionConfigItem[]>(`/api/products/${id}/options-config`);
-          setCards(cfg);
-        }
+        const cfg = await api<OptionConfigItem[]>(`/api/products/${id}/options-config`);
+        setCards(cfg);
       } finally {
         setLoading(false);
       }
@@ -88,27 +86,10 @@ export default function ConfigureProductOptionsPage() {
       : c)));
   };
 
+  // Protocol check removed to allow configuring master options for any product (e.g. SanMar SOAP) 
+  // that will eventually be pushed to an OPS storefront.
+  
   if (loading) return <div className="p-6 text-[#888894]">Loading…</div>;
-
-  if (supplier && supplier.protocol !== "ops_graphql") {
-    return (
-      <div className="flex flex-col gap-4 p-6">
-        <div className="text-xs text-[#888894]">
-          <button onClick={() => router.back()} className="hover:underline">← Back</button>
-        </div>
-        <div className="bg-white rounded-[10px] border border-[#cfccc8] p-10 text-center">
-          <div className="text-[15px] font-semibold text-[#1e1e24] mb-2">
-            Master options not available for this product
-          </div>
-          <p className="text-sm text-[#888894] max-w-[500px] mx-auto">
-            {product?.product_name} is sourced from <strong>{supplier.name}</strong> ({supplier.protocol}).
-            Master options apply only to products pushed to OPS storefronts (Visual Graphics OPS).
-            Upstream wholesale suppliers like SanMar, 4Over, and S&S don&apos;t use this configuration.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-4 p-6">

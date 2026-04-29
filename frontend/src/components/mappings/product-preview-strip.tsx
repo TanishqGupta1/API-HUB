@@ -39,29 +39,31 @@ export function ProductPreviewStrip({ supplierId }: Props) {
   }
 
   return (
-    <div className="flex gap-3">
+    <div className="flex gap-4">
       {products.map((p) => (
         <div
           key={p.id}
-          className="bg-white rounded border border-[#cfccc8] overflow-hidden w-36"
+          className="bg-white rounded-2xl border border-[#f2f0ed] overflow-hidden w-44 hover:border-[#1e4d92] transition-all hover:shadow-xl hover:shadow-blue-900/5 group"
         >
-          {p.image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={p.image_url}
-              alt={p.product_name}
-              className="w-full h-28 object-contain bg-[#ebe8e3]"
-            />
-          ) : (
-            <div className="w-full h-28 bg-[#ebe8e3] flex items-center justify-center text-[10px] text-[#b4b4bc] font-bold uppercase">
-              No image
-            </div>
-          )}
-          <div className="p-2">
-            <div className="text-[11px] font-bold text-[#1e1e24] truncate">
+          <div className="h-32 bg-[#f9f7f4] flex items-center justify-center overflow-hidden">
+            {p.image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={p.image_url}
+                alt={p.product_name}
+                className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500"
+              />
+            ) : (
+              <div className="text-[9px] font-black uppercase tracking-widest text-[#cfccc8]">
+                No Asset
+              </div>
+            )}
+          </div>
+          <div className="p-4 bg-white">
+            <div className="text-[11px] font-black text-[#1e1e24] truncate tracking-tight mb-0.5">
               {p.product_name}
             </div>
-            <div className="text-[10px] font-mono text-[#888894]">{p.supplier_sku}</div>
+            <div className="text-[10px] font-mono font-bold text-[#888894]">{p.supplier_sku}</div>
           </div>
         </div>
       ))}

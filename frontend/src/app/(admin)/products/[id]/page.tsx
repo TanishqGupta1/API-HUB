@@ -150,13 +150,11 @@ export default function ProductDetailPage() {
           </div>
         </div>
         <div className="flex gap-3">
-          {supplier?.protocol === "ops_graphql" && (
-            <Link href={`/products/${product.id}/options`}>
-              <Button variant="outline" className="border-[#1e4d92] text-[#1e4d92]">
-                Configure Options
-              </Button>
-            </Link>
-          )}
+          <Link href={`/products/${product.id}/options`}>
+            <Button variant="outline" className="border-[#1e4d92] text-[#1e4d92]">
+              Configure Options
+            </Button>
+          </Link>
           <PublishButton
             productId={id}
             onDone={() => {
@@ -366,8 +364,8 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* ── Product Options (VG products only) ───────────── */}
-      {supplier?.protocol === "ops_graphql" && (
+      {/* ── Product Options (All products) ─────────────── */}
+      {true && (
         <div className="bg-white border border-[#cfccc8] rounded-lg shadow-[4px_6px_0_rgba(30,77,146,0.08)] overflow-hidden mb-8">
           <div className="flex items-center justify-between px-6 py-4 bg-[#ebe8e3] border-b border-[#cfccc8]">
             <div>
