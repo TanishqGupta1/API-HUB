@@ -1,12 +1,12 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from modules.catalog.models import Product
+from modules.catalog.models import Category, Product, ProductImage, ProductVariant
+from modules.sync_jobs.models import SyncJob
 
 from .models import Supplier
 from .schemas import SupplierCreate, SupplierRead
@@ -118,6 +118,18 @@ async def delete_supplier(supplier_id: UUID, db: AsyncSession = Depends(get_db))
     supplier = result.scalar_one_or_none()
     if not supplier:
         raise HTTPException(404, "Supplier not found")
+
+    # Delete child rows before the supplier to satisfy FK constraints
+    product_ids = (
+        await db.execute(select(Product.id).where(Product.supplier_id == supplier_id))
+    ).scalars().all()
+    if product_ids:
+        await db.execute(delete(ProductVariant).where(ProductVariant.product_id.in_(product_ids)))
+        await db.execute(delete(ProductImage).where(ProductImage.product_id.in_(product_ids)))
+    await db.execute(delete(Product).where(Product.supplier_id == supplier_id))
+    await db.execute(delete(Category).where(Category.supplier_id == supplier_id))
+    await db.execute(delete(SyncJob).where(SyncJob.supplier_id == supplier_id))
+
     await db.delete(supplier)
     await db.commit()
     return {"deleted": True}
