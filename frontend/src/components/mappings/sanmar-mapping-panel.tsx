@@ -82,7 +82,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange }: Props) {
         </label>
         <p className="text-[11px] text-[#888894] mt-1 ml-6">
           Adds an extra SOAP call per product but populates image_url + variant
-          image arrays from SanMar's Media service.
+          image arrays from SanMar&apos;s Media service.
         </p>
       </div>
     </div>

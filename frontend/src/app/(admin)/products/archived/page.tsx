@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import type { ProductListItem } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 
@@ -18,7 +19,7 @@ export default function ArchivedProductsPage() {
         );
         setProducts(rows);
       } catch (err) {
-        console.error(err);
+        log.error(err);
       } finally {
         setLoading(false);
       }
@@ -30,7 +31,7 @@ export default function ArchivedProductsPage() {
       await api(`/api/products/${id}/restore`, { method: "POST" });
       setProducts((prev) => prev.filter((x) => x.id !== id));
     } catch (err) {
-      console.error(err);
+      log.error(err);
       alert("Failed to restore product.");
     }
   };

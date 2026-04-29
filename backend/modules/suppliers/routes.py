@@ -69,12 +69,27 @@ async def create_supplier(body: SupplierCreate, db: AsyncSession = Depends(get_d
     return data
 
 
-@router.get("/{supplier_id}", response_model=SupplierRead)
-async def get_supplier(supplier_id: UUID, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Supplier).where(Supplier.id == supplier_id))
-    supplier = result.scalar_one_or_none()
+async def get_supplier_by_id_or_slug(db: AsyncSession, id_or_slug: str) -> Supplier:
+    # Try UUID first
+    supplier = None
+    try:
+        uid = UUID(id_or_slug)
+        result = await db.execute(select(Supplier).where(Supplier.id == uid))
+        supplier = result.scalar_one_or_none()
+    except ValueError:
+        # Not a UUID, try slug
+        result = await db.execute(select(Supplier).where(Supplier.slug == id_or_slug))
+        supplier = result.scalar_one_or_none()
+
     if not supplier:
         raise HTTPException(404, "Supplier not found")
+    return supplier
+
+
+@router.get("/{supplier_id_or_slug}", response_model=SupplierRead)
+async def get_supplier(supplier_id_or_slug: str, db: AsyncSession = Depends(get_db)):
+    supplier = await get_supplier_by_id_or_slug(db, supplier_id_or_slug)
+    
     count = (
         await db.execute(
             select(func.count()).select_from(Product).where(Product.supplier_id == supplier.id)
@@ -85,14 +100,11 @@ async def get_supplier(supplier_id: UUID, db: AsyncSession = Depends(get_db)):
     return data
 
 
-@router.patch("/{supplier_id}", response_model=SupplierRead)
+@router.patch("/{supplier_id_or_slug}", response_model=SupplierRead)
 async def patch_supplier(
-    supplier_id: UUID, body: dict, db: AsyncSession = Depends(get_db)
+    supplier_id_or_slug: str, body: dict, db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Supplier).where(Supplier.id == supplier_id))
-    supplier = result.scalar_one_or_none()
-    if not supplier:
-        raise HTTPException(404, "Supplier not found")
+    supplier = await get_supplier_by_id_or_slug(db, supplier_id_or_slug)
     
     # Partial update from dict
     for key, val in body.items():
@@ -112,45 +124,39 @@ async def patch_supplier(
     return data
 
 
-@router.delete("/{supplier_id}")
-async def delete_supplier(supplier_id: UUID, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Supplier).where(Supplier.id == supplier_id))
-    supplier = result.scalar_one_or_none()
-    if not supplier:
-        raise HTTPException(404, "Supplier not found")
+@router.delete("/{supplier_id_or_slug}")
+async def delete_supplier(supplier_id_or_slug: str, db: AsyncSession = Depends(get_db)):
+    supplier = await get_supplier_by_id_or_slug(db, supplier_id_or_slug)
 
-    # Delete child rows before the supplier to satisfy FK constraints
     product_ids = (
-        await db.execute(select(Product.id).where(Product.supplier_id == supplier_id))
+        await db.execute(select(Product.id).where(Product.supplier_id == supplier.id))
     ).scalars().all()
     if product_ids:
         await db.execute(delete(ProductVariant).where(ProductVariant.product_id.in_(product_ids)))
         await db.execute(delete(ProductImage).where(ProductImage.product_id.in_(product_ids)))
-    await db.execute(delete(Product).where(Product.supplier_id == supplier_id))
-    await db.execute(delete(Category).where(Category.supplier_id == supplier_id))
-    await db.execute(delete(SyncJob).where(SyncJob.supplier_id == supplier_id))
+    await db.execute(delete(Product).where(Product.supplier_id == supplier.id))
+    await db.execute(delete(Category).where(Category.supplier_id == supplier.id))
+    await db.execute(delete(SyncJob).where(SyncJob.supplier_id == supplier.id))
 
     await db.delete(supplier)
     await db.commit()
     return {"deleted": True}
 
 
-@router.get("/{supplier_id}/endpoints")
-async def get_supplier_endpoints(supplier_id: UUID, db: AsyncSession = Depends(get_db)):
-    return await get_cached_endpoints(db, supplier_id)
+@router.get("/{supplier_id_or_slug}/endpoints")
+async def get_supplier_endpoints(supplier_id_or_slug: str, db: AsyncSession = Depends(get_db)):
+    supplier = await get_supplier_by_id_or_slug(db, supplier_id_or_slug)
+    return await get_cached_endpoints(db, supplier.id)
 
 
-@router.put("/{supplier_id}/mappings")
+@router.put("/{supplier_id_or_slug}/mappings")
 async def save_supplier_mappings(
-    supplier_id: UUID, body: dict, db: AsyncSession = Depends(get_db)
+    supplier_id_or_slug: str, body: dict, db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Supplier).where(Supplier.id == supplier_id))
-    supplier = result.scalar_one_or_none()
-    if not supplier:
-        raise HTTPException(404, "Supplier not found")
+    supplier = await get_supplier_by_id_or_slug(db, supplier_id_or_slug)
     supplier.field_mappings = body
     await db.commit()
-    return {"saved": True, "supplier_id": str(supplier_id), "mappings": body}
+    return {"saved": True, "supplier_id": str(supplier.id), "mappings": body}
 @router.post("/test")
 async def test_supplier_connection(body: dict):
     """Test connection to a supplier before adding it.

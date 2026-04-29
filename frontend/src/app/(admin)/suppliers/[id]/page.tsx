@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import { Supplier } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,7 @@ export default function SupplierDetailPage() {
         const data = await api<Supplier>(`/api/suppliers/${id}`);
         setSupplier(data);
       } catch (e) {
-        console.error("Failed to load supplier", e);
+        log.error("Failed to load supplier", e);
       } finally {
         setLoading(false);
       }

@@ -8,6 +8,7 @@ const SORT_LABEL: Record<SortKey, string> = {
   price_asc: "Price ↑",
   price_desc: "Price ↓",
   newest: "Newest",
+  variants: "Most variants",
 };
 
 export function ActiveFilterChips() {
