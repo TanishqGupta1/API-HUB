@@ -103,6 +103,10 @@ async def _run_category_import(
     """
     from modules.promostandards.client import PromoStandardsClient
     from modules.promostandards.normalizer import upsert_products
+    from modules.catalog.models import Category, Product
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy import update
+    import re
 
     async with async_session() as session:
         job = await session.get(SyncJob, job_id)
@@ -145,6 +149,34 @@ async def _run_category_import(
                 media=None,
                 category_id=db_cat.id
             )
+
+            # Upsert a Category row for this category_name so the sidebar shows it
+            if products:
+                cat_slug = re.sub(r"[^a-z0-9]+", "-", category_name.lower()).strip("-")
+                stmt = pg_insert(Category).values(
+                    supplier_id=supplier_id,
+                    external_id=cat_slug,
+                    name=category_name,
+                    sort_order=0,
+                ).on_conflict_do_update(
+                    index_elements=["supplier_id", "external_id"],
+                    set_={"name": category_name},
+                )
+                result = await session.execute(stmt.returning(Category.id))
+                category_id = result.scalar_one()
+
+                # Link imported products to this category
+                product_skus = [p.product_id for p in products]
+                await session.execute(
+                    update(Product)
+                    .where(
+                        Product.supplier_id == supplier_id,
+                        Product.supplier_sku.in_(product_skus),
+                    )
+                    .values(category_id=category_id)
+                )
+                await session.commit()
+
             job2 = await session.get(SyncJob, job_id)
             if job2:
                 job2.status = "completed"

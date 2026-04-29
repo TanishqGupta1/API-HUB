@@ -3,8 +3,6 @@
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -13,15 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Globe,
-  ArrowLeft,
-  ShieldCheck,
-  Zap,
-  Database,
-  Lock,
-  Cloud,
-} from "lucide-react";
+import { Globe, ArrowLeft, Lock, Zap, ShieldCheck, Cloud, Database } from "lucide-react";
 
 type AuthFieldType = "text" | "password" | "number";
 interface AuthField {
@@ -41,17 +31,11 @@ interface ProtocolDef {
   fields: AuthField[];
 }
 
-// Cred shapes match the backend protocol adapters:
-//   soap/promostandards -> modules/promostandards/client.py reads id/password/customer_number
-//   sftp -> n8n SFTP credential needs host/port/username/password
-//   rest -> S&S Activewear: HTTP Basic
-//   rest_hmac -> 4Over: HMAC-SHA256 with client_id/client_secret
-//   ops_graphql -> OnPrintShop OAuth2
 const PROTOCOLS: ProtocolDef[] = [
   {
     value: "promostandards",
     label: "PromoStandards (SOAP)",
-    base_url_label: "PS Directory base URL",
+    base_url_label: "PS Directory Base URL",
     base_url_default: "https://promostandards.org/api",
     fields: [
       { key: "id", label: "Username (id)", required: true, placeholder: "your username" },
@@ -62,9 +46,9 @@ const PROTOCOLS: ProtocolDef[] = [
   {
     value: "soap",
     label: "Generic SOAP",
-    base_url_label: "WSDL base URL",
+    base_url_label: "WSDL Base URL",
     fields: [
-      { key: "id", label: "Username (id)", required: true },
+      { key: "id", label: "Username (ID)", required: true },
       { key: "password", label: "Password", type: "password", required: true },
       { key: "customer_number", label: "Customer Number", type: "number" },
     ],
@@ -72,7 +56,7 @@ const PROTOCOLS: ProtocolDef[] = [
   {
     value: "rest",
     label: "REST (HTTP Basic) — S&S Activewear",
-    base_url_label: "API base URL",
+    base_url_label: "API Base URL",
     base_url_default: "https://api.ssactivewear.com",
     fields: [
       { key: "username", label: "Account # / Username", required: true },
@@ -82,7 +66,7 @@ const PROTOCOLS: ProtocolDef[] = [
   {
     value: "rest_hmac",
     label: "REST + HMAC — 4Over",
-    base_url_label: "API base URL",
+    base_url_label: "API Base URL",
     base_url_default: "https://api.4over.com",
     fields: [
       { key: "client_id", label: "Client ID", required: true },
@@ -92,7 +76,7 @@ const PROTOCOLS: ProtocolDef[] = [
   {
     value: "sftp",
     label: "SFTP / CSV — SanMar",
-    base_url_label: "SFTP host:port (informational)",
+    base_url_label: "SFTP Host:Port",
     base_url_default: "ftp.sanmar.com:2200",
     fields: [
       { key: "host", label: "SFTP Host", required: true, default: "ftp.sanmar.com" },
@@ -104,7 +88,7 @@ const PROTOCOLS: ProtocolDef[] = [
   {
     value: "ops_graphql",
     label: "OnPrintShop GraphQL (OAuth2)",
-    base_url_label: "OPS base URL",
+    base_url_label: "OPS Base URL",
     base_url_default: "https://yourshop.onprintshop.com",
     fields: [
       { key: "client_id", label: "OAuth2 Client ID", required: true },
@@ -115,37 +99,32 @@ const PROTOCOLS: ProtocolDef[] = [
   },
 ];
 
-const SANMAR_PRESET = {
-  name: "SanMar",
-  slug: "sanmar",
-  protocol: "promostandards",
-  promostandards_code: "SANMAR",
-  base_url: "https://promostandards.org/api",
-  auth_config: {
-    id: "",
-    password: "",
-    customer_number: "",
-  } as Record<string, string>,
-};
-
-const SANMAR_SFTP_PRESET = {
-  name: "SanMar SFTP",
-  slug: "sanmar-sftp",
-  protocol: "sftp",
-  promostandards_code: "",
-  base_url: "ftp.sanmar.com:2200",
-  auth_config: {
-    host: "ftp.sanmar.com",
-    port: "2200",
-    username: "",
-    password: "",
-  } as Record<string, string>,
-};
+const PRESETS = [
+  {
+    label: "SanMar",
+    sub: "PromoStandards · SOAP",
+    icon: "S",
+    data: {
+      name: "SanMar", slug: "sanmar", protocol: "promostandards",
+      promostandards_code: "SANMAR", base_url: "https://promostandards.org/api",
+      auth_config: { id: "", password: "", customer_number: "" } as Record<string, string>,
+    },
+  },
+  {
+    label: "SanMar SFTP",
+    sub: "SFTP / CSV",
+    icon: "S",
+    data: {
+      name: "SanMar SFTP", slug: "sanmar-sftp", protocol: "sftp",
+      promostandards_code: "", base_url: "ftp.sanmar.com:2200",
+      auth_config: { host: "ftp.sanmar.com", port: "2200", username: "", password: "" } as Record<string, string>,
+    },
+  },
+];
 
 export default function NewSupplierPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [protocol, setProtocol] = useState("promostandards");
@@ -153,12 +132,8 @@ export default function NewSupplierPage() {
   const [baseUrl, setBaseUrl] = useState("");
   const [authConfig, setAuthConfig] = useState<Record<string, string>>({});
 
-  const def = useMemo(
-    () => PROTOCOLS.find((p) => p.value === protocol) ?? PROTOCOLS[0],
-    [protocol],
-  );
+  const def = useMemo(() => PROTOCOLS.find((p) => p.value === protocol) ?? PROTOCOLS[0], [protocol]);
 
-  // Reset auth_config when protocol changes so we don't carry stale keys.
   function changeProtocol(next: string) {
     setProtocol(next);
     const nextDef = PROTOCOLS.find((p) => p.value === next);
@@ -169,7 +144,7 @@ export default function NewSupplierPage() {
     if (nextDef.base_url_default && !baseUrl) setBaseUrl(nextDef.base_url_default);
   }
 
-  function applyPreset(preset: typeof SANMAR_PRESET) {
+  function applyPreset(preset: typeof PRESETS[0]["data"]) {
     setName(preset.name);
     setSlug(preset.slug);
     setProtocol(preset.protocol);
@@ -186,24 +161,20 @@ export default function NewSupplierPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      // Strip empty strings so the backend stores only fields the user filled in.
       const trimmedAuth: Record<string, string | number> = {};
       for (const [k, v] of Object.entries(authConfig)) {
         if (v === undefined || v === null || v === "") continue;
         const fdef = def.fields.find((f) => f.key === k);
         trimmedAuth[k] = fdef?.type === "number" ? Number(v) : v;
       }
-      const payload = {
-        name,
-        slug,
-        protocol,
-        promostandards_code: promostandardsCode || null,
-        base_url: baseUrl || null,
-        auth_config: trimmedAuth,
-      };
       await api("/api/suppliers", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          name, slug, protocol,
+          promostandards_code: promostandardsCode || null,
+          base_url: baseUrl || null,
+          auth_config: trimmedAuth,
+        }),
       });
       router.push("/suppliers");
     } catch (err) {
@@ -214,237 +185,207 @@ export default function NewSupplierPage() {
     }
   }
 
+  const labelCls = "block text-[13px] font-semibold text-[#484852] mb-1.5";
+  const hintCls = "text-[11px] text-[#888894] mt-1.5 leading-relaxed";
+
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.back()} className="text-[#888894]">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-2xl font-black text-[#1e1e24] tracking-tight flex items-center gap-2">
-              <PlusIcon />
-              Register New Supplier
-            </h1>
-            <p className="text-sm text-[#888894] font-medium">
-              Add a new data source to your universal catalog.
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="text-[10px] uppercase tracking-widest border-[#cfccc8]"
-            onClick={() => applyPreset(SANMAR_PRESET)}
-          >
-            SanMar (PromoStandards)
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="text-[10px] uppercase tracking-widest border-[#cfccc8]"
-            onClick={() => applyPreset(SANMAR_SFTP_PRESET)}
-          >
-            SanMar (SFTP)
-          </Button>
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-1.5 text-[13px] text-[#888894] hover:text-[#1e4d92] transition-colors mb-4 font-medium"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Suppliers
+        </button>
+        <h1 className="text-[28px] font-extrabold text-[#1e1e24] tracking-tight">Register New Supplier</h1>
+        <p className="text-[14px] text-[#888894] mt-1">Add a data source to your universal catalog.</p>
+      </div>
+
+      {/* Quick-fill presets */}
+      <div className="mb-8">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-[#888894] mb-3">Quick Presets</p>
+        <div className="flex gap-3">
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => applyPreset(p.data)}
+              className="flex items-center gap-3 px-4 py-3 bg-white border-2 border-[#cfccc8] rounded-xl hover:border-[#1e4d92] hover:bg-[#eef4fb] transition-all group"
+            >
+              <div className="w-8 h-8 rounded-lg bg-[#1e4d92] text-white text-[13px] font-black flex items-center justify-center">
+                {p.icon}
+              </div>
+              <div className="text-left">
+                <div className="text-[13px] font-bold text-[#1e1e24] group-hover:text-[#1e4d92]">{p.label}</div>
+                <div className="text-[11px] text-[#888894]">{p.sub}</div>
+              </div>
+              <Zap className="w-3.5 h-3.5 text-[#cfccc8] group-hover:text-[#1e4d92] ml-1" />
+            </button>
+          ))}
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="md:col-span-2 space-y-6">
-          <Card className="p-6 border-[#cfccc8] shadow-sm flex flex-col gap-6">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-[#1e4d92] border-b border-[#f2f0ed] pb-4">
-              <Globe className="w-3.5 h-3.5" />
-              Core Identity
-            </div>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left: form */}
+        <div className="lg:col-span-2 space-y-6">
 
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-[#888894] uppercase tracking-widest">
-                  Supplier Name
-                </label>
-                <Input
-                  placeholder="e.g. Acme Corp"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="h-11 border-[#cfccc8] focus:ring-[#1e4d92]"
-                  required
-                />
+          {/* Section 1: Identity */}
+          <div className="bg-white border border-[#cfccc8] rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#f2f0ed] flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-[#eef4fb] flex items-center justify-center">
+                <Globe className="w-3.5 h-3.5 text-[#1e4d92]" />
               </div>
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-[#888894] uppercase tracking-widest">
-                  System Slug (Unique)
-                </label>
-                <Input
-                  placeholder="e.g. acme-corp"
-                  value={slug}
-                  onChange={(e) =>
-                    setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-"))
-                  }
-                  className="h-11 border-[#cfccc8] font-mono"
-                  required
-                />
-              </div>
+              <span className="text-[13px] font-bold text-[#1e293b]">Supplier Identity</span>
             </div>
-
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-[#888894] uppercase tracking-widest">
-                Protocol / Method
-              </label>
-              <Select value={protocol} onValueChange={changeProtocol}>
-                <SelectTrigger className="h-11 border-[#cfccc8]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROTOCOLS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {protocol === "promostandards" || protocol === "soap" ? (
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-[#888894] uppercase tracking-widest">
-                  PromoStandards Code (lookup key)
-                </label>
-                <Input
-                  placeholder="e.g. ACME"
-                  value={promostandardsCode}
-                  onChange={(e) => setPromostandardsCode(e.target.value.toUpperCase())}
-                  className="h-11 border-[#cfccc8] font-mono"
-                />
-              </div>
-            ) : null}
-
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-[#888894] uppercase tracking-widest">
-                {def.base_url_label}
-              </label>
-              <Input
-                placeholder={def.base_url_default ?? "https://api.supplier.com/v1"}
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                className="h-11 border-[#cfccc8] font-mono text-[13px]"
-              />
-            </div>
-          </Card>
-
-          <Card className="p-6 border-[#cfccc8] shadow-sm space-y-6">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-[#1e4d92] border-b border-[#f2f0ed] pb-4">
-              <Lock className="w-3.5 h-3.5" />
-              Authentication Credentials
-              <span className="ml-auto text-[10px] font-mono text-[#b4b4bc] normal-case tracking-normal">
-                stored Fernet-encrypted
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
-              {def.fields.map((f) => (
-                <div key={f.key} className="space-y-2">
+            <div className="p-6 space-y-5">
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
                   <label className="text-[11px] font-bold text-[#888894] uppercase tracking-widest">
-                    {f.label}
-                    {f.required ? <span className="ml-1 text-[#b93232]">*</span> : null}
+                    Supplier Name
                   </label>
                   <Input
-                    type={f.type === "password" ? "password" : f.type === "number" ? "number" : "text"}
-                    placeholder={f.placeholder ?? ""}
-                    value={authConfig[f.key] ?? ""}
-                    onChange={(e) => updateAuth(f.key, e.target.value)}
-                    className={`h-11 border-[#cfccc8] ${f.type === "number" ? "font-mono" : ""}`}
-                    required={f.required}
+                    placeholder="e.g. Acme Corp"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="h-11 border-[#cfccc8] focus:ring-[#1e4d92]"
+                    required
                   />
+                </div>
+                <div>
+                  <label className={labelCls}>System Slug <span className="text-[#888894] font-normal">(unique)</span></label>
+                  <Input
+                    placeholder="e.g. acme-corp"
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-"))}
+                    className="h-11 border-[#cfccc8] font-mono text-[13px]"
+                    required
+                  />
+                  <p className={hintCls}>Lowercase, no spaces. Used as the internal ID.</p>
+                </div>
+              </div>
+
+              <div>
+                <label className={labelCls}>Protocol / Method</label>
+                <Select value={protocol} onValueChange={changeProtocol}>
+                  <SelectTrigger className="h-11 border-[#cfccc8] text-[14px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PROTOCOLS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(protocol === "promostandards" || protocol === "soap") && (
+                <div>
+                  <label className={labelCls}>PromoStandards Code (lookup key)</label>
+                  <Input
+                    placeholder="e.g. ACME"
+                    value={promostandardsCode}
+                    onChange={(e) => setPromostandardsCode(e.target.value.toUpperCase())}
+                    className="h-11 border-[#cfccc8] font-mono text-[13px]"
+                  />
+                  <p className={hintCls}>Used to look up WSDL endpoints in the PromoStandards directory.</p>
+                </div>
+              )}
+
+              <div>
+                <label className={labelCls}>{def.base_url_label}</label>
+                <Input
+                  placeholder={def.base_url_default ?? "https://api.supplier.com/v1"}
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  className="h-11 border-[#cfccc8] font-mono text-[13px]"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Auth */}
+          <div className="bg-white border border-[#cfccc8] rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#f2f0ed] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#eef4fb] flex items-center justify-center">
+                  <Lock className="w-3.5 h-3.5 text-[#1e4d92]" />
+                </div>
+                <span className="text-[13px] font-bold text-[#1e1e24]">Authentication Credentials</span>
+              </div>
+              <span className="text-[11px] font-mono text-[#b4b4bc] bg-[#f9f7f4] px-2.5 py-1 rounded-full border border-[#ebe8e3]">
+                Fernet-encrypted
+              </span>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-2 gap-5">
+                {def.fields.map((f) => (
+                  <div key={f.key}>
+                    <label className={labelCls}>
+                      {f.label}
+                      {f.required && <span className="ml-1 text-[#b93232]">*</span>}
+                    </label>
+                    <Input
+                      type={f.type === "password" ? "password" : f.type === "number" ? "number" : "text"}
+                      placeholder={f.placeholder ?? ""}
+                      value={authConfig[f.key] ?? ""}
+                      onChange={(e) => updateAuth(f.key, e.target.value)}
+                      className={`h-11 border-[#cfccc8] text-[14px] ${f.type !== "text" ? "font-mono" : ""}`}
+                      required={f.required}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="text-[10px] font-mono text-[#b4b4bc] border-t border-dashed border-[#ebe8e3] pt-3 mt-4">
+                Field shape inferred from protocol. PromoStandards typically uses{" "}
+                <code className="text-[#1e4d92]">id</code> /{" "}
+                <code className="text-[#1e4d92]">password</code> per the PO Integration Guide.
+              </div>
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full h-12 bg-[#1e4d92] hover:bg-[#173d74] text-white font-bold text-[14px] rounded-xl shadow-[0_3px_0_#143566] active:shadow-none active:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? "Connecting…" : "Initialize Connection"}
+          </button>
+        </div>
+
+        {/* Right: guide */}
+        <div className="space-y-4">
+          <div className="bg-[#1e4d92] rounded-2xl p-5 text-white">
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-4">Registration Guide</p>
+            <div className="space-y-4">
+              {[
+                { icon: ShieldCheck, text: "System slugs must be unique and alphanumeric." },
+                { icon: Zap, text: "Use the presets above to prefill the protocol + cred shape from the Integration Guide." },
+                { icon: Cloud, text: "PromoStandards code drives WSDL endpoint resolution from the public directory." },
+              ].map(({ icon: Icon, text }, i) => (
+                <div key={i} className="flex gap-3">
+                  <div className="w-6 h-6 rounded bg-white/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <p className="text-[11px] font-medium leading-relaxed opacity-90">{text}</p>
                 </div>
               ))}
             </div>
+          </div>
 
-            <div className="text-[10px] font-mono text-[#b4b4bc] border-t border-dashed border-[#ebe8e3] pt-3">
-              Field shape inferred from protocol. PromoStandards typically uses{" "}
-              <code className="text-[#1e4d92]">id</code> /{" "}
-              <code className="text-[#1e4d92]">password</code> per the PO Integration Guide.
-            </div>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card className="p-6 bg-[#1e4d92] text-white border-none shadow-xl shadow-blue-900/20">
-            <h4 className="font-black uppercase tracking-widest text-[10px] opacity-70 mb-4">
-              Registration Guide
-            </h4>
-            <div className="space-y-4">
-              <div className="flex gap-3">
-                <div className="w-6 h-6 rounded bg-white/10 flex items-center justify-center shrink-0">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                </div>
-                <p className="text-[11px] font-medium leading-relaxed">
-                  System slugs must be unique and alphanumeric.
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <div className="w-6 h-6 rounded bg-white/10 flex items-center justify-center shrink-0">
-                  <Zap className="w-3.5 h-3.5" />
-                </div>
-                <p className="text-[11px] font-medium leading-relaxed">
-                  Use the presets above to prefill the protocol + cred shape from the
-                  Integration Guide.
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <div className="w-6 h-6 rounded bg-white/10 flex items-center justify-center shrink-0">
-                  <Cloud className="w-3.5 h-3.5" />
-                </div>
-                <p className="text-[11px] font-medium leading-relaxed">
-                  PromoStandards code drives WSDL endpoint resolution from the public directory.
-                </p>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full mt-8 bg-white text-[#1e4d92] hover:bg-blue-50 font-black uppercase tracking-widest text-[11px] h-12"
-              disabled={loading}
-            >
-              {loading ? "Connecting..." : "Initialize Connection"}
-            </Button>
-          </Card>
-
-          <div className="p-6 rounded-2xl border border-dashed border-[#cfccc8] bg-[#f9f7f4]/50">
+          <div className="bg-white border border-dashed border-[#cfccc8] rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-2">
               <Database className="w-4 h-4 text-[#888894]" />
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#888894]">
-                Connection Test
-              </span>
+              <span className="text-[12px] font-bold text-[#484852]">After Registration</span>
             </div>
-            <p className="text-[10px] font-medium text-[#888894] leading-relaxed">
-              Once created, hit the supplier detail page and use the &quot;Refresh
-              endpoints&quot; / sync action to verify creds.
+            <p className="text-[12px] text-[#888894] leading-relaxed">
+              Go to the supplier detail page and use <span className="font-semibold text-[#484852]">Refresh Endpoints</span> to verify credentials and start syncing.
             </p>
           </div>
         </div>
       </form>
-    </div>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <div className="w-8 h-8 rounded-xl bg-[#f9f7f4] border border-[#cfccc8] flex items-center justify-center text-[#1e4d92]">
-      <svg
-        className="w-4 h-4"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-      </svg>
     </div>
   );
 }

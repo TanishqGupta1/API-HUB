@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from database import get_db
 from modules.suppliers.models import Supplier
 
+from modules.push_log.models import ProductPushLog
 from .models import Category, Product, ProductOption, ProductOptionAttribute, ProductVariant
 from .schemas import (
     ProductListRead,
@@ -43,6 +44,7 @@ async def _category_descendants(db: AsyncSession, root_id: UUID) -> list[UUID]:
 async def list_products(
     supplier_id: Optional[UUID] = None,
     category_id: Optional[UUID] = None,
+    customer_id: Optional[UUID] = None,
     brand: Optional[str] = None,
     search: Optional[str] = None,
     archived: bool = False,
@@ -81,10 +83,26 @@ async def list_products(
     if category_id:
         descendants = await _category_descendants(db, category_id)
         query = query.where(Product.category_id.in_(descendants))
+    if customer_id:
+        pushed_ids = (
+            await db.execute(
+                select(ProductPushLog.product_id)
+                .where(ProductPushLog.customer_id == customer_id)
+                .distinct()
+            )
+        ).scalars().all()
+        query = query.where(Product.id.in_(pushed_ids))
     if brand:
         query = query.where(Product.brand == brand)
     if search:
-        query = query.where(Product.product_name.ilike(f"%{search}%"))
+        from sqlalchemy import or_
+        query = query.where(
+            or_(
+                Product.product_name.ilike(f"%{search}%"),
+                Product.supplier_sku.ilike(f"%{search}%"),
+                Product.brand.ilike(f"%{search}%"),
+            )
+        )
     query = query.offset(skip).limit(limit).order_by(Product.product_name)
 
     rows = (await db.execute(query)).all()

@@ -201,7 +201,7 @@ export default function ImportFromSupplierPage() {
               !selectedCategory ||
               (job !== null && (job.status === "queued" || job.status === "running"))
             }
-            className="bg-[#1e4d92] hover:bg-[#173d74]"
+            className="bg-[#1e4d92] hover:bg-[#173d74] text-white"
           >
             {importing ? "Starting…" : "Import"}
           </Button>

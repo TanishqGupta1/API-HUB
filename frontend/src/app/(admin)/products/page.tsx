@@ -8,11 +8,14 @@ import { log } from "@/lib/log";
 import type { ProductListItem, Supplier } from "@/lib/types";
 import { ProductCard } from "@/components/products/product-card";
 
+interface Category { id: string; name: string; }
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<ProductListItem[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [supplierSearch, setSupplierSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -21,6 +24,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     api<Supplier[]>("/api/suppliers").then(setSuppliers).catch(log.error);
+    api<Category[]>("/api/categories").then(setCategories).catch(log.error);
   }, []);
 
   useEffect(() => {
@@ -28,14 +32,16 @@ export default function ProductsPage() {
     const timeout = setTimeout(() => {
       const params = new URLSearchParams({ limit: "50" });
       if (search) params.set("search", search);
-      if (typeFilter) params.set("type", typeFilter);
+      if (categoryId) params.set("category_id", categoryId);
+      if (supplierFilter !== "all") params.set("supplier_id", supplierFilter);
+      
       api<ProductListItem[]>(`/api/products?${params.toString()}`)
         .then(setProducts)
         .catch(log.error)
         .finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(timeout);
-  }, [search, typeFilter]);
+  }, [search, categoryId, supplierFilter]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -59,18 +65,13 @@ export default function ProductsPage() {
     }
   };
 
-  const types = ["Apparel", "Bags", "Drinkware", "Accessories"];
-
   const filteredSuppliers = suppliers.filter((s) =>
     s.name.toLowerCase().includes(supplierSearch.toLowerCase())
   );
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierFilter);
 
-  const displayedProducts = products.filter((p) => {
-    if (supplierFilter === "all") return true;
-    return p.supplier_id === supplierFilter;
-  });
+  const displayedProducts = products; // Backend handles filtering now
 
   return (
     <div id="s-products">
@@ -96,9 +97,9 @@ export default function ProductsPage() {
       <div className="flex items-center gap-2 mb-8">
         {/* All Products pill */}
         <button
-          onClick={() => { setSupplierFilter("all"); setSupplierSearch(""); }}
+          onClick={() => { setSupplierFilter("all"); setSupplierSearch(""); setCategoryId(""); }}
           className={`px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
-            ${supplierFilter === "all"
+            ${supplierFilter === "all" && !categoryId
               ? "bg-[#1e1e24] text-white border-[#1e1e24]"
               : "bg-white text-[#484852] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
             }`}
@@ -149,7 +150,7 @@ export default function ProductsPage() {
                   filteredSuppliers.map((s) => (
                     <button
                       key={s.id}
-                      onClick={() => { setSupplierFilter(s.id); setDropdownOpen(false); setSupplierSearch(""); }}
+                      onClick={() => { setSupplierFilter(s.id); setDropdownOpen(false); setSupplierSearch(""); setCategoryId(""); }}
                       className={`w-full text-left px-3 py-[9px] text-[12px] font-medium flex items-center justify-between transition-colors
                         ${supplierFilter === s.id
                           ? "bg-[#eef4fb] text-[#1e4d92] font-bold"
@@ -173,70 +174,50 @@ export default function ProductsPage() {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
             <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <path d="m21 21-4.3-4.3" />
           </svg>
           <input
             type="text"
-            className="w-full pl-11 pr-4 py-[14px] bg-[#f9f7f4] border-2 border-[#cfccc8] rounded-md
-                       text-[15px] font-sans outline-none transition-all
-                       focus:border-[#1e4d92] focus:bg-white focus:shadow-[0_0_0_4px_#eef4fb]"
-            placeholder="Query index by name, SKU, or tag..."
+            placeholder="Search products by name or SKU..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-12 pr-4 h-11 bg-white border border-[#cfccc8] rounded-full text-[13px] font-medium text-[#1e1e24] placeholder:text-[#b4b4bc] outline-none focus:border-[#1e4d92] transition-colors"
           />
         </div>
+      </div>
 
-        {/* Type filter tags */}
-        <button
-          onClick={() => setTypeFilter("")}
-          className={`px-4 py-2 rounded-md border text-[12px] font-semibold cursor-pointer transition-all duration-150
-            ${typeFilter === ""
-              ? "bg-[#1e4d92] text-white border-[#1e4d92]"
-              : "bg-white text-[#1e1e24] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
-            }`}
-        >
-          All
-        </button>
-        {types.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTypeFilter(t)}
-            className={`px-4 py-2 rounded-md border text-[12px] font-semibold cursor-pointer transition-all duration-150
-              ${typeFilter === t
-                ? "bg-[#1e4d92] text-white border-[#1e4d92]"
-                : "bg-white text-[#1e1e24] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
-              }`}
-          >
-            {t}
-          </button>
-        ))}
-
-        {/* Result count */}
-        <div className="ml-auto font-mono text-[11px] text-[#888894]">
-          {loading ? "Loading products..." : `${displayedProducts.length.toLocaleString()} results`}
+      {loading && products.length === 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-pulse">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="aspect-[4/5] bg-white border border-[#f2f0ed] rounded-2xl" />
+          ))}
         </div>
-      </div>
+      ) : displayedProducts.length === 0 ? (
+        <div className="py-20 text-center border-2 border-dashed border-[#f2f0ed] rounded-3xl bg-[#fcfbf9]">
+          <div className="text-[14px] font-bold text-[#1e1e24]">No products found</div>
+          <p className="text-[12px] text-[#888894] mt-1">Try adjusting your filters or search terms.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {displayedProducts.map((p) => (
+            <ProductCard key={p.id} product={p} onArchive={() => handleArchive(p)} />
+          ))}
+        </div>
+      )}
 
-      {/* Product grid */}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
-        {loading ? (
-          <div className="col-span-full py-10 text-center text-[#888894] text-[14px]">
-            <div className="font-mono mb-2">Loading products...</div>
-            <span>Syncing items from your connected data sources</span>
-          </div>
-        ) : products.length === 0 ? (
-          <div className="col-span-full py-10 text-center text-[#888894] text-[14px]">
-            <p>No products yet. Connect a supplier to start syncing products.</p>
-          </div>
-        ) : (
-          displayedProducts.map((p) => (
-            <ProductCard key={p.id} product={p} onArchive={handleArchive} />
-          ))
-        )}
-      </div>
+      {/* Pagination (placeholder) */}
+      {!loading && displayedProducts.length > 0 && (
+        <div className="mt-12 flex justify-center">
+          <button className="px-6 py-2.5 bg-white border border-[#cfccc8] rounded-full text-[12px] font-bold text-[#1e1e24] hover:bg-[#fcfbf9] transition-colors">
+            Load More Products
+          </button>
+        </div>
+      )}
     </div>
   );
 }
