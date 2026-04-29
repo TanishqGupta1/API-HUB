@@ -21,9 +21,6 @@ services:
       - --reload
 
   frontend:
-    # Build only the deps stage — that's the smallest image with node_modules
-    # ready to run `npm run dev`. The full multi-stage build creates a
-    # standalone bundle that's incompatible with the source-mount workflow.
     build:
       context: ./frontend
       target: deps
