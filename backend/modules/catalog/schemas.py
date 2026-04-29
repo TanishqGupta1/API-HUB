@@ -194,3 +194,20 @@ class OPSCategoryInput(BaseModel):
     parent_id: int = -1
     status: int = 1
     category_internal_name: str
+
+
+class AttributeUpdate(BaseModel):
+    title: Optional[str] = None
+    price: Optional[Decimal] = None
+    sort_order: Optional[int] = None
+    enabled: Optional[bool] = None
+
+
+class OptionUpdate(BaseModel):
+    title: Optional[str] = None
+    enabled: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+class OptionBulkSave(BaseModel):
+    options: list[OptionIngest]

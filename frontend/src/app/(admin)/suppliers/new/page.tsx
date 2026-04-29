@@ -38,9 +38,9 @@ const PROTOCOLS: ProtocolDef[] = [
     base_url_label: "PS Directory Base URL",
     base_url_default: "https://promostandards.org/api",
     fields: [
-      { key: "id", label: "Username (ID)", required: true, placeholder: "your sanmar.com username" },
+      { key: "id", label: "Username (id)", required: true, placeholder: "your username" },
       { key: "password", label: "Password", type: "password", required: true },
-      { key: "customer_number", label: "Customer Number", type: "number", placeholder: "e.g. 157718" },
+      { key: "customer_number", label: "Customer Number", type: "number", placeholder: "e.g. 12345" },
     ],
   },
   {
@@ -237,24 +237,26 @@ export default function NewSupplierPage() {
               <div className="w-7 h-7 rounded-lg bg-[#eef4fb] flex items-center justify-center">
                 <Globe className="w-3.5 h-3.5 text-[#1e4d92]" />
               </div>
-              <span className="text-[13px] font-bold text-[#1e1e24]">Supplier Identity</span>
+              <span className="text-[13px] font-bold text-[#1e293b]">Supplier Identity</span>
             </div>
             <div className="p-6 space-y-5">
               <div className="grid grid-cols-2 gap-5">
-                <div>
-                  <label className={labelCls}>Supplier Name</label>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-[#888894] uppercase tracking-widest">
+                    Supplier Name
+                  </label>
                   <Input
-                    placeholder="e.g. SanMar"
+                    placeholder="e.g. Acme Corp"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="h-11 border-[#cfccc8] focus:ring-[#1e4d92] text-[14px]"
+                    className="h-11 border-[#cfccc8] focus:ring-[#1e4d92]"
                     required
                   />
                 </div>
                 <div>
                   <label className={labelCls}>System Slug <span className="text-[#888894] font-normal">(unique)</span></label>
                   <Input
-                    placeholder="e.g. sanmar"
+                    placeholder="e.g. acme-corp"
                     value={slug}
                     onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-"))}
                     className="h-11 border-[#cfccc8] font-mono text-[13px]"
@@ -280,9 +282,9 @@ export default function NewSupplierPage() {
 
               {(protocol === "promostandards" || protocol === "soap") && (
                 <div>
-                  <label className={labelCls}>PromoStandards Code</label>
+                  <label className={labelCls}>PromoStandards Code (lookup key)</label>
                   <Input
-                    placeholder="e.g. SANMAR"
+                    placeholder="e.g. ACME"
                     value={promostandardsCode}
                     onChange={(e) => setPromostandardsCode(e.target.value.toUpperCase())}
                     className="h-11 border-[#cfccc8] font-mono text-[13px]"
@@ -319,7 +321,7 @@ export default function NewSupplierPage() {
             <div className="p-6">
               <div className="grid grid-cols-2 gap-5">
                 {def.fields.map((f) => (
-                  <div key={f.key} className={f.type === "number" && def.fields.length % 2 !== 0 ? "" : ""}>
+                  <div key={f.key}>
                     <label className={labelCls}>
                       {f.label}
                       {f.required && <span className="ml-1 text-[#b93232]">*</span>}
@@ -334,6 +336,11 @@ export default function NewSupplierPage() {
                     />
                   </div>
                 ))}
+              </div>
+              <div className="text-[10px] font-mono text-[#b4b4bc] border-t border-dashed border-[#ebe8e3] pt-3 mt-4">
+                Field shape inferred from protocol. PromoStandards typically uses{" "}
+                <code className="text-[#1e4d92]">id</code> /{" "}
+                <code className="text-[#1e4d92]">password</code> per the PO Integration Guide.
               </div>
             </div>
           </div>
@@ -355,14 +362,14 @@ export default function NewSupplierPage() {
             <div className="space-y-4">
               {[
                 { icon: ShieldCheck, text: "System slugs must be unique and alphanumeric." },
-                { icon: Zap, text: "Use a preset above to prefill protocol and credential fields automatically." },
+                { icon: Zap, text: "Use the presets above to prefill the protocol + cred shape from the Integration Guide." },
                 { icon: Cloud, text: "PromoStandards code drives WSDL endpoint resolution from the public directory." },
               ].map(({ icon: Icon, text }, i) => (
                 <div key={i} className="flex gap-3">
                   <div className="w-6 h-6 rounded bg-white/10 flex items-center justify-center shrink-0 mt-0.5">
                     <Icon className="w-3.5 h-3.5" />
                   </div>
-                  <p className="text-[12px] leading-relaxed opacity-90">{text}</p>
+                  <p className="text-[11px] font-medium leading-relaxed opacity-90">{text}</p>
                 </div>
               ))}
             </div>

@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,6 +54,16 @@ class ImportCategoryResponse(BaseModel):
     status: str
     category_name: str
     limit: int
+
+
+class FetchProductResponse(BaseModel):
+    product_id: str
+    product_name: str | None
+    description: str | None
+    brand: str | None
+    image_url: str | None
+    categories: list[str]
+    variants: list[dict]
 
 
 # ---------------------------------------------------------------------------
@@ -111,8 +121,33 @@ async def _run_category_import(
                 limit=limit,
                 extension_wsdl_url=extension_wsdl_url,
             )
+
+            # Ensure category exists in DB
+            from modules.catalog.models import Category
+            cat_res = await session.execute(
+                select(Category).where(
+                    Category.supplier_id == supplier_id,
+                    Category.name == category_name
+                )
+            )
+            db_cat = cat_res.scalar_one_or_none()
+            if not db_cat:
+                db_cat = Category(
+                    supplier_id=supplier_id,
+                    name=category_name,
+                    external_id=category_name, # SanMar uses name as ID
+                )
+                session.add(db_cat)
+                await session.flush()
+            
             await upsert_products(
-                session, supplier_id, products, inventory=None, pricing=None, media=None
+                session, 
+                supplier_id, 
+                products, 
+                inventory=None, 
+                pricing=None, 
+                media=None,
+                category_id=db_cat.id
             )
 
             # Upsert a Category row for this category_name so the sidebar shows it
@@ -276,3 +311,92 @@ async def import_category(
         category_name=body.category_name,
         limit=body.limit,
     )
+
+
+@router.get("/{supplier_id}/fetch-product", response_model=FetchProductResponse)
+async def fetch_single_product(
+    supplier_id: UUID,
+    style_id: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch a single product by Style ID (SKU) for preview.
+    
+    This is a synchronous-feeling call (awaits the SOAP response) used for
+    UI previews before a full import.
+    """
+    supplier = await _load_supplier(db, supplier_id)
+
+    if supplier.protocol not in PS_PROTOCOLS:
+        raise HTTPException(
+            400, f"Fetch-product not supported for protocol '{supplier.protocol}'"
+        )
+
+    from modules.promostandards.client import PromoStandardsClient
+    from modules.promostandards.resolver import resolve_wsdl_url
+
+    endpoints = await get_cached_endpoints(db, supplier_id)
+    wsdl_product = resolve_wsdl_url(endpoints, "product_data")
+    if not wsdl_product:
+        raise HTTPException(
+            502, "Product Data WSDL not found in supplier endpoint cache."
+        )
+
+    client = PromoStandardsClient(wsdl_product, dict(supplier.auth_config or {}))
+    product = await client.get_product(style_id)
+    
+    if not product:
+        raise HTTPException(404, f"Product '{style_id}' not found at supplier.")
+
+    return FetchProductResponse(
+        product_id=product.product_id,
+        product_name=product.product_name,
+        description=product.description,
+        brand=product.brand,
+        image_url=product.primary_image_url,
+        categories=product.categories,
+        variants=[
+            {
+                "color": v.color_name,
+                "size": v.size_name,
+                "part_id": v.part_id,
+            }
+            for v in product.parts
+        ],
+    )
+
+
+@router.post("/{supplier_id}/import-product", status_code=201)
+async def import_single_product(
+    supplier_id: UUID,
+    style_id: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch and immediately import a single product into the catalog."""
+    supplier = await _load_supplier(db, supplier_id)
+
+    if supplier.protocol not in PS_PROTOCOLS:
+        raise HTTPException(
+            400, f"Import-product not supported for protocol '{supplier.protocol}'"
+        )
+
+    from modules.promostandards.client import PromoStandardsClient
+    from modules.promostandards.resolver import resolve_wsdl_url
+    from modules.promostandards.normalizer import upsert_products
+
+    endpoints = await get_cached_endpoints(db, supplier_id)
+    wsdl_product = resolve_wsdl_url(endpoints, "product_data")
+    if not wsdl_product:
+        raise HTTPException(
+            502, "Product Data WSDL not found in supplier endpoint cache."
+        )
+
+    client = PromoStandardsClient(wsdl_product, dict(supplier.auth_config or {}))
+    product = await client.get_product(style_id)
+    
+    if not product:
+        raise HTTPException(404, f"Product '{style_id}' not found at supplier.")
+
+    await upsert_products(db, supplier_id, [product], inventory=None, pricing=None, media=None)
+    await db.commit()
+    
+    return {"success": True, "product_id": product.product_id}

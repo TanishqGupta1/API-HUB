@@ -55,18 +55,6 @@ export function PublishButton({ productId, onDone }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <select
-          value={customerId}
-          onChange={(e) => setCustomerId(e.target.value)}
-          className="px-3 py-2 border-[1.5px] border-[#cfccc8] rounded-lg text-[13px] bg-white focus:border-[#1e4d92] outline-none font-mono transition-colors"
-        >
-          <option value="">Select Storefront…</option>
-          {customers.map((c) => (
-            <option key={c.id} value={c.id} disabled={!c.is_active}>
-              {c.name} {c.is_active ? "" : "(inactive)"}
-            </option>
-          ))}
-        </select>
         <button
           type="button"
           onClick={run}
