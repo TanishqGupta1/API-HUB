@@ -162,9 +162,12 @@ export default function ProductsPage() {
             <div className="font-mono mb-2">Loading products...</div>
             <span>Syncing items from your connected data sources</span>
           </div>
-        ) : products.length === 0 ? (
+        ) : displayedProducts.length === 0 ? (
           <div className="col-span-full py-10 text-center text-[#888894] text-[14px]">
-            <p>No products yet. Connect a supplier to start syncing products.</p>
+            {search || categoryId
+              ? <p>No products match your search.</p>
+              : <p>No products yet. Connect a supplier to start syncing products.</p>
+            }
           </div>
         ) : (
           displayedProducts.map((p) => (

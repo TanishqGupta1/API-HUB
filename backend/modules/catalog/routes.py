@@ -77,7 +77,14 @@ async def list_products(
     if brand:
         query = query.where(Product.brand == brand)
     if search:
-        query = query.where(Product.product_name.ilike(f"%{search}%"))
+        from sqlalchemy import or_
+        query = query.where(
+            or_(
+                Product.product_name.ilike(f"%{search}%"),
+                Product.supplier_sku.ilike(f"%{search}%"),
+                Product.brand.ilike(f"%{search}%"),
+            )
+        )
     query = query.offset(skip).limit(limit).order_by(Product.product_name)
 
     rows = (await db.execute(query)).all()
