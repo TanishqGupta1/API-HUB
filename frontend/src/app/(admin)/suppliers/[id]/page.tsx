@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import { Supplier } from "@/lib/types";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, ShieldCheck, Trash2, Lock, Globe, Package, Calendar, Activity } from "lucide-react";
 
 export default function SupplierDetailPage() {
@@ -148,21 +149,12 @@ export default function SupplierDetailPage() {
                 </div>
                 <span className="text-[13px] font-bold text-[#1e1e24]">Connection Settings</span>
               </div>
-              <div className="flex items-center rounded-lg border border-[#cfccc8] overflow-hidden text-[12px] font-semibold">
-                <button
-                  type="button"
-                  onClick={() => handleToggleActive(false)}
-                  className={`px-4 py-2 transition-colors ${!supplier.is_active ? "bg-red-600 text-white" : "bg-white text-[#888894] hover:bg-[#f2f0ed]"}`}
-                >
-                  Inactive
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleToggleActive(true)}
-                  className={`px-4 py-2 transition-colors ${supplier.is_active ? "bg-emerald-600 text-white" : "bg-white text-[#888894] hover:bg-[#f2f0ed]"}`}
-                >
-                  Active
-                </button>
+              <div className="flex items-center gap-2.5">
+                <span className="text-[12px] font-bold text-[#1e1e24]">Active</span>
+                <Switch checked={supplier.is_active} onCheckedChange={handleToggleActive} />
+                <span className={`text-[12px] font-bold px-2.5 py-0.5 rounded-full ${supplier.is_active ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
+                  {supplier.is_active ? "ON" : "OFF"}
+                </span>
               </div>
             </div>
 
