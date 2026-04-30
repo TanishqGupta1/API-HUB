@@ -157,7 +157,7 @@ async def test_customer_quote_applies_markup(db, seed_supplier):
         )).scalar_one()
 
     async with AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
-        resp = await client.post(f"/api/pricing/customers/{cid}/quote", json={
+        resp = await client.post(f"/api/customers/{cid}/pricing/quote", json={
             "product_id": str(pid),
             "variant_id": str(variant_id),
             "qty": 2,

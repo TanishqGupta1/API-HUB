@@ -37,7 +37,7 @@ from modules.push_candidates.routes import router as push_candidates_router
 from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
 from modules.suppliers.category_import import router as category_import_router
-from modules.pricing.routes import router as pricing_router
+from modules.pricing.routes import router as pricing_router, customer_router as pricing_customer_router
 
 
 # Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
@@ -127,6 +127,7 @@ app.include_router(ops_config_router)
 app.include_router(category_import_router)
 app.include_router(promostandards_sync_router)
 app.include_router(pricing_router)
+app.include_router(pricing_customer_router)
 
 
 @app.get("/health")

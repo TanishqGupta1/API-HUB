@@ -217,3 +217,99 @@ async def test_storefront_override_replaces_unit_price(db, seed_supplier):
         await s.execute(delete(Product).where(Product.id == pid))
         await s.execute(delete(Customer).where(Customer.id == cid))
         await s.commit()
+
+
+@pytest.mark.asyncio
+async def test_customer_quote_endpoint_happy_path(db, seed_supplier):
+    """POST /api/customers/{id}/pricing/quote applies markup and returns CustomerQuoteResult."""
+    from modules.catalog.persistence import persist_product
+    from modules.catalog.schemas import ProductIngest, VariantIngest, VariantPriceIngest, ApparelDetailsIngest
+    from modules.catalog.models import Product, ProductVariant
+    from modules.customers.models import Customer
+    from modules.markup.models import MarkupRule
+    from database import async_session
+    from sqlalchemy import select, delete
+    from httpx import AsyncClient, ASGITransport
+    import main
+
+    async with async_session() as s:
+        pid = await persist_product(s, seed_supplier.id, ProductIngest(
+            supplier_sku="EP-CMK-T7",
+            product_name="task7 happy",
+            product_type="apparel",
+            apparel_details=ApparelDetailsIngest(),
+            variants=[VariantIngest(
+                part_id="T7V1",
+                color="Black",
+                size="L",
+                prices=[VariantPriceIngest(price_type="Net", quantity_min=1, quantity_max=2147483647, price=Decimal("10.00"))],
+            )],
+        ))
+        customer = Customer(
+            name="Task7 Co",
+            ops_base_url="https://t7.ops.com",
+            ops_token_url="https://t7.ops.com/token",
+            ops_client_id="x",
+            ops_auth_config={"client_secret": "x"},
+        )
+        s.add(customer)
+        await s.flush()
+        s.add(MarkupRule(customer_id=customer.id, scope="all", markup_pct=Decimal("50.00"), rounding="none", priority=0))
+        await s.commit()
+        vid = (await s.execute(select(ProductVariant.id).where(ProductVariant.product_id == pid))).scalar_one()
+        cid = customer.id
+
+    async with AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        resp = await client.post(f"/api/customers/{cid}/pricing/quote", json={
+            "product_id": str(pid), "variant_id": str(vid), "qty": 4,
+        })
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["base_unit_price"] == "10.00"
+    assert body["unit_price"] == "15.00"
+    assert body["total"] == "60.00"
+    assert Decimal(body["markup_pct"]) == Decimal("50")
+    assert body["storefront_override_applied"] is False
+
+    async with async_session() as s:
+        await s.execute(delete(Product).where(Product.id == pid))
+        await s.execute(delete(Customer).where(Customer.id == cid))
+        await s.commit()
+
+
+@pytest.mark.asyncio
+async def test_customer_quote_endpoint_unknown_customer(db, seed_supplier):
+    """POST /api/customers/{unknown_id}/pricing/quote returns 404 mentioning 'customer'."""
+    from modules.catalog.persistence import persist_product
+    from modules.catalog.schemas import ProductIngest, VariantIngest, VariantPriceIngest, ApparelDetailsIngest
+    from modules.catalog.models import Product, ProductVariant
+    from database import async_session
+    from sqlalchemy import select, delete
+    from httpx import AsyncClient, ASGITransport
+    import main
+
+    async with async_session() as s:
+        pid = await persist_product(s, seed_supplier.id, ProductIngest(
+            supplier_sku="EP-UNK-T7",
+            product_name="task7 unknown customer",
+            product_type="apparel",
+            apparel_details=ApparelDetailsIngest(),
+            variants=[VariantIngest(
+                part_id="T7V2",
+                prices=[VariantPriceIngest(price_type="Net", quantity_min=1, quantity_max=2147483647, price=Decimal("9.99"))],
+            )],
+        ))
+        await s.commit()
+        vid = (await s.execute(select(ProductVariant.id).where(ProductVariant.product_id == pid))).scalar_one()
+
+    async with AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/customers/00000000-0000-0000-0000-000000000000/pricing/quote",
+            json={"product_id": str(pid), "variant_id": str(vid), "qty": 1},
+        )
+    assert resp.status_code == 404
+    assert "customer" in resp.text.lower()
+
+    async with async_session() as s:
+        await s.execute(delete(Product).where(Product.id == pid))
+        await s.commit()

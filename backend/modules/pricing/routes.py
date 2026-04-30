@@ -14,6 +14,7 @@ from .resolvers import resolve_quote
 from .schemas import CustomerQuoteResult, QuoteRequest, QuoteResult
 
 router = APIRouter(prefix="/api/pricing", tags=["pricing"])
+customer_router = APIRouter(prefix="/api/customers", tags=["pricing"])
 
 
 @router.post("/quote", response_model=QuoteResult)
@@ -26,7 +27,7 @@ async def quote(req: QuoteRequest, db: AsyncSession = Depends(get_db)) -> QuoteR
         raise HTTPException(status_code=404, detail=str(exc))
 
 
-@router.post("/customers/{customer_id}/quote", response_model=CustomerQuoteResult)
+@customer_router.post("/{customer_id}/pricing/quote", response_model=CustomerQuoteResult)
 async def customer_quote(
     customer_id: UUID,
     req: QuoteRequest,

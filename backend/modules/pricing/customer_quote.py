@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from modules.customers.models import Customer
 from modules.markup.engine import apply_markup, resolve_rule
 from modules.markup.models import MarkupRule
 from modules.catalog.models import Product
@@ -24,6 +25,10 @@ async def resolve_customer_quote(
     customer_id: UUID,
     db: AsyncSession,
 ) -> CustomerQuoteResult:
+    customer = await db.get(Customer, customer_id)
+    if customer is None:
+        raise MissingPricingDataError(f"Customer {customer_id} not found")
+
     base_result: QuoteResult = await resolve_quote(req, db)
 
     product = await db.get(Product, req.product_id)
