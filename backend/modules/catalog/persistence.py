@@ -23,6 +23,11 @@ from .models import (
 from .schemas import ProductIngest
 
 
+class PersistError(Exception):
+    """Raised when an error occurs during product persistence."""
+    pass
+
+
 async def persist_product(
     db: AsyncSession, supplier_id: UUID, item: ProductIngest, category_id: UUID | None = None
 ) -> UUID:

@@ -19,6 +19,7 @@ class Supplier(Base):
     promostandards_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     base_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     auth_config: Mapped[dict] = mapped_column(EncryptedJSON, default=dict)
+    protocol_config: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True, default=None)
     endpoint_cache: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     endpoint_cache_updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

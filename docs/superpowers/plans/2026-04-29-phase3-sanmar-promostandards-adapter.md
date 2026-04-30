@@ -1,5 +1,18 @@
 # Phase 3: SanMar / PromoStandards Adapter Implementation Plan
 
+> **STATUS (2026-04-30): ⏸ NOT STARTED — needs plan revision before execution.**
+>
+> **Blockers:** SanMar API credentials still pending from Christian (per V1 plan note). Without creds, only fixture-driven tests are possible. Live SOAP integration deferred until creds arrive.
+>
+> **Plan revisions needed before execution:**
+> 1. **`BaseAdapter` already exists** — Phase 2 shipped it at `backend/modules/import_jobs/base.py`. This plan said "create `BaseAdapter` ABC unless Phase 2 already shipped it" — Phase 2 shipped, so SanMarAdapter just subclasses the existing ABC. Remove duplicate-creation tasks from this plan.
+> 2. **Adapter registry already exists** — `register_adapter` decorator at `backend/modules/import_jobs/registry.py`. Use it.
+> 3. **Import endpoint already exists** — `POST /api/suppliers/{id}/import` at `backend/modules/import_jobs/routes.py`. Reuse, don't recreate.
+> 4. **Match Phase 2 patterns:** OPSAdapter uses thin client (`OPSClient` httpx wrapper) + adapter (normalize to `ProductIngest`) split. Mirror this with `SanMarSOAPClient` (zeep wrapper) + `SanMarAdapter` (normalize).
+> 5. **Smoke script `backend/scripts/sanmar_smoke.py`** referenced in plan — verify it exists; if not, drop the reference.
+>
+> **Estimated effort after revisions:** Reduces from ~12 tasks to ~6-8 tasks (no framework setup, just the SanMar-specific adapter + fixtures + tests).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the `PromoStandardsAdapter` base class plus `SanMarAdapter` subclass on top of the polymorphic foundation (Phase 1) so SanMar and any future PromoStandards apparel supplier can be ingested via the same registry: discover → hydrate (`GetProduct` + `GetMediaContent` + `GetPricing`) → normalize to `ProductIngest` → `persist_product`. Ship configurable test mode (15-20 products) end-to-end with recorded SOAP fixtures (no live SanMar calls in tests).
