@@ -59,7 +59,7 @@ export default function SuppliersPage() {
           </h1>
           <p className="text-[#888894] mt-1 font-medium">Manage and monitor your external data sources.</p>
         </div>
-        <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10 px-8 h-11" asChild>
+        <Button className="bg-[#1e4d92] hover:bg-[#173d74] text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10 px-8 h-11" asChild>
           <Link href="/suppliers/new">
             <Plus className="w-4 h-4 mr-2" />
             Add New Supplier
@@ -183,7 +183,7 @@ export default function SuppliersPage() {
           <p className="text-[13px] text-[#888894] max-w-sm mx-auto font-medium leading-relaxed mb-6">
             Start building your data hub by connecting your first supplier via SOAP, REST, or SFTP.
           </p>
-          <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-black text-xs uppercase tracking-widest px-8" asChild>
+          <Button className="bg-[#1e4d92] hover:bg-[#173d74] text-white font-black text-xs uppercase tracking-widest px-8" asChild>
             <Link href="/suppliers/new">Register Now</Link>
           </Button>
         </div>

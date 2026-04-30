@@ -12,7 +12,6 @@ import {
   ArrowUpDown,
   Trash2,
   Save,
-  CheckCircle2,
   Filter,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -26,8 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
 import { api } from "@/lib/api";
+
+const toast = {
+  success: (msg: string) => console.info("[ok]", msg),
+  error: (msg: string) => alert(msg),
+  info: (msg: string) => console.info("[info]", msg),
+};
 
 // ─── Component: OptionCard ──────────────────────────────────────────────────
 
@@ -215,6 +219,7 @@ export default function ProductOptionsPage() {
 
   const [customers, setCustomers] = useState<any[]>([]);
   const [productsList, setProductsList] = useState<any[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
 
   const fetchOptions = async (pid: string) => {
     try {
@@ -228,12 +233,8 @@ export default function ProductOptionsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [c, p] = await Promise.all([
-          api<any[]>("/api/customers"),
-          api<any[]>("/api/products?limit=1000"),
-        ]);
+        const c = await api<any[]>("/api/customers");
         setCustomers(c);
-        setProductsList(p);
       } catch (e: any) {
         toast.error(e.message);
       } finally {
@@ -241,6 +242,28 @@ export default function ProductOptionsPage() {
       }
     })();
   }, []);
+
+  // Re-fetch products when storefront changes, reset product selection
+  useEffect(() => {
+    if (!customerId) {
+      setProductsList([]);
+      setProductId("");
+      return;
+    }
+    setProductId("");
+    setProductsList([]);
+    setProductsLoading(true);
+    (async () => {
+      try {
+        const p = await api<any[]>(`/api/products?customer_id=${customerId}&limit=200`);
+        setProductsList(p);
+      } catch (e: any) {
+        toast.error(e.message);
+      } finally {
+        setProductsLoading(false);
+      }
+    })();
+  }, [customerId]);
 
   useEffect(() => {
     if (!productId || !customerId) {
@@ -389,9 +412,9 @@ export default function ProductOptionsPage() {
           </div>
           <div className="space-y-1.5">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Catalog Item</span>
-            <Select value={productId} onValueChange={setProductId}>
+            <Select value={productId} onValueChange={setProductId} disabled={!customerId || productsLoading}>
               <SelectTrigger className="h-10 border-[#cbd5e1] bg-white rounded-none text-[13px] font-bold">
-                <SelectValue placeholder="Select Product" />
+                <SelectValue placeholder={!customerId ? "Select a storefront first" : productsLoading ? "Loading products…" : "Select Product"} />
               </SelectTrigger>
               <SelectContent className="rounded-none">
                 {productsList.map(p => (

@@ -112,7 +112,7 @@ export default function AdminDashboard() {
           <Button variant="outline" className="border-[#cfccc8] bg-white hover:bg-[#f9f7f4] font-bold text-xs uppercase tracking-wider" asChild>
             <Link href="/sync">View All Jobs</Link>
           </Button>
-          <Button className="bg-[#1e4d92] hover:bg-[#173d74] font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10" asChild>
+          <Button className="bg-[#1e4d92] hover:bg-[#173d74] text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-900/10" asChild>
             <Link href="/products/setup">Setup New Product</Link>
           </Button>
         </div>

@@ -46,7 +46,7 @@ export default function ArchivedProductsPage() {
           </p>
         </div>
         <Link href="/products">
-          <Button variant="outline">← Active Products</Button>
+          <Button variant="outline" className="border-[#1e4d92] text-[#1e4d92] hover:bg-[#1e4d92] hover:text-white transition-colors">← Active Products</Button>
         </Link>
       </div>
 

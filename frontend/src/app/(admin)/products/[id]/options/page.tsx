@@ -1,184 +1,127 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
-import type { OptionConfigItem, Product, Supplier } from "@/lib/types";
+import React, { useEffect, useMemo, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
+import {
+  ChevronLeft,
+  Settings,
+  Star,
+  Plus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import { OptionCard } from "@/components/options/option-card";
 
-export default function ConfigureProductOptionsPage() {
-  const { id } = useParams<{ id: string }>();
+export default function ProductOptionsPage() {
   const router = useRouter();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [supplier, setSupplier] = useState<Supplier | null>(null);
-  const [cards, setCards] = useState<OptionConfigItem[]>([]);
-  const [dirty, setDirty] = useState<Set<string>>(new Set());
+  const { id } = useParams();
+  const [options, setOptions] = useState<any[]>([]);
+  const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [savingAll, setSavingAll] = useState(false);
-  const [savedAll, setSavedAll] = useState(false);
-  const [search, setSearch] = useState("");
-  const [tag, setTag] = useState("");
+
+  const fetchOptions = async () => {
+    try {
+      const data = await api<any>(`/api/products/${id}`);
+      setProduct(data);
+      setOptions(data.options || []);
+    } catch (e: any) {
+      log.error(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const p = await api<Product>(`/api/products/${id}`);
-        setProduct(p);
-        const sup = await api<Supplier>(`/api/suppliers/${p.supplier_id}`);
-        setSupplier(sup);
-        const cfg = await api<OptionConfigItem[]>(`/api/products/${id}/options-config`);
-        setCards(cfg);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    fetchOptions();
   }, [id]);
 
-  const tags = useMemo(() => {
-    const s = new Set<string>();
-    cards.forEach((c) => c.master_option_tag && s.add(c.master_option_tag));
-    return Array.from(s);
-  }, [cards]);
-
-  const visible = useMemo(() => {
-    let result = cards;
-
-    // Smart Filter: If it's an apparel product (like a Toddler T-Shirt), hide signage options
-    if (product) {
-      const pName = (product.product_name || "").toLowerCase();
-      const pType = (product.product_type || "").toLowerCase();
-      const isApparel = pName.includes("shirt") || pName.includes("tee") || pName.includes("hoodie") || pType.includes("apparel") || (supplier?.name || "").toLowerCase().includes("sanmar");
-      
-      if (isApparel) {
-        const signageKeywords = ["laminate", "substrate", "ink", "finish", "packaging", "binding", "paper"];
-        result = result.filter(o => {
-          const t = (o.title || o.option_key || "").toLowerCase();
-          return !signageKeywords.some(kw => t.includes(kw));
-        });
-      }
-    }
-
-    return result.filter((c) => {
-      if (tag && c.master_option_tag !== tag) return false;
-      if (search && !c.title.toLowerCase().includes(search.toLowerCase())) return false;
-      return true;
-    });
-  }, [cards, search, tag, product, supplier]);
-
-  const updateCard = (idx: number, next: OptionConfigItem) => {
-    setCards((prev) => prev.map((c, i) => (i === idx ? next : c)));
-    setDirty((d) => new Set(d).add(next.master_option_id));
+  const updateAttr = (optionId: string, attrId: string, field: string, value: any) => {
+    setOptions((prev) =>
+      prev.map((o) =>
+        o.id === optionId
+          ? {
+              ...o,
+              attributes: o.attributes.map((a: any) =>
+                a.id === attrId ? { ...a, [field]: value } : a
+              ),
+            }
+          : o
+      )
+    );
   };
 
-  const saveOne = async (card: OptionConfigItem) => {
-    await api(`/api/products/${id}/options-config/${card.master_option_id}`, {
-      method: "PATCH",
-      body: JSON.stringify(card),
-    });
-    setDirty((d) => {
-      const n = new Set(d);
-      n.delete(card.master_option_id);
-      return n;
-    });
+  const toggleOption = (optionId: string, enabled: boolean) => {
+    setOptions((prev) =>
+      prev.map((o) => (o.id === optionId ? { ...o, enabled } : o))
+    );
   };
 
-  const saveAll = async () => {
-    setSavingAll(true);
-    setSavedAll(false);
-    try {
-      await api(`/api/products/${id}/options-config`, {
-        method: "PUT",
-        body: JSON.stringify(cards),
-      });
-      setDirty(new Set());
-      setSavedAll(true);
-      setTimeout(() => setSavedAll(false), 2000);
-    } catch (err) {
-      alert("Failed to save all.");
-    } finally {
-      setSavingAll(false);
-    }
-  };
-
-  const deleteCard = async (card: OptionConfigItem) => {
-    await api(`/api/products/${id}/options-config/${card.master_option_id}`, { method: "DELETE" });
-    setCards((prev) => prev.map((c) => (c.master_option_id === card.master_option_id
-      ? { ...c, enabled: false, attributes: c.attributes.map((a) => ({ ...a, enabled: false })) }
-      : c)));
-  };
-
-  // Protocol check removed to allow configuring master options for any product (e.g. SanMar SOAP) 
-  // that will eventually be pushed to an OPS storefront.
-  
-  if (loading) return <div className="p-6 text-[#888894]">Loading…</div>;
-
-  if (loading) return <div className="p-6 text-[#888894]">Loading…</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center">
+        <div className="text-[#475569] font-bold text-sm animate-pulse uppercase tracking-widest">Loading Options…</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-xs text-[#888894]">
-            <button onClick={() => router.back()} className="hover:underline">← Back</button>
+    <div className="min-h-screen bg-[#f8fafc] p-4 md:p-6 lg:p-8">
+      <div className="max-w-[1400px] mx-auto bg-white border border-[#e2e8f0] shadow-md">
+        {/* Top Header */}
+        <div className="border-b border-[#e2e8f0] px-5 py-4 flex items-center justify-between bg-white">
+          <div className="flex items-center gap-3 text-[16px] font-bold text-[#2563eb]">
+            <span className="uppercase tracking-tight">Configure Options</span>
+            <span className="text-[#94a3b8]">»</span>
+            <span className="text-[#1e293b]">{product?.product_name}</span>
+            <Settings className="w-5 h-5 text-[#64748b]" />
+            <Star className="w-5 h-5 text-[#f59e0b] fill-[#f59e0b]" />
           </div>
-          <h1 className="text-xl font-bold text-[#1e1e24] mt-1">
-            Assign Product Options » <span className="text-[#1e4d92]">{product?.product_name}</span>
-          </h1>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="h-9 px-4 border-[#cbd5e1] bg-white text-[#475569] text-[12px] font-black uppercase tracking-widest rounded-none hover:bg-[#f1f5f9] shadow-sm"
+              onClick={() => router.back()}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Back to Product
+            </Button>
+            <Button
+              className="h-9 px-4 bg-[#1e4d92] text-white text-[12px] font-black uppercase tracking-widest rounded-none shadow-sm"
+              onClick={() => log.info("Custom options pending implementation")}
+            >
+              <Plus className="w-4 h-4 mr-1.5" />
+              Add Custom Option
+            </Button>
+          </div>
         </div>
-        <Button
-          onClick={saveAll}
-          disabled={savingAll || savedAll || (!savedAll && dirty.size === 0)}
-          className={savedAll ? "bg-green-600 hover:bg-green-700" : "bg-[#1e4d92] hover:bg-[#173d74]"}
-        >
-          {savingAll ? "Saving..." : savedAll ? "Saved!" : `Save All ${dirty.size ? `(${dirty.size})` : ""}`}
-        </Button>
-      </div>
 
-      <div className="flex items-center gap-3">
-        <Input
-          placeholder="Search..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-xs"
-        />
-        <select
-          value={tag}
-          onChange={(e) => setTag(e.target.value)}
-          className="h-9 px-3 text-sm border border-[#cfccc8] rounded bg-white"
-        >
-          <option value="">All tags</option>
-          {tags.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-        <Button variant="ghost" onClick={() => { setSearch(""); setTag(""); }}>Reset</Button>
+        {/* Options grid */}
+        <div className="p-8 bg-[#f8fafc]">
+          {options.length === 0 ? (
+            <div className="py-32 text-center border-2 border-dashed border-[#cbd5e1] rounded-xl bg-white/50">
+              <div className="text-[#94a3b8] font-bold text-sm uppercase tracking-widest">
+                No options found for this product.
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {options.map((opt) => (
+                <OptionCard
+                  key={opt.id}
+                  productId={id as string}
+                  option={opt}
+                  onUpdateAttr={(attrId, field, value) =>
+                    updateAttr(opt.id, attrId, field, value)
+                  }
+                  onToggle={(enabled) => toggleOption(opt.id, enabled)}
+                  onRefresh={fetchOptions}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-
-      {visible.length === 0 ? (
-        <div className="bg-white rounded-[10px] border border-[#cfccc8] p-10 text-center text-[#888894]">
-          {cards.length === 0
-            ? "No master options synced. Visit /products/configure and click Sync from OPS."
-            : "No matches for the current filter."}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {visible.map((card) => {
-            const idx = cards.indexOf(card);
-            return (
-              <OptionCard
-                key={card.master_option_id}
-                card={card}
-                dirty={dirty.has(card.master_option_id)}
-                onChange={(next) => updateCard(idx, next)}
-                onSave={() => saveOne(cards[idx])}
-                onDelete={() => deleteCard(card)}
-              />
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
