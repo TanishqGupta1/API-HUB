@@ -38,6 +38,9 @@ from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
 from modules.suppliers.category_import import router as category_import_router
 
+import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
+from modules.import_jobs.routes import router as import_jobs_router
+
 
 # Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
 # but never alters existing ones, so ADD COLUMN steps ship here. Each statement
@@ -54,6 +57,11 @@ _SCHEMA_UPGRADES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)",
     "CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images(product_id)",
     "CREATE INDEX IF NOT EXISTS idx_product_options_product_id ON product_options(product_id)",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS adapter_class VARCHAR(64)",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS last_full_sync TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS last_delta_sync TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS errors JSONB",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS protocol_config JSONB",
 ]
 
 
@@ -121,6 +129,7 @@ app.include_router(push_mappings_router)
 app.include_router(ops_config_router)
 app.include_router(category_import_router)
 app.include_router(promostandards_sync_router)
+app.include_router(import_jobs_router)
 
 
 @app.get("/health")

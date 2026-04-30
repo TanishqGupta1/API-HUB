@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class MarkupRuleCreate(BaseModel):
@@ -24,7 +24,7 @@ class MarkupRuleRead(BaseModel):
     priority: int
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # -------- push-payload response models --------

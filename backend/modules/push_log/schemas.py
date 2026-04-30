@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PushLogCreate(BaseModel):
@@ -25,7 +25,7 @@ class PushLogRead(BaseModel):
     error: Optional[str]
     pushed_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductPushStatus(BaseModel):

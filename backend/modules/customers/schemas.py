@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class CustomerCreate(BaseModel):
@@ -23,4 +23,4 @@ class CustomerRead(BaseModel):
     products_pushed: int = 0
     markup_rules_count: int = 0
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)

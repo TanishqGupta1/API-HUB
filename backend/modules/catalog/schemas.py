@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 
 class VariantRead(BaseModel):
@@ -14,8 +14,18 @@ class VariantRead(BaseModel):
     base_price: Optional[float]
     inventory: Optional[int]
     warehouse: Optional[str]
+    prices: list["VariantPriceRead"] = []
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VariantPriceRead(BaseModel):
+    price_type: str
+    quantity_min: int
+    quantity_max: Optional[int]
+    price: Decimal
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductImageRead(BaseModel):
@@ -25,7 +35,7 @@ class ProductImageRead(BaseModel):
     color: Optional[str]
     sort_order: int
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductOptionAttributeRead(BaseModel):
@@ -39,7 +49,7 @@ class ProductOptionAttributeRead(BaseModel):
     setup_cost: Optional[Decimal] = None
     multiplier: Optional[Decimal] = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductOptionRead(BaseModel):
@@ -53,7 +63,36 @@ class ProductOptionRead(BaseModel):
     required: bool
     attributes: list[ProductOptionAttributeRead] = []
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ApparelDetailsRead(BaseModel):
+    pricing_method: str
+    raw_payload: Optional[dict] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PrintDetailsRead(BaseModel):
+    pricing_method: str
+    min_width: Optional[Decimal] = None
+    max_width: Optional[Decimal] = None
+    min_height: Optional[Decimal] = None
+    max_height: Optional[Decimal] = None
+    size_unit: Optional[str] = None
+    base_price_per_sq_unit: Optional[Decimal] = None
+    raw_payload: Optional[dict] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductSizeRead(BaseModel):
+    width: Decimal
+    height: Decimal
+    unit: str
+    label: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductRead(BaseModel):
@@ -62,21 +101,24 @@ class ProductRead(BaseModel):
     supplier_name: Optional[str] = None
     supplier_sku: str
     product_name: str
-    brand: Optional[str]
-    category: Optional[str]
+    brand: Optional[str] = None
+    category: Optional[str] = None
     category_id: Optional[UUID] = None
-    description: Optional[str]
+    description: Optional[str] = None
     product_type: str
-    image_url: Optional[str]
-    ops_product_id: Optional[str]
+    image_url: Optional[str] = None
+    ops_product_id: Optional[str] = None
     external_catalogue: Optional[int] = None
-    last_synced: Optional[datetime]
+    last_synced: Optional[datetime] = None
     archived_at: Optional[datetime] = None
     variants: list[VariantRead] = []
     images: list[ProductImageRead] = []
     options: list[ProductOptionRead] = []
+    apparel_details: Optional[ApparelDetailsRead] = None
+    print_details: Optional[PrintDetailsRead] = None
+    sizes: list[ProductSizeRead] = []
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductListRead(BaseModel):
@@ -98,7 +140,7 @@ class ProductListRead(BaseModel):
     total_inventory: int = 0
     archived_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------- Ingest schemas (used by POST /api/ingest/{supplier_id}/...) ----------
@@ -115,6 +157,44 @@ class VariantIngest(BaseModel):
     base_price: Optional[Decimal] = None
     inventory: Optional[int] = None
     warehouse: Optional[str] = None
+    prices: list["VariantPriceIngest"] = Field(default_factory=list)
+
+
+class VariantPriceIngest(BaseModel):
+    price_type: str  # MSRP | Net | Sale | Case
+    quantity_min: int = 1
+    quantity_max: Optional[int] = None
+    price: Decimal
+
+
+class ProductSizeIngest(BaseModel):
+    width: Decimal
+    height: Decimal
+    unit: str = "in"
+    label: Optional[str] = None
+    # OPS-specific fields
+    ops_size_id: Optional[int] = None
+    size_title: Optional[str] = None
+
+
+class ApparelDetailsIngest(BaseModel):
+    pricing_method: str = "tiered_variant"
+    raw_payload: Optional[dict] = None
+
+
+class PrintDetailsIngest(BaseModel):
+    pricing_method: str = "formula"
+    min_width: Optional[Decimal] = None
+    max_width: Optional[Decimal] = None
+    min_height: Optional[Decimal] = None
+    max_height: Optional[Decimal] = None
+    size_unit: str = "in"
+    base_price_per_sq_unit: Optional[Decimal] = None
+    raw_payload: Optional[dict] = None
+    # OPS-specific fields
+    ops_product_id_int: Optional[int] = None
+    default_category_id: Optional[int] = None
+    external_catalogue: Optional[int] = None
 
 
 class ImageIngest(BaseModel):
@@ -161,6 +241,18 @@ class ProductIngest(BaseModel):
     variants: list[VariantIngest] = Field(default_factory=list)
     images: list[ImageIngest] = Field(default_factory=list)
     options: list[OptionIngest] = Field(default_factory=list)
+    apparel_details: Optional[ApparelDetailsIngest] = None
+    print_details: Optional[PrintDetailsIngest] = None
+    sizes: list[ProductSizeIngest] = Field(default_factory=list)
+    raw_payload: Optional[dict] = None
+
+    @model_validator(mode="after")
+    def validate_type_details(self) -> "ProductIngest":
+        if self.product_type == "apparel" and not self.apparel_details:
+            self.apparel_details = ApparelDetailsIngest()
+        if self.product_type == "print" and not self.print_details and not self.sizes:
+            raise ValueError("print_details or sizes must be provided for product_type='print'")
+        return self
 
 
 class InventoryIngest(BaseModel):

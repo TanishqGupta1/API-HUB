@@ -2,7 +2,8 @@ from typing import Literal, Optional
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+
 
 Protocol = Literal["soap", "rest", "hmac", "ops_graphql", "promostandards"]
 
@@ -29,4 +30,4 @@ class SupplierRead(BaseModel):
     created_at: datetime
     product_count: int = 0
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)

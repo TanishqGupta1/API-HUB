@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class ProductStorefrontConfigBase(BaseModel):
     product_id: UUID
@@ -15,5 +15,4 @@ class ProductStorefrontConfigUpsert(ProductStorefrontConfigBase):
 class ProductStorefrontConfigRead(ProductStorefrontConfigBase):
     id: UUID
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
