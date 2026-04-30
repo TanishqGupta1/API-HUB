@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SyncJobRead(BaseModel):
@@ -16,7 +16,7 @@ class SyncJobRead(BaseModel):
     records_processed: int
     error_log: Optional[str]
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SyncJobCreate(BaseModel):

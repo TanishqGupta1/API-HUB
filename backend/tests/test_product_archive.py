@@ -38,12 +38,12 @@ async def _seed_product(sku: str) -> uuid.UUID:
             supplier_id=sup.id, supplier_sku=sku, product_name=f"Product {sku}"
         )
         s.add(prod); await s.commit(); await s.refresh(prod)
-        return prod.id
+        return prod.id, sup.id
 
 
 @pytest.mark.asyncio
 async def test_archive_sets_archived_at():
-    pid = await _seed_product("ARCH-1")
+    pid, _ = await _seed_product("ARCH-1")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.post(f"/api/products/{pid}/archive")
     assert r.status_code == 200
@@ -54,7 +54,7 @@ async def test_archive_sets_archived_at():
 
 @pytest.mark.asyncio
 async def test_archive_is_idempotent():
-    pid = await _seed_product("ARCH-2")
+    pid, _ = await _seed_product("ARCH-2")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r1 = await c.post(f"/api/products/{pid}/archive")
         r2 = await c.post(f"/api/products/{pid}/archive")
@@ -63,7 +63,7 @@ async def test_archive_is_idempotent():
 
 @pytest.mark.asyncio
 async def test_restore_clears_archived_at():
-    pid = await _seed_product("ARCH-3")
+    pid, _ = await _seed_product("ARCH-3")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         await c.post(f"/api/products/{pid}/archive")
         r = await c.post(f"/api/products/{pid}/restore")
@@ -73,26 +73,26 @@ async def test_restore_clears_archived_at():
 
 @pytest.mark.asyncio
 async def test_default_list_excludes_archived():
-    pid = await _seed_product("ARCH-4")
+    pid, sid = await _seed_product("ARCH-4")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         # Visible before archive
-        r = await c.get("/api/products?limit=500")
+        r = await c.get(f"/api/products?supplier_id={sid}")
         ids_before = [p["id"] for p in r.json()]
         assert str(pid) in ids_before
         # Archive
         await c.post(f"/api/products/{pid}/archive")
         # Hidden from default list
-        r = await c.get("/api/products?limit=500")
+        r = await c.get(f"/api/products?supplier_id={sid}")
         ids_after = [p["id"] for p in r.json()]
         assert str(pid) not in ids_after
 
 
 @pytest.mark.asyncio
 async def test_archived_true_lists_only_archived():
-    pid = await _seed_product("ARCH-5")
+    pid, sid = await _seed_product("ARCH-5")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         await c.post(f"/api/products/{pid}/archive")
-        r = await c.get("/api/products?archived=true&limit=500")
+        r = await c.get(f"/api/products?archived=true&supplier_id={sid}")
     ids = [p["id"] for p in r.json()]
     assert str(pid) in ids
 

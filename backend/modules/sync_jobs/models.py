@@ -3,6 +3,7 @@ import uuid as uuid_mod
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -22,3 +23,4 @@ class SyncJob(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     records_processed: Mapped[int] = mapped_column(Integer, default=0)
     error_log: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    errors: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)

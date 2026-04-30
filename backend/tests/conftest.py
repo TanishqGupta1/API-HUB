@@ -1,28 +1,26 @@
-"""Shared pytest fixtures for the backend test suite.
-
-Strategy: each fixture/session is short-lived. Test data is inserted with
-a fresh session, committed, and then cleaned up by the autouse cleanup
-fixture after each test. This avoids asyncpg "another operation in progress"
-errors that occur when the same session is shared between the test and the
-FastAPI app's request handler.
-
-Database selection: by default we load the dev .env so engineers can run the
-suite locally against the same Postgres they're already running. Set
-TEST_DATABASE_URL to point pytest at a separate database (recommended for CI).
-"""
+"""Shared pytest fixtures for the backend test suite."""
 import os
 from pathlib import Path
 
 import pytest_asyncio
 from dotenv import load_dotenv
+import asyncio
+import sys
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
-# If TEST_DATABASE_URL is set, override POSTGRES_URL before `database` is imported
-# so the engine is built against the test DB.
 _test_db_url = os.environ.get("TEST_DATABASE_URL")
 if _test_db_url:
     os.environ["POSTGRES_URL"] = _test_db_url
+
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.pool import NullPool
+# Override engine globally for tests to avoid connection sharing issues on Windows
+engine = create_async_engine(os.environ["POSTGRES_URL"], poolclass=NullPool)
+async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 os.environ["INGEST_SHARED_SECRET"] = "test-secret-do-not-use-in-prod"
 
@@ -30,7 +28,10 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy import delete, select  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
-from database import Base, async_session, engine  # noqa: E402
+from database import Base
+import database
+database.engine = engine
+database.async_session = async_session
 from main import app  # noqa: E402
 
 TEST_SUPPLIER_SLUGS = ("vg-ops-test", "vg-ops-inactive")
@@ -40,23 +41,23 @@ TEST_CUSTOMER_OPS_URLS = (
     "https://test3.ops.com",
 )
 
+_SCHEMA_CREATED = False
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def _create_schema():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Ensure schema exists. Only runs DDL once per process."""
+    global _SCHEMA_CREATED
+    if not _SCHEMA_CREATED:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        _SCHEMA_CREATED = True
     yield
-    await engine.dispose()
+    # No engine.dispose() here to avoid closing resources needed by other tests
+    # in the same process/loop.
 
 
 async def _cleanup_test_customers() -> None:
-    """Delete sentinel Customer rows + everything that cascades from them.
-
-    `customers.id` has ON DELETE CASCADE FKs from push_mappings, markup_rules,
-    and push_log, so a single DELETE on customers cleans the whole tree.
-    """
     from modules.customers.models import Customer
-
     async with async_session() as s:
         await s.execute(
             delete(Customer).where(
@@ -67,8 +68,6 @@ async def _cleanup_test_customers() -> None:
 
 
 async def _cleanup_test_suppliers() -> None:
-    """Delete any lingering supplier rows + their owned products / variants /
-    images / categories / sync_jobs."""
     from modules.catalog.models import Category, Product, ProductImage, ProductVariant
     from modules.suppliers.models import Supplier
     from modules.sync_jobs.models import SyncJob
@@ -105,23 +104,25 @@ async def _cleanup_test_suppliers() -> None:
 
 @pytest_asyncio.fixture(autouse=True)
 async def _cleanup_around_test():
+    """Automatically cleans up test data before and after every test."""
     await _cleanup_test_customers()
     await _cleanup_test_suppliers()
     yield
     await _cleanup_test_customers()
     await _cleanup_test_suppliers()
+    # Force pool disposal to avoid connection leaks between tests
+    await engine.dispose()
 
 
 @pytest_asyncio.fixture
 async def db() -> AsyncSession:
-    """Short-lived session for test-side assertions. Never shared with app."""
     async with async_session() as session:
         yield session
+        await session.close()
 
 
 @pytest_asyncio.fixture
 async def client() -> AsyncClient:
-    """ASGI client. App opens its own sessions via get_db — no override."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -130,7 +131,6 @@ async def client() -> AsyncClient:
 @pytest_asyncio.fixture
 async def seed_supplier():
     from modules.suppliers.models import Supplier
-
     async with async_session() as s:
         supplier = Supplier(
             name="VG OPS Test",
@@ -143,7 +143,6 @@ async def seed_supplier():
         s.add(supplier)
         await s.commit()
         await s.refresh(supplier)
-        # Expunge so the returned object stays usable after the session closes.
         s.expunge(supplier)
     return supplier
 
@@ -151,7 +150,6 @@ async def seed_supplier():
 @pytest_asyncio.fixture
 async def inactive_supplier():
     from modules.suppliers.models import Supplier
-
     async with async_session() as s:
         supplier = Supplier(
             name="VG OPS Inactive",

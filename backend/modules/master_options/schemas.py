@@ -2,7 +2,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ---- Read (for GET /api/master-options) ----
@@ -14,7 +14,7 @@ class MasterOptionAttributeRead(BaseModel):
     sort_order: int
     default_price: Optional[Decimal] = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MasterOptionRead(BaseModel):
@@ -30,7 +30,7 @@ class MasterOptionRead(BaseModel):
     master_option_tag: Optional[str] = None
     attributes: list[MasterOptionAttributeRead] = Field(default_factory=list)
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---- Ingest (for POST /api/ingest/master-options — n8n payload) ----

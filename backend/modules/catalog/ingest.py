@@ -38,6 +38,7 @@ from .schemas import (
     PriceIngest,
     ProductIngest,
 )
+from .persistence import persist_product
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 
@@ -278,75 +279,7 @@ async def ingest_products(
             if item.category_external_id
             else None
         )
-        product_stmt = pg_insert(Product).values(
-            supplier_id=supplier.id,
-            supplier_sku=item.supplier_sku,
-            product_name=item.product_name,
-            brand=item.brand,
-            category=item.category_name,
-            category_id=category_id,
-            description=item.description,
-            product_type=item.product_type,
-            image_url=item.image_url,
-            ops_product_id=item.ops_product_id,
-            external_catalogue=item.external_catalogue,
-            last_synced=now,
-        ).on_conflict_do_update(
-            index_elements=["supplier_id", "supplier_sku"],
-            set_={
-                "product_name": item.product_name,
-                "brand": item.brand,
-                "category": item.category_name,
-                "category_id": category_id,
-                "description": item.description,
-                "product_type": item.product_type,
-                "image_url": item.image_url,
-                "ops_product_id": item.ops_product_id,
-                "external_catalogue": item.external_catalogue,
-                "last_synced": now,
-            },
-        ).returning(Product.id)
-        product_id = (await db.execute(product_stmt)).scalar_one()
-
-        for v in item.variants:
-            variant_stmt = pg_insert(ProductVariant).values(
-                product_id=product_id,
-                color=v.color,
-                size=v.size,
-                sku=v.sku,
-                base_price=v.base_price,
-                inventory=v.inventory,
-                warehouse=v.warehouse,
-            ).on_conflict_do_update(
-                index_elements=["product_id", "color", "size"],
-                set_={
-                    "sku": v.sku,
-                    "base_price": v.base_price,
-                    "inventory": v.inventory,
-                    "warehouse": v.warehouse,
-                },
-            )
-            await db.execute(variant_stmt)
-
-        for idx, img in enumerate(item.images):
-            image_stmt = pg_insert(ProductImage).values(
-                product_id=product_id,
-                url=img.url,
-                image_type=img.image_type,
-                color=img.color,
-                sort_order=img.sort_order or idx,
-            ).on_conflict_do_update(
-                index_elements=["product_id", "url"],
-                set_={
-                    "image_type": img.image_type,
-                    "color": img.color,
-                    "sort_order": img.sort_order or idx,
-                },
-            )
-            await db.execute(image_stmt)
-
-        if item.options:
-            await _upsert_options(db, product_id, item.options)
+        await persist_product(db, supplier.id, item, category_id=category_id)
 
     await _finish_sync_job(db, job, len(batch))
     return IngestResult(

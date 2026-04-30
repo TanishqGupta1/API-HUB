@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -62,6 +63,15 @@ class Product(Base):
         back_populates="product", cascade="all, delete-orphan"
     )
     category_ref: Mapped[Optional["Category"]] = relationship(back_populates="products")
+    apparel_details: Mapped[Optional["ApprelDetails"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan", uselist=False
+    )
+    print_details: Mapped[Optional["PrintDetails"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan", uselist=False
+    )
+    sizes: Mapped[list["ProductSize"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )
 
 
 class ProductVariant(Base):
@@ -82,6 +92,9 @@ class ProductVariant(Base):
     warehouse: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     product: Mapped["Product"] = relationship(back_populates="variants")
+    prices: Mapped[list["VariantPrice"]] = relationship(
+        back_populates="variant", cascade="all, delete-orphan"
+    )
 
 
 class ProductImage(Base):
@@ -155,3 +168,69 @@ class ProductOptionAttribute(Base):
     overridden_sort: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     option: Mapped["ProductOption"] = relationship(back_populates="attributes")
+
+
+class ApprelDetails(Base):
+    __tablename__ = "apparel_details"
+
+    product_id: Mapped[uuid_mod.UUID] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), primary_key=True
+    )
+    pricing_method: Mapped[str] = mapped_column(String(50), default="tiered_variant")
+    raw_payload: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    product: Mapped["Product"] = relationship(back_populates="apparel_details")
+
+
+class PrintDetails(Base):
+    __tablename__ = "print_details"
+
+    product_id: Mapped[uuid_mod.UUID] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), primary_key=True
+    )
+    pricing_method: Mapped[str] = mapped_column(String(50), default="formula")
+    min_width: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    max_width: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    min_height: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    max_height: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    size_unit: Mapped[str] = mapped_column(String(10), default="in")
+    base_price_per_sq_unit: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 4), nullable=True)
+    raw_payload: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    product: Mapped["Product"] = relationship(back_populates="print_details")
+
+
+class VariantPrice(Base):
+    __tablename__ = "variant_prices"
+    __table_args__ = (
+        UniqueConstraint("variant_id", "price_type", "quantity_min", name="uq_variant_price_type_qty"),
+    )
+
+    id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
+    variant_id: Mapped[uuid_mod.UUID] = mapped_column(
+        ForeignKey("product_variants.id", ondelete="CASCADE"), index=True
+    )
+    price_type: Mapped[str] = mapped_column(String(20))  # MSRP | Net | Sale | Case
+    quantity_min: Mapped[int] = mapped_column(Integer)
+    quantity_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+
+    variant: Mapped["ProductVariant"] = relationship(back_populates="prices")
+
+
+class ProductSize(Base):
+    __tablename__ = "product_sizes"
+    __table_args__ = (
+        UniqueConstraint("product_id", "width", "height", name="uq_product_size_wh"),
+    )
+
+    id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
+    product_id: Mapped[uuid_mod.UUID] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    width: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    height: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    unit: Mapped[str] = mapped_column(String(10), default="in")
+    label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    product: Mapped["Product"] = relationship(back_populates="sizes")

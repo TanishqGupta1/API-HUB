@@ -25,6 +25,9 @@ class Supplier(Base):
     )
     field_mappings: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True, default=None)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    adapter_class: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    last_full_sync: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_delta_sync: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

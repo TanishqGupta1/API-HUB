@@ -13,6 +13,8 @@ import {
   Trash2,
   Save,
   Filter,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -107,12 +109,12 @@ function OptionCard({
   };
 
   return (
-    <div className="bg-white border border-[#e2e8f0] flex flex-col shadow-sm">
+    <div className="bg-white border border-[#bfdbfe] flex flex-col shadow-sm rounded-sm overflow-hidden">
       {/* Header */}
-      <div className="bg-[#dbeafe] border-b border-[#bfdbfe] px-3 py-2 flex items-center justify-between">
+      <div className="bg-[#eff6ff] border-b border-[#bfdbfe] px-3 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <GripVertical className="w-4 h-4 text-[#64748b] shrink-0 cursor-grab" />
-          <span className="text-[13px] font-bold text-[#1e40af] truncate uppercase tracking-tight">
+          <GripVertical className="w-4 h-4 text-[#3b82f6] shrink-0 cursor-grab" />
+          <span className="text-[12px] font-black text-[#1e40af] truncate uppercase tracking-widest">
             {option.title}
           </span>
         </div>
@@ -173,9 +175,17 @@ function OptionCard({
         {hasMore ? (
           <button
             onClick={() => setShowAll((v) => !v)}
-            className="text-[11px] font-bold text-[#2563eb] hover:underline flex items-center gap-1 uppercase tracking-tight"
+            className="text-[10px] font-black text-[#2563eb] hover:underline flex items-center gap-1 uppercase tracking-widest"
           >
-            {showAll ? "Show Less" : "Show More"}
+            {showAll ? (
+              <>
+                Show Less <ChevronUp className="w-3 h-3" />
+              </>
+            ) : (
+              <>
+                Show More <ChevronDown className="w-3 h-3" />
+              </>
+            )}
           </button>
         ) : (
           <span />

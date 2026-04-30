@@ -155,9 +155,12 @@ async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
         select(Product)
         .where(Product.id == product_id)
         .options(
-            selectinload(Product.variants),
+            selectinload(Product.variants).selectinload(ProductVariant.prices),
             selectinload(Product.images),
             selectinload(Product.options).selectinload(ProductOption.attributes),
+            selectinload(Product.apparel_details),
+            selectinload(Product.print_details),
+            selectinload(Product.sizes),
         )
     )
     product = result.scalar_one_or_none()
