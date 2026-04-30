@@ -1,0 +1,141 @@
+[
+  {
+    "product_id": 131,
+    "product_name": "Decals - General Performance",
+    "main_sku": "DECAL-131",
+    "status": 1,
+    "default_category_id": 22,
+    "small_image": "https://cdn.ops.test/decals/131_small.jpg",
+    "large_image": "https://cdn.ops.test/decals/131_large.jpg",
+    "externalCatalogue": 1,
+    "description": "High-performance custom decals",
+    "brand": "VG Decals",
+    "pricing_method": "formula",
+    "product_size": [
+      {"size_id": 1, "size_title": "Custom Size", "size_width": 0, "size_height": 0},
+      {"size_id": 2, "size_title": "4\" x 4\"", "size_width": 4, "size_height": 4},
+      {"size_id": 3, "size_title": "6\" x 6\"", "size_width": 6, "size_height": 6}
+    ],
+    "product_additional_options": [
+      {"master_option_id": 59, "option_key": "lamMaterial", "title": "Lamination Material", "options_type": "combo", "required": false,
+       "attributes": [
+         {"attribute_id": 101, "master_attribute_id": 201, "attribute_key": "gloss", "title": "Gloss", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+         {"attribute_id": 102, "master_attribute_id": 202, "attribute_key": "matte", "title": "Matte", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.10"},
+         {"attribute_id": 103, "master_attribute_id": 203, "attribute_key": "clear", "title": "Clear", "sort_order": 3, "status": 1, "setup_cost": "0.00", "multiplier": "1.05"}
+       ]},
+      {"master_option_id": 60, "option_key": "material", "title": "Material", "options_type": "combo", "required": true,
+       "attributes": [
+         {"attribute_id": 111, "master_attribute_id": 211, "attribute_key": "vinyl", "title": "Vinyl", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+         {"attribute_id": 112, "master_attribute_id": 212, "attribute_key": "polyester", "title": "Polyester", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.20"}
+       ]},
+      {"master_option_id": 61, "option_key": "shape", "title": "Shape", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 121, "master_attribute_id": 221, "attribute_key": "rectangle", "title": "Rectangle", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 122, "master_attribute_id": 222, "attribute_key": "circle", "title": "Circle", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 123, "master_attribute_id": 223, "attribute_key": "custom", "title": "Custom", "sort_order": 3, "status": 1, "setup_cost": "5.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 62, "option_key": "quantity", "title": "Quantity", "options_type": "combo", "required": true, "attributes": [
+        {"attribute_id": 131, "master_attribute_id": 231, "attribute_key": "q25", "title": "25", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 132, "master_attribute_id": 232, "attribute_key": "q50", "title": "50", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "0.90"},
+        {"attribute_id": 133, "master_attribute_id": 233, "attribute_key": "q100", "title": "100", "sort_order": 3, "status": 1, "setup_cost": "0.00", "multiplier": "0.80"}
+      ]},
+      {"master_option_id": 63, "option_key": "cut", "title": "Cut Type", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 141, "master_attribute_id": 241, "attribute_key": "die", "title": "Die Cut", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 142, "master_attribute_id": 242, "attribute_key": "kiss", "title": "Kiss Cut", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.05"}
+      ]},
+      {"master_option_id": 64, "option_key": "ink", "title": "Ink Type", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 151, "master_attribute_id": 251, "attribute_key": "digital", "title": "Digital", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 65, "option_key": "turnaround", "title": "Turnaround", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 161, "master_attribute_id": 261, "attribute_key": "standard", "title": "Standard (5-7 days)", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 162, "master_attribute_id": 262, "attribute_key": "rush", "title": "Rush (2-3 days)", "sort_order": 2, "status": 1, "setup_cost": "10.00", "multiplier": "1.30"}
+      ]},
+      {"master_option_id": 66, "option_key": "whiteInk", "title": "White Ink", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 171, "master_attribute_id": 271, "attribute_key": "no", "title": "No", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 172, "master_attribute_id": 272, "attribute_key": "yes", "title": "Yes", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.15"}
+      ]},
+      {"master_option_id": 67, "option_key": "corners", "title": "Corner Style", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 181, "master_attribute_id": 281, "attribute_key": "square", "title": "Square", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 182, "master_attribute_id": 282, "attribute_key": "round", "title": "Rounded", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 68, "option_key": "finish", "title": "Finish", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 191, "master_attribute_id": 291, "attribute_key": "gloss", "title": "Gloss", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 192, "master_attribute_id": 292, "attribute_key": "matte", "title": "Matte", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 69, "option_key": "backing", "title": "Backing", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 201, "master_attribute_id": 301, "attribute_key": "paper", "title": "Paper", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 70, "option_key": "color", "title": "Color Count", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 211, "master_attribute_id": 311, "attribute_key": "full", "title": "Full Color", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 71, "option_key": "adhesive", "title": "Adhesive Type", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 221, "master_attribute_id": 321, "attribute_key": "permanent", "title": "Permanent", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 222, "master_attribute_id": 322, "attribute_key": "removable", "title": "Removable", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.10"}
+      ]},
+      {"master_option_id": 72, "option_key": "holes", "title": "Holes", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 231, "master_attribute_id": 331, "attribute_key": "none", "title": "No Holes", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 232, "master_attribute_id": 332, "attribute_key": "one", "title": "1 Hole", "sort_order": 2, "status": 1, "setup_cost": "2.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 73, "option_key": "substrate", "title": "Substrate", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 241, "master_attribute_id": 341, "attribute_key": "polypropylene", "title": "Polypropylene", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 74, "option_key": "proofing", "title": "Proofing", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 251, "master_attribute_id": 351, "attribute_key": "digital", "title": "Digital Proof", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 252, "master_attribute_id": 352, "attribute_key": "hard", "title": "Hard Proof", "sort_order": 2, "status": 1, "setup_cost": "15.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 75, "option_key": "packaging", "title": "Packaging", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 261, "master_attribute_id": 361, "attribute_key": "flat", "title": "Flat", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 262, "master_attribute_id": 362, "attribute_key": "rolled", "title": "Rolled", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 76, "option_key": "grommets", "title": "Grommets", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 271, "master_attribute_id": 371, "attribute_key": "none", "title": "No Grommets", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 77, "option_key": "printing", "title": "Printing Side", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 281, "master_attribute_id": 381, "attribute_key": "single", "title": "Single Side", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 282, "master_attribute_id": 382, "attribute_key": "double", "title": "Double Side", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.80"}
+      ]},
+      {"master_option_id": 78, "option_key": "perforation", "title": "Perforation", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 291, "master_attribute_id": 391, "attribute_key": "no", "title": "No", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 79, "option_key": "shipping", "title": "Shipping Method", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 301, "master_attribute_id": 401, "attribute_key": "ground", "title": "Ground", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 302, "master_attribute_id": 402, "attribute_key": "express", "title": "Express", "sort_order": 2, "status": 1, "setup_cost": "20.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 80, "option_key": "artFile", "title": "Art File Format", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 311, "master_attribute_id": 411, "attribute_key": "pdf", "title": "PDF", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 312, "master_attribute_id": 412, "attribute_key": "ai", "title": "AI", "sort_order": 2, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 81, "option_key": "bleed", "title": "Bleed", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 321, "master_attribute_id": 421, "attribute_key": "standard", "title": "Standard Bleed", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 82, "option_key": "resolution", "title": "Resolution", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 331, "master_attribute_id": 431, "attribute_key": "300dpi", "title": "300 DPI", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 83, "option_key": "colorSpace", "title": "Color Space", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 341, "master_attribute_id": 441, "attribute_key": "cmyk", "title": "CMYK", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 84, "option_key": "oversize", "title": "Oversize Charge", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 351, "master_attribute_id": 451, "attribute_key": "no", "title": "No", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 85, "option_key": "setup", "title": "Setup Fee", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 361, "master_attribute_id": 461, "attribute_key": "included", "title": "Included", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 86, "option_key": "design", "title": "Design Service", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 371, "master_attribute_id": 471, "attribute_key": "no", "title": "No Design", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 372, "master_attribute_id": 472, "attribute_key": "yes", "title": "Design Service", "sort_order": 2, "status": 1, "setup_cost": "50.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 87, "option_key": "foiling", "title": "Foiling", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 381, "master_attribute_id": 481, "attribute_key": "no", "title": "No Foiling", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 88, "option_key": "emboss", "title": "Embossing", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 391, "master_attribute_id": 491, "attribute_key": "no", "title": "No Embossing", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 89, "option_key": "spotUV", "title": "Spot UV", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 401, "master_attribute_id": 501, "attribute_key": "no", "title": "No Spot UV", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"}
+      ]},
+      {"master_option_id": 90, "option_key": "dieline", "title": "Die Line", "options_type": "combo", "required": false, "attributes": [
+        {"attribute_id": 411, "master_attribute_id": 511, "attribute_key": "standard", "title": "Standard", "sort_order": 1, "status": 1, "setup_cost": "0.00", "multiplier": "1.00"},
+        {"attribute_id": 412, "master_attribute_id": 512, "attribute_key": "custom", "title": "Custom", "sort_order": 2, "status": 1, "setup_cost": "25.00", "multiplier": "1.00"}
+      ]}
+    ]
+  }
+]

@@ -172,6 +172,9 @@ class ProductSizeIngest(BaseModel):
     height: Decimal
     unit: str = "in"
     label: Optional[str] = None
+    # OPS-specific fields
+    ops_size_id: Optional[int] = None
+    size_title: Optional[str] = None
 
 
 class ApparelDetailsIngest(BaseModel):
@@ -188,6 +191,10 @@ class PrintDetailsIngest(BaseModel):
     size_unit: str = "in"
     base_price_per_sq_unit: Optional[Decimal] = None
     raw_payload: Optional[dict] = None
+    # OPS-specific fields
+    ops_product_id_int: Optional[int] = None
+    default_category_id: Optional[int] = None
+    external_catalogue: Optional[int] = None
 
 
 class ImageIngest(BaseModel):
@@ -237,6 +244,7 @@ class ProductIngest(BaseModel):
     apparel_details: Optional[ApparelDetailsIngest] = None
     print_details: Optional[PrintDetailsIngest] = None
     sizes: list[ProductSizeIngest] = Field(default_factory=list)
+    raw_payload: Optional[dict] = None
 
     @model_validator(mode="after")
     def validate_type_details(self) -> "ProductIngest":
