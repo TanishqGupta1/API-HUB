@@ -54,6 +54,10 @@ _SCHEMA_UPGRADES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)",
     "CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images(product_id)",
     "CREATE INDEX IF NOT EXISTS idx_product_options_product_id ON product_options(product_id)",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS adapter_class VARCHAR(64)",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS last_full_sync TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS last_delta_sync TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS errors JSONB",
 ]
 
 
