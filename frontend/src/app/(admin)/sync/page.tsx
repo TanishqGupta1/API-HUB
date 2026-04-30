@@ -79,7 +79,7 @@ function StatusBadge({ status }: { status: string }) {
 function SkeletonRow() {
   return (
     <tr className="border-t border-[#cfccc8]">
-      {[120, 80, 100, 60, 60, 110, 90].map((w, i) => (
+      {[120, 80, 100, 60, 60, 110, 90, 60].map((w, i) => (
         <td key={i} className="px-5 py-4">
           <div className="h-3 rounded animate-pulse w-full bg-[#f2f0ed]" style={{ width: w }} />
         </td>
@@ -97,6 +97,7 @@ export default function SyncJobsPage() {
   const [filterSupplier, setFilterSupplier] = useState("");
   const [filterStatus,   setFilterStatus]   = useState("");
   const [filterJobType,  setFilterJobType]  = useState("");
+  const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -295,9 +296,9 @@ export default function SyncJobsPage() {
         <table className="w-full text-sm min-w-[720px]">
           <thead>
             <tr className="border-b border-[#cfccc8]">
-              {["Supplier", "Job Type", "Status", "Records", "Duration", "Started"].map((h) => (
+              {["Supplier", "Job Type", "Status", "Records", "Duration", "Started", ""].map((h, i) => (
                 <th
-                  key={h}
+                  key={i}
                   className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide text-[#484852] font-mono"
                 >
                   {h}
@@ -343,7 +344,29 @@ export default function SyncJobsPage() {
                   <td className="px-5 py-4 text-xs text-[#484852] font-mono">
                     {fmtStarted(j.started_at)}
                   </td>
+
+                  {/* Actions */}
+                  <td className="px-5 py-4 text-right">
+                    {j.status === "failed" && j.error_log && (
+                      <button 
+                        onClick={() => setExpandedErrorId(expandedErrorId === j.id ? null : j.id)}
+                        className="text-xs font-semibold text-[#b93232] hover:underline whitespace-nowrap"
+                      >
+                        {expandedErrorId === j.id ? "Hide Error" : "View Error"}
+                      </button>
+                    )}
+                  </td>
                 </tr>
+
+                {expandedErrorId === j.id && (
+                  <tr className="bg-[#fdf2f2] border-t-0 border-b border-[#cfccc8]">
+                    <td colSpan={7} className="px-5 pb-5 pt-1">
+                      <div className="font-mono text-xs text-[#b93232] whitespace-pre-wrap max-h-64 overflow-y-auto p-4 bg-white border border-[#fac8c8] rounded shadow-inner">
+                        {j.error_log}
+                      </div>
+                    </td>
+                  </tr>
+                )}
               </React.Fragment>
             ))}
 

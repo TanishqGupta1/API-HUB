@@ -47,7 +47,7 @@ async def list_products(
     search: Optional[str] = None,
     archived: bool = False,
     skip: int = 0,
-    limit: int = Query(default=50, le=500),
+    limit: int = Query(default=50, le=1000),
     db: AsyncSession = Depends(get_db),
 ):
     variant_agg = (

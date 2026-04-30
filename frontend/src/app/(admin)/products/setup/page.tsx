@@ -230,7 +230,7 @@ export default function ProductOptionsPage() {
       try {
         const [c, p] = await Promise.all([
           api<any[]>("/api/customers"),
-          api<any[]>("/api/products?limit=200"),
+          api<any[]>("/api/products?limit=1000"),
         ]);
         setCustomers(c);
         setProductsList(p);
@@ -255,19 +255,20 @@ export default function ProductOptionsPage() {
     const selectedProduct = productsList.find((p) => p.id === productId);
     
     // Smart Filter: If it's an apparel product (like a Toddler T-Shirt), hide signage options
-    if (selectedProduct) {
-      const pName = (selectedProduct.product_name || "").toLowerCase();
-      const pType = (selectedProduct.product_type || "").toLowerCase();
-      const isApparel = pName.includes("shirt") || pName.includes("tee") || pName.includes("hoodie") || pType.includes("apparel") || (selectedProduct.supplier_name || "").toLowerCase().includes("sanmar");
-      
-      if (isApparel) {
-        const signageKeywords = ["laminate", "substrate", "ink", "finish", "packaging", "binding", "paper"];
-        result = result.filter(o => {
-          const t = (o.title || o.option_key || "").toLowerCase();
-          return !signageKeywords.some(kw => t.includes(kw));
-        });
-      }
-    }
+    // (Temporarily disabled to show all options)
+    // if (selectedProduct) {
+    //   const pName = (selectedProduct.product_name || "").toLowerCase();
+    //   const pType = (selectedProduct.product_type || "").toLowerCase();
+    //   const isApparel = pName.includes("shirt") || pName.includes("tee") || pName.includes("hoodie") || pType.includes("apparel") || (selectedProduct.supplier_name || "").toLowerCase().includes("sanmar");
+    //   
+    //   if (isApparel) {
+    //     const signageKeywords = ["laminate", "substrate", "ink", "finish", "packaging", "binding", "paper"];
+    //     result = result.filter(o => {
+    //       const t = (o.title || o.option_key || "").toLowerCase();
+    //       return !signageKeywords.some(kw => t.includes(kw));
+    //     });
+    //   }
+    // }
 
     if (!search.trim() && tag === "all") return result;
     return result
