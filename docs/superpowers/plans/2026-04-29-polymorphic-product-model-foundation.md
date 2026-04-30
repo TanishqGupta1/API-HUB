@@ -1,5 +1,7 @@
 # Phase 1 — Polymorphic Product Model Foundation
 
+> **STATUS (2026-04-30): ✅ COMPLETE.** Implemented by sinchanaprintdeed in commit `93de4b5` (PR #69), merged to `main`. All 16 tasks landed: ApprelDetails, PrintDetails, VariantPrice, ProductSize models created; persist_product service in `backend/modules/catalog/persistence.py`; Pydantic schemas extended; ingest endpoint refactored; backfill script at `backend/scripts/backfill_polymorphic.py`; 14 test files (`test_phase1_task1.py` through `test_phase1_task13.py` + `test_phase1_e2e.py` + `test_persist_product.py`). **Open follow-ups:** verify backfill has been run on dev DB; clean up scratch files (`backend/scratch_create_schema.py`, `scratch_test_db.py`, `task7_error.txt`, `test_output*.txt`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extend the existing product data model from a single flat shape into a polymorphic one — a shared `products` spine plus type-specific detail tables (`apparel_details`, `print_details`) and supporting tables (`variant_prices`, `product_sizes`). Ship a `persist_product` service that routes by `product_type` and replaces the inline upsert logic in `catalog/ingest.py`. After this phase, Phases 2–5 can all call `persist_product(item: ProductIngest, ...)` regardless of supplier type.

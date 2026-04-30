@@ -1,5 +1,13 @@
 # Post-MVP Roadmap (Phases 6-13)
 
+> **STATUS UPDATE (2026-04-30):**
+> - **Phase 1:** ✅ COMPLETE on main (`93de4b5`)
+> - **Phase 2:** 🟡 PARTIAL on main (`b391baa`) — DELTA discovery missing, rolls into Phase 9
+> - **Phase 3:** ⏸ Plan needs revision (Phase 2 already shipped BaseAdapter framework); creds-blocked
+> - **Phase 4:** 🟢 Unblocked, ready next
+> - **Phase 5:** 🟢 Unblocked, parallel-safe with Phase 6
+> - **Phases 6-13:** Spec needed per phase before plan; see open questions in 2026-04-30 brainstorm
+
 > **For agentic workers:** This is a strategic roadmap, NOT a per-task implementation plan. Each phase below requires its own spec → detailed plan → execution cycle. Use superpowers:brainstorming to spec a phase before writing its implementation plan.
 
 **Goal:** Define the post-MVP trajectory after Phases 1-5 ship. Phases 1-5 deliver the polymorphic product foundation, OPS + SanMar adapters, pricing API, and product detail UI. Phases 6-13 extend that foundation toward production-grade multi-tenant catalog management.
