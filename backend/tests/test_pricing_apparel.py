@@ -6,6 +6,99 @@ from decimal import Decimal
 import pytest
 
 
+@pytest.mark.asyncio
+async def test_apparel_quote_quantizes_to_two_decimals(db, seed_supplier):
+    """Tier price 3.337 -> rounds to 3.34; total 3.34 * 3 = 10.02."""
+    from modules.catalog.persistence import persist_product
+    from modules.catalog.schemas import ProductIngest, VariantIngest, VariantPriceIngest, ApparelDetailsIngest
+    from modules.catalog.models import Product, ProductVariant
+    from modules.pricing.resolvers import resolve_quote
+    from modules.pricing.schemas import QuoteRequest
+    from database import async_session
+    from sqlalchemy import select, delete
+
+    payload = ProductIngest(
+        supplier_sku="QUANT-1",
+        product_name="quant",
+        product_type="apparel",
+        apparel_details=ApparelDetailsIngest(),
+        variants=[
+            VariantIngest(
+                part_id="QV1",
+                color="B",
+                size="M",
+                base_price=Decimal("3.337"),
+                prices=[
+                    VariantPriceIngest(price_type="Net", quantity_min=1, quantity_max=2147483647, price=Decimal("3.337")),
+                ],
+            ),
+        ],
+    )
+    async with async_session() as s:
+        pid = await persist_product(s, seed_supplier.id, payload)
+        await s.commit()
+        vid = (await s.execute(
+            select(ProductVariant.id).where(ProductVariant.product_id == pid)
+        )).scalar_one()
+
+    async with async_session() as s:
+        result = await resolve_quote(
+            QuoteRequest(product_id=pid, variant_id=vid, qty=3), s
+        )
+        assert result.unit_price == Decimal("3.34")
+        assert result.total == Decimal("10.02")
+
+    async with async_session() as s:
+        await s.execute(delete(Product).where(Product.id == pid))
+        await s.commit()
+
+
+@pytest.mark.asyncio
+async def test_apparel_resolver_currency_passthrough(db, seed_supplier):
+    """Response always includes currency=USD."""
+    from modules.catalog.persistence import persist_product
+    from modules.catalog.schemas import ProductIngest, VariantIngest, VariantPriceIngest, ApparelDetailsIngest
+    from modules.catalog.models import Product, ProductVariant
+    from modules.pricing.resolvers import resolve_quote
+    from modules.pricing.schemas import QuoteRequest
+    from database import async_session
+    from sqlalchemy import select, delete
+
+    payload = ProductIngest(
+        supplier_sku="CUR-1",
+        product_name="cur",
+        product_type="apparel",
+        apparel_details=ApparelDetailsIngest(),
+        variants=[
+            VariantIngest(
+                part_id="CURV1",
+                color="W",
+                size="S",
+                base_price=Decimal("9.99"),
+                prices=[
+                    VariantPriceIngest(price_type="Net", quantity_min=1, quantity_max=2147483647, price=Decimal("9.99")),
+                ],
+            ),
+        ],
+    )
+    async with async_session() as s:
+        pid = await persist_product(s, seed_supplier.id, payload)
+        await s.commit()
+        vid = (await s.execute(
+            select(ProductVariant.id).where(ProductVariant.product_id == pid)
+        )).scalar_one()
+
+    async with async_session() as s:
+        result = await resolve_quote(
+            QuoteRequest(product_id=pid, variant_id=vid, qty=1), s
+        )
+        assert result.currency == "USD"
+
+    async with async_session() as s:
+        await s.execute(delete(Product).where(Product.id == pid))
+        await s.commit()
+
+
 def test_quote_request_accepts_apparel_payload():
     from modules.pricing.schemas import QuoteRequest
 
