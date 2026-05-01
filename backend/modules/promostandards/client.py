@@ -194,7 +194,7 @@ class PromoStandardsClient:
 
     def _sync_get_sellable_product_ids(self, ws_version: str) -> list[str]:
         svc = self._get_service()
-        response = svc.getProductSellable(**self._auth(ws_version))
+        response = svc.getProductSellable(isSellable=True, **self._auth(ws_version))
 
         container = _attr(response, "ProductSellableArray", "productSellableArray")
         items = _as_list(_attr(container, "ProductSellable", "productSellable"))

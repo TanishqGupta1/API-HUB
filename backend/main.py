@@ -37,8 +37,10 @@ from modules.push_candidates.routes import router as push_candidates_router
 from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
 from modules.suppliers.category_import import router as category_import_router
+from modules.pricing.routes import router as pricing_router, customer_router as pricing_customer_router
 
 import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
+import modules.rest_connector.fourover_adapter  # noqa: F401  registers FourOverAdapter
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
 
@@ -142,6 +144,8 @@ app.include_router(ops_config_router)
 app.include_router(category_import_router)
 app.include_router(promostandards_sync_router)
 app.include_router(import_jobs_router)
+app.include_router(pricing_router)
+app.include_router(pricing_customer_router)
 
 
 @app.get("/health")

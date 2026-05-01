@@ -43,6 +43,7 @@ services:
       - NODE_FUNCTION_ALLOW_EXTERNAL=*
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET}
+      - API_BASE_URL=${API_BASE_URL:-http://host.docker.internal:8000}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n-nodes-onprintshop:/opt/custom-nodes/n8n-nodes-onprintshop
@@ -60,12 +61,14 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: deps
+    command: npm run dev
     ports:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-      - NEXT_PUBLIC_INGEST_SECRET=${NEXT_PUBLIC_INGEST_SECRET:-}
       - WATCHPACK_POLLING=true
     volumes:
       - ./frontend:/app

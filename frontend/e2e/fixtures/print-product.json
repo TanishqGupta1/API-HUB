@@ -1,0 +1,76 @@
+{
+  "id": "00000000-0000-0000-0000-0000000000b1",
+  "supplier_id": "00000000-0000-0000-0000-0000000000s1",
+  "supplier_name": "VG OPS",
+  "supplier_sku": "131",
+  "product_name": "Decals - General Performance",
+  "brand": null,
+  "category": null,
+  "category_id": null,
+  "description": null,
+  "product_type": "print",
+  "pricing_method": "formula",
+  "image_url": null,
+  "ops_product_id": "131",
+  "external_catalogue": 1,
+  "last_synced": null,
+  "archived_at": null,
+  "variants": [],
+  "images": [],
+  "options": [
+    {
+      "id": "opt-substrate",
+      "option_key": "substrateMaterial",
+      "title": "Substrate",
+      "options_type": "combo",
+      "sort_order": 0,
+      "master_option_id": null,
+      "ops_option_id": null,
+      "required": false,
+      "attributes": [
+        { "id": "a-sav", "title": "SAV", "sort_order": 0, "ops_attribute_id": null },
+        { "id": "a-vinyl", "title": "Vinyl", "sort_order": 1, "ops_attribute_id": null }
+      ]
+    },
+    {
+      "id": "opt-ink",
+      "option_key": "inkFinish",
+      "title": "Ink Finish",
+      "options_type": "radio",
+      "sort_order": 1,
+      "master_option_id": null,
+      "ops_option_id": null,
+      "required": false,
+      "attributes": [
+        { "id": "a-gloss", "title": "Gloss", "sort_order": 0, "ops_attribute_id": null },
+        { "id": "a-matte", "title": "Matte", "sort_order": 1, "ops_attribute_id": null }
+      ]
+    }
+  ],
+  "apparel_details": null,
+  "print_details": {
+    "ops_product_id_int": 131,
+    "default_category_id": 22,
+    "external_catalogue": 1,
+    "width_min": "1",
+    "width_max": "96",
+    "height_min": "1",
+    "height_max": "96",
+    "formula": null,
+    "size_template_id": null
+  },
+  "sizes": [
+    {
+      "id": "sz1",
+      "ops_size_id": 160,
+      "size_title": "Custom Size",
+      "size_width": "0",
+      "size_height": "0",
+      "width_min": "1",
+      "width_max": "96",
+      "height_min": "1",
+      "height_max": "96",
+      "sort_order": 0
+    }
+  ]
+}

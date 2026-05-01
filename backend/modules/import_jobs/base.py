@@ -24,7 +24,6 @@ class DiscoveryMode(str, Enum):
     CLOSEOUTS = "closeouts"
 
 
-
 class ProductRef(BaseModel):
     """A reference to a product in the supplier's system."""
     supplier_sku: str

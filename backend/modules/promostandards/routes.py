@@ -151,8 +151,13 @@ async def _run_full_product_sync(
 
         try:
             product_client = PromoStandardsClient(wsdl_product, auth_config)
-            product_ids = await product_client.get_sellable_product_ids()
-            
+            raw_ids = await product_client.get_sellable_product_ids()
+            # Deduplicate while preserving order — some suppliers (SanMar) return
+            # duplicate IDs per color/size row; duplicates in one INSERT batch
+            # cause "ON CONFLICT DO UPDATE command cannot affect row a second time".
+            seen: set[str] = set()
+            product_ids = [x for x in raw_ids if not (x in seen or seen.add(x))]
+
             if limit:
                 product_ids = product_ids[:limit]
                 
@@ -180,6 +185,7 @@ async def _run_full_product_sync(
                 session, job_id, status="completed", records_processed=len(products)
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
@@ -232,6 +238,7 @@ async def _run_rest_sync(
                 records_processed=len(products),
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
@@ -268,6 +275,7 @@ async def _run_inventory_sync(
                 session, job_id, status="completed", records_processed=len(inventory)
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
@@ -304,6 +312,7 @@ async def _run_pricing_sync(
                 session, job_id, status="completed", records_processed=len(pricing)
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 

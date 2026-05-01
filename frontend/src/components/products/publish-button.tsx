@@ -10,7 +10,7 @@ interface Props {
 }
 
 const N8N_URL = process.env.NEXT_PUBLIC_N8N_URL ?? "http://localhost:5678";
-const PUSH_WORKFLOW_ID = process.env.NEXT_PUBLIC_PUSH_WORKFLOW_ID ?? "vg-ops-push-001";
+const PUSH_WORKFLOW_ID = process.env.NEXT_PUBLIC_PUSH_WORKFLOW_ID ?? "ops-push-001";
 
 export function PublishButton({ productId, onDone }: Props) {
   const [customers, setCustomers] = useState<Customer[]>([]);
