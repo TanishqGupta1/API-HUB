@@ -2,7 +2,7 @@
 
 n8n calls these endpoints to kick off SOAP syncs. Each POST returns
 immediately (HTTP 202) with a SyncJob id; the actual SOAP work runs
-as a FastAPI BackgroundTask. n8n polls GET /api/sync_jobs/{job_id}
+as a FastAPI BackgroundTask. n8n polls GET /api/sync-jobs/{job_id}
 until status flips to "completed" or "failed".
 
 Upstream deps (Tanishq T3b + T4) are imported lazily inside the
@@ -114,7 +114,7 @@ async def _finish_job(
     job.status = status
     job.records_processed = records_processed
     job.error_log = error
-    job.finished_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(timezone.utc)
     await session.commit()
 
 
@@ -499,7 +499,7 @@ async def latest_sync_status(
         "job_type": job.job_type,
         "status": job.status,
         "started_at": job.started_at,
-        "finished_at": job.finished_at,
+        "completed_at": job.completed_at,
         "records_processed": job.records_processed,
         "error_log": job.error_log,
     }

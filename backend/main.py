@@ -99,10 +99,17 @@ async def lifespan(app: FastAPI):
         async with async_session() as db:
             await ensure_vg_ops_supplier(db)
 
-    # Start the background scheduler
-    asyncio.create_task(start_scheduler(interval_hours=24))
-    
+    # Start the background scheduler (sleeps first; no-op if DISABLE_SCHEDULER=true)
+    _scheduler_task = asyncio.create_task(start_scheduler(interval_hours=24))
+
     yield
+
+    # Graceful shutdown: cancel scheduler before closing DB pool
+    _scheduler_task.cancel()
+    try:
+        await _scheduler_task
+    except asyncio.CancelledError:
+        pass
     await engine.dispose()
 
 
