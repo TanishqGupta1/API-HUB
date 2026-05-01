@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -100,15 +101,20 @@ async def get_supplier(supplier_id_or_slug: str, db: AsyncSession = Depends(get_
     return data
 
 
+_SUPPLIER_PATCHABLE = {
+    "name", "protocol", "promostandards_code", "base_url", "adapter_class",
+    "auth_config", "field_mappings", "is_active", "protocol_config",
+}
+
+
 @router.patch("/{supplier_id_or_slug}", response_model=SupplierRead)
 async def patch_supplier(
     supplier_id_or_slug: str, body: dict, db: AsyncSession = Depends(get_db)
 ):
     supplier = await get_supplier_by_id_or_slug(db, supplier_id_or_slug)
-    
-    # Partial update from dict
+
     for key, val in body.items():
-        if hasattr(supplier, key):
+        if key in _SUPPLIER_PATCHABLE:
             setattr(supplier, key, val)
             
     await db.commit()

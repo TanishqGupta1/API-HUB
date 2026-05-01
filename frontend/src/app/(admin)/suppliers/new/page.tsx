@@ -130,6 +130,7 @@ export default function NewSupplierPage() {
   const [protocol, setProtocol] = useState("promostandards");
   const [promostandardsCode, setPromostandardsCode] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [adapterClass, setAdapterClass] = useState("");
   const [authConfig, setAuthConfig] = useState<Record<string, string>>({});
 
   const def = useMemo(() => PROTOCOLS.find((p) => p.value === protocol) ?? PROTOCOLS[0], [protocol]);
@@ -173,6 +174,7 @@ export default function NewSupplierPage() {
           name, slug, protocol,
           promostandards_code: promostandardsCode || null,
           base_url: baseUrl || null,
+          adapter_class: adapterClass || null,
           auth_config: trimmedAuth,
         }),
       });
@@ -301,6 +303,24 @@ export default function NewSupplierPage() {
                   onChange={(e) => setBaseUrl(e.target.value)}
                   className="h-11 border-[#cfccc8] font-mono text-[13px]"
                 />
+              </div>
+
+              <div>
+                <label className={labelCls}>Adapter Class</label>
+                <select
+                  value={adapterClass}
+                  onChange={(e) => setAdapterClass(e.target.value)}
+                  className="w-full h-11 px-3 border border-[#cfccc8] rounded-md bg-white font-mono text-[13px] text-[#1e1e24] focus:outline-none focus:ring-2 focus:ring-[#1e4d92] focus:border-transparent"
+                >
+                  <option value="">— None (set after creation)</option>
+                  <option value="OPSAdapter">OPSAdapter — OnPrintShop GraphQL</option>
+                  <option value="SanMarAdapter">SanMarAdapter — SanMar SOAP</option>
+                  <option value="AlphabroderAdapter">AlphabroderAdapter — Alphabroder SOAP</option>
+                  <option value="SSAdapter">SSAdapter — S&S Activewear REST</option>
+                  <option value="FourOverAdapter">FourOverAdapter — 4Over REST + HMAC</option>
+                  <option value="PromoStandardsAdapter">PromoStandardsAdapter — Generic SOAP</option>
+                </select>
+                <p className={hintCls}>Required for scheduled sync. Can be set later on the supplier detail page.</p>
               </div>
             </div>
           </div>

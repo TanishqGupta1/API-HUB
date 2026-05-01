@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -62,64 +62,99 @@ async def create_sync_job(body: SyncJobCreate, db: AsyncSession = Depends(get_db
 
 @router.get("/health", response_model=SyncHealthResponse, tags=["sync_jobs"])
 async def sync_health(db: AsyncSession = Depends(get_db)):
-    """Per-supplier sync health: last sync times, recent error count, consecutive failures."""
+    """Per-supplier sync health. Uses 2 queries total instead of N+1."""
     suppliers = (await db.execute(select(Supplier).order_by(Supplier.name))).scalars().all()
+    if not suppliers:
+        return SyncHealthResponse(suppliers=[], generated_at=datetime.now(timezone.utc))
+
+    supplier_ids = [s.id for s in suppliers]
+
+    # Query 1: last terminal job per supplier (window function)
+    last_job_rows = (await db.execute(
+        text("""
+            SELECT DISTINCT ON (supplier_id)
+                supplier_id, status, completed_at
+            FROM sync_jobs
+            WHERE supplier_id = ANY(:ids)
+              AND status IN ('success', 'partial_success', 'completed', 'failed')
+            ORDER BY supplier_id, completed_at DESC NULLS LAST
+        """),
+        {"ids": supplier_ids},
+    )).mappings().all()
+    last_job_by_supplier = {r["supplier_id"]: r for r in last_job_rows}
+
+    # Query 2: last 10 jobs per supplier for error counting
+    recent_rows = (await db.execute(
+        text("""
+            SELECT supplier_id, status, row_num
+            FROM (
+                SELECT supplier_id, status,
+                       ROW_NUMBER() OVER (PARTITION BY supplier_id ORDER BY started_at DESC) AS row_num
+                FROM sync_jobs
+                WHERE supplier_id = ANY(:ids)
+            ) ranked
+            WHERE row_num <= 10
+        """),
+        {"ids": supplier_ids},
+    )).mappings().all()
+
+    from collections import defaultdict
+    recent_by_supplier: dict = defaultdict(list)
+    for r in recent_rows:
+        recent_by_supplier[r["supplier_id"]].append(r["status"])
 
     result = []
     for supplier in suppliers:
-        # Most recent completed job
-        last_job = (
-            await db.execute(
-                select(SyncJob)
-                .where(
-                    SyncJob.supplier_id == supplier.id,
-                    SyncJob.status.in_(["success", "partial_success", "completed", "failed"]),
-                )
-                .order_by(SyncJob.completed_at.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-
-        # Error count in last 10 jobs
-        recent_jobs = (
-            await db.execute(
-                select(SyncJob)
-                .where(SyncJob.supplier_id == supplier.id)
-                .order_by(SyncJob.started_at.desc())
-                .limit(10)
-            )
-        ).scalars().all()
-        recent_error_count = sum(1 for j in recent_jobs if j.status == "failed")
-
-        # Consecutive failures from most recent backwards
+        last = last_job_by_supplier.get(supplier.id)
+        recent_statuses = recent_by_supplier.get(supplier.id, [])
+        recent_error_count = sum(1 for s in recent_statuses if s == "failed")
         consecutive_failures = 0
-        for j in recent_jobs:
-            if j.status == "failed":
+        for s in recent_statuses:
+            if s == "failed":
                 consecutive_failures += 1
-            elif j.status in ("success", "partial_success", "completed"):
+            elif s in ("success", "partial_success", "completed"):
                 break
 
-        result.append(
-            SupplierSyncHealth(
-                supplier_id=supplier.id,
-                supplier_name=supplier.name,
-                is_active=supplier.is_active,
-                last_full_sync=supplier.last_full_sync,
-                last_delta_sync=supplier.last_delta_sync,
-                last_sync_status=last_job.status if last_job else None,
-                last_sync_completed_at=last_job.completed_at if last_job else None,
-                recent_error_count=recent_error_count,
-                consecutive_failures=consecutive_failures,
-            )
-        )
+        result.append(SupplierSyncHealth(
+            supplier_id=supplier.id,
+            supplier_name=supplier.name,
+            is_active=supplier.is_active,
+            last_full_sync=supplier.last_full_sync,
+            last_delta_sync=supplier.last_delta_sync,
+            last_sync_status=last["status"] if last else None,
+            last_sync_completed_at=last["completed_at"] if last else None,
+            recent_error_count=recent_error_count,
+            consecutive_failures=consecutive_failures,
+        ))
 
     return SyncHealthResponse(suppliers=result, generated_at=datetime.now(timezone.utc))
+
+
 @router.get("/{job_id}", response_model=SyncJobRead)
 async def get_sync_job(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     job = await db.get(SyncJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.post("/{job_id}/retry", response_model=SyncJobRead, status_code=201)
+async def retry_sync_job(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    original = await db.get(SyncJob, job_id)
+    if not original:
+        raise HTTPException(status_code=404, detail="Job not found")
+    new_job = SyncJob(
+        supplier_id=original.supplier_id,
+        supplier_name=original.supplier_name,
+        job_type=original.job_type,
+        status="pending",
+        started_at=datetime.now(timezone.utc),
+        records_processed=0,
+    )
+    db.add(new_job)
+    await db.commit()
+    await db.refresh(new_job)
+    return new_job
 
 
 @router.patch("/{job_id}", response_model=SyncJobRead)
