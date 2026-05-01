@@ -3,7 +3,6 @@
 import { useState } from "react";
 import type { Product } from "@/lib/types";
 import { DimensionInput, type DimensionInputValue } from "@/components/storefront/dimension-input";
-import { OptionGroupedForm } from "@/components/storefront/option-grouped-form";
 import { LivePriceQuote } from "@/components/storefront/live-price-quote";
 
 interface Props {
@@ -17,7 +16,6 @@ export function PrintDetailPanel({ product }: Props) {
   const detail = product.print_details;
   const [dim, setDim] = useState<DimensionInputValue>({ width: null, height: null });
   const [qty, setQty] = useState<number>(1);
-  const [selected, setSelected] = useState<Record<string, string>>({});
 
   return (
     <div className="flex flex-col gap-6">
@@ -50,12 +48,6 @@ export function PrintDetailPanel({ product }: Props) {
           className="h-9 w-32 px-2 text-[13px] border border-[#cfccc8] rounded-md bg-white text-[#1e1e24] focus:outline-none focus:border-[#1e4d92]"
         />
       </div>
-
-      <OptionGroupedForm
-        options={product.options}
-        selected={selected}
-        onChange={setSelected}
-      />
 
       <LivePriceQuote
         productId={product.id}

@@ -1,6 +1,6 @@
 {
   "id": "catalog-sync-weekly-001",
-  "name": "Catalog Sync — Weekly Full (All Suppliers)",
+  "name": "Catalog Sync \u2014 Weekly Full (All Suppliers)",
   "active": false,
   "nodes": [
     {
@@ -18,18 +18,24 @@
       "name": "Every Sunday 1 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
-      "position": [240, 320]
+      "position": [
+        240,
+        320
+      ]
     },
     {
       "parameters": {
-        "url": "http://host.docker.internal:8000/api/suppliers",
+        "url": "={{ $env.API_BASE_URL }}/api/suppliers",
         "options": {}
       },
       "id": "csw-0002",
       "name": "Get Active Suppliers",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 320]
+      "position": [
+        460,
+        320
+      ]
     },
     {
       "parameters": {
@@ -39,16 +45,22 @@
       "name": "Filter Active",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 320]
+      "position": [
+        680,
+        320
+      ]
     },
     {
       "parameters": {
-        "url": "=http://host.docker.internal:8000/api/suppliers/{{$json.supplier_id}}/import",
+        "url": "={{ $env.API_BASE_URL }}/api/suppliers/{{$json.supplier_id}}/import",
         "method": "POST",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            { "name": "mode", "value": "full" }
+            {
+              "name": "mode",
+              "value": "full"
+            }
           ]
         },
         "options": {}
@@ -57,7 +69,10 @@
       "name": "Trigger Full Import",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 320]
+      "position": [
+        900,
+        320
+      ]
     },
     {
       "parameters": {
@@ -68,39 +83,55 @@
       "name": "Wait 5s",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [1120, 320]
+      "position": [
+        1120,
+        320
+      ]
     },
     {
       "parameters": {
-        "url": "=http://host.docker.internal:8000/api/sync-jobs/{{$json.sync_job_id}}",
+        "url": "={{ $env.API_BASE_URL }}/api/sync-jobs/{{$json.sync_job_id}}",
         "options": {}
       },
       "id": "csw-0006",
       "name": "Poll Job Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 320]
+      "position": [
+        1340,
+        320
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const job = $input.first().json;\nif (job.status === 'success' || job.status === 'partial_success' || job.status === 'failed') {\n  return [{ json: { ...job, done: true } }];\n}\nreturn [{ json: { ...job, done: false } }];"
+        "jsCode": "const job = $input.first().json;\nlet supplier_name = job.supplier_name;\nif (!supplier_name) {\n  try { supplier_name = $(\"Filter Active\").item.json.supplier_name; } catch (_) {}\n}\nconst base = { ...job, supplier_name: supplier_name ?? \"unknown\" };\nif (base.status === \"success\" || base.status === \"partial_success\" || base.status === \"failed\") {\n  return [{ json: { ...base, done: true } }];\n}\nreturn [{ json: { ...base, done: false } }];"
       },
       "id": "csw-0007",
       "name": "Check Done",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 320]
+      "position": [
+        1560,
+        320
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "done-check",
               "leftValue": "={{ $json.done }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equal" }
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
             }
           ],
           "combinator": "and"
@@ -110,18 +141,28 @@
       "name": "Is Done?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1780, 320]
+      "position": [
+        1780,
+        320
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "fail-check",
               "leftValue": "={{ $json.status }}",
               "rightValue": "failed",
-              "operator": { "type": "string", "operation": "equals" }
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
@@ -131,7 +172,10 @@
       "name": "Failed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2000, 200]
+      "position": [
+        2000,
+        200
+      ]
     },
     {
       "parameters": {
@@ -152,44 +196,130 @@
       "name": "Slack Alert",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2220, 100]
+      "position": [
+        2220,
+        100
+      ]
     }
   ],
   "connections": {
     "Every Sunday 1 AM": {
-      "main": [[{ "node": "Get Active Suppliers", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Get Active Suppliers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get Active Suppliers": {
-      "main": [[{ "node": "Filter Active", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Filter Active",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Filter Active": {
-      "main": [[{ "node": "Trigger Full Import", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Trigger Full Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Trigger Full Import": {
-      "main": [[{ "node": "Wait 5s", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Wait 5s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Wait 5s": {
-      "main": [[{ "node": "Poll Job Status", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Poll Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Poll Job Status": {
-      "main": [[{ "node": "Check Done", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Check Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Check Done": {
-      "main": [[{ "node": "Is Done?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Is Done?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Is Done?": {
       "main": [
-        [{ "node": "Failed?", "type": "main", "index": 0 }],
-        [{ "node": "Wait 5s", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 5s",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Failed?": {
       "main": [
-        [{ "node": "Slack Alert", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     }
   },
-  "settings": { "executionOrder": "v1" },
-  "tags": [{ "name": "sync" }, { "name": "catalog" }]
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "sync"
+    },
+    {
+      "name": "catalog"
+    }
+  ]
 }

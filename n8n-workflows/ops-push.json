@@ -18,7 +18,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Reads query params from the webhook.\n// Required: customer_id\n// Optional: supplier_id, limit, product_id\n//\n// Single-product push (from product detail page):\n//   GET /webhook/ops-push?customer_id=<uuid>&product_id=<uuid>&limit=1\n//\n// Bulk push (all products for a customer/supplier):\n//   GET /webhook/ops-push?customer_id=<uuid>&supplier_id=<uuid>&limit=25\n\nconst first = $input.first().json ?? {};\nconst q = first.query ?? first.queryParameters ?? {};\n\nconst customer_id = q.customer_id ?? q.customerId;\nif (!customer_id) {\n  throw new Error('Missing required query param: customer_id');\n}\n\nconst supplier_id = q.supplier_id ?? q.supplierId ?? null;\nconst product_id = q.product_id ?? q.productId ?? null;\nconst limitRaw = q.limit ?? 25;\nconst limit = Math.max(1, Math.min(200, Number(limitRaw) || 25));\n\nconst api_base = $env.API_HUB_BASE_URL || 'http://host.docker.internal:8000';\n\n// When product_id is provided, fetch that one product directly.\n// Otherwise, fetch the full product list (bulk push).\nlet products_url;\nif (product_id) {\n  products_url = `${api_base.replace(/\\/$/, '')}/api/products/${product_id}`;\n} else {\n  const url = new URL(`${api_base.replace(/\\/$/, '')}/api/products`);\n  url.searchParams.set('limit', String(limit));\n  if (supplier_id) url.searchParams.set('supplier_id', String(supplier_id));\n  products_url = url.toString();\n}\n\nreturn [{\n  json: {\n    api_base,\n    customer_id: String(customer_id),\n    supplier_id: supplier_id ? String(supplier_id) : null,\n    product_id: product_id ? String(product_id) : null,\n    limit,\n    products_url,\n  },\n}];"
+        "jsCode": "// Reads query params from the webhook.\n// Required: customer_id\n// Optional: supplier_id, limit, product_id\n//\n// Single-product push (from product detail page):\n//   GET /webhook/ops-push?customer_id=<uuid>&product_id=<uuid>&limit=1\n//\n// Bulk push (all products for a customer/supplier):\n//   GET /webhook/ops-push?customer_id=<uuid>&supplier_id=<uuid>&limit=25\n\nconst first = $input.first().json ?? {};\nconst q = first.query ?? first.queryParameters ?? {};\n\nconst customer_id = q.customer_id ?? q.customerId;\nif (!customer_id) {\n  throw new Error('Missing required query param: customer_id');\n}\n\nconst supplier_id = q.supplier_id ?? q.supplierId ?? null;\nconst product_id = q.product_id ?? q.productId ?? null;\nconst limitRaw = q.limit ?? 25;\nconst limit = Math.max(1, Math.min(200, Number(limitRaw) || 25));\n\nconst api_base = $env.API_BASE_URL;\n\n// When product_id is provided, fetch that one product directly.\n// Otherwise, fetch the full product list (bulk push).\nlet products_url;\nif (product_id) {\n  products_url = `${api_base.replace(/\\/$/, '')}/api/products/${product_id}`;\n} else {\n  const url = new URL(`${api_base.replace(/\\/$/, '')}/api/products`);\n  url.searchParams.set('limit', String(limit));\n  if (supplier_id) url.searchParams.set('supplier_id', String(supplier_id));\n  products_url = url.toString();\n}\n\nreturn [{\n  json: {\n    api_base,\n    customer_id: String(customer_id),\n    supplier_id: supplier_id ? String(supplier_id) : null,\n    product_id: product_id ? String(product_id) : null,\n    limit,\n    products_url,\n  },\n}];"
       },
       "id": "a1111111-0002-0000-0000-000000000002",
       "name": "Parse Params",
@@ -220,7 +220,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=http://host.docker.internal:8000/api/push/{{ $('Parse Params').item.json.customer_id }}/product/{{ $('Parse Params').item.json.product_id }}/ops-options",
+        "url": "={{ $env.API_BASE_URL }}/api/push/{{ $('Parse Params').item.json.customer_id }}/product/{{ $('Parse Params').item.json.product_id }}/ops-options",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -258,7 +258,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:8000/api/push-mappings",
+        "url": "={{ $env.API_BASE_URL }}/api/push-mappings",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -304,7 +304,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=http://host.docker.internal:8000/api/push/{{ $('Parse Params').item.json.customer_id }}/product/{{ $('Parse Params').item.json.product_id }}/ops-options",
+        "url": "={{ $env.API_BASE_URL }}/api/push/{{ $('Parse Params').item.json.customer_id }}/product/{{ $('Parse Params').item.json.product_id }}/ops-options",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -342,7 +342,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:8000/api/push-mappings",
+        "url": "={{ $env.API_BASE_URL }}/api/push-mappings",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

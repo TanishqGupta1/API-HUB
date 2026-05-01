@@ -30,7 +30,7 @@
     },
     {
       "parameters": {
-        "url": "http://host.docker.internal:8000/api/suppliers",
+        "url": "={{ $env.API_BASE_URL }}/api/suppliers",
         "options": {}
       },
       "id": "http-001",
@@ -131,7 +131,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://host.docker.internal:8000/api/ingest/{{ $('Resolve SanMar SID').item.json.sid }}/products",
+        "url": "={{ $env.API_BASE_URL }}/api/ingest/{{ $('Resolve SanMar SID').item.json.sid }}/products",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -175,7 +175,7 @@
       "position": [1600, 400],
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:8000/api/push-log",
+        "url": "={{ $env.API_BASE_URL }}/api/push-log",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
