@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -11,13 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from modules.customers.models import Customer
 from modules.markup.engine import apply_markup, resolve_rule
 from modules.markup.models import MarkupRule
-from modules.catalog.models import Product
 
 from .errors import MissingPricingDataError
-from .resolvers import _to_cents, resolve_quote
+from .resolvers import load_product, resolve_quote_for_product, to_cents
 from .schemas import CustomerQuoteResult, QuoteRequest, QuoteResult
-
-CENT = Decimal("0.01")
 
 
 async def resolve_customer_quote(
@@ -29,11 +26,9 @@ async def resolve_customer_quote(
     if customer is None:
         raise MissingPricingDataError(f"Customer {customer_id} not found")
 
-    base_result: QuoteResult = await resolve_quote(req, db)
-
-    product = await db.get(Product, req.product_id)
-    if product is None:
-        raise MissingPricingDataError(f"Product {req.product_id} not found")
+    # Load product once — reused for both pricing and markup rule lookup (M3).
+    product = await load_product(req.product_id, db)
+    base_result: QuoteResult = await resolve_quote_for_product(req, product, db)
 
     rules = (
         await db.execute(
@@ -48,8 +43,8 @@ async def resolve_customer_quote(
         req.product_id, customer_id, marked_up_unit, db
     )
 
-    unit_price = _to_cents(final_unit)
-    total = _to_cents(unit_price * Decimal(req.qty))
+    unit_price = to_cents(final_unit)
+    total = to_cents(unit_price * Decimal(req.qty))
 
     return CustomerQuoteResult(
         unit_price=unit_price,
@@ -75,6 +70,9 @@ async def _apply_storefront_override(
       - "fixed_unit_price": str  — replaces price entirely
       - "extra_markup_pct": str  — additional % on top of marked-up price
       - "rounding": "nearest_99" | "nearest_dollar" | "none"
+
+    All rounding uses to_cents (ROUND_HALF_UP) for consistency with the
+    rest of the pricing pipeline (M2).
     """
     from modules.ops_config.models import ProductStorefrontConfig
 
@@ -92,7 +90,7 @@ async def _apply_storefront_override(
     new_unit = current_unit
 
     if "fixed_unit_price" in overrides:
-        return Decimal(str(overrides["fixed_unit_price"])), True
+        return to_cents(Decimal(str(overrides["fixed_unit_price"]))), True
 
     if "extra_markup_pct" in overrides:
         pct = Decimal(str(overrides["extra_markup_pct"]))
@@ -102,6 +100,7 @@ async def _apply_storefront_override(
     if rounding == "nearest_99":
         new_unit = Decimal(math.floor(new_unit)) + Decimal("0.99")
     elif rounding == "nearest_dollar":
-        new_unit = Decimal(round(new_unit))
+        # Use to_cents-compatible rounding, not Python's banker rounding (M2).
+        new_unit = Decimal(math.floor(new_unit + Decimal("0.5")))
 
     return new_unit, True

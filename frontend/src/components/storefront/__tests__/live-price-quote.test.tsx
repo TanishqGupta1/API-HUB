@@ -20,7 +20,6 @@ describe("LivePriceQuote", () => {
         qty={1}
         width={null}
         height={null}
-        selectedAttributeIds={[]}
       />,
     );
     expect(screen.getByText(/enter dimensions/i)).toBeInTheDocument();
@@ -32,7 +31,7 @@ describe("LivePriceQuote", () => {
         unit_price: "12.50",
         total: "625.00",
         currency: "USD",
-        breakdown: { base: "8.00", area_multiplier: "6.00", setup_cost: "10.00" },
+        breakdown: { base: "8.00", area_factor: "6.00", setup_cost: "10.00" },
       },
       loading: false,
       error: null,
@@ -43,12 +42,12 @@ describe("LivePriceQuote", () => {
         qty={50}
         width={24}
         height={36}
-        selectedAttributeIds={["a1", "a2"]}
       />,
     );
     expect(screen.getByText(/\$625\.00/)).toBeInTheDocument();
     expect(screen.getByText(/12\.50/)).toBeInTheDocument();
-    expect(screen.getByText(/setup_cost/i)).toBeInTheDocument();
+    // Now shows human-readable label instead of raw snake_case key (N2).
+    expect(screen.getByText(/setup cost/i)).toBeInTheDocument();
   });
 
   it("renders the error message when the quote endpoint fails", () => {
@@ -63,7 +62,6 @@ describe("LivePriceQuote", () => {
         qty={50}
         width={24}
         height={36}
-        selectedAttributeIds={[]}
       />,
     );
     expect(screen.getByText(/width is required/i)).toBeInTheDocument();

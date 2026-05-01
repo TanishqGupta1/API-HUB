@@ -1,4 +1,7 @@
 """Resolve WSDL URLs from cached PromoStandards directory endpoints."""
+import logging
+
+_log = logging.getLogger(__name__)
 
 # PS directory returns ServiceType as strings like "Product Data", "Inventory",
 # "Product Pricing and Configuration", "Media Content". Suppliers register
@@ -27,10 +30,19 @@ def _normalize_service_type(raw: str) -> str:
 
 
 def _parse_version(version_str: str) -> tuple[int, ...]:
-    """Parse a version string like '2.0.0' into a tuple for comparison."""
+    """Parse a version string like '2.0.0' into a tuple for comparison.
+
+    Returns (0,) on malformed input and logs a warning so bad endpoint cache
+    rows surface in logs rather than silently degrading to version 0.
+    """
     try:
         return tuple(int(x) for x in str(version_str).split("."))
     except (ValueError, AttributeError):
+        _log.warning(
+            "ps_directory: malformed endpoint version %r — treating as (0,). "
+            "Check the endpoint cache row for this supplier.",
+            version_str,
+        )
         return (0,)
 
 

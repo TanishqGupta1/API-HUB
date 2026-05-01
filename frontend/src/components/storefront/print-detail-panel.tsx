@@ -19,8 +19,6 @@ export function PrintDetailPanel({ product }: Props) {
   const [qty, setQty] = useState<number>(1);
   const [selected, setSelected] = useState<Record<string, string>>({});
 
-  const selectedAttributeIds = Object.values(selected).filter((v): v is string => !!v);
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
@@ -64,7 +62,6 @@ export function PrintDetailPanel({ product }: Props) {
         qty={qty}
         width={dim.width}
         height={dim.height}
-        selectedAttributeIds={selectedAttributeIds}
       />
     </div>
   );

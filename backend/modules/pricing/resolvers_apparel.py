@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from modules.catalog.models import Product, ProductVariant, VariantPrice
 
 from .errors import MissingPricingDataError
-from .resolvers import _to_cents
+from .resolvers import to_cents
 from .schemas import (
     ApparelBreakdown,
     QuoteRequest,
@@ -37,7 +37,7 @@ class TieredVariantResolver:
         base = Decimal(variant.base_price) if variant.base_price is not None else None
 
         if tier is not None:
-            unit_price = _to_cents(tier.price)
+            unit_price = to_cents(tier.price)
             qty_max_str = str(tier.quantity_max) if tier.quantity_max is not None else "∞"
             tier_match = TierMatch(
                 group=tier.price_type,
@@ -46,7 +46,7 @@ class TieredVariantResolver:
             )
             fallback = False
         elif base is not None:
-            unit_price = _to_cents(base)
+            unit_price = to_cents(base)
             tier_match = None
             fallback = True
         else:
@@ -54,13 +54,13 @@ class TieredVariantResolver:
                 f"Variant {variant.id} has no variant_prices and no base_price"
             )
 
-        total = _to_cents(unit_price * Decimal(req.qty))
+        total = to_cents(unit_price * Decimal(req.qty))
         return QuoteResult(
             unit_price=unit_price,
             total=total,
             currency="USD",
             breakdown=ApparelBreakdown(
-                base=_to_cents(base) if base is not None else unit_price,
+                base=to_cents(base) if base is not None else unit_price,
                 tier_match=tier_match,
                 qty=req.qty,
                 fallback=fallback,

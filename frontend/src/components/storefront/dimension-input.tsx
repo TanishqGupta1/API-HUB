@@ -36,7 +36,12 @@ export function DimensionInput({
       width: Number.isNaN(wn ?? NaN) ? null : wn,
       height: Number.isNaN(hn ?? NaN) ? null : hn,
     });
-  }, [w, h, onChange]);
+    // `onChange` is intentionally omitted from deps — it is a notifier callback,
+    // not a reactive value. Callers MUST pass a stable reference (a useState
+    // setter or a useCallback-wrapped function). An inline arrow function would
+    // create a new identity every render and trigger an infinite loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [w, h]);
 
   const wOut =
     w !== "" && widthMin != null && widthMax != null

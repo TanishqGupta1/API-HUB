@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { PriceQuote, PriceQuoteRequest } from "@/lib/types";
 
@@ -23,7 +23,11 @@ export function useDebouncedQuote(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
-  const serialized = JSON.stringify(body);
+
+  // Serialize once per distinct body value (M4). Callers should pass a
+  // stable body reference (useMemo at the call site) so this only reruns
+  // when the pricing inputs actually change.
+  const serialized = useMemo(() => JSON.stringify(body), [body]);
 
   useEffect(() => {
     if (!enabled) {

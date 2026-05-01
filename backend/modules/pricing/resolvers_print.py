@@ -12,10 +12,10 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from modules.catalog.models import PrintDetails, Product, ProductOption, ProductOptionAttribute
+from modules.catalog.models import PrintDetails, Product
 
 from .errors import BoundsError, MissingPricingDataError
-from .resolvers import _to_cents
+from .resolvers import to_cents
 from .schemas import OptionMultiplierTrace, PrintBreakdown, QuoteRequest, QuoteResult
 
 
@@ -54,20 +54,20 @@ class FormulaResolver:
 
         area = req.width * req.height
         unit = base * area * area_factor
-        unit_price = _to_cents(unit)
+        unit_price = to_cents(unit)
 
-        total = _to_cents(unit_price * Decimal(req.qty) + base_setup)
+        total = to_cents(unit_price * Decimal(req.qty) + base_setup)
 
         return QuoteResult(
             unit_price=unit_price,
             total=total,
             currency="USD",
             breakdown=PrintBreakdown(
-                base=_to_cents(base),
+                base=to_cents(base),
                 area=area,
                 area_factor=area_factor,
                 option_multipliers=[],
-                setup_cost=_to_cents(base_setup),
+                setup_cost=to_cents(base_setup),
                 qty=req.qty,
             ),
         )
