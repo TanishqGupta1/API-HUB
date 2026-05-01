@@ -83,7 +83,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
         supplier_name: "SanMar",
         job_type: "full", // approximation
         started_at: new Date().toISOString(),
-        finished_at: null,
+        completed_at: null,
         error_log: null
       });
 
@@ -162,10 +162,10 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
                 <span className="font-black text-[#1e4d92] mr-1">{activeJob.records_processed}</span>
                 records synchronized
               </div>
-              {activeJob.finished_at && (
+              {activeJob.completed_at && (
                 <div className="text-[10px] font-bold text-[#cfccc8] uppercase tracking-wider flex items-center gap-2">
                   <Clock className="w-3.5 h-3.5" />
-                  {new Date(activeJob.finished_at).toLocaleTimeString()}
+                  {new Date(activeJob.completed_at).toLocaleTimeString()}
                 </div>
               )}
             </div>

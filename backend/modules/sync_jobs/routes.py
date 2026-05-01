@@ -22,7 +22,7 @@ class SupplierSyncHealth(BaseModel):
     last_full_sync: Optional[datetime]
     last_delta_sync: Optional[datetime]
     last_sync_status: Optional[str]
-    last_sync_finished_at: Optional[datetime]
+    last_sync_completed_at: Optional[datetime]
     recent_error_count: int
     consecutive_failures: int
 
@@ -75,7 +75,7 @@ async def sync_health(db: AsyncSession = Depends(get_db)):
                     SyncJob.supplier_id == supplier.id,
                     SyncJob.status.in_(["success", "partial_success", "completed", "failed"]),
                 )
-                .order_by(SyncJob.finished_at.desc())
+                .order_by(SyncJob.completed_at.desc())
                 .limit(1)
             )
         ).scalar_one_or_none()
@@ -107,7 +107,7 @@ async def sync_health(db: AsyncSession = Depends(get_db)):
                 last_full_sync=supplier.last_full_sync,
                 last_delta_sync=supplier.last_delta_sync,
                 last_sync_status=last_job.status if last_job else None,
-                last_sync_finished_at=last_job.finished_at if last_job else None,
+                last_sync_completed_at=last_job.completed_at if last_job else None,
                 recent_error_count=recent_error_count,
                 consecutive_failures=consecutive_failures,
             )
@@ -149,7 +149,7 @@ async def update_sync_job(
     status: Optional[str] = None,
     records_processed: Optional[int] = None,
     error_log: Optional[str] = None,
-    finished_at: Optional[datetime] = None,
+    completed_at: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db),
 ):
     job = await db.get(SyncJob, job_id)
@@ -161,8 +161,8 @@ async def update_sync_job(
         job.records_processed = records_processed
     if error_log is not None:
         job.error_log = error_log
-    if finished_at is not None:
-        job.finished_at = finished_at
+    if completed_at is not None:
+        job.completed_at = completed_at
     await db.commit()
     await db.refresh(job)
     return job

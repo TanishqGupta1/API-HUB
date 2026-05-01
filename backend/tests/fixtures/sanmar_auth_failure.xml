@@ -1,0 +1,14 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <s:Fault>
+      <faultcode>s:Client</faultcode>
+      <faultstring xml:lang="en-US">Invalid credentials.</faultstring>
+      <detail>
+        <ErrorMessage xmlns="http://www.promostandards.org/WSDL/SharedObjects/1.0.0/">
+          <code>100</code>
+          <description>Authentication Failed</description>
+        </ErrorMessage>
+      </detail>
+    </s:Fault>
+  </s:Body>
+</s:Envelope>

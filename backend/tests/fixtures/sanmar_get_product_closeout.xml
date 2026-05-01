@@ -1,0 +1,11 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetProductCloseoutResponse xmlns="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/">
+      <ProductCloseoutArray>
+        <ProductCloseout>
+          <productId>PC61</productId>
+        </ProductCloseout>
+      </ProductCloseoutArray>
+    </GetProductCloseoutResponse>
+  </s:Body>
+</s:Envelope>
