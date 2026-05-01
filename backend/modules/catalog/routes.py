@@ -170,6 +170,7 @@ async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
     supplier = await db.get(Supplier, product.supplier_id)
     data = ProductRead.model_validate(product)
     data.supplier_name = supplier.name if supplier else None
+    data.supplier_has_decoration_overlay = bool(supplier.has_decoration_overlay) if supplier else False
     data.images = sorted(data.images, key=lambda i: i.sort_order)
     data.options = sorted(data.options, key=lambda o: o.sort_order)
     for opt in data.options:
