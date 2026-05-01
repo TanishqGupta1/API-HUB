@@ -1,0 +1,14 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <s:Fault>
+      <faultcode>s:Client</faultcode>
+      <faultstring xml:lang="en-US">Product not found.</faultstring>
+      <detail>
+        <ErrorMessage xmlns="http://www.promostandards.org/WSDL/SharedObjects/1.0.0/">
+          <code>105</code>
+          <description>Invalid Product ID</description>
+        </ErrorMessage>
+      </detail>
+    </s:Fault>
+  </s:Body>
+</s:Envelope>

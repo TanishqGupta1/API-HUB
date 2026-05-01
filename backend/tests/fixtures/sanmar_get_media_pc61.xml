@@ -1,0 +1,22 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetMediaContentResponse xmlns="http://www.promostandards.org/WSDL/MediaService/1.0.0/">
+      <MediaContentArray>
+        <MediaContent>
+          <productId>PC61</productId>
+          <partId>PC61-WH-S</partId>
+          <url>https://res.cloudinary.com/sanmar/image/upload/pc61_white_front.jpg</url>
+          <mediaType>Image</mediaType>
+          <classTypeName>Primary</classTypeName>
+        </MediaContent>
+        <MediaContent>
+          <productId>PC61</productId>
+          <partId>PC61-BLK-XL</partId>
+          <url>https://res.cloudinary.com/sanmar/image/upload/pc61_black_front.jpg</url>
+          <mediaType>Image</mediaType>
+          <classTypeName>Primary</classTypeName>
+        </MediaContent>
+      </MediaContentArray>
+    </GetMediaContentResponse>
+  </s:Body>
+</s:Envelope>

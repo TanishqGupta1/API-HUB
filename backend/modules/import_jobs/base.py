@@ -18,6 +18,10 @@ class DiscoveryMode(str, Enum):
     DELTA = "delta"
     FIRST_N = "first_n"
     EXPLICIT_LIST = "explicit_list"
+    FILTERED_SAMPLE = "filtered_sample"
+    FULL_SELLABLE = "full_sellable"
+    CLOSEOUTS = "closeouts"
+
 
 
 class ProductRef(BaseModel):
@@ -51,7 +55,10 @@ class TransientError(AdapterError):
 class BaseAdapter(ABC):
     """Abstract base class for all supplier adapters."""
 
+    product_type: str  # subclass sets "apparel" | "print"
+
     def __init__(self, supplier: Supplier, db: AsyncSession):
+
         self.supplier = supplier
         self.db = db
 
@@ -69,3 +76,8 @@ class BaseAdapter(ABC):
     async def discover_changed(self, since: str) -> List[ProductRef]:
         """Discover products that have changed since a given timestamp/marker."""
         pass
+
+    async def discover_closeouts(self) -> List[ProductRef]:
+        """Discover products that are marked as closeout."""
+        raise NotImplementedError
+

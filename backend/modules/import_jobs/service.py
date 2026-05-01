@@ -105,31 +105,54 @@ async def run_existing_import_job(
             return
 
         success_count = 0
+        fail_count = 0
         for ref in refs:
-            try:
-                ingest = await adapter.hydrate_product(ref)
-                await persist_product(db, supplier.id, ingest)
-                await db.commit()
-                success_count += 1
-            except AuthError as e:
-                # Mid-loop auth = still fatal.
-                errors.append({"phase": "hydrate", "ref": ref.supplier_sku, "code": e.code, "msg": str(e)})
-                await db.rollback()
-                await _finalize_job(db, job, status="failed", errors=errors, processed=success_count, supplier=supplier, mode=mode)
-                return job_id
-            except (SupplierError, TransientError, PersistError, AdapterError) as e:
-                errors.append({
-                    "phase": "hydrate",
-                    "ref": ref.supplier_sku,
-                    "code": getattr(e, "code", None),
-                    "msg": str(e),
-                })
-                await db.rollback()
-            except Exception as e:                              # noqa: BLE001
-                # Unexpected — log + continue but track in errors[].
-                log.exception("unexpected per-product error: %s", e)
-                errors.append({"phase": "hydrate", "ref": ref.supplier_sku, "msg": str(e)})
-                await db.rollback()
+            retries = 2
+            while retries >= 0:
+                try:
+                    ingest = await adapter.hydrate_product(ref)
+                    await persist_product(db, supplier.id, ingest)
+                    await db.commit()
+                    success_count += 1
+                    break
+                except AuthError as e:
+                    # Mid-loop auth = still fatal.
+                    errors.append({"phase": "hydrate", "ref": ref.supplier_sku, "code": e.code, "msg": str(e)})
+                    await db.rollback()
+                    await _finalize_job(db, job, status="failed", errors=errors, processed=success_count, supplier=supplier, mode=mode)
+                    return job_id
+                except TransientError as e:
+                    if retries > 0:
+                        retries -= 1
+                        log.info("Transient error for %s, retrying... (%d left)", ref.supplier_sku, retries)
+                        await db.rollback()
+                        continue
+                    errors.append({
+                        "phase": "hydrate",
+                        "ref": ref.supplier_sku,
+                        "code": getattr(e, "code", None),
+                        "msg": str(e),
+                    })
+                    await db.rollback()
+                    fail_count += 1
+                    break
+                except (SupplierError, PersistError, AdapterError) as e:
+                    errors.append({
+                        "phase": "hydrate",
+                        "ref": ref.supplier_sku,
+                        "code": getattr(e, "code", None),
+                        "msg": str(e),
+                    })
+                    await db.rollback()
+                    fail_count += 1
+                    break
+                except Exception as e:                              # noqa: BLE001
+                    # Unexpected — log + continue but track in errors[].
+                    log.exception("unexpected per-product error: %s", e)
+                    errors.append({"phase": "hydrate", "ref": ref.supplier_sku, "msg": str(e)})
+                    await db.rollback()
+                    fail_count += 1
+                    break
 
         status = (
             "success" if not errors
@@ -139,6 +162,7 @@ async def run_existing_import_job(
         await _finalize_job(
             db, job, status=status, errors=errors or None, processed=success_count, supplier=supplier, mode=mode
         )
+
 
 
 async def run_import(
