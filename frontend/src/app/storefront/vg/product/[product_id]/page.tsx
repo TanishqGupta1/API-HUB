@@ -4,14 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { Category, OptionConfigItem, Product } from "@/lib/types";
+import type { Category, Product } from "@/lib/types";
 import { PDPLayout } from "@/components/storefront/pdp-layout";
 import { ImageGallery } from "@/components/storefront/image-gallery";
-import { VariantPicker } from "@/components/storefront/variant-picker";
-import { PriceBlock } from "@/components/storefront/price-block";
 import { DescriptionHtml } from "@/components/storefront/description-html";
 import { RelatedProducts } from "@/components/storefront/related-products";
-import { ProductOptions } from "@/components/storefront/product-options";
+import { ProductDetailPanel } from "@/components/storefront/product-detail-panel";
 
 export default function VGProductDetailPage() {
   const params = useParams<{ product_id: string }>();
@@ -20,11 +18,8 @@ export default function VGProductDetailPage() {
 
   const [product, setProduct] = useState<Product | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [optionAdj, setOptionAdj] = useState(0);
-  const [priceLookup, setPriceLookup] = useState<Map<number, number>>(new Map());
 
   useEffect(() => {
     if (!productId) return;
@@ -34,31 +29,16 @@ export default function VGProductDetailPage() {
     api<Product>(`/api/products/${productId}`)
       .then(async (p) => {
         setProduct(p);
-        if (p.variants.length > 0) setSelectedVariantId(p.variants[0].id);
         const catId = (p as Product & { category_id?: string }).category_id;
         if (catId) {
           try {
             setCategory(await api<Category>(`/api/categories/${catId}`));
           } catch { /* ignore */ }
         }
-        try {
-          const configs = await api<OptionConfigItem[]>(`/api/products/${productId}/options-config`);
-          const lookup = new Map<number, number>();
-          configs.forEach((opt) => {
-            opt.attributes.forEach((attr) => {
-              if (attr.enabled && Number(attr.price) !== 0) {
-                lookup.set(attr.ops_attribute_id, Number(attr.price));
-              }
-            });
-          });
-          setPriceLookup(lookup);
-        } catch { /* options-config is optional — non-OPS products won't have it */ }
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   }, [productId]);
-
-  const selectedVariant = product?.variants.find((v) => v.id === selectedVariantId) ?? null;
 
   if (loading) {
     return (
@@ -108,32 +88,22 @@ export default function VGProductDetailPage() {
         </div>
       </div>
 
-      <PriceBlock variant={selectedVariant} fallback={product.variants} adjustment={optionAdj} />
-
-      {product.variants.length > 0 && (
-        <div className="py-5 border-t border-dashed border-[#cfccc8]">
-          <VariantPicker
-            variants={product.variants}
-            selectedVariantId={selectedVariantId}
-            onSelect={setSelectedVariantId}
-          />
-        </div>
-      )}
-
-      <ProductOptions
-        options={product.options}
-        priceLookup={priceLookup}
-        onPriceChange={setOptionAdj}
-      />
+      <ProductDetailPanel product={product} />
 
       <div className="flex gap-3 pt-2">
-        <button type="button" onClick={() => router.back()}
-          className="px-5 py-3 rounded-md border border-[#cfccc8] text-[#1e1e24] text-[13px] font-semibold hover:border-[#1e4d92] hover:text-[#1e4d92]">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="px-5 py-3 rounded-md border border-[#cfccc8] text-[#1e1e24] text-[13px] font-semibold hover:border-[#1e4d92] hover:text-[#1e4d92]"
+        >
           ← Back
         </button>
-        <button type="button" disabled
+        <button
+          type="button"
+          disabled
           className="flex-1 px-5 py-3 rounded-md bg-[#1e4d92] text-white text-[13px] font-semibold opacity-60 cursor-not-allowed"
-          title="Quote flow coming in future phase">
+          title="Quote flow coming in future phase"
+        >
           Add to quote
         </button>
       </div>
