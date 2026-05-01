@@ -1,0 +1,42 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetProductResponse xmlns="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/" xmlns:shared="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/SharedObjects/">
+      <Product>
+        <productId>PC61</productId>
+        <productName>Port &amp; Company Essential Tee</productName>
+        <description>A heavyweight classic. 6.1-ounce, 100% soft spun cotton.</description>
+        <productBrand>Port &amp; Company</productBrand>
+        <productStatus>Active</productStatus>
+        <ProductCategoryArray>
+          <ProductCategory>
+            <category>T-Shirts</category>
+          </ProductCategory>
+        </ProductCategoryArray>
+        <ProductPartArray>
+          <ProductPart>
+            <partId>PC61-WH-S</partId>
+            <partName>White Small</partName>
+            <partDescription>PC61 White Small</partDescription>
+            <partStatus>Active</partStatus>
+            <ColorArray>
+              <Color>
+                <colorName>White</colorName>
+              </Color>
+            </ColorArray>
+          </ProductPart>
+          <ProductPart>
+            <partId>PC61-BLK-XL</partId>
+            <partName>Black XL</partName>
+            <partDescription>PC61 Black XL</partDescription>
+            <partStatus>Active</partStatus>
+            <ColorArray>
+              <Color>
+                <colorName>Black</colorName>
+              </Color>
+            </ColorArray>
+          </ProductPart>
+        </ProductPartArray>
+      </Product>
+    </GetProductResponse>
+  </s:Body>
+</s:Envelope>

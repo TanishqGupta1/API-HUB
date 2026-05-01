@@ -126,35 +126,49 @@ class PromoStandardsClient:
         self.wsdl_url = wsdl_url
         self.auth_config = auth_config or {}
         self._service = service
+        self._history = None
 
     # -- zeep bootstrap ----------------------------------------------------
 
     def _get_service(self) -> Any:
-        if self._service is not None:
-            return self._service
-        # xml_huge_tree is needed for suppliers that return very large XML responses.
+        return self.get_service_with_history()[0]
+
+    def get_service_with_history(self) -> tuple[Any, Any]:
+        """Return (service, history_plugin). History allows raw XML access."""
+        if self._service is not None and self._history is not None:
+            return self._service, self._history
+
         from zeep.settings import Settings
+        from zeep.plugins import HistoryPlugin
         settings = Settings(strict=False, xml_huge_tree=True)
         transport = Transport(
             cache=SqliteCache(), timeout=30, operation_timeout=120
         )
+        self._history = HistoryPlugin()
 
         try:
-            self._service = ZeepClient(
-                self.wsdl_url, transport=transport, settings=settings
-            ).service
+            client = ZeepClient(
+                self.wsdl_url, 
+                transport=transport, 
+                settings=settings,
+                plugins=[self._history]
+            )
+            self._service = client.service
         except ValueError as e:
             if "no default service defined" in str(e).lower() and "?wsdl" not in self.wsdl_url.lower():
-                # Some .NET services return HTML at the base URL and require ?wsdl
                 retry_url = self.wsdl_url + ("&wsdl" if "?" in self.wsdl_url else "?wsdl")
                 log.info("No default service at %s, retrying with %s", self.wsdl_url, retry_url)
-                self._service = ZeepClient(
-                    retry_url, transport=transport, settings=settings
-                ).service
+                client = ZeepClient(
+                    retry_url, 
+                    transport=transport, 
+                    settings=settings,
+                    plugins=[self._history]
+                )
+                self._service = client.service
             else:
                 raise
         
-        return self._service
+        return self._service, self._history
 
     def _auth(
         self,

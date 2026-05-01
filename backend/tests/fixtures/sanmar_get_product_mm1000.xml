@@ -1,0 +1,31 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetProductResponse xmlns="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/" xmlns:shared="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/SharedObjects/">
+      <Product>
+        <productId>MM1000</productId>
+        <productName>Port Authority Core Classic Pique Polo</productName>
+        <description>An indispensable polo for just about every uniforming need.</description>
+        <productBrand>Port Authority</productBrand>
+        <productStatus>Active</productStatus>
+        <ProductCategoryArray>
+          <ProductCategory>
+            <category>Polos</category>
+          </ProductCategory>
+        </ProductCategoryArray>
+        <ProductPartArray>
+          <ProductPart>
+            <partId>MM1000-NAVY-M</partId>
+            <partName>Navy Medium</partName>
+            <partDescription>MM1000 Navy Medium</partDescription>
+            <partStatus>Active</partStatus>
+            <ColorArray>
+              <Color>
+                <colorName>Navy</colorName>
+              </Color>
+            </ColorArray>
+          </ProductPart>
+        </ProductPartArray>
+      </Product>
+    </GetProductResponse>
+  </s:Body>
+</s:Envelope>

@@ -42,6 +42,7 @@ from modules.pricing.routes import router as pricing_router, customer_router as 
 import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
 import modules.rest_connector.fourover_adapter  # noqa: F401  registers FourOverAdapter
 from modules.import_jobs.routes import router as import_jobs_router
+from modules.import_jobs.scheduler import start_scheduler
 
 
 # Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
@@ -64,6 +65,13 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS last_delta_sync TIMESTAMP WITH TIME ZONE",
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS errors JSONB",
     "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS protocol_config JSONB",
+    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS discovery_mode VARCHAR(32)",
+    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS total_products INTEGER DEFAULT 0",
+    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS success_count INTEGER DEFAULT 0",
+    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS failed_count INTEGER DEFAULT 0",
+    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE",
+    "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sync_jobs' AND column_name='finished_at') THEN UPDATE sync_jobs SET completed_at = finished_at WHERE completed_at IS NULL AND finished_at IS NOT NULL; ALTER TABLE sync_jobs DROP COLUMN finished_at; END IF; END $$",
+    "UPDATE sync_jobs SET status = 'pending' WHERE status = 'queued'",
 ]
 
 
@@ -90,6 +98,10 @@ async def lifespan(app: FastAPI):
 
         async with async_session() as db:
             await ensure_vg_ops_supplier(db)
+
+    # Start the background scheduler
+    asyncio.create_task(start_scheduler(interval_hours=24))
+    
     yield
     await engine.dispose()
 
