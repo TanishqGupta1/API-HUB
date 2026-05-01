@@ -1,5 +1,11 @@
 # Phase 4 — Pricing API Implementation Plan
 
+> **STATUS (2026-04-30): 🟢 UNBLOCKED — ready to execute.** Phase 1 (model + persist_product) merged to main. Ship Phase 4 now to unblock Phase 5 frontend and Christian's pricing flows.
+>
+> **Dependency note:** SanMar (Phase 3) decoration overlay is Phase 7 deliverable. Pricing for *decorated* SanMar products (apparel base + decoration multipliers + setup_cost) needs Phase 7 data. **Recommendation:** ship Phase 4 covering apparel-tiered + print-formula pricing only. Decoration-aware pricing is added incrementally in Phase 7 (`FormulaResolver` extends to merge decoration options at quote time).
+>
+> **Open question:** TieredVariantResolver vs apparel base `variant_prices` rows — Phase 1 model supports tiered prices via `variant_prices` table; verify `persist_product` apparel path actually writes `variant_prices` rows from `ProductIngest.price_tiers` before this plan runs.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship a supplier-agnostic pricing engine — `POST /api/pricing/quote` (anonymous) and `POST /api/customers/{customer_id}/pricing/quote` (markup-aware) — that resolves apparel prices via `variant_prices` lookup and print prices via formula evaluation, returning a deterministic `unit_price` + `total` + `breakdown` trace.

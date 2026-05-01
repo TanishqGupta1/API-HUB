@@ -1,5 +1,9 @@
 # Phase 5 Frontend PDP Implementation Plan
 
+> **STATUS (2026-04-30): 🟢 UNBLOCKED — ready to execute after Phase 4.** Backend polymorphic model from Phase 1 is merged. `apparel_details`, `print_details`, `variant_prices`, `product_sizes` exist and accessible via `ProductRead`. Phase 4 pricing API is the remaining backend dependency. Once Phase 4 ships `/api/pricing/quote`, this plan can begin.
+>
+> **Parallel-safe with Phase 6:** This plan touches storefront PDP routes (`frontend/src/app/storefront/...`). Phase 6 catalog UI touches admin shell + catalog list. No file overlap. Can ship in parallel.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extend the existing storefront PDP at `/storefront/vg/product/[product_id]` so it renders apparel and print products from one route, switching the body by `product.product_type`. Apparel keeps the existing `<VariantPicker>` + `<PriceBlock>` flow but reads variant-tier prices from `variant_prices`. Print products get a new `<DimensionInput>` + `<OptionGroupedForm>` + `<LivePriceQuote>` configurator that calls `/api/pricing/quote` for live prices. The catalog list page gets a `product_type` filter pill driven from list endpoint metadata.
