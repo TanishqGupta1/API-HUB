@@ -51,7 +51,7 @@ export function PushRowAction({ productId, productName }: Props) {
     setMessage({ text: "Triggering push workflow…", type: "info" });
     try {
       const res = await api<{ triggered: boolean }>(
-        `/api/n8n/workflows/vg-ops-push-001/trigger?product_id=${productId}&customer_id=${customerId}`,
+        `/api/n8n/workflows/ops-push-001/trigger?product_id=${productId}&customer_id=${customerId}`,
         { method: "POST" },
       );
       if (res.triggered) {

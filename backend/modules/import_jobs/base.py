@@ -18,6 +18,8 @@ class DiscoveryMode(str, Enum):
     DELTA = "delta"
     FIRST_N = "first_n"
     EXPLICIT_LIST = "explicit_list"
+    CLOSEOUTS = "closeouts"
+    FULL_SELLABLE = "full_sellable"
 
 
 class ProductRef(BaseModel):

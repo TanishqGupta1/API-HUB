@@ -2,17 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import type { ProductListItem } from "@/lib/types";
+import type { ProductListItem, ProductType } from "@/lib/types";
 import { useSearch } from "@/components/storefront/search-context";
 import { FilterButton } from "@/components/storefront/filter-button";
 import { ActiveFilterChips } from "@/components/storefront/active-filter-chips";
 import { StorefrontProductCard } from "@/components/storefront/storefront-product-card";
+import { ProductTypeFilter } from "@/components/storefront/product-type-filter";
 
 
 export default function VGStorefrontPage() {
   const { filters } = useSearch();
   const [products, setProducts] = useState<ProductListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [productType, setProductType] = useState<ProductType | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -26,9 +28,19 @@ export default function VGStorefrontPage() {
   }, []);
 
 
+  const availableTypes = useMemo(
+    () => Array.from(new Set(products.map((p) => p.product_type))) as ProductType[],
+    [products],
+  );
+
   const visible = useMemo(() => {
     let rows = products;
-    
+
+    // 0. Product type filter
+    if (productType) {
+      rows = rows.filter((p) => p.product_type === productType);
+    }
+
     // 1. Category Filter
     if (filters.category) {
       rows = rows.filter((p) => p.category_id === filters.category);
@@ -68,7 +80,7 @@ export default function VGStorefrontPage() {
         sorted.sort((a, b) => a.product_name.localeCompare(b.product_name));
     }
     return sorted;
-  }, [products, filters]);
+  }, [products, productType, filters]);
 
   return (
     <div className="flex-1 flex flex-col p-5 gap-5 overflow-hidden">
@@ -80,6 +92,12 @@ export default function VGStorefrontPage() {
       </div>
 
       <ActiveFilterChips />
+
+      <ProductTypeFilter
+        available={availableTypes}
+        value={productType}
+        onChange={setProductType}
+      />
 
       {loading ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">

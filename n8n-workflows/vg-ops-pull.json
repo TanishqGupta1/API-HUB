@@ -16,7 +16,7 @@
     },
     {
       "parameters": {
-        "url": "http://host.docker.internal:8000/api/suppliers",
+        "url": "={{ $env.API_BASE_URL }}/api/suppliers",
         "options": {}
       },
       "id": "9a1b1111-0002-0000-0000-000000000002",
@@ -105,7 +105,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://host.docker.internal:8000/api/ingest/{{ $('Resolve VG SID').item.json.vg_sid }}/products",
+        "url": "={{ $env.API_BASE_URL }}/api/ingest/{{ $('Resolve VG SID').item.json.vg_sid }}/products",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

@@ -29,7 +29,7 @@
     },
     {
       "parameters": {
-        "url": "http://host.docker.internal:8000/api/suppliers",
+        "url": "={{ $env.API_BASE_URL }}/api/suppliers",
         "options": {}
       },
       "id": "get-suppliers",
@@ -51,7 +51,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://host.docker.internal:8000/api/sync/{{ $json.sid }}/products",
+        "url": "={{ $env.API_BASE_URL }}/api/sync/{{ $json.sid }}/products",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -83,7 +83,7 @@
     },
     {
       "parameters": {
-        "url": "=http://host.docker.internal:8000/api/sync/{{ $('Resolve SanMar SID').item.json.sid }}/status",
+        "url": "={{ $env.API_BASE_URL }}/api/sync/{{ $('Resolve SanMar SID').item.json.sid }}/status",
         "options": {}
       },
       "id": "poll-status",

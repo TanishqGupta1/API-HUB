@@ -1,4 +1,7 @@
 """Resolve WSDL URLs from cached PromoStandards directory endpoints."""
+import logging
+
+_log = logging.getLogger(__name__)
 
 # PS directory returns ServiceType as strings like "Product Data", "Inventory",
 # "Product Pricing and Configuration", "Media Content". Suppliers register
@@ -26,8 +29,27 @@ def _normalize_service_type(raw: str) -> str:
     return _SERVICE_TYPE_ALIASES.get(raw.strip().lower(), raw.strip().lower())
 
 
+def _parse_version(version_str: str) -> tuple[int, ...]:
+    """Parse a version string like '2.0.0' into a tuple for comparison.
+
+    Returns (0,) on malformed input and logs a warning so bad endpoint cache
+    rows surface in logs rather than silently degrading to version 0.
+    """
+    try:
+        return tuple(int(x) for x in str(version_str).split("."))
+    except (ValueError, AttributeError):
+        _log.warning(
+            "ps_directory: malformed endpoint version %r — treating as (0,). "
+            "Check the endpoint cache row for this supplier.",
+            version_str,
+        )
+        return (0,)
+
+
 def resolve_wsdl_url(endpoint_cache: list[dict], service_type: str) -> str | None:
     """Find the ProductionURL for a given service type in the cached endpoints.
+
+    When multiple versions of the same service exist, returns the highest version.
 
     Args:
         endpoint_cache: List of endpoint dicts from PS directory API.
@@ -36,16 +58,14 @@ def resolve_wsdl_url(endpoint_cache: list[dict], service_type: str) -> str | Non
 
     Returns:
         The ProductionURL string, or None if not found.
-
-    Example:
-        >>> endpoints = [{"ServiceType": "Product Data", "ProductionURL": "https://ws.sanmar.com/...?wsdl"}]
-        >>> resolve_wsdl_url(endpoints, "product_data")
-        'https://ws.sanmar.com/...?wsdl'
     """
     target = _normalize_service_type(service_type)
+    best_url: str | None = None
+    best_version: tuple[int, ...] = (-1,)
+
     for ep in endpoint_cache or []:
-        # Handle standard flat dicts OR nested PS Directory API v2 structure
         raw_type = ""
+        version_str = "0"
         service_block = ep.get("Service")
         if isinstance(service_block, dict):
             st = service_block.get("ServiceType")
@@ -53,19 +73,23 @@ def resolve_wsdl_url(endpoint_cache: list[dict], service_type: str) -> str | Non
                 raw_type = st.get("Name", "")
             else:
                 raw_type = str(st or "")
-        
+            version_str = service_block.get("Version", "0")
+
         if not raw_type:
             raw_type = ep.get("ServiceType") or ep.get("Name") or ""
+        if not version_str or version_str == "0":
+            version_str = ep.get("Version", "0")
 
-        if _normalize_service_type(str(raw_type)) == target:
-            # Prefer the exact version if specified, otherwise take the first match
-            # Some directories return 'URL', some return 'ProductionURL'
-            url = ep.get("URL") or ep.get("ProductionURL")
-            
-            # Prefer V2 or V1.1.0 over V1.0.0 if multiple exist (resolver stops at first match otherwise)
-            # We'll just return the first match we find for now, as that's what the current logic does.
-            # To handle versions properly, we should really sort or filter by version.
-            # But just grabbing URL is enough to fix the crash.
-            if url:
-                return url
-    return None
+        if _normalize_service_type(str(raw_type)) != target:
+            continue
+
+        url = ep.get("URL") or ep.get("ProductionURL")
+        if not url:
+            continue
+
+        version = _parse_version(version_str)
+        if version > best_version:
+            best_version = version
+            best_url = url
+
+    return best_url

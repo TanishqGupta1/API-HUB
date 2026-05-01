@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Building2, Globe, ArrowRight, ShieldCheck, Activity } from "lucide-react";
+import { Plus, Search, Building2, Globe, ArrowRight, ShieldCheck, Activity, Lock } from "lucide-react";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type { Customer } from "@/lib/types";
