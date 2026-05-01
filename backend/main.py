@@ -40,6 +40,7 @@ from modules.suppliers.category_import import router as category_import_router
 from modules.pricing.routes import router as pricing_router, customer_router as pricing_customer_router
 
 import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
+import modules.rest_connector.fourover_adapter  # noqa: F401  registers FourOverAdapter
 from modules.import_jobs.routes import router as import_jobs_router
 
 
