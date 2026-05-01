@@ -59,9 +59,16 @@ class BaseAdapter(ABC):
     product_type: str  # subclass sets "apparel" | "print"
 
     def __init__(self, supplier: Supplier, db: AsyncSession):
-
         self.supplier = supplier
         self.db = db
+
+    def get_delta_since_timestamp(self) -> datetime:
+        """Centralized logic for DELTA sync fallback."""
+        from datetime import timezone
+        since = self.supplier.last_delta_sync or self.supplier.last_full_sync
+        if not since:
+            since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        return since
 
     @abstractmethod
     async def discover(self, mode: DiscoveryMode, limit: Optional[int] = None, explicit_list: Optional[List[str]] = None) -> List[ProductRef]:

@@ -12,9 +12,14 @@ class SyncJobRead(BaseModel):
     job_type: str
     status: str
     started_at: datetime
-    finished_at: Optional[datetime]
-    records_processed: int
-    error_log: Optional[str]
+    completed_at: Optional[datetime] = None
+    total_products: int = 0
+    success_count: int = 0
+    failed_count: int = 0
+    records_processed: int = 0
+    error_log: Optional[str] = None
+    errors: Optional[list] = None
+    discovery_mode: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

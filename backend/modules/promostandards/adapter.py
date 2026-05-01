@@ -28,7 +28,8 @@ from .resolver import resolve_wsdl_url
 
 log = logging.getLogger(__name__)
 
-_AUTH_CODES = {"100", "104", "105", "110"}
+_AUTH_CODES = {"100", "104", "110"}
+_PARSER = etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False)
 
 
 def _classify_fault_xml(xml_bytes: bytes) -> None:
@@ -36,7 +37,7 @@ def _classify_fault_xml(xml_bytes: bytes) -> None:
 
     Returns silently if the envelope is not a Fault (caller continues).
     """
-    root = etree.fromstring(xml_bytes)
+    root = etree.fromstring(xml_bytes, _PARSER)
     fault = root.xpath("//*[local-name()='Fault']")
     if not fault:
         return
@@ -78,9 +79,8 @@ class PromoStandardsAdapter(BaseAdapter):
         url = resolve_wsdl_url(cache, service_type)
         if not url:
             raise SupplierError(
+                f"WSDL for service {service_type!r} not in endpoint_cache for supplier {self.supplier.name!r}",
                 "wsdl_missing",
-                f"WSDL for service {service_type!r} not in endpoint_cache for "
-                f"supplier {self.supplier.name!r}",
             )
         return url
 
@@ -112,10 +112,7 @@ class PromoStandardsAdapter(BaseAdapter):
             return refs
             
         if mode is DiscoveryMode.DELTA:
-            since = self.supplier.last_delta_sync or self.supplier.last_full_sync
-            if not since:
-                from datetime import timezone
-                since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+            since = self.get_delta_since_timestamp()
             return await self.discover_changed(since)
             
         if mode is DiscoveryMode.CLOSEOUTS:

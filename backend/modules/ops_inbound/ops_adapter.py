@@ -123,11 +123,7 @@ class OPSAdapter(BaseAdapter):
             return refs
 
         if mode == DiscoveryMode.DELTA:
-            since = self.supplier.last_delta_sync or self.supplier.last_full_sync
-            if not since:
-                # Fallback to a very old date if no sync has ever happened
-                from datetime import timezone
-                since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+            since = self.get_delta_since_timestamp()
             return await self.discover_changed(since)
 
         raise ValueError(f"Unsupported discovery mode for OPS: {mode}")

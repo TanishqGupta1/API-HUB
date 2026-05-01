@@ -43,7 +43,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
 
     const interval = setInterval(async () => {
       try {
-        const updated = await api<SyncJob>(`/api/sync-jobs/${activeJob.id}`);
+        const updated = await api<SyncJob>(`/api/sync_jobs/${activeJob.id}`);
         setActiveJob(updated);
         if (updated.status === "completed" && onSyncComplete) {
           onSyncComplete();

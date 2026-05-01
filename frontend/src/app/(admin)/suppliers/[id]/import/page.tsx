@@ -65,7 +65,7 @@ export default function ImportFromSupplierPage() {
     if (!job || job.status === "completed" || job.status === "failed") return;
     const interval = setInterval(async () => {
       try {
-        const updated = await api<SyncJob>(`/api/sync-jobs/${job.id}`);
+        const updated = await api<SyncJob>(`/api/sync_jobs/${job.id}`);
         setJob(updated);
       } catch (e) {
         log.error("Job status check failed", e);

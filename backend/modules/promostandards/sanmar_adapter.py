@@ -30,15 +30,6 @@ class SanMarAdapter(PromoStandardsAdapter):
             return url
         return super()._wsdl_for(service_type)
 
-    def _require_auth(self) -> dict:
-        """SanMar sometimes needs additional fields in auth_config.
-        
-        We normalize them to 'id' and 'password' for the base adapter,
-        but SanMar specific calls might need more.
-        """
-        auth = super()._require_auth()
-        # SanMar auth is standard PS id/password for PS endpoints.
-        return auth
 
 # Self-register
 register_adapter("SanMarAdapter", SanMarAdapter)

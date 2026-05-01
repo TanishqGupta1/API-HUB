@@ -2,7 +2,7 @@
 
 n8n calls these endpoints to kick off SOAP syncs. Each POST returns
 immediately (HTTP 202) with a SyncJob id; the actual SOAP work runs
-as a FastAPI BackgroundTask. n8n polls GET /api/sync-jobs/{job_id}
+as a FastAPI BackgroundTask. n8n polls GET /api/sync_jobs/{job_id}
 until status flips to "completed" or "failed".
 
 Upstream deps (Tanishq T3b + T4) are imported lazily inside the

@@ -209,9 +209,10 @@ def test_ps_fault_xml_maps_to_auth_error_and_supplier_error():
         _classify_fault_xml(auth_xml)
 
     not_found_xml = (FIXTURES_DIR / "sanmar_product_not_found.xml").read_bytes()
-    # Code 105 is in _AUTH_CODES, so it raises AuthError
-    with pytest.raises(AuthError):
+    # Code 105 is 'Invalid Product ID', should raise SupplierError
+    with pytest.raises(SupplierError) as exc:
         _classify_fault_xml(not_found_xml)
+    assert exc.value.code == "105"
     
     # Generic fault should map to SupplierError
     generic_xml = b"<Fault><errorMessage><code>999</code><description>Kaboom</description></errorMessage></Fault>"
@@ -286,16 +287,3 @@ async def test_sanmar_import_orchestration(seed_supplier: Supplier):
             
         finally:
             service_mod.get_adapter = original_get
-
-
-
-
-
-
-
-
-
-
-
-
-
