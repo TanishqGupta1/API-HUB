@@ -85,6 +85,32 @@ _SCHEMA_UPGRADES: list[str] = [
         updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (customer_id, product_id)
     )""",
+    # Fix SanMar MultipleResultsFound: old (product_id, color, size) constraint breaks with NULL values.
+    # Drop it and add a clean (product_id, sku) unique constraint instead.
+    "ALTER TABLE product_variants DROP CONSTRAINT IF EXISTS uq_variant_product_color_size",
+    # Inline dedup before adding unique constraint (Blocker 3)
+    """DO $$ BEGIN
+    DELETE FROM product_variants
+    WHERE id IN (
+        SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY product_id, sku ORDER BY id) as rn
+            FROM product_variants
+            WHERE sku IS NOT NULL
+        ) sub
+        WHERE rn > 1
+    );
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_variants_product_sku') THEN
+        ALTER TABLE product_variants ADD CONSTRAINT uq_product_variants_product_sku UNIQUE (product_id, sku);
+    END IF;
+    END $$""",
+    "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS supplier_image_url TEXT",
+    "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS checksum VARCHAR(64)",
+    "CREATE INDEX IF NOT EXISTS idx_product_images_checksum ON product_images(checksum)",
+    # New image tracking columns (Blocker 2 & 6)
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_image_fetch_at TIMESTAMP WITH TIME ZONE NULL",
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_image_fetch_attempt_at TIMESTAMP WITH TIME ZONE NULL",
+    # Fix ProductImage upsert key (Moderate 7)
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_images_supplier_url') THEN ALTER TABLE product_images ADD CONSTRAINT uq_product_images_supplier_url UNIQUE (product_id, supplier_image_url); END IF; END $$",
 ]
 
 
@@ -112,10 +138,17 @@ async def lifespan(app: FastAPI):
         async with async_session() as db:
             await ensure_vg_ops_supplier(db)
 
-    # Start the background scheduler
-    asyncio.create_task(start_scheduler(interval_hours=24))
-    
+    # Start the background scheduler (sleeps first; no-op if DISABLE_SCHEDULER=true)
+    _scheduler_task = asyncio.create_task(start_scheduler(interval_hours=24))
+
     yield
+
+    # Graceful shutdown: cancel scheduler before closing DB pool
+    _scheduler_task.cancel()
+    try:
+        await _scheduler_task
+    except asyncio.CancelledError:
+        pass
     await engine.dispose()
     from modules.n8n_proxy import routes as _n8n_proxy
     if _n8n_proxy._http_client is not None:

@@ -70,7 +70,7 @@ async def trigger_import(
     )
 
 
-@router.get("/{supplier_id}/sync_jobs", response_model=list[SyncJobRead], tags=["sync_jobs"])
+@router.get("/{supplier_id}/sync-jobs", response_model=list[SyncJobRead], tags=["sync_jobs"])
 async def list_supplier_sync_jobs(
     supplier_id: uuid.UUID,
     limit: int = 50,

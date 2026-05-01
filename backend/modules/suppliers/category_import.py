@@ -122,12 +122,14 @@ async def _run_category_import(
                 extension_wsdl_url=extension_wsdl_url,
             )
 
-            # Ensure category exists in DB
-            from modules.catalog.models import Category
+            import re
+            cat_slug = re.sub(r"[^a-z0-9]+", "-", category_name.lower()).strip("-")
+
+            # Ensure category exists — use external_id key for idempotency
             cat_res = await session.execute(
                 select(Category).where(
                     Category.supplier_id == supplier_id,
-                    Category.name == category_name
+                    Category.external_id == cat_slug
                 )
             )
             db_cat = cat_res.scalar_one_or_none()
@@ -135,24 +137,23 @@ async def _run_category_import(
                 db_cat = Category(
                     supplier_id=supplier_id,
                     name=category_name,
-                    external_id=category_name, # SanMar uses name as ID
+                    external_id=cat_slug,
                 )
                 session.add(db_cat)
                 await session.flush()
-            
+
             await upsert_products(
-                session, 
-                supplier_id, 
-                products, 
-                inventory=None, 
-                pricing=None, 
+                session,
+                supplier_id,
+                products,
+                inventory=None,
+                pricing=None,
                 media=None,
                 category_id=db_cat.id
             )
 
             # Upsert a Category row for this category_name so the sidebar shows it
             if products:
-                cat_slug = re.sub(r"[^a-z0-9]+", "-", category_name.lower()).strip("-")
                 stmt = pg_insert(Category).values(
                     supplier_id=supplier_id,
                     external_id=cat_slug,
