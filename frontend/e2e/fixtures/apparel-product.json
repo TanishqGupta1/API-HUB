@@ -1,0 +1,67 @@
+{
+  "id": "00000000-0000-0000-0000-0000000000a1",
+  "supplier_id": "00000000-0000-0000-0000-0000000000s1",
+  "supplier_name": "SanMar",
+  "supplier_sku": "PC61",
+  "product_name": "Heavyweight Polo",
+  "brand": "Mercer+Mettle",
+  "category": null,
+  "category_id": null,
+  "description": "<p>A heavyweight polo.</p>",
+  "product_type": "apparel",
+  "pricing_method": "tiered_variants",
+  "image_url": "https://cdnm.sanmar.com/MM1000.jpg",
+  "ops_product_id": null,
+  "external_catalogue": null,
+  "last_synced": null,
+  "archived_at": null,
+  "variants": [
+    {
+      "id": "v1",
+      "color": "Deep Black",
+      "size": "S",
+      "sku": "PC61-DB-S",
+      "base_price": 24.98,
+      "inventory": null,
+      "warehouse": null,
+      "part_id": "1878771",
+      "gtin": "00191265938235",
+      "flags": { "pms_color": "BLACK C", "standard_color": "Deep Black" },
+      "prices": [
+        { "group_name": "MSRP", "qty_min": 1, "qty_max": 11, "price": "24.98", "currency": "USD" },
+        { "group_name": "MSRP", "qty_min": 12, "qty_max": 2147483647, "price": "19.98", "currency": "USD" }
+      ]
+    },
+    {
+      "id": "v2",
+      "color": "Deep Black",
+      "size": "M",
+      "sku": "PC61-DB-M",
+      "base_price": 24.98,
+      "inventory": null,
+      "warehouse": null,
+      "part_id": "1878772",
+      "gtin": null,
+      "flags": null,
+      "prices": [
+        { "group_name": "MSRP", "qty_min": 1, "qty_max": 11, "price": "24.98", "currency": "USD" }
+      ]
+    }
+  ],
+  "images": [],
+  "options": [],
+  "apparel_details": {
+    "ps_part_id": "1878771",
+    "apparel_style": "Mens",
+    "is_closeout": false,
+    "is_hazmat": null,
+    "is_caution": false,
+    "caution_comment": null,
+    "is_on_demand": null,
+    "fabric_specs": { "weight_oz": 8.1 },
+    "fob_points": null,
+    "keywords": null
+  },
+  "print_details": null,
+  "sizes": []
+}

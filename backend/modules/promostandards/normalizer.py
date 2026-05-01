@@ -178,6 +178,18 @@ async def upsert_products(
                 }
             )
         if image_rows:
+            # Deduplicate by URL within this batch — SanMar emits the same
+            # catalog image URL for every colour, which causes PostgreSQL to
+            # reject the batch ("ON CONFLICT DO UPDATE command cannot affect
+            # row a second time"). Keep the first occurrence of each URL.
+            seen_urls: set[str] = set()
+            deduped_rows: list[dict] = []
+            for row in image_rows:
+                if row["url"] not in seen_urls:
+                    seen_urls.add(row["url"])
+                    deduped_rows.append(row)
+            image_rows = deduped_rows
+
             for image_batch in _chunks(image_rows, _BATCH_SIZE):
                 img_stmt = pg_insert(ProductImage).values(list(image_batch))
                 img_stmt = img_stmt.on_conflict_do_update(
