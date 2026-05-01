@@ -72,6 +72,10 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE",
     "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sync_jobs' AND column_name='finished_at') THEN UPDATE sync_jobs SET completed_at = finished_at WHERE completed_at IS NULL AND finished_at IS NOT NULL; ALTER TABLE sync_jobs DROP COLUMN finished_at; END IF; END $$",
     "UPDATE sync_jobs SET status = 'pending' WHERE status = 'queued'",
+    # Fix SanMar MultipleResultsFound: old (product_id, color, size) constraint breaks with NULL values.
+    # Drop it and add a clean (product_id, sku) unique constraint instead.
+    "ALTER TABLE product_variants DROP CONSTRAINT IF EXISTS uq_variant_product_color_size",
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_variants_product_sku') THEN ALTER TABLE product_variants ADD CONSTRAINT uq_product_variants_product_sku UNIQUE (product_id, sku); END IF; END $$",
 ]
 
 

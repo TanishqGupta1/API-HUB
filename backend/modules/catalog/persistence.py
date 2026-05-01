@@ -134,9 +134,12 @@ async def persist_product(
             inventory=v.inventory,
             warehouse=v.warehouse,
         ).on_conflict_do_update(
-            index_elements=["product_id", "color", "size"],
+            # Use named constraint — avoids NULL=NULL mismatches on (color, size)
+            # which caused MultipleResultsFound on SanMar imports.
+            constraint="uq_product_variants_product_sku",
             set_={
-                "sku": v.sku,
+                "color": v.color,
+                "size": v.size,
                 "base_price": v.base_price,
                 "inventory": v.inventory,
                 "warehouse": v.warehouse,
