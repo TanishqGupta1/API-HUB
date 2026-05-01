@@ -68,7 +68,13 @@ async def _cleanup_test_customers() -> None:
 
 
 async def _cleanup_test_suppliers() -> None:
-    from modules.catalog.models import Category, Product, ProductImage, ProductVariant
+    from modules.catalog.models import (
+        Category, 
+        Product, 
+        ProductImage, 
+        ProductVariant,
+        CustomerProductSelection
+    )
     from modules.suppliers.models import Supplier
     from modules.sync_jobs.models import SyncJob
 
@@ -89,6 +95,9 @@ async def _cleanup_test_suppliers() -> None:
         ).scalars().all()
 
         if product_ids:
+            await s.execute(
+                delete(CustomerProductSelection).where(CustomerProductSelection.product_id.in_(product_ids))
+            )
             await s.execute(
                 delete(ProductVariant).where(ProductVariant.product_id.in_(product_ids))
             )

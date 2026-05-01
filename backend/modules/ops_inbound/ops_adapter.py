@@ -123,12 +123,7 @@ class OPSAdapter(BaseAdapter):
             return refs
 
         if mode == DiscoveryMode.DELTA:
-            since = self.supplier.last_delta_sync or self.supplier.last_full_sync
-            if since is None:
-                # No prior sync — fall back to full discovery
-                data = await self.client.query(_LIST_PRODUCTS_QUERY)
-                rows = data.get("listProducts", [])
-                return [ProductRef(supplier_sku=str(r["product_id"])) for r in rows]
+            since = self.get_delta_since_timestamp()
             return await self.discover_changed(since)
 
         raise ValueError(f"Unsupported discovery mode for OPS: {mode}")

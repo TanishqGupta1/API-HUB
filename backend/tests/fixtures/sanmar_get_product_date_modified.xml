@@ -1,0 +1,12 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetProductDateModifiedResponse xmlns="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/">
+      <ProductDateModifiedArray>
+        <ProductDateModified>
+          <productId>PC61</productId>
+          <lastModifiedDate>2026-04-30T10:00:00Z</lastModifiedDate>
+        </ProductDateModified>
+      </ProductDateModifiedArray>
+    </GetProductDateModifiedResponse>
+  </s:Body>
+</s:Envelope>

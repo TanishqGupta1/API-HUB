@@ -276,9 +276,13 @@ export interface SyncJob {
   job_type: JobType;
   status: SyncStatus;
   started_at: string;
-  finished_at: string | null;
+  completed_at: string | null;
+  total_products: number;
+  success_count: number;
+  failed_count: number;
   records_processed: number;
   error_log: string | null;
+  discovery_mode: string | null;
 }
 
 /* ─── Dashboard Stats ────────────────────────────────────────────────────── */

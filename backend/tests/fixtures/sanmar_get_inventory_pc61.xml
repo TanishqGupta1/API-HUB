@@ -1,0 +1,31 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetInventoryLevelsResponse xmlns="http://www.promostandards.org/WSDL/InventoryService/2.0.0/">
+      <Inventory>
+        <productId>PC61</productId>
+        <PartInventoryArray>
+          <PartInventory>
+            <partId>PC61-WH-S</partId>
+            <InventoryLocationArray>
+              <InventoryLocation>
+                <locationId>PRESTON</locationId>
+                <locationName>Preston, WA</locationName>
+                <quantityAvailable>150</quantityAvailable>
+              </InventoryLocation>
+            </InventoryLocationArray>
+          </PartInventory>
+          <PartInventory>
+            <partId>PC61-BLK-XL</partId>
+            <InventoryLocationArray>
+              <InventoryLocation>
+                <locationId>PRESTON</locationId>
+                <locationName>Preston, WA</locationName>
+                <quantityAvailable>50</quantityAvailable>
+              </InventoryLocation>
+            </InventoryLocationArray>
+          </PartInventory>
+        </PartInventoryArray>
+      </Inventory>
+    </GetInventoryLevelsResponse>
+  </s:Body>
+</s:Envelope>

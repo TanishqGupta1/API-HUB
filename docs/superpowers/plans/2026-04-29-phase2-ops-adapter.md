@@ -1,6 +1,6 @@
 # Phase 2 — OPS Inbound Adapter Implementation Plan
 
-> **STATUS (2026-04-30): 🟡 PARTIAL.** Implemented by sinchanaprintdeed in commit `b391baa` (PR #70), merged to `main`. **Shipped:** `BaseAdapter`, `ProductRef`, `DiscoveryMode`, error types (`AuthError`/`SupplierError`/`TransientError`), adapter registry with `register_adapter` decorator, `OPSAdapter` + `OPSClient`, import_jobs service + routes + endpoint, `POST /api/suppliers/{id}/import` endpoint, runbook at `backend/docs/ops_inbound_adapter_runbook.md`, 4 test files. **Missing:** `DiscoveryMode.DELTA` raises `NotImplementedError` ("comes in Task 6") — delta sync not yet implemented; rolls into Phase 9 sync orchestration. **Open follow-ups:** verify OPS adapter auth handles OAuth2 token refresh (currently reads static `auth_config.auth_token`); run `POST /api/suppliers/{vg_id}/import?mode=first_n&limit=15` against dev DB and confirm products land with `print_details` rows.
+> **STATUS (2026-05-01): ✅ COMPLETED.** All tasks, including `DiscoveryMode.DELTA` and `SyncJob.discovery_mode` column, implemented and verified via `tests/test_import_routes.py` and `tests/test_import_service.py`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

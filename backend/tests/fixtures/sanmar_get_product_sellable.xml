@@ -1,0 +1,16 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetProductSellableResponse xmlns="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/">
+      <ProductSellableArray>
+        <ProductSellable>
+          <productId>PC61</productId>
+          <isSellable>true</isSellable>
+        </ProductSellable>
+        <ProductSellable>
+          <productId>MM1000</productId>
+          <isSellable>true</isSellable>
+        </ProductSellable>
+      </ProductSellableArray>
+    </GetProductSellableResponse>
+  </s:Body>
+</s:Envelope>
