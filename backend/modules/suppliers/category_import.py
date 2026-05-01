@@ -181,14 +181,14 @@ async def _run_category_import(
             if job2:
                 job2.status = "completed"
                 job2.records_processed = len(products)
-                job2.finished_at = datetime.now(timezone.utc)
+                job2.completed_at = datetime.now(timezone.utc)
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
             job3 = await session.get(SyncJob, job_id)
             if job3:
                 job3.status = "failed"
                 job3.error_log = str(exc)
-                job3.finished_at = datetime.now(timezone.utc)
+                job3.completed_at = datetime.now(timezone.utc)
                 await session.commit()
 
 

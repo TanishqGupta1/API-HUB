@@ -107,6 +107,9 @@ async def lifespan(app: FastAPI):
     
     yield
     await engine.dispose()
+    from modules.n8n_proxy import routes as _n8n_proxy
+    if _n8n_proxy._http_client is not None:
+        await _n8n_proxy._http_client.aclose()
 
 
 import os

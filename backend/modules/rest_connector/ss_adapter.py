@@ -178,5 +178,8 @@ class SSAdapter(BaseAdapter):
         # S&S has no modified-since endpoint — return full list
         return await self.discover(DiscoveryMode.FULL)
 
+    async def close(self) -> None:
+        await self._client.aclose()
+
 
 register_adapter("SSAdapter", SSAdapter)
