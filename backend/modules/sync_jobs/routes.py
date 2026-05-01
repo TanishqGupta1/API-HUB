@@ -96,7 +96,7 @@ async def sync_health(db: AsyncSession = Depends(get_db)):
         for j in recent_jobs:
             if j.status == "failed":
                 consecutive_failures += 1
-            elif j.status in ("success", "partial_success"):
+            elif j.status in ("success", "partial_success", "completed"):
                 break
 
         result.append(
