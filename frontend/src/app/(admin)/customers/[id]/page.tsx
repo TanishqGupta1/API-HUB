@@ -92,7 +92,7 @@ export default function CustomerSettingsPage() {
         <Button 
           onClick={handleSave} 
           disabled={saving}
-          className="bg-[#1e4d92] hover:bg-[#173d74] font-bold text-xs uppercase tracking-wider h-11 px-8 shadow-lg shadow-blue-900/10"
+          className="bg-[#1e4d92] hover:bg-[#173d74] text-white font-bold text-xs uppercase tracking-wider h-11 px-8 shadow-lg shadow-blue-900/10"
         >
           {saving ? "Saving..." : "Save Configuration"}
           <Save className="w-4 h-4 ml-2" />
