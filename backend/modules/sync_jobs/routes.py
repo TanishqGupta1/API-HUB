@@ -60,58 +60,6 @@ async def create_sync_job(body: SyncJobCreate, db: AsyncSession = Depends(get_db
     return job
 
 
-@router.get("/{job_id}", response_model=SyncJobRead)
-async def get_sync_job(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    job = await db.get(SyncJob, job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
-
-
-@router.post("/{job_id}/retry", response_model=SyncJobRead, status_code=201)
-async def retry_sync_job(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    original = await db.get(SyncJob, job_id)
-    if not original:
-        raise HTTPException(status_code=404, detail="Job not found")
-    new_job = SyncJob(
-        supplier_id=original.supplier_id,
-        supplier_name=original.supplier_name,
-        job_type=original.job_type,
-        status="pending",
-        started_at=datetime.now(timezone.utc),
-        records_processed=0,
-    )
-    db.add(new_job)
-    await db.commit()
-    await db.refresh(new_job)
-    return new_job
-
-
-@router.patch("/{job_id}", response_model=SyncJobRead)
-async def update_sync_job(
-    job_id: uuid.UUID,
-    status: Optional[str] = None,
-    records_processed: Optional[int] = None,
-    error_log: Optional[str] = None,
-    finished_at: Optional[datetime] = None,
-    db: AsyncSession = Depends(get_db),
-):
-    job = await db.get(SyncJob, job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    if status is not None:
-        job.status = status
-    if records_processed is not None:
-        job.records_processed = records_processed
-    if error_log is not None:
-        job.error_log = error_log
-    if finished_at is not None:
-        job.finished_at = finished_at
-    await db.commit()
-    await db.refresh(job)
-    return job
-
-
 @router.get("/health", response_model=SyncHealthResponse, tags=["sync_jobs"])
 async def sync_health(db: AsyncSession = Depends(get_db)):
     """Per-supplier sync health: last sync times, recent error count, consecutive failures."""
@@ -166,3 +114,55 @@ async def sync_health(db: AsyncSession = Depends(get_db)):
         )
 
     return SyncHealthResponse(suppliers=result, generated_at=datetime.now(timezone.utc))
+
+
+@router.get("/{job_id}", response_model=SyncJobRead)
+async def get_sync_job(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    job = await db.get(SyncJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@router.post("/{job_id}/retry", response_model=SyncJobRead, status_code=201)
+async def retry_sync_job(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    original = await db.get(SyncJob, job_id)
+    if not original:
+        raise HTTPException(status_code=404, detail="Job not found")
+    new_job = SyncJob(
+        supplier_id=original.supplier_id,
+        supplier_name=original.supplier_name,
+        job_type=original.job_type,
+        status="pending",
+        started_at=datetime.now(timezone.utc),
+        records_processed=0,
+    )
+    db.add(new_job)
+    await db.commit()
+    await db.refresh(new_job)
+    return new_job
+
+
+@router.patch("/{job_id}", response_model=SyncJobRead)
+async def update_sync_job(
+    job_id: uuid.UUID,
+    status: Optional[str] = None,
+    records_processed: Optional[int] = None,
+    error_log: Optional[str] = None,
+    finished_at: Optional[datetime] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.get(SyncJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if status is not None:
+        job.status = status
+    if records_processed is not None:
+        job.records_processed = records_processed
+    if error_log is not None:
+        job.error_log = error_log
+    if finished_at is not None:
+        job.finished_at = finished_at
+    await db.commit()
+    await db.refresh(job)
+    return job
