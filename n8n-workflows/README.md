@@ -70,9 +70,20 @@ Stock and pricing are **not** in this workflow yet — they're separate OPS quer
 | `POST /ingest/*` — 409 "not active" | Supplier flipped back | SQL UPDATE above |
 | `POST /ingest/*` — 500 | Uvicorn crashed — check its log |
 
-## Network assumption
+## Network / environment
 
-Workflow URLs use `http://host.docker.internal:8000` because FastAPI runs on the host (uvicorn) while n8n runs in Docker. If FastAPI later runs inside Docker (`docker compose up -d api`), replace every `host.docker.internal:8000` with `api:8000` across the workflow JSON (9 lines), save, re-import.
+All workflow URLs use `{{ $env.API_BASE_URL }}` so the address is configurable per environment.
+Set `API_BASE_URL` in the n8n container's environment (already wired in `docker-compose.yml`):
+
+- **macOS/Windows Docker Desktop (default):** `http://host.docker.internal:8000`
+- **Linux / all-Docker stack:** `http://api:8000`
+- **Production:** your public or internal API hostname
+
+## Activation
+
+All workflow JSONs ship with `"active": false`. This is intentional — workflows must be
+manually imported, credentials bound, and then activated in the n8n UI before any scheduled
+or webhook triggers fire. Activating before credentials are set causes every execution to fail.
 
 ---
 
