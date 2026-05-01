@@ -297,3 +297,195 @@ Decisions made during 2026-04-30 brainstorm that shape this roadmap:
 Brainstorm Phase 6 (the next ship) using superpowers:brainstorming. Spec → writing-plans → execute. Repeat per phase.
 
 This roadmap doc lives at `docs/superpowers/plans/2026-04-30-post-mvp-roadmap.md` as a portfolio guide. Update it as phases complete or priorities shift.
+
+---
+
+## Phase Dependency Table
+
+> **Legend:** ✅ = hard dependency (cannot start without) | ⚠️ = soft dependency (can start, but limited without) | 🔑 = external gate (credentials, decisions, infra)
+
+| Phase | Hard Depends On | Soft / Parallel | External Gates | Notes |
+|-------|-----------------|-----------------|----------------|-------|
+| **6** Customer Catalog | Phase 1 ✅ | — | — | `customers` table already exists; unblocked now |
+| **7** Decoration Overlay | Phase 1 ✅, Phase 3 ✅, Phase 6 ✅ | — | — | Cannot start until Phase 6 ships customer context |
+| **8** Push Polish | Phase 6 ✅, Phase 7 ✅ | — | OPS GraphQL error codes 🔑 | Light lift if 7 is clean; push_log + push_mappings already exist |
+| **9** Sync Orchestration | Phase 2 ✅, Phase 3 ⚠️ | Phase 7 (parallel-safe) | n8n cron design 🔑 | Phase 2 partial — DELTA ingest must be completed here first |
+| **10** More Suppliers | Phase 3 ✅ | Phase 11 (parallel-safe) | S&S / Alphabroder / 4Over credentials 🔑 | Each supplier is independently unblocked once creds arrive |
+| **11** Image Pipeline | Phase 1 ✅, Phase 3 ✅ | Phase 10 (parallel-safe) | S3 bucket / CDN setup 🔑, SanMar FTP access 🔑 | Cost model must be approved before S3 provisioning |
+| **12** Multi-Tenant SaaS | Phase 6 ✅ | — | Auth provider choice 🔑, billing vendor 🔑 | All selection/decoration rows already customer-scoped — Phase 12 layers auth only |
+| **13** Production Hardening | All above ✅ | — | AWS account 🔑, pen-test vendor 🔑 | AWS plan already exists; Alembic migration needs prod DB snapshot |
+
+**Critical path to ship:** 6 → 7 → 8 → 12 → 13 (no parallel shortcuts on this spine).
+
+**Best parallelism windows:**
+- After Phase 6 ships: start Phase 7 + Phase 9 simultaneously (different teams/workers).
+- After Phase 9 ships: start Phase 10 per supplier independently.
+- Phase 11 can start alongside Phase 10 (different file surfaces).
+
+---
+
+## Frontend vs Backend Task Breakdown (Phases 6–13)
+
+### Phase 6 — Customer-curated catalog views
+
+| Layer | Tasks |
+|-------|-------|
+| **Backend** | New `customer_product_selections` table (customer_id, product_id, status, added_at, pushed_at) |
+| **Backend** | State machine: `selected → pushed → stale` (detect stale via `last_synced > pushed_at`) |
+| **Backend** | `GET /api/customers/{id}/catalog` — returns selected products with status |
+| **Backend** | `POST /api/customers/{id}/catalog/{product_id}` — add product to customer catalog |
+| **Backend** | `DELETE /api/customers/{id}/catalog/{product_id}` — remove selection |
+| **Frontend** | Customer dropdown in admin top nav (populates from existing `customers` API) |
+| **Frontend** | "Available Catalog" view — all imported products, add-to-customer button per card |
+| **Frontend** | "Customer Catalog" view — filtered to selected products for active customer |
+| **Frontend** | Status badges per product card: Available / Selected / Pushed / Stale |
+| **Frontend** | Supplier filter working on both catalog views (verify existing filter covers this) |
+
+**Audit note:** Stale detection rule (`last_synced > pushed_at`) must be locked in spec before backend starts — wrong rule here breaks Phase 8 push state.
+
+---
+
+### Phase 7 — Decoration overlay model
+
+| Layer | Tasks |
+|-------|-------|
+| **Backend** | New `customer_product_decorations` table (customer_id, product_id, decoration_options JSONB, updated_at) |
+| **Backend** | Reuse Phase 1 `OptionIngest` schema for decoration_options shape |
+| **Backend** | `GET /api/customers/{id}/products/{product_id}/decorations` |
+| **Backend** | `PUT /api/customers/{id}/products/{product_id}/decorations` — upsert decoration options |
+| **Backend** | Validation rule: SanMar products require decoration before push (gate in push pipeline) |
+| **Backend** | Integration with `master_options` module (if templated approach chosen — see open question) |
+| **Frontend** | "Add Decoration" tab on SanMar product detail page |
+| **Frontend** | Decoration option editor UI (imprint method, location, color, etc.) |
+| **Frontend** | Visual indicator on product card: "Needs Decoration" warning badge |
+
+**Audit note:** The open question (free-form vs templated decorations) must be resolved in spec before any backend or frontend work starts. This is the highest-risk design call in the roadmap.
+
+---
+
+### Phase 8 — Push pipeline polish
+
+| Layer | Tasks |
+|-------|-------|
+| **Backend** | Push routing in `modules/ops_push/`: branch on `has_decoration_overlay` supplier capability flag |
+| **Backend** | Decoration merge: combine base apparel options + `customer_product_decorations` at push time |
+| **Backend** | Configurable internal name prefix per (supplier, customer) — store in supplier/customer config |
+| **Backend** | Verify `push_mappings` retry path is idempotent (query OPS before re-creating) |
+| **Backend** | Handle OPS "already exists" error codes gracefully (query-first or catch + update) |
+| **Backend** | Update `customer_product_selections.status` → `pushed` after successful push |
+| **Frontend** | Push history view per (customer, product) — renders existing `push_log` data |
+| **Frontend** | "Push" button on Customer Catalog product cards (wired to push endpoint) |
+| **Frontend** | Push status feedback: in-progress spinner, success toast, error message |
+
+**Audit note:** OPS GraphQL error codes for "product already exists" must be documented before backend push routing is written. Get this from Christian or OPS Postman collection.
+
+---
+
+### Phase 9 — Sync orchestration via n8n
+
+| Layer | Tasks |
+|-------|-------|
+| **Backend** | Complete DELTA ingest (missing from Phase 2 — `last_synced` delta queries) |
+| **Backend** | Ensure `POST /api/suppliers/{id}/import?mode={delta\|full\|closeouts}` covers all modes |
+| **Backend** | `last_full_sync` / `last_delta_sync` column updates on successful import |
+| **Backend** | Sync status API: `GET /api/suppliers/{id}/sync-status` (last run, error count, throughput) |
+| **Backend** | Slack/email alert integration on consecutive failures (webhook or SMTP) |
+| **n8n** | Cron workflow template per sync_type (catalog/inventory/pricing/closeouts) |
+| **n8n** | Parameterize workflow by supplier_id from DB — one template, not one workflow per supplier |
+| **n8n** | Schedule: catalog weekly, inventory hourly, pricing daily, closeouts monthly |
+| **Frontend** | Sync dashboard: per-supplier last-success timestamp, error count, throughput table |
+| **Frontend** | Alert config UI (optional): where to send failure notifications |
+
+**Audit note:** n8n is its own layer — treat it as "orchestration" separate from frontend/backend. Workflow sprawl is the stated risk; the one-template-parameterized-by-supplier_id pattern must be enforced from the start.
+
+---
+
+### Phase 10 — More suppliers
+
+| Layer | Tasks |
+|-------|-------|
+| **Backend** | `SSAdapter` — PromoStandards REST, subclass of `PromoStandardsAdapter` from Phase 3 |
+| **Backend** | `AlphabroderAdapter` — PromoStandards SOAP, same parent class |
+| **Backend** | `FourOverAdapter` — REST + HMAC auth, new auth path in adapter framework |
+| **Backend** | DB rows for each supplier (adapter_class, auth_config, endpoint) — no router changes |
+| **Backend** | Per-supplier fixture sets in `backend/tests/fixtures/` |
+| **Backend** | "How to add a supplier" one-pager in `docs/` |
+| **Frontend** | None — existing catalog/push UI works without changes if adapter contract is respected |
+
+**Audit note:** Frontend is a pure free ride here only if each adapter returns the same normalized schema as Phase 1. Verify normalization output in tests before marking complete.
+
+---
+
+### Phase 11 — Image pipeline
+
+| Layer | Tasks |
+|-------|-------|
+| **Backend** | SanMar FTP image pull script (separate from PS API) |
+| **Backend** | S3 upload job — idempotent (skip if `product_images.url` already set to CDN URL) |
+| **Backend** | CDN configuration in front of S3 (CloudFront or equivalent) |
+| **Backend** | `product_images.url` update after upload — write CDN URL back to DB |
+| **Backend** | Color-to-image mapping: `variant.color` → `image.color` match logic |
+| **Backend** | Image type taxonomy enforcement: `front \| back \| side \| detail \| lifestyle` |
+| **Backend** | Background job runner (Celery task, n8n trigger, or FastAPI BackgroundTask) |
+| **Frontend** | Color-aware image display on PDP: clicking color swatch swaps product image |
+| **Frontend** | Image type tabs or carousel on PDP: Front / Back / Side / Detail / Lifestyle |
+
+**Audit note:** At ~50-100K images, the pull strategy (bulk vs lazy-pull on first view) must be cost-modeled before any S3 provisioning. This is the biggest cost risk in the roadmap.
+
+---
+
+### Phase 12 — Multi-tenant SaaS
+
+| Layer | Tasks |
+|-------|-------|
+| **Backend** | Customer auth: email + password (bcrypt) or OAuth (NextAuth / Auth.js compatible) |
+| **Backend** | JWT or session token issuance + refresh |
+| **Backend** | RBAC middleware: `vg_admin` (all customers) vs `customer_admin` (own only) |
+| **Backend** | Scoped query guards on all routes: inject `customer_id` from token |
+| **Backend** | Customer onboarding endpoints: signup, verify email, connect OPS storefront |
+| **Backend** | Billing integration: Stripe webhook handlers, subscription status check |
+| **Backend** | Settings endpoints: update OPS auth, markup rules, supplier toggles per customer |
+| **Frontend** | Login / signup pages |
+| **Frontend** | Role-based nav: VG admin sees customer switcher; customer admin sees only own data |
+| **Frontend** | Customer onboarding wizard UI |
+| **Frontend** | Settings page: OPS auth config, markup rule editor, supplier access toggles |
+| **Frontend** | Billing / subscription status UI (Stripe Customer Portal embed or custom) |
+
+**Audit note:** Scoping audit required — every existing query in `catalog`, `push_log`, `markup` must be reviewed to confirm `customer_id` filter is applied. Missing one is a data-leak bug.
+
+---
+
+### Phase 13 — Production hardening
+
+| Layer | Tasks |
+|-------|-------|
+| **Backend** | AWS deployment (follow `2026-04-24-aws-deployment-readiness.md`) |
+| **Backend** | Alembic adoption — snapshot prod schema, baseline migration, apply going forward |
+| **Backend** | Audit log table + middleware: every write records (user, table, row_id, before, after, timestamp) |
+| **Backend** | Rate limiting per customer (FastAPI middleware or API Gateway throttle) |
+| **Backend** | Secret rotation: `SECRET_KEY` (Fernet) + `INGEST_SHARED_SECRET` — automated via AWS Secrets Manager |
+| **Backend** | Backup strategy: automated RDS snapshots, RPO/RTO targets documented |
+| **Backend** | Penetration test findings remediation |
+| **Frontend** | Monitoring dashboards: integrate Grafana/Datadog iframe or redirect to dashboard URL |
+| **Frontend** | Error boundary pages (500, 403, 404) with actionable messages |
+| **Frontend** | (Optional) Admin audit log viewer — searchable table of recent writes |
+
+**Audit note:** Alembic migration from `_SCHEMA_UPGRADES` is the riskiest backend step — take a prod DB snapshot first. Pen test cannot start until Phase 12 auth is complete.
+
+---
+
+## Task Count Summary
+
+| Phase | Backend Tasks | Frontend Tasks | n8n Tasks | Total |
+|-------|:---:|:---:|:---:|:---:|
+| 6 — Customer Catalog | 5 | 5 | 0 | **10** |
+| 7 — Decoration Overlay | 5 | 3 | 0 | **8** |
+| 8 — Push Polish | 6 | 3 | 0 | **9** |
+| 9 — Sync Orchestration | 5 | 2 | 3 | **10** |
+| 10 — More Suppliers | 6 | 0 | 0 | **6** |
+| 11 — Image Pipeline | 7 | 2 | 0 | **9** |
+| 12 — Multi-Tenant SaaS | 8 | 5 | 0 | **13** |
+| 13 — Production Hardening | 8 | 3 | 0 | **11** |
+| **TOTAL** | **50** | **23** | **3** | **76** |
+
+> Backend is ~66% of the remaining work. Frontend is ~30%. n8n orchestration is a small but blocking slice in Phase 9.

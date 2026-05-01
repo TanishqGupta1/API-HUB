@@ -17,6 +17,7 @@ import modules.sync_jobs.models  # noqa: F401
 import modules.master_options.models  # noqa: F401
 import modules.push_mappings.models  # noqa: F401
 import modules.ops_config.models  # noqa: F401
+import modules.decorations.models  # noqa: F401
 
 from modules.suppliers.models import Supplier
 from modules.catalog.models import Product, ProductVariant
@@ -43,6 +44,7 @@ import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
 import modules.rest_connector.fourover_adapter  # noqa: F401  registers FourOverAdapter
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
+from modules.decorations.routes import router as decorations_router
 
 
 # Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
@@ -72,6 +74,14 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE",
     "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sync_jobs' AND column_name='finished_at') THEN UPDATE sync_jobs SET completed_at = finished_at WHERE completed_at IS NULL AND finished_at IS NOT NULL; ALTER TABLE sync_jobs DROP COLUMN finished_at; END IF; END $$",
     "UPDATE sync_jobs SET status = 'pending' WHERE status = 'queued'",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS has_decoration_overlay BOOLEAN NOT NULL DEFAULT FALSE",
+    """CREATE TABLE IF NOT EXISTS customer_product_decorations (
+        customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        product_id  UUID NOT NULL REFERENCES products(id)  ON DELETE CASCADE,
+        decoration_options JSONB NOT NULL DEFAULT '[]',
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (customer_id, product_id)
+    )""",
 ]
 
 
@@ -146,6 +156,7 @@ app.include_router(promostandards_sync_router)
 app.include_router(import_jobs_router)
 app.include_router(pricing_router)
 app.include_router(pricing_customer_router)
+app.include_router(decorations_router)
 
 
 @app.get("/health")

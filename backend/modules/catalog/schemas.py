@@ -99,6 +99,7 @@ class ProductRead(BaseModel):
     id: UUID
     supplier_id: UUID
     supplier_name: Optional[str] = None
+    supplier_has_decoration_overlay: bool = False
     supplier_sku: str
     product_name: str
     brand: Optional[str] = None
