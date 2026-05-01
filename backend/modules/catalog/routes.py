@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select, text, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -150,7 +150,11 @@ async def restore_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{product_id}", response_model=ProductRead)
-async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_product(
+    product_id: UUID, 
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(
         select(Product)
         .where(Product.id == product_id)
@@ -170,7 +174,22 @@ async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
     supplier = await db.get(Supplier, product.supplier_id)
     data = ProductRead.model_validate(product)
     data.supplier_name = supplier.name if supplier else None
+    
+    # Sort images and group by color
     data.images = sorted(data.images, key=lambda i: i.sort_order)
+    images_by_color = {}
+    for img in data.images:
+        color_key = (img.color or "general").lower().replace(" ", "_")
+        if color_key not in images_by_color:
+            images_by_color[color_key] = []
+        images_by_color[color_key].append(img)
+    data.images_by_color = images_by_color
+
+    # Lazy Pull: If no images exist and supplier is SanMar, trigger background fetch
+    if not data.images and supplier and (supplier.promostandards_code or "").upper() == "SANMAR":
+        from modules.images.service import trigger_lazy_image_fetch
+        background_tasks.add_task(trigger_lazy_image_fetch, product.id, supplier.id)
+
     data.options = sorted(data.options, key=lambda o: o.sort_order)
     for opt in data.options:
         opt.attributes = sorted(opt.attributes, key=lambda a: a.sort_order)

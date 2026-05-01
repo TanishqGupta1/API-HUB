@@ -161,19 +161,23 @@ async def persist_product(
                 ))
 
     # 5. Upsert Images
-    for idx, img in enumerate(item.images):
+    for idx, img in enumerate(item.images or []):
         image_stmt = pg_insert(ProductImage).values(
             product_id=product_id,
             url=img.url,
+            supplier_image_url=img.supplier_image_url,
             image_type=img.image_type,
             color=img.color,
-            sort_order=img.sort_order or idx,
+            sort_order=img.sort_order,
+            checksum=img.checksum,
         ).on_conflict_do_update(
             index_elements=["product_id", "url"],
             set_={
+                "supplier_image_url": img.supplier_image_url,
                 "image_type": img.image_type,
                 "color": img.color,
                 "sort_order": img.sort_order or idx,
+                "checksum": img.checksum,
             },
         )
         await db.execute(image_stmt)

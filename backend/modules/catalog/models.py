@@ -108,9 +108,11 @@ class ProductImage(Base):
         ForeignKey("products.id", ondelete="CASCADE"), index=True
     )
     url: Mapped[str] = mapped_column(Text)
-    image_type: Mapped[str] = mapped_column(String(50), default="front")
+    supplier_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    image_type: Mapped[str] = mapped_column(String(50), default="front")  # front | back | side | detail | lifestyle
     color: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    checksum: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     product: Mapped["Product"] = relationship(back_populates="images")
 

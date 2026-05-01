@@ -76,6 +76,9 @@ _SCHEMA_UPGRADES: list[str] = [
     # Drop it and add a clean (product_id, sku) unique constraint instead.
     "ALTER TABLE product_variants DROP CONSTRAINT IF EXISTS uq_variant_product_color_size",
     "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_variants_product_sku') THEN ALTER TABLE product_variants ADD CONSTRAINT uq_product_variants_product_sku UNIQUE (product_id, sku); END IF; END $$",
+    "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS supplier_image_url TEXT",
+    "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS checksum VARCHAR(64)",
+    "CREATE INDEX IF NOT EXISTS idx_product_images_checksum ON product_images(checksum)",
 ]
 
 

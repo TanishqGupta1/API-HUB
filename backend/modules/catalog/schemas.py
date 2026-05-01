@@ -31,9 +31,11 @@ class VariantPriceRead(BaseModel):
 class ProductImageRead(BaseModel):
     id: UUID
     url: str
+    supplier_image_url: Optional[str] = None
     image_type: str
-    color: Optional[str]
+    color: Optional[str] = None
     sort_order: int
+    checksum: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -113,6 +115,7 @@ class ProductRead(BaseModel):
     archived_at: Optional[datetime] = None
     variants: list[VariantRead] = []
     images: list[ProductImageRead] = []
+    images_by_color: dict[str, list[ProductImageRead]] = {}
     options: list[ProductOptionRead] = []
     apparel_details: Optional[ApparelDetailsRead] = None
     print_details: Optional[PrintDetailsRead] = None
@@ -199,9 +202,11 @@ class PrintDetailsIngest(BaseModel):
 
 class ImageIngest(BaseModel):
     url: str
+    supplier_image_url: Optional[str] = None
     image_type: str = "front"
     color: Optional[str] = None
     sort_order: int = 0
+    checksum: Optional[str] = None
 
 
 class OptionAttributeIngest(BaseModel):
