@@ -163,8 +163,8 @@ class FourOverAdapter(BaseAdapter):
         )
 
     async def discover_changed(self, since: datetime) -> list[ProductRef]:
-        # 4Over has no modified-since endpoint — return full list
-        return await self.discover(DiscoveryMode.FULL)
+        # 4Over has no modified-since endpoint — return all sellable products
+        return await self.discover(DiscoveryMode.FULL_SELLABLE)
 
 
 register_adapter("FourOverAdapter", FourOverAdapter)
