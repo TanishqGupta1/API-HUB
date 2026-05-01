@@ -6,6 +6,7 @@ Per-product errors continue the loop and are logged to sync_jobs.errors[].
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -130,9 +131,11 @@ async def run_existing_import_job(
                     return
                 except TransientError as e:
                     if retries > 0:
+                        backoff = 2 ** (2 - retries)
+                        log.info("Transient error for %s, retrying in %ds... (%d left)", ref.supplier_sku, backoff, retries)
                         retries -= 1
-                        log.info("Transient error for %s, retrying... (%d left)", ref.supplier_sku, retries)
                         await db.rollback()
+                        await asyncio.sleep(backoff)
                         continue
                     errors.append({
                         "phase": "hydrate",

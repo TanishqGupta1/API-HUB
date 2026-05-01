@@ -172,7 +172,7 @@ export default function WorkflowsPage() {
   }, []);
 
   useEffect(() => {
-    api<SyncJob[]>("/api/sync_jobs?limit=100")
+    api<SyncJob[]>("/api/sync-jobs?limit=100")
       .then((jobs) => setLatest(pickLatestByType(jobs)))
       .catch(() => setLatest({}));
   }, []);

@@ -110,7 +110,7 @@ export default function SyncJobsPage() {
     if (filterJobType)  params.set("job_type", filterJobType);
     if (filterSupplier) params.set("supplier_name", filterSupplier);
     try {
-      const data = await api<SyncJob[]>(`/api/sync_jobs${params.size ? `?${params}` : ""}`);
+      const data = await api<SyncJob[]>(`/api/sync-jobs${params.size ? `?${params}` : ""}`);
       setJobs(data);
     } catch (e: any) {
       setFetchError(e.message ?? "Failed to load");

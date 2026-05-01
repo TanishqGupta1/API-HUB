@@ -11,6 +11,9 @@ from datetime import datetime
 from lxml import etree
 from pydantic import BaseModel
 
+# Security: Disable entity resolution to prevent XXE attacks
+_PARSER = etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False)
+
 from modules.catalog.schemas import (
     ApparelDetailsIngest,
     ImageIngest,
@@ -52,7 +55,7 @@ _MEDIA_CLASS_TO_TYPE = {
 
 def normalize_get_product_xml(xml_bytes: bytes) -> ProductIngest:
     """Parse GetProductResponse XML into a base ProductIngest (without media/pricing)."""
-    root = etree.fromstring(xml_bytes)
+    root = etree.fromstring(xml_bytes, _PARSER)
     # local-name() is used to be namespace-agnostic across different PS implementations
     product = root.xpath("//*[local-name()='Product']")[0]
     
@@ -138,7 +141,7 @@ def normalize_get_product_xml(xml_bytes: bytes) -> ProductIngest:
 
 def merge_pricing(ingest: ProductIngest, pricing_xml: bytes) -> ProductIngest:
     """Append PartPriceArray tiers (Net, Sale, Case, ...) onto each variant."""
-    root = etree.fromstring(pricing_xml)
+    root = etree.fromstring(pricing_xml, _PARSER)
     parts = root.xpath("//*[local-name()='PartPricing'] | //*[local-name()='Part']")
     by_part = {v.part_id: v for v in ingest.variants}
     
@@ -164,7 +167,7 @@ def merge_pricing(ingest: ProductIngest, pricing_xml: bytes) -> ProductIngest:
 
 def merge_media(ingest: ProductIngest, media_xml: bytes) -> ProductIngest:
     """Append MediaContentArray entries to ingest.images."""
-    root = etree.fromstring(media_xml)
+    root = etree.fromstring(media_xml, _PARSER)
     seen_urls = {img.url for img in ingest.images}
     media_nodes = root.xpath("//*[local-name()='MediaContent']")
     

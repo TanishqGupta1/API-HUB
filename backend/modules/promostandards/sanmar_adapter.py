@@ -25,10 +25,20 @@ class SanMarAdapter(PromoStandardsAdapter):
     """Subclass for SanMar that uses hardcoded WSDLs and special auth."""
 
     def _wsdl_for(self, service_type: str) -> str:
+        # 1. Try dynamic cache (PS Directory) first
+        try:
+            cached = super()._wsdl_for(service_type)
+            if cached:
+                return cached
+        except Exception:
+            pass
+            
+        # 2. Fallback to hardcoded SanMar defaults
         url = SANMAR_WSDLS.get(service_type.upper())
         if url:
             return url
-        return super()._wsdl_for(service_type)
+            
+        return super()._wsdl_for(service_type) # Let it raise the error if still missing
 
 
 # Self-register

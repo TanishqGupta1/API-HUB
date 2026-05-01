@@ -19,7 +19,12 @@ from modules.import_jobs.base import (
     DiscoveryMode,
     ProductRef,
     SupplierError,
+    TransientError,
 )
+
+# Security: Disable entity resolution to prevent XXE attacks
+_PARSER = etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False)
+
 from modules.import_jobs.registry import register_adapter
 from modules.suppliers.models import Supplier
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +34,6 @@ from .resolver import resolve_wsdl_url
 log = logging.getLogger(__name__)
 
 _AUTH_CODES = {"100", "104", "110"}
-_PARSER = etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False)
 
 
 def _classify_fault_xml(xml_bytes: bytes) -> None:
@@ -75,14 +79,12 @@ class PromoStandardsAdapter(BaseAdapter):
         return {"id": ps_id, "password": password}
 
     def _wsdl_for(self, service_type: str) -> str:
-        cache = self.supplier.endpoint_cache or []
-        url = resolve_wsdl_url(cache, service_type)
-        if not url:
-            raise SupplierError(
-                f"WSDL for service {service_type!r} not in endpoint_cache for supplier {self.supplier.name!r}",
-                "wsdl_missing",
-            )
-        return url
+        # Try dynamic cache (PS Directory)
+        cached = super()._wsdl_for(service_type)
+        if cached:
+            return cached
+            
+        raise SupplierError(f"WSDL for service {service_type!r} not in endpoint_cache", "wsdl_missing")
 
     async def discover(
         self, mode: DiscoveryMode, limit: Optional[int] = None, explicit_list: Optional[List[str]] = None
@@ -168,19 +170,18 @@ class PromoStandardsAdapter(BaseAdapter):
 
     async def _call_get_product(self, ref: ProductRef) -> bytes:
         client = self._get_client("PRODUCT")
-        from zeep.plugins import HistoryPlugin
         import asyncio
+        from zeep.exceptions import TransportError
         
         def _sync_call():
-            from zeep import Client as ZeepClient
-            from zeep.transports import Transport
-            h = HistoryPlugin()
-            c = ZeepClient(client.wsdl_url, transport=Transport(), plugins=[h])
+            svc, h = client.get_service_with_history()
             try:
-                c.service.getProduct(
+                svc.getProduct(
                     productId=ref.supplier_sku,
                     **client._auth(ws_version="2.0.0", localization_country="us", localization_language="en")
                 )
+            except TransportError as te:
+                raise TransientError(f"Network timeout: {te}") from te
             except Exception:
                 if h.last_received and h.last_received.get("envelope") is not None:
                     _classify_fault_xml(etree.tostring(h.last_received["envelope"]))
@@ -193,15 +194,12 @@ class PromoStandardsAdapter(BaseAdapter):
 
     async def _call_get_pricing(self, ref: ProductRef) -> bytes:
         client = self._get_client("PRICING")
-        from zeep.plugins import HistoryPlugin
         import asyncio
+        from zeep.exceptions import TransportError
         def _sync_call():
-            from zeep import Client as ZeepClient
-            from zeep.transports import Transport
-            h = HistoryPlugin()
-            c = ZeepClient(client.wsdl_url, transport=Transport(), plugins=[h])
+            svc, h = client.get_service_with_history()
             try:
-                c.service.getConfigurationAndPricing(
+                svc.getConfigurationAndPricing(
                     productId=ref.supplier_sku,
                     currency="USD",
                     fobId="1",
@@ -209,6 +207,8 @@ class PromoStandardsAdapter(BaseAdapter):
                     configurationType="Blank",
                     **client._auth(ws_version="1.0.0")
                 )
+            except TransportError as te:
+                raise TransientError(f"Network timeout: {te}") from te
             except Exception:
                 if h.last_received and h.last_received.get("envelope") is not None:
                     _classify_fault_xml(etree.tostring(h.last_received["envelope"]))
@@ -220,19 +220,18 @@ class PromoStandardsAdapter(BaseAdapter):
 
     async def _call_get_media(self, ref: ProductRef) -> bytes:
         client = self._get_client("MEDIA")
-        from zeep.plugins import HistoryPlugin
         import asyncio
+        from zeep.exceptions import TransportError
         def _sync_call():
-            from zeep import Client as ZeepClient
-            from zeep.transports import Transport
-            h = HistoryPlugin()
-            c = ZeepClient(client.wsdl_url, transport=Transport(), plugins=[h])
+            svc, h = client.get_service_with_history()
             try:
-                c.service.getMediaContent(
+                svc.getMediaContent(
                     productId=ref.supplier_sku,
                     mediaType="Image",
                     **client._auth(ws_version="1.1.0")
                 )
+            except TransportError as te:
+                raise TransientError(f"Network timeout: {te}") from te
             except Exception:
                 if h.last_received and h.last_received.get("envelope") is not None:
                     _classify_fault_xml(etree.tostring(h.last_received["envelope"]))

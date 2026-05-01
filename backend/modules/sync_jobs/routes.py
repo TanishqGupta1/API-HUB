@@ -10,7 +10,7 @@ from database import get_db
 from .models import SyncJob
 from .schemas import SyncJobCreate, SyncJobRead
 
-router = APIRouter(prefix="/api/sync_jobs", tags=["sync_jobs"])
+router = APIRouter(prefix="/api/sync-jobs", tags=["sync_jobs"])
 
 
 @router.get("", response_model=list[SyncJobRead])

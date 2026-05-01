@@ -75,7 +75,7 @@ export default function AdminDashboard() {
       try {
         const [s, j, sup] = await Promise.all([
           api<Stats>("/api/stats"),
-          api<SyncJob[]>("/api/sync_jobs?limit=5"),
+          api<SyncJob[]>("/api/sync-jobs?limit=5"),
           api<Supplier[]>("/api/suppliers"),
         ]);
         setStats(s);

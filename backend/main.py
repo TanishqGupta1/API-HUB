@@ -40,6 +40,7 @@ from modules.suppliers.category_import import router as category_import_router
 
 import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
 from modules.import_jobs.routes import router as import_jobs_router
+from modules.import_jobs.scheduler import start_scheduler
 
 
 # Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
@@ -67,6 +68,8 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS success_count INTEGER DEFAULT 0",
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS failed_count INTEGER DEFAULT 0",
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE",
+    "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sync_jobs' AND column_name='finished_at') THEN UPDATE sync_jobs SET completed_at = finished_at WHERE completed_at IS NULL AND finished_at IS NOT NULL; ALTER TABLE sync_jobs DROP COLUMN finished_at; END IF; END $$",
+    "UPDATE sync_jobs SET status = 'pending' WHERE status = 'queued'",
 ]
 
 
@@ -93,6 +96,10 @@ async def lifespan(app: FastAPI):
 
         async with async_session() as db:
             await ensure_vg_ops_supplier(db)
+
+    # Start the background scheduler
+    asyncio.create_task(start_scheduler(interval_hours=24))
+    
     yield
     await engine.dispose()
 
