@@ -216,7 +216,7 @@ export default function CustomerSettingsPage() {
           <div className="bg-[#fdf2f2] border border-[#f5c6cb] rounded-2xl p-6 space-y-4">
              <h3 className="text-[10px] font-black uppercase tracking-widest text-[#b93232]">Danger Zone</h3>
              <p className="text-[11px] text-[#b93232] font-medium leading-relaxed">
-               Deactivating this instance will stop all product syncs immediately. Existing products on the storefront will remain but won't be updated.
+               Deactivating this instance will stop all product syncs immediately. Existing products on the storefront will remain but won&apos;t be updated.
              </p>
              <Button variant="outline" className="w-full border-[#f5c6cb] text-[#b93232] hover:bg-[#b93232] hover:text-white font-bold text-[10px] uppercase tracking-wider h-10 transition-all">
                 Terminate Node Connection
