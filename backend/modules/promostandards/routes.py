@@ -185,6 +185,7 @@ async def _run_full_product_sync(
                 session, job_id, status="completed", records_processed=len(products)
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
@@ -237,6 +238,7 @@ async def _run_rest_sync(
                 records_processed=len(products),
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
@@ -273,6 +275,7 @@ async def _run_inventory_sync(
                 session, job_id, status="completed", records_processed=len(inventory)
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
@@ -309,6 +312,7 @@ async def _run_pricing_sync(
                 session, job_id, status="completed", records_processed=len(pricing)
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
