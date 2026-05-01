@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { Category, Product } from "@/lib/types";
+import type { Category, Customer, Product } from "@/lib/types";
 import { PDPLayout } from "@/components/storefront/pdp-layout";
 import { ImageGallery } from "@/components/storefront/image-gallery";
 import { DescriptionHtml } from "@/components/storefront/description-html";
 import { RelatedProducts } from "@/components/storefront/related-products";
 import { ProductDetailPanel } from "@/components/storefront/product-detail-panel";
+import { DecorationEditor } from "@/components/storefront/decoration-editor";
 
 export default function VGProductDetailPage() {
   const params = useParams<{ product_id: string }>();
@@ -18,6 +19,8 @@ export default function VGProductDetailPage() {
 
   const [product, setProduct] = useState<Product | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,9 +29,13 @@ export default function VGProductDetailPage() {
     setLoading(true);
     setError(null);
 
-    api<Product>(`/api/products/${productId}`)
-      .then(async (p) => {
+    Promise.all([
+      api<Product>(`/api/products/${productId}`),
+      api<Customer[]>("/api/customers"),
+    ])
+      .then(async ([p, custs]) => {
         setProduct(p);
+        setCustomers(custs.filter((c) => c.is_active));
         const catId = (p as Product & { category_id?: string }).category_id;
         if (catId) {
           try {
@@ -65,6 +72,8 @@ export default function VGProductDetailPage() {
     );
   }
 
+  const showDecorationTab = product.supplier_has_decoration_overlay && selectedCustomerId;
+
   const info = (
     <div className="flex flex-col gap-6">
       <div>
@@ -89,6 +98,29 @@ export default function VGProductDetailPage() {
       </div>
 
       <ProductDetailPanel product={product} />
+
+      {customers.length > 0 && (
+        <div className="border-t border-dashed border-[#cfccc8] pt-4">
+          <label className="block text-[11px] font-bold uppercase tracking-[0.12em] text-[#888894] mb-1.5">
+            Storefront
+          </label>
+          <select
+            value={selectedCustomerId}
+            onChange={(e) => setSelectedCustomerId(e.target.value)}
+            className="w-full h-10 px-3 rounded-md border border-[#cfccc8] bg-white text-[13px] text-[#1e1e24] outline-none focus:border-[#1e4d92] transition-colors"
+          >
+            <option value="">— select a storefront —</option>
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          {product.supplier_has_decoration_overlay && !selectedCustomerId && (
+            <p className="mt-1.5 text-[11px] text-[#b47a00] font-medium">
+              Select a storefront to configure decoration options
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-3 pt-2">
         <button
@@ -118,6 +150,22 @@ export default function VGProductDetailPage() {
         <ImageGallery images={product.images} fallbackUrl={product.image_url} alt={product.product_name} />
       }
       info={info}
+      options={
+        showDecorationTab ? (
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-[3px] h-5 bg-[#1e4d92] rounded-full" />
+              <h2 className="text-[15px] font-extrabold text-[#1e1e24] tracking-[-0.01em]">
+                Decoration Options
+              </h2>
+              <span className="ml-auto text-[11px] font-mono text-[#888894]">
+                {customers.find((c) => c.id === selectedCustomerId)?.name}
+              </span>
+            </div>
+            <DecorationEditor customerId={selectedCustomerId} productId={product.id} />
+          </div>
+        ) : undefined
+      }
       description={<DescriptionHtml html={product.description} />}
       related={
         <RelatedProducts

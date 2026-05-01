@@ -93,8 +93,11 @@ async def trigger_lazy_image_fetch(product_id: UUID, supplier_id: UUID):
         all_images = await ftp.list_images()
         matches = [img for img in all_images if img["style"].upper() == product.supplier_sku.upper()]
         
+        from datetime import datetime, timezone
         if not matches:
             log.info(f"No SanMar FTP images found for style {product.supplier_sku}")
+            product.last_image_fetch_at = datetime.now(timezone.utc)
+            await session.commit()
             return
 
         for match in matches:
@@ -130,5 +133,6 @@ async def trigger_lazy_image_fetch(product_id: UUID, supplier_id: UUID):
             except Exception as e:
                 log.error(f"Lazy fetch failed for {match['filename']}: {e}")
 
+        product.last_image_fetch_at = datetime.now(timezone.utc)
         await session.commit()
         log.info(f"Successfully lazy-fetched {len(matches)} images for product {product.supplier_sku}")

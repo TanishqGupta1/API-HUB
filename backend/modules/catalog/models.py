@@ -49,6 +49,8 @@ class Product(Base):
     ops_product_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     external_catalogue: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     last_synced: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_image_fetch_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_image_fetch_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )

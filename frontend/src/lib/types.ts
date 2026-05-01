@@ -11,6 +11,7 @@ export interface Supplier {
   protocol: string;
   promostandards_code: string | null;
   base_url: string | null;
+  adapter_class: string | null;
   auth_config: Record<string, string>;
   field_mappings: Record<string, string> | null;
   is_active: boolean;
@@ -24,6 +25,7 @@ export interface SupplierCreate {
   protocol: string;
   promostandards_code?: string | null;
   base_url?: string | null;
+  adapter_class?: string | null;
   auth_config?: Record<string, string>;
 }
 
@@ -140,6 +142,7 @@ export interface Product {
   id: string;
   supplier_id: string;
   supplier_name: string;
+  supplier_has_decoration_overlay: boolean;
   supplier_sku: string;
   product_name: string;
   brand: string | null;

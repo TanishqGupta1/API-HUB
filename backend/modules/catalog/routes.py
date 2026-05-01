@@ -174,21 +174,26 @@ async def get_product(
     supplier = await db.get(Supplier, product.supplier_id)
     data = ProductRead.model_validate(product)
     data.supplier_name = supplier.name if supplier else None
+    data.supplier_has_decoration_overlay = bool(supplier.has_decoration_overlay) if supplier else False
+    # Lazy Pull: Gate behind env flag and 1h debounce
+    import os
+    from datetime import timedelta
+    ENABLE_LAZY_IMAGES = os.getenv("ENABLE_LAZY_IMAGES", "false").lower() == "true"
     
-    # Sort images and group by color
-    data.images = sorted(data.images, key=lambda i: i.sort_order)
-    images_by_color = {}
-    for img in data.images:
-        color_key = (img.color or "general").lower().replace(" ", "_")
-        if color_key not in images_by_color:
-            images_by_color[color_key] = []
-        images_by_color[color_key].append(img)
-    data.images_by_color = images_by_color
-
-    # Lazy Pull: If no images exist and supplier is SanMar, trigger background fetch
-    if not data.images and supplier and (supplier.promostandards_code or "").upper() == "SANMAR":
-        from modules.images.service import trigger_lazy_image_fetch
-        background_tasks.add_task(trigger_lazy_image_fetch, product.id, supplier.id)
+    if (
+        ENABLE_LAZY_IMAGES 
+        and not data.images 
+        and supplier 
+        and (supplier.promostandards_code or "").upper() == "SANMAR"
+    ):
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+        if not product.last_image_fetch_attempt_at or product.last_image_fetch_attempt_at < one_hour_ago:
+            # Mark attempt immediately to debounce
+            product.last_image_fetch_attempt_at = datetime.now(timezone.utc)
+            await db.commit()
+            
+            from modules.images.service import trigger_lazy_image_fetch
+            background_tasks.add_task(trigger_lazy_image_fetch, product.id, supplier.id)
 
     data.options = sorted(data.options, key=lambda o: o.sort_order)
     for opt in data.options:

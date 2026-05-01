@@ -171,9 +171,9 @@ async def persist_product(
             sort_order=img.sort_order,
             checksum=img.checksum,
         ).on_conflict_do_update(
-            index_elements=["product_id", "url"],
+            constraint="uq_product_images_supplier_url",
             set_={
-                "supplier_image_url": img.supplier_image_url,
+                "url": img.url,
                 "image_type": img.image_type,
                 "color": img.color,
                 "sort_order": img.sort_order or idx,
