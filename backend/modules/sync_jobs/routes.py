@@ -73,7 +73,7 @@ async def sync_health(db: AsyncSession = Depends(get_db)):
                 select(SyncJob)
                 .where(
                     SyncJob.supplier_id == supplier.id,
-                    SyncJob.status.in_(["success", "partial_success", "failed"]),
+                    SyncJob.status.in_(["success", "partial_success", "completed", "failed"]),
                 )
                 .order_by(SyncJob.finished_at.desc())
                 .limit(1)
