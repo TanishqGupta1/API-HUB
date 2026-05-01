@@ -41,6 +41,9 @@ from modules.pricing.routes import router as pricing_router, customer_router as 
 
 import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
 import modules.rest_connector.fourover_adapter  # noqa: F401  registers FourOverAdapter
+import modules.rest_connector.ss_adapter  # noqa: F401  registers SSAdapter
+import modules.promostandards.sanmar_adapter  # noqa: F401  registers SanMarAdapter
+import modules.promostandards.alphabroder_adapter  # noqa: F401  registers AlphabroderAdapter
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
 
