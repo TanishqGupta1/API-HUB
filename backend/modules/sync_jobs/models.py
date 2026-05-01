@@ -24,3 +24,4 @@ class SyncJob(Base):
     records_processed: Mapped[int] = mapped_column(Integer, default=0)
     error_log: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     errors: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    discovery_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)

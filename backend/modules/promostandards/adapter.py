@@ -112,13 +112,10 @@ class PromoStandardsAdapter(BaseAdapter):
             return refs
             
         if mode is DiscoveryMode.DELTA:
-            since = cfg.get("delta_since")
+            since = self.supplier.last_delta_sync or self.supplier.last_full_sync
             if not since:
-                # In production, we might want to default to supplier.last_full_sync
-                raise SupplierError(
-                    "delta_since_missing",
-                    "DiscoveryMode.DELTA requires protocol_config.delta_since",
-                )
+                from datetime import timezone
+                since = datetime(2000, 1, 1, tzinfo=timezone.utc)
             return await self.discover_changed(since)
             
         if mode is DiscoveryMode.CLOSEOUTS:
@@ -152,7 +149,7 @@ class PromoStandardsAdapter(BaseAdapter):
             
         return ingest
 
-    async def discover_changed(self, since: str) -> list[ProductRef]:
+    async def discover_changed(self, since: datetime) -> list[ProductRef]:
         self._require_auth()
         return await self._call_get_product_date_modified(since)
 
@@ -248,20 +245,41 @@ class PromoStandardsAdapter(BaseAdapter):
             return body
         return await asyncio.to_thread(_sync_call)
 
-    async def _call_get_product_date_modified(self, since: str) -> list[ProductRef]:
+    async def _call_get_product_date_modified(self, since: datetime) -> list[ProductRef]:
         client = self._get_client("PRODUCT")
         import asyncio
         def _sync():
             svc = client._get_service()
             res = svc.getProductDateModified(
-                since=since,
+                changeTimeStamp=since.isoformat(),
                 **client._auth(ws_version="2.0.0")
             )
-            return [] 
+            out: list[ProductRef] = []
+            # res is usually a list of objects with productId, partId
+            for item in (res or []):
+                pid = getattr(item, "productId", None)
+                qid = getattr(item, "partId", None)
+                if pid:
+                    out.append(ProductRef(supplier_sku=str(pid), part_id=str(qid) if qid else None))
+            return out
         return await asyncio.to_thread(_sync)
 
     async def _call_get_product_closeout(self) -> list[ProductRef]:
-        return []
+        client = self._get_client("PRODUCT")
+        import asyncio
+        def _sync():
+            svc = client._get_service()
+            res = svc.getProductCloseOut(
+                **client._auth(ws_version="2.0.0")
+            )
+            out: list[ProductRef] = []
+            for item in (res or []):
+                pid = getattr(item, "productId", None)
+                qid = getattr(item, "partId", None)
+                if pid:
+                    out.append(ProductRef(supplier_sku=str(pid), part_id=str(qid) if qid else None))
+            return out
+        return await asyncio.to_thread(_sync)
 
 
 

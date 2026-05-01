@@ -62,6 +62,7 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS last_delta_sync TIMESTAMP WITH TIME ZONE",
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS errors JSONB",
     "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS protocol_config JSONB",
+    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS discovery_mode VARCHAR(32)",
 ]
 
 

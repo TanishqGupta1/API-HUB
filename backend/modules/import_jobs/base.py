@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import Enum
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional, List
 from pydantic import BaseModel
 
@@ -73,7 +74,7 @@ class BaseAdapter(ABC):
         pass
 
     @abstractmethod
-    async def discover_changed(self, since: str) -> List[ProductRef]:
+    async def discover_changed(self, since: datetime) -> List[ProductRef]:
         """Discover products that have changed since a given timestamp/marker."""
         pass
 
