@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { clearSession, getUser, type AuthUser } from "@/lib/auth";
 
 const NAV_ITEMS = [
   {
@@ -148,20 +150,43 @@ const NAV_ITEMS = [
           </svg>
         ),
       },
+      {
+        href: "/settings",
+        label: "Settings",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        ),
+      },
     ],
   },
 ];
 
 export default function SidebarNav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    setUser(getUser());
+  }, []);
+
+  function handleLogout() {
+    clearSession();
+    router.push("/login");
+  }
+
+  const isVGAdmin = user?.role === "vg_admin";
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
     // Strip query params for comparison
     const base = href.split("?")[0];
-    
+
     if (pathname === base) return true;
-    
+
     if (pathname.startsWith(`${base}/`)) {
       if (base === "/products") {
         if (
@@ -174,9 +199,15 @@ export default function SidebarNav() {
       }
       return true;
     }
-    
+
     return false;
   };
+
+  // customer_admin only sees their storefront — hide supplier/config management
+  const visibleGroups = NAV_ITEMS.filter((group) => {
+    if (isVGAdmin) return true;
+    return group.section === "Storefront";
+  });
 
   return (
     <nav className="sidebar">
@@ -185,7 +216,7 @@ export default function SidebarNav() {
         <div className="sidebar-subtitle">Blueprint v0.3 | Universal Connector</div>
       </div>
 
-      {NAV_ITEMS.map((group) => (
+      {visibleGroups.map((group) => (
         <div className="nav-group" key={group.section}>
           <div className="nav-section">{group.section}</div>
           {group.items.map((item) => (
@@ -204,11 +235,38 @@ export default function SidebarNav() {
       ))}
 
       <div style={{ marginTop: "auto", padding: "24px", borderTop: "1px dashed var(--border)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--green)" }} />
-          <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase" }}>
-            Engine Online
-          </span>
+        {user && (
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--ink)", marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {user.email}
+            </div>
+            <div style={{ fontSize: "10px", fontFamily: "var(--font-mono)", color: "var(--ink-muted)", textTransform: "uppercase" }}>
+              {user.role === "vg_admin" ? "VG Admin" : "Customer Admin"}
+            </div>
+          </div>
+        )}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--green)" }} />
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase" }}>
+              Online
+            </span>
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{
+              fontSize: "11px",
+              fontWeight: 600,
+              color: "var(--ink-muted)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "2px 6px",
+              borderRadius: "3px",
+            }}
+          >
+            Sign out
+          </button>
         </div>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--ink-faint)", marginTop: "4px" }}>
           v0.3.0-alpha

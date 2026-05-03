@@ -18,6 +18,7 @@ import modules.master_options.models  # noqa: F401
 import modules.push_mappings.models  # noqa: F401
 import modules.ops_config.models  # noqa: F401
 import modules.decorations.models  # noqa: F401
+import modules.auth.models  # noqa: F401
 
 from modules.suppliers.models import Supplier
 from modules.catalog.models import Product, ProductVariant
@@ -48,6 +49,8 @@ import modules.promostandards.alphabroder_adapter  # noqa: F401  registers Alpha
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
 from modules.decorations.routes import router as decorations_router
+from modules.auth.routes import router as auth_router
+from modules.auth.dependencies import get_current_user
 
 
 # Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
@@ -134,9 +137,11 @@ async def lifespan(app: FastAPI):
 
     if ENVIRONMENT == "development":
         from modules.suppliers.demo_seed import ensure_vg_ops_supplier
+        from modules.auth.seed import ensure_default_admin
 
         async with async_session() as db:
             await ensure_vg_ops_supplier(db)
+            await ensure_default_admin(db)
 
     # Start the background scheduler (sleeps first; no-op if DISABLE_SCHEDULER=true)
     _scheduler_task = asyncio.create_task(start_scheduler(interval_hours=24))
@@ -170,32 +175,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
-app.include_router(suppliers_router)
-app.include_router(customers_router)
-app.include_router(markup_router)
-app.include_router(markup_push_router)
-app.include_router(push_log_router)
-app.include_router(push_status_router)
-app.include_router(ps_router)
-app.include_router(catalog_router)
-app.include_router(categories_router)
+# Auth — no token required on these routes
+app.include_router(auth_router)
+# Ingest — uses INGEST_SHARED_SECRET, not JWT
 app.include_router(catalog_ingest_router)
 app.include_router(master_options_ingest_router)
-app.include_router(master_options_router)
-app.include_router(master_options_product_config_router)
-app.include_router(n8n_proxy_router)
-app.include_router(sync_jobs_router)
-app.include_router(ops_push_router)
-app.include_router(push_candidates_router)
-app.include_router(push_mappings_router)
-app.include_router(ops_config_router)
-app.include_router(category_import_router)
-app.include_router(promostandards_sync_router)
-app.include_router(import_jobs_router)
-app.include_router(pricing_router)
-app.include_router(pricing_customer_router)
-app.include_router(decorations_router)
+
+# All admin-facing routers require a valid JWT
+_auth = [Depends(get_current_user)]
+app.include_router(suppliers_router, dependencies=_auth)
+app.include_router(customers_router, dependencies=_auth)
+app.include_router(markup_router, dependencies=_auth)
+app.include_router(markup_push_router, dependencies=_auth)
+app.include_router(push_log_router, dependencies=_auth)
+app.include_router(push_status_router, dependencies=_auth)
+app.include_router(ps_router, dependencies=_auth)
+app.include_router(catalog_router, dependencies=_auth)
+app.include_router(categories_router, dependencies=_auth)
+app.include_router(master_options_router, dependencies=_auth)
+app.include_router(master_options_product_config_router, dependencies=_auth)
+app.include_router(n8n_proxy_router, dependencies=_auth)
+app.include_router(sync_jobs_router, dependencies=_auth)
+app.include_router(ops_push_router, dependencies=_auth)
+app.include_router(push_candidates_router, dependencies=_auth)
+app.include_router(push_mappings_router, dependencies=_auth)
+app.include_router(ops_config_router, dependencies=_auth)
+app.include_router(category_import_router, dependencies=_auth)
+app.include_router(promostandards_sync_router, dependencies=_auth)
+app.include_router(import_jobs_router, dependencies=_auth)
+app.include_router(pricing_router, dependencies=_auth)
+app.include_router(pricing_customer_router, dependencies=_auth)
+app.include_router(decorations_router, dependencies=_auth)
 
 
 @app.get("/health")
