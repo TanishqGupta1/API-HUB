@@ -4,31 +4,82 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
-import { Supplier } from "@/lib/types";
+import { Supplier, SyncJob } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Plus, 
-  Settings2, 
-  RefreshCcw, 
-  Globe, 
-  Database, 
-  ShieldCheck, 
+import {
+  Plus,
+  Settings2,
+  RefreshCcw,
+  Globe,
+  Database,
+  ShieldCheck,
   ChevronRight,
   MoreVertical,
   Activity
 } from "lucide-react";
 
+// ── Sync badge helpers ────────────────────────────────────────────────────────
+
+type SyncHealth = "healthy" | "stale" | "critical" | "error" | "running" | "never";
+
+function getSyncHealth(job: SyncJob | undefined): SyncHealth {
+  if (!job) return "never";
+  if (job.status === "running" || job.status === "pending") return "running";
+  if (job.status === "failed") return "error";
+  if (!job.completed_at) return "never";
+  const ageMs = Date.now() - new Date(job.completed_at).getTime();
+  const ageHrs = ageMs / (1000 * 60 * 60);
+  if (ageHrs < 1) return "healthy";
+  if (ageHrs < 24) return "stale";
+  return "critical";
+}
+
+const SYNC_BADGE: Record<SyncHealth, { color: string; bg: string; label: string }> = {
+  healthy:  { color: "#247a52", bg: "rgba(36,122,82,0.1)",   label: "Synced"    },
+  stale:    { color: "#c17c00", bg: "rgba(193,124,0,0.1)",   label: "Stale"     },
+  critical: { color: "#b93232", bg: "rgba(185,50,50,0.1)",   label: "Outdated"  },
+  error:    { color: "#b93232", bg: "rgba(185,50,50,0.1)",   label: "Error"     },
+  running:  { color: "#1e4d92", bg: "rgba(30,77,146,0.1)",   label: "Syncing"   },
+  never:    { color: "#888894", bg: "var(--paper-warm)",      label: "Never run" },
+};
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [syncMap, setSyncMap]     = useState<Record<string, SyncJob>>({});
+  const [loading, setLoading]     = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const data = await api<Supplier[]>("/api/suppliers");
+        const [data, jobs] = await Promise.all([
+          api<Supplier[]>("/api/suppliers"),
+          api<SyncJob[]>("/api/sync-jobs?limit=200").catch(() => [] as SyncJob[]),
+        ]);
         setSuppliers(data);
+
+        // Build map: supplier_id → most recent completed/failed job
+        const map: Record<string, SyncJob> = {};
+        for (const j of jobs) {
+          const existing = map[j.supplier_id];
+          if (!existing || j.started_at > existing.started_at) {
+            map[j.supplier_id] = j;
+          }
+        }
+        setSyncMap(map);
       } catch (e) {
         log.error("Failed to load suppliers", e);
       } finally {
@@ -104,10 +155,14 @@ export default function SuppliersPage() {
 
       {/* Supplier Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {suppliers.map((s) => (
+        {suppliers.map((s) => {
+          const latestJob = syncMap[s.id];
+          const health    = getSyncHealth(latestJob);
+          const badge     = SYNC_BADGE[health];
+          return (
           <Card key={s.id} className="border-[#cfccc8] overflow-hidden bg-white hover:border-[#1e4d92] transition-all hover:shadow-xl hover:shadow-blue-900/5 group">
             <div className="p-6 space-y-6">
-              
+
               {/* Top Row: Name & Protocol */}
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
@@ -124,7 +179,23 @@ export default function SuppliersPage() {
                     </div>
                   </div>
                 </div>
-                <div className={`w-2 h-2 rounded-full mt-2 ${s.is_active ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-[#cfccc8]'}`} />
+                {/* Sync health badge */}
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0"
+                  style={{ background: badge.bg, color: badge.color }}
+                  title={latestJob?.completed_at ? `Last sync: ${new Date(latestJob.completed_at).toLocaleString()}` : "Never synced"}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${health === "healthy" || health === "running" ? "animate-pulse" : ""}`}
+                    style={{ background: badge.color }}
+                  />
+                  {badge.label}
+                  {latestJob?.completed_at && (
+                    <span className="font-mono font-normal normal-case tracking-normal opacity-70">
+                      · {timeAgo(latestJob.completed_at)}
+                    </span>
+                  )}
+                </span>
               </div>
 
               {/* Stats & Info Row */}
@@ -140,9 +211,9 @@ export default function SuppliersPage() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-[9px] font-black uppercase tracking-widest text-[#888894] mb-1">Auth Type</div>
-                  <div className="text-[10px] font-black uppercase tracking-tight text-[#1e1e24]">
-                    {s.protocol === 'soap' ? 'SOAP XML' : s.protocol === 'sftp' ? 'SSH Key' : 'REST API'}
+                  <div className="text-[9px] font-black uppercase tracking-widest text-[#888894] mb-1">Last Sync</div>
+                  <div className="text-[10px] font-black uppercase tracking-tight" style={{ color: badge.color }}>
+                    {latestJob?.status === "running" ? "Running…" : latestJob?.completed_at ? timeAgo(latestJob.completed_at) : "—"}
                   </div>
                 </div>
               </div>
@@ -172,7 +243,8 @@ export default function SuppliersPage() {
 
             </div>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {/* Empty State */}

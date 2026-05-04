@@ -152,7 +152,7 @@ async def upsert_products(
             for variant_batch in _chunks(variant_rows, _BATCH_SIZE):
                 v_stmt = pg_insert(ProductVariant).values(list(variant_batch))
                 v_stmt = v_stmt.on_conflict_do_update(
-                    constraint="uq_variant_product_color_size",
+                    constraint="uq_product_variants_product_sku",
                     set_={
                         "sku": v_stmt.excluded.sku,
                         "base_price": v_stmt.excluded.base_price,

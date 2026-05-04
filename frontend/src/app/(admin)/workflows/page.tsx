@@ -196,13 +196,39 @@ export default function WorkflowsPage() {
     }
   }
 
-  const runningTypes = new Set(
-    Object.values(latest).filter((j): j is SyncJob => !!j && j.status === "running").map((j) => j.job_type),
+  const allJobs = Object.values(latest).filter((j): j is SyncJob => !!j);
+  const hasQueued    = allJobs.some((j) => j.status === "pending");
+  const hasRunning   = allJobs.some((j) => j.status === "running");
+  const hasCompleted = allJobs.some((j) => j.status === "completed");
+
+  // Check push log: any workflow that is active and has had executions counts as "published"
+  const hasPublished = Object.values(executions).some((execs) =>
+    execs.some((e) => e.status === "success")
   );
 
-  const liveNodes: PipelineNode[] = runningTypes.size
-    ? PIPELINE_NODES.map((n, i) => (i === 1 || i === 2 ? { ...n, status: "running" } : n))
-    : PIPELINE_NODES;
+  function nodeStatus(idx: number): PipelineNode["status"] {
+    // idx: 0=Supplier, 1=Fetch Data, 2=Normalize, 3=Store in DB, 4=Publish to Store
+    if (hasRunning) {
+      if (idx === 0) return "done";
+      if (idx === 1 || idx === 2) return "running";
+      return "idle";
+    }
+    if (hasCompleted) {
+      if (idx <= 3) return "done";
+      if (idx === 4) return hasPublished ? "done" : "idle";
+      return "idle";
+    }
+    if (hasQueued) {
+      if (idx === 0) return "running";
+      return "idle";
+    }
+    return "idle";
+  }
+
+  const liveNodes: PipelineNode[] = PIPELINE_NODES.map((n, i) => ({
+    ...n,
+    status: nodeStatus(i),
+  }));
 
   return (
     <div className="flex flex-col gap-6 pb-12">
