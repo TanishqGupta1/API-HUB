@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { log } from "@/lib/log";
 import type { Customer } from "@/lib/types";
 import { ArrowLeft, Package, AlertTriangle, CheckCircle2, Search, Send, Loader2 } from "lucide-react";
 
@@ -23,6 +25,8 @@ type PushState = "idle" | "pushing" | "pushed" | "error";
 
 export default function CustomerCatalogPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const supplierId = searchParams.get("supplier_id");
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
@@ -33,9 +37,12 @@ export default function CustomerCatalogPage() {
 
   useEffect(() => {
     if (!id) return;
+    setLoading(true);
+    const candidatesUrl = `/api/push/candidates/${id}?limit=500${supplierId ? `&supplier_id=${supplierId}` : ""}`;
+    
     Promise.all([
       api<Customer>(`/api/customers/${id}`),
-      api<CatalogProduct[]>(`/api/push/candidates/${id}?limit=500`),
+      api<CatalogProduct[]>(candidatesUrl),
     ])
       .then(([cust, prods]) => {
         setCustomer(cust);
@@ -47,8 +54,12 @@ export default function CustomerCatalogPage() {
         });
         setPushStates(initial);
       })
+      .catch((err) => {
+        log.error("Failed to fetch product candidates", err);
+        toast.error(err.message || "Failed to fetch products");
+      })
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, supplierId]);
 
   async function handlePush(e: React.MouseEvent, productId: string) {
     e.preventDefault();
@@ -122,6 +133,7 @@ export default function CustomerCatalogPage() {
         </div>
         <div className="text-[11px] font-mono text-[#888894]">
           {filtered.length} / {products.length} products
+          {supplierId && " (Filtered by Supplier)"}
         </div>
       </div>
 
@@ -216,37 +228,41 @@ export default function CustomerCatalogPage() {
                     <p className="text-[10px] text-red-600 mt-1 leading-snug">{pushError}</p>
                   )}
 
-                  {/* Push button */}
-                  <button
-                    onClick={(e) => handlePush(e, p.product_id)}
-                    disabled={isPushing || needsDecoration}
-                    title={needsDecoration ? "Add decoration before pushing" : isPushed ? "Push again" : "Push to storefront"}
-                    className="mt-2 flex items-center justify-center gap-1.5 w-full py-1.5 rounded border text-[11px] font-bold transition-colors"
-                    style={{
-                      background: isPushed ? "var(--paper)" : "var(--blue)",
-                      color: isPushed ? "var(--blue)" : "#fff",
-                      borderColor: "var(--blue)",
-                      opacity: needsDecoration ? 0.4 : isPushing ? 0.7 : 1,
-                      cursor: needsDecoration || isPushing ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {isPushing ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Pushing…
-                      </>
-                    ) : isPushed ? (
-                      <>
-                        <CheckCircle2 className="w-3 h-3" />
-                        Pushed
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-3 h-3" />
-                        Push to OPS
-                      </>
-                    )}
-                  </button>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Link href={`/customers/${id}/catalog/${p.product_id}/history`} className="text-[10px] font-semibold text-[#1e4d92] hover:underline shrink-0">
+                      History
+                    </Link>
+                    <button
+                      onClick={(e) => handlePush(e, p.product_id)}
+                      disabled={isPushing || needsDecoration}
+                      title={needsDecoration ? "Add decoration before pushing" : isPushed ? "Push again" : "Push to storefront"}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded border text-[11px] font-bold transition-colors"
+                      style={{
+                        background: isPushed ? "var(--paper)" : "var(--blue)",
+                        color: isPushed ? "var(--blue)" : "#fff",
+                        borderColor: "var(--blue)",
+                        opacity: needsDecoration ? 0.4 : isPushing ? 0.7 : 1,
+                        cursor: needsDecoration || isPushing ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {isPushing ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Pushing…
+                        </>
+                      ) : isPushed ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          Pushed
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3 h-3" />
+                          Push to OPS
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             );

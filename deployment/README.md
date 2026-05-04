@@ -64,6 +64,19 @@ aws cloudformation deploy \
     DbPassword=$(openssl rand -base64 24)
 ```
 
+## Environment variables reference
+
+| Variable | Service | Required | Description |
+|----------|---------|----------|-------------|
+| `POSTGRES_URL` | backend | Yes | Full asyncpg connection string |
+| `SECRET_KEY` | backend | Yes | Fernet key for encrypted DB columns |
+| `JWT_SECRET_KEY` | backend | Yes | HMAC key for JWT signing (rotate independently of SECRET_KEY) |
+| `INGEST_SHARED_SECRET` | backend | Yes | Auth header for n8n → FastAPI ingest |
+| `ALLOWED_ORIGINS` | backend | Yes | Comma-separated CORS origins |
+| `N8N_BASE_URL` | backend | Yes | URL of n8n instance |
+| `NEXT_PUBLIC_API_URL` | frontend | Yes | Backend URL visible to the browser |
+| `NEXT_PUBLIC_N8N_URL` | frontend | No | n8n URL for workflow trigger buttons |
+
 ## Step 3 — Database setup (first deploy only)
 
 After the stack creates, run the Alembic baseline stamp on the newly-created RDS instance.

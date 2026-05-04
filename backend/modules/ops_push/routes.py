@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from modules.catalog.models import ProductImage
 from modules.decorations.service import DecorationMissingError
+from modules.push_log.models import ProductPushLog
 
 from .image_pipeline import process_image
 from .service import execute_push, prepare_push_payload
@@ -60,9 +61,35 @@ async def preview_push_payload(
         raise HTTPException(422, str(e))
     except ValueError as e:
         raise HTTPException(404, str(e))
-    # Strip secret from preview
     payload.pop("customer_ops_client_secret", None)
     return payload
+
+
+@router.get("/history/{customer_id}/{product_id}")
+async def get_push_history(
+    customer_id: UUID,
+    product_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ProductPushLog)
+        .where(
+            ProductPushLog.customer_id == customer_id,
+            ProductPushLog.product_id == product_id,
+        )
+        .order_by(ProductPushLog.pushed_at.desc())
+    )
+    logs = result.scalars().all()
+    return [
+        {
+            "id": log.id,
+            "status": log.status,
+            "error": log.error,
+            "pushed_at": log.pushed_at,
+            "ops_product_id": log.ops_product_id,
+        }
+        for log in logs
+    ]
 
 
 @push_action_router.post("/{customer_id}/push/{product_id}", status_code=202)
@@ -79,7 +106,6 @@ async def push_product(
     except ValueError as e:
         raise HTTPException(404, str(e))
 
-    # Strip secret before returning to caller
     payload.pop("customer_ops_client_secret", None)
     return {
         "push_log_id": str(log.id),

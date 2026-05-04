@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import type { SupplierCategoryBrowse, ImportCategoryResponse, SyncJob } from "@/lib/types";
 import { toast } from "sonner";
 import { Download, Loader2, CheckCircle2, AlertCircle, Clock } from "lucide-react";
@@ -49,7 +50,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
           onSyncComplete();
         }
       } catch (e) {
-        console.error("Polling error", e);
+        log.error("Polling error", e);
       }
     }, 2000);
 
@@ -71,6 +72,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
         body: JSON.stringify({
           category_name: defaultCategory,
           limit: 10,
+          fetch_images: includeImages,
         }),
       });
       

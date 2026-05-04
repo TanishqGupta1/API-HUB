@@ -254,14 +254,18 @@ async def seed():
 
             # Assign category if it's a VG product
             category_id = None
+            category_name = None
             if p_data["supplier_slug"] == "vg-ops":
                 cat_ext_id = vg_prod_cats.get(p_data["supplier_sku"])
                 if cat_ext_id:
-                    category_id = cat_map.get(cat_ext_id).id
+                    cat_obj = cat_map.get(cat_ext_id)
+                    category_id = cat_obj.id
+                    category_name = cat_obj.name
 
             if existing_product:
                 if category_id and not existing_product.category_id:
                     existing_product.category_id = category_id
+                    existing_product.category = category_name
                     await db.flush()
                 seeded_products.append(existing_product)
                 continue
@@ -274,7 +278,8 @@ async def seed():
                 description=p_data["description"],
                 product_type=p_data["product_type"],
                 image_url=p_data["image_url"],
-                category_id=category_id
+                category_id=category_id,
+                category=category_name,
             )
             db.add(product)
             await db.flush()
@@ -320,9 +325,6 @@ async def seed():
         
         await db.commit()
         print(f"  [add]  Seeded {len(LOG_SPECS)} activity logs.")
-
-    print("\nSeed complete!")
-    await engine.dispose()
 
     print("\nSeed complete!")
     await engine.dispose()

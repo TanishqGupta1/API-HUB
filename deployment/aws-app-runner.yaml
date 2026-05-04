@@ -143,6 +143,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
 
+<<<<<<< HEAD
   ApiInstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -203,10 +204,40 @@ Resources:
       HealthCheckConfiguration:
         Protocol: HTTP
         Path: /health
+=======
+  # --- Backend: FastAPI ---
+  BackendService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: api-hub-backend
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerECRRole.Arn
+        ImageRepository:
+          ImageIdentifier: !Ref BackendImageUri
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: "8000"
+            RuntimeEnvironmentVariables:
+              POSTGRES_URL: !Ref PostgresUrl
+              SECRET_KEY: !Ref SecretKey
+              INGEST_SHARED_SECRET: !Ref IngestSharedSecret
+              ALLOWED_ORIGINS: !Ref AllowedOrigins
+              # n8n is self-hosted — set N8N_BASE_URL to your n8n instance URL
+              N8N_BASE_URL: !Ref NextPublicN8nUrl
+              PYTHONUNBUFFERED: "1"
+      InstanceConfiguration:
+        Cpu: !Ref BackendCpu
+        Memory: !Ref BackendMemory
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: /api/health
+>>>>>>> origin/main
         Interval: 10
         Timeout: 5
         HealthyThreshold: 1
         UnhealthyThreshold: 3
+<<<<<<< HEAD
 
   # ── App Runner: Next.js frontend ─────────────────────────────────────────────
 
@@ -231,11 +262,45 @@ Resources:
       InstanceConfiguration:
         Cpu: 1024
         Memory: 2048
+=======
+      AutoScalingConfigurationArn: !Ref BackendAutoScaling
+
+  BackendAutoScaling:
+    Type: AWS::AppRunner::AutoScalingConfiguration
+    Properties:
+      AutoScalingConfigurationName: api-hub-backend-scaling
+      MinSize: 1
+      MaxSize: 5
+      MaxConcurrency: 100
+
+  # --- Frontend: Next.js standalone ---
+  FrontendService:
+    Type: AWS::AppRunner::Service
+    DependsOn: BackendService
+    Properties:
+      ServiceName: api-hub-frontend
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerECRRole.Arn
+        ImageRepository:
+          ImageIdentifier: !Ref FrontendImageUri
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: "3000"
+            RuntimeEnvironmentVariables:
+              NEXT_PUBLIC_API_URL: !Ref NextPublicApiUrl
+              NEXT_PUBLIC_N8N_URL: !Ref NextPublicN8nUrl
+              NODE_ENV: production
+      InstanceConfiguration:
+        Cpu: !Ref FrontendCpu
+        Memory: !Ref FrontendMemory
+>>>>>>> origin/main
       HealthCheckConfiguration:
         Protocol: HTTP
         Path: /
         Interval: 10
         Timeout: 5
+<<<<<<< HEAD
 
   # ── ECS Fargate: n8n (requires persistent storage) ───────────────────────────
 
@@ -351,3 +416,29 @@ Outputs:
     Value: !Ref IngestSharedSecret
   PostgresUrlSecretArn:
     Value: !Ref PostgresUrlSecret
+=======
+        HealthyThreshold: 1
+        UnhealthyThreshold: 3
+      AutoScalingConfigurationArn: !Ref FrontendAutoScaling
+
+  FrontendAutoScaling:
+    Type: AWS::AppRunner::AutoScalingConfiguration
+    Properties:
+      AutoScalingConfigurationName: api-hub-frontend-scaling
+      MinSize: 1
+      MaxSize: 3
+      MaxConcurrency: 100
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+
+  BackendUrl:
+    Description: App Runner URL for the FastAPI backend
+    Value: !GetAtt BackendService.ServiceUrl
+
+  FrontendUrl:
+    Description: App Runner URL for the Next.js frontend
+    Value: !GetAtt FrontendService.ServiceUrl
+>>>>>>> origin/main

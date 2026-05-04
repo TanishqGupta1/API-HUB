@@ -1,6 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import UUID
+import os
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select, text, delete
@@ -177,9 +178,6 @@ async def get_product(
     data.supplier_has_decoration_overlay = bool(supplier.has_decoration_overlay) if supplier else False
     data.images = sorted(data.images, key=lambda i: i.sort_order)
 
-    # Lazy image pull: gated behind ENABLE_LAZY_IMAGES env flag with 1h debounce
-    import os
-    from datetime import timedelta
     if (
         os.getenv("ENABLE_LAZY_IMAGES", "false").lower() == "true"
         and not data.images
