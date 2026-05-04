@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { log } from "@/lib/log";
 import type { Customer } from "@/lib/types";
 import { ArrowLeft, Package, AlertTriangle, CheckCircle2, Search } from "lucide-react";
 
@@ -21,6 +23,8 @@ interface CatalogProduct {
 
 export default function CustomerCatalogPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const supplierId = searchParams.get("supplier_id");
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
@@ -29,16 +33,23 @@ export default function CustomerCatalogPage() {
 
   useEffect(() => {
     if (!id) return;
+    setLoading(true);
+    const candidatesUrl = `/api/push/candidates/${id}?limit=500${supplierId ? `&supplier_id=${supplierId}` : ""}`;
+    
     Promise.all([
       api<Customer>(`/api/customers/${id}`),
-      api<CatalogProduct[]>(`/api/push/candidates/${id}?limit=500`),
+      api<CatalogProduct[]>(candidatesUrl),
     ])
       .then(([cust, prods]) => {
         setCustomer(cust);
         setProducts(prods);
       })
+      .catch((err) => {
+        log.error("Failed to fetch product candidates", err);
+        toast.error(err.message || "Failed to fetch products");
+      })
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, supplierId]);
 
   const filtered = products.filter(
     (p) =>
@@ -61,9 +72,9 @@ export default function CustomerCatalogPage() {
           p.product_id === productId ? { ...p, ops_product_id: "pending" } : p
         )
       );
-    } catch (err) {
-      console.error("Failed to push product", err);
-      alert("Failed to push product");
+    } catch (err: any) {
+      log.error("Failed to push product", err);
+      toast.error(err.message || "Failed to push product");
     }
   };
 
@@ -112,6 +123,7 @@ export default function CustomerCatalogPage() {
         </div>
         <div className="text-[11px] font-mono text-[#888894]">
           {filtered.length} / {products.length} products
+          {supplierId && " (Filtered by Supplier)"}
         </div>
       </div>
 

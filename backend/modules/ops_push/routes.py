@@ -9,8 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from modules.catalog.models import ProductImage
+from modules.push_log.models import ProductPushLog
 
 from .image_pipeline import process_image
+from .service import push_product
 
 router = APIRouter(prefix="/api/push", tags=["ops_push"])
 
@@ -49,7 +51,6 @@ async def push_product_route(
     product_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    from .service import push_product
     try:
         result = await push_product(db, customer_id, product_id)
         if result["status"] == "failed":
@@ -64,7 +65,6 @@ async def get_push_history(
     product_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    from modules.push_log.models import ProductPushLog
     result = await db.execute(
         select(ProductPushLog)
         .where(

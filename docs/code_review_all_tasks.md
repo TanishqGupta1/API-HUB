@@ -1,22 +1,27 @@
 # API-HUB — Code Review: All Completed Tasks
 
-**Reviewed:** 2026-04-15 | **Scope:** All merged PRs (#1 Urvashi, #2 Sinchana, #3 Vidhi) + initial commits
+**Reviewed:** 2026-04-15 | **Scope:** All merged PRs (#1 Urvashi, #2 Sinchana, #3 Vidhi) + initial commits  
+**Last updated:** 2026-05-04 | **All 9 issues resolved** ✅
 
 ---
 
-## Issues Summary
+## Resolution Status — All Issues
 
-| # | Severity | Task | Issue | Owner |
-|---|----------|------|-------|-------|
-| 1 | CRITICAL | Task 1 (Project Setup) | PostgreSQL port mismatch — docker-compose says 5434, .env says 5432 | Vidhi |
-| 2 | CRITICAL | Task 2 (Database) | `load_dotenv` points to `backend/.env` which doesn't exist | Vidhi |
-| 3 | CRITICAL | Task 9 (Next.js Scaffold) | shadcn/ui components not installed — blocks all Phase 4 work | Sinchana |
-| 4 | MODERATE | Task 20 (Push Log) | N+1 query in push status endpoint | Vidhi |
-| 5 | MODERATE | Task 20 (Push Log) | Inconsistent route prefix pattern | Vidhi |
-| 6 | MODERATE | Task 6 (Catalog Routes) | N+1 query in product list endpoint (variant count) | Urvashi |
-| 7 | MINOR | Task 8 (Seed Script) | Imports inside loop body in seed script | Vidhi |
-| 8 | MINOR | Task 9 (Next.js Scaffold) | Dashboard page uses hardcoded data, not the API | Sinchana |
-| 9 | MINOR | Task 18-20 (Docs) | Hardcoded local path `/Users/PD/API-HUB` in 4 test doc files | Vidhi |
+| # | Severity | Issue | Status | Resolved in |
+|---|----------|-------|--------|-------------|
+| 1 | CRITICAL | PostgreSQL port mismatch | ✅ RESOLVED | `docker-compose.yml` — postgres no longer exposed on host; services use internal network port 5432 |
+| 2 | CRITICAL | `load_dotenv` wrong path | ✅ RESOLVED | `backend/database.py:10`, `backend/seed_demo.py:8` — path changed to `parent.parent / ".env"` |
+| 3 | CRITICAL | shadcn/ui not installed | ✅ RESOLVED | `frontend/src/components/ui/` — all shadcn components present |
+| 4 | MODERATE | N+1 query in push status endpoint | ✅ RESOLVED | `backend/modules/push_log/routes.py:91-126` — GROUP BY subquery, 2 queries total |
+| 5 | MODERATE | Inconsistent route prefix | ✅ RESOLVED | `backend/modules/push_log/routes.py:13` — split into two routers with proper prefixes |
+| 6 | MODERATE | N+1 query in product list | ✅ RESOLVED | `backend/modules/catalog/routes.py:46-67` — `variant_agg` subquery covers count + price + inventory |
+| 7 | MINOR | Imports inside loop body | ✅ RESOLVED | `backend/seed_demo.py` — all imports hoisted to top of file |
+| 8 | MINOR | Dashboard hardcoded data | ✅ RESOLVED | `frontend/src/app/(admin)/page.tsx:67` — live `api<Stats>("/api/stats")` call |
+| 9 | MINOR | Hardcoded `/Users/PD/API-HUB` in docs | ✅ RESOLVED | `docs/Task_Test_fill/` — paths replaced in all 4 files |
+
+---
+
+## Issues Summary (original)
 
 ---
 
@@ -250,3 +255,18 @@ All reference `/Users/PD/API-HUB` — Vidhi's local machine path:
 1. **Fix Issues 1 + 2 first** (port + dotenv) — the backend literally won't start without these
 2. **Fix Issue 3** (shadcn/ui) — blocks all Phase 4 frontend work
 3. Issues 4-9 can be addressed as part of normal development
+
+---
+
+## Session Update — 2026-05-04
+
+Additional hygiene and deployment tasks completed in this session (separate from the original 9 code review issues):
+
+| Task | File(s) changed | What |
+|------|----------------|------|
+| Delete dead tailwind config | `frontend/tailwind.config.js` (deleted) | Removed old pre-shadcn CommonJS config — `.ts` version is the live one |
+| Replace `console.error` with `log` util | `frontend/src/components/mappings/sanmar-mapping-panel.tsx` | Last remaining raw `console.error` — now uses `log.error` which is silenced in production |
+| Create `.npmignore` for n8n node | `n8n-nodes-onprintshop/.npmignore` | Ensures only `dist/` ships when installing from GitHub — excludes source TS, dev deps, internal docs |
+| Fix `seed_demo.py` category string | `backend/seed_demo.py` | Set `product.category` string alongside `category_id` so PDP category label renders correctly in demo |
+| docker-compose env passthrough | `docker-compose.yml`, `.env.example` | Wire `ALLOWED_ORIGINS` to api service; document `API_BASE_URL` used by all n8n workflows |
+| AWS App Runner config | `deployment/aws-app-runner.yaml`, `deployment/README.md` | CloudFormation template for one-command production deployment to AWS App Runner |

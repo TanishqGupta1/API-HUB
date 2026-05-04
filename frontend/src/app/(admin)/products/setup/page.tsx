@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
+import { Supplier } from "@/lib/types";
 
 const toast = {
   success: (msg: string) => console.info("[ok]", msg),
@@ -228,6 +229,7 @@ export default function ProductOptionsPage() {
   const [productId, setProductId] = useState<string>("");
 
   const [customers, setCustomers] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
 
@@ -243,8 +245,12 @@ export default function ProductOptionsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const c = await api<any[]>("/api/customers");
+        const [c, s] = await Promise.all([
+          api<any[]>("/api/customers"),
+          api<any[]>("/api/suppliers"),
+        ]);
         setCustomers(c);
+        setSuppliers(s);
       } catch (e: any) {
         toast.error(e.message);
       } finally {
@@ -253,19 +259,35 @@ export default function ProductOptionsPage() {
     })();
   }, []);
 
-  // Re-fetch products when storefront changes, reset product selection
+  // Re-fetch products when storefront changes
   useEffect(() => {
-    if (!customerId) {
-      setProductsList([]);
-      setProductId("");
-      return;
-    }
-    setProductId("");
+    if (!customerId || customers.length === 0 || suppliers.length === 0) return;
+    
     setProductsList([]);
     setProductsLoading(true);
     (async () => {
       try {
-        const p = await api<any[]>(`/api/products?customer_id=${customerId}&limit=200`);
+        const params = new URLSearchParams({ limit: "500" });
+        
+        // Auto-detect supplier from storefront name
+        const selectedCustomer = customers.find(c => c.id === customerId);
+        let matchedSupplier = null;
+        
+        if (selectedCustomer) {
+          matchedSupplier = suppliers.find(s => 
+            s.name.toLowerCase().includes(selectedCustomer.name.toLowerCase()) ||
+            selectedCustomer.name.toLowerCase().includes(s.name.toLowerCase())
+          );
+          
+          if (matchedSupplier) {
+            params.set("supplier_id", matchedSupplier.id);
+          } else {
+            // Fallback to original behavior: show only products already pushed to this node
+            params.set("customer_id", customerId);
+          }
+        }
+
+        const p = await api<any[]>(`/api/products?${params.toString()}`);
         setProductsList(p);
       } catch (e: any) {
         toast.error(e.message);
@@ -273,7 +295,7 @@ export default function ProductOptionsPage() {
         setProductsLoading(false);
       }
     })();
-  }, [customerId]);
+  }, [customerId, customers, suppliers]);
 
   useEffect(() => {
     if (!productId || !customerId) {
@@ -288,20 +310,26 @@ export default function ProductOptionsPage() {
     const selectedProduct = productsList.find((p) => p.id === productId);
     
     // Smart Filter: If it's an apparel product (like a Toddler T-Shirt), hide signage options
-    // (Temporarily disabled to show all options)
-    // if (selectedProduct) {
-    //   const pName = (selectedProduct.product_name || "").toLowerCase();
-    //   const pType = (selectedProduct.product_type || "").toLowerCase();
-    //   const isApparel = pName.includes("shirt") || pName.includes("tee") || pName.includes("hoodie") || pType.includes("apparel") || (selectedProduct.supplier_name || "").toLowerCase().includes("sanmar");
-    //   
-    //   if (isApparel) {
-    //     const signageKeywords = ["laminate", "substrate", "ink", "finish", "packaging", "binding", "paper"];
-    //     result = result.filter(o => {
-    //       const t = (o.title || o.option_key || "").toLowerCase();
-    //       return !signageKeywords.some(kw => t.includes(kw));
-    //     });
-    //   }
-    // }
+    if (selectedProduct) {
+      const pName = (selectedProduct.product_name || "").toLowerCase();
+      const pType = (selectedProduct.product_type || "").toLowerCase();
+      const isApparel = 
+        pName.includes("shirt") || 
+        pName.includes("tee") || 
+        pName.includes("hoodie") || 
+        pName.includes("toddler") || 
+        pName.includes("infant") || 
+        pType.includes("apparel") || 
+        (selectedProduct.supplier_name || "").toLowerCase().includes("sanmar");
+      
+      if (isApparel) {
+        const signageKeywords = ["laminate", "substrate", "ink", "finish", "packaging", "binding", "paper"];
+        result = result.filter(o => {
+          const t = (o.title || o.option_key || "").toLowerCase();
+          return !signageKeywords.some(kw => t.includes(kw));
+        });
+      }
+    }
 
     if (!search.trim() && tag === "all") return result;
     return result
@@ -422,9 +450,9 @@ export default function ProductOptionsPage() {
           </div>
           <div className="space-y-1.5">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Catalog Item</span>
-            <Select value={productId} onValueChange={setProductId} disabled={!customerId || productsLoading}>
+            <Select value={productId} onValueChange={setProductId} disabled={productsLoading}>
               <SelectTrigger className="h-10 border-[#cbd5e1] bg-white rounded-none text-[13px] font-bold">
-                <SelectValue placeholder={!customerId ? "Select a storefront first" : productsLoading ? "Loading products…" : "Select Product"} />
+                <SelectValue placeholder={productsLoading ? "Loading products…" : "Select Product"} />
               </SelectTrigger>
               <SelectContent className="rounded-none">
                 {productsList.map(p => (

@@ -12,26 +12,21 @@ def merge_product_with_decorations(product: Any, decorations: list[dict] | None)
     
     # Extract base variants
     variants = []
+    
+    # Common decoration processing
+    dec_cost = 0.0
+    dec_areas = []
+    if decorations:
+        for dec in decorations:
+            dec_cost += float(dec.get("price_addition", 0.0) or 0.0)
+            dec_areas.append({
+                "placement": dec.get("placement"),
+                "method": dec.get("method")
+            })
+
     if hasattr(product, "variants") and product.variants:
         for v in product.variants:
             base_price = float(v.base_price) if v.base_price else 0.0
-            
-            # If decorations exist, we could add decoration cost.
-            # Assuming decoration_options adds a fixed cost for simplicity here, 
-            # or we calculate based on the complex decoration pricing model.
-            dec_cost = 0.0
-            dec_areas = []
-            
-            if decorations:
-                for dec in decorations:
-                    # dec might look like {"placement": "Front", "method": "DTG", "price_addition": 5.0}
-                    # We extract cost if it exists
-                    dec_cost += float(dec.get("price_addition", 0.0) or 0.0)
-                    dec_areas.append({
-                        "placement": dec.get("placement"),
-                        "method": dec.get("method")
-                    })
-            
             final_price = base_price + dec_cost
             
             variants.append({
@@ -42,6 +37,16 @@ def merge_product_with_decorations(product: Any, decorations: list[dict] | None)
                 "price": final_price,
                 "decorations": dec_areas
             })
+    elif decorations:
+        # Fallback for products without variants but with decorations
+        variants.append({
+            "sku": product.supplier_sku,
+            "color": "Default",
+            "size": "OS",
+            "inventory": 0,
+            "price": dec_cost,
+            "decorations": dec_areas
+        })
             
     payload = {
         "external_id": product.supplier_sku,

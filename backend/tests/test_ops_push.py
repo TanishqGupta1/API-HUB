@@ -128,8 +128,7 @@ async def test_idempotent_push(setup_data, client: AsyncClient, db):
         source_product_id=product_id,
         customer_id=customer_id,
         target_ops_base_url="mock",
-        target_ops_product_id=12345,
-        pushed_at=pytest.approx(0) # Not used
+        target_ops_product_id=12345
     )
     # fake push log
     from datetime import datetime, timezone
