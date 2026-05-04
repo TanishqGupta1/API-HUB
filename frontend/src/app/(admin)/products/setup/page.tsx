@@ -28,12 +28,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
-
-const toast = {
-  success: (msg: string) => console.info("[ok]", msg),
-  error: (msg: string) => alert(msg),
-  info: (msg: string) => console.info("[info]", msg),
-};
+import { Supplier } from "@/lib/types";
+import { toast } from "sonner";
+import { log } from "@/lib/log";
 
 // ─── Component: OptionCard ──────────────────────────────────────────────────
 
@@ -228,8 +225,10 @@ export default function ProductOptionsPage() {
   const [productId, setProductId] = useState<string>("");
 
   const [customers, setCustomers] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [supplierId, setSupplierId] = useState<string>("all");
 
   const fetchOptions = async (pid: string) => {
     try {
@@ -243,8 +242,12 @@ export default function ProductOptionsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const c = await api<any[]>("/api/customers");
+        const [c, s] = await Promise.all([
+          api<any[]>("/api/customers"),
+          api<any[]>("/api/suppliers"),
+        ]);
         setCustomers(c);
+        setSuppliers(s);
       } catch (e: any) {
         toast.error(e.message);
       } finally {
@@ -253,27 +256,33 @@ export default function ProductOptionsPage() {
     })();
   }, []);
 
-  // Re-fetch products when storefront changes, reset product selection
+  // Re-fetch products when storefront or supplier filter changes
   useEffect(() => {
-    if (!customerId) {
-      setProductsList([]);
-      setProductId("");
-      return;
-    }
-    setProductId("");
+    if (!customerId || customers.length === 0 || suppliers.length === 0) return;
+    
     setProductsList([]);
     setProductsLoading(true);
     (async () => {
       try {
-        const p = await api<any[]>(`/api/products?customer_id=${customerId}&limit=200`);
+        const params = new URLSearchParams({ limit: "500" });
+        
+        if (supplierId && supplierId !== "all") {
+          params.set("supplier_id", supplierId);
+        } else {
+          // Default: show only products already pushed to this storefront node
+          params.set("customer_id", customerId);
+        }
+
+        const p = await api<any[]>(`/api/products?${params.toString()}`);
         setProductsList(p);
       } catch (e: any) {
+        log.error("Failed to fetch products", e);
         toast.error(e.message);
       } finally {
         setProductsLoading(false);
       }
     })();
-  }, [customerId]);
+  }, [customerId, supplierId, customers, suppliers]);
 
   useEffect(() => {
     if (!productId || !customerId) {
@@ -288,20 +297,26 @@ export default function ProductOptionsPage() {
     const selectedProduct = productsList.find((p) => p.id === productId);
     
     // Smart Filter: If it's an apparel product (like a Toddler T-Shirt), hide signage options
-    // (Temporarily disabled to show all options)
-    // if (selectedProduct) {
-    //   const pName = (selectedProduct.product_name || "").toLowerCase();
-    //   const pType = (selectedProduct.product_type || "").toLowerCase();
-    //   const isApparel = pName.includes("shirt") || pName.includes("tee") || pName.includes("hoodie") || pType.includes("apparel") || (selectedProduct.supplier_name || "").toLowerCase().includes("sanmar");
-    //   
-    //   if (isApparel) {
-    //     const signageKeywords = ["laminate", "substrate", "ink", "finish", "packaging", "binding", "paper"];
-    //     result = result.filter(o => {
-    //       const t = (o.title || o.option_key || "").toLowerCase();
-    //       return !signageKeywords.some(kw => t.includes(kw));
-    //     });
-    //   }
-    // }
+    if (selectedProduct) {
+      const pName = (selectedProduct.product_name || "").toLowerCase();
+      const pType = (selectedProduct.product_type || "").toLowerCase();
+      const isApparel = 
+        pName.includes("shirt") || 
+        pName.includes("tee") || 
+        pName.includes("hoodie") || 
+        pName.includes("toddler") || 
+        pName.includes("infant") || 
+        pType.includes("apparel") || 
+        (selectedProduct.supplier_name || "").toLowerCase().includes("sanmar");
+      
+      if (isApparel) {
+        const signageKeywords = ["laminate", "substrate", "ink", "finish", "packaging", "binding", "paper"];
+        result = result.filter(o => {
+          const t = (o.title || o.option_key || "").toLowerCase();
+          return !signageKeywords.some(kw => t.includes(kw));
+        });
+      }
+    }
 
     if (!search.trim() && tag === "all") return result;
     return result
@@ -409,22 +424,41 @@ export default function ProductOptionsPage() {
         <div className="px-5 py-4 border-b border-[#e2e8f0] bg-slate-50/30 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Storefront</span>
-            <Select value={customerId} onValueChange={setCustomerId}>
-              <SelectTrigger className="h-10 border-[#cbd5e1] bg-white rounded-none text-[13px] font-bold">
-                <SelectValue placeholder="Select Storefront" />
-              </SelectTrigger>
-              <SelectContent className="rounded-none">
-                {customers.map(c => (
-                  <SelectItem key={c.id} value={c.id} className="font-bold">{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <div className="flex items-center gap-2">
+                <Select value={supplierId} onValueChange={setSupplierId}>
+                  <SelectTrigger className="w-[180px] h-9 bg-white border-[#cbd5e1] rounded-none text-[12px] font-medium text-[#1e40af] focus:ring-[#3b82f6]">
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-3.5 h-3.5 text-[#3b82f6]" />
+                      <SelectValue placeholder="All Suppliers" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent className="rounded-none border-[#cbd5e1]">
+                    <SelectItem value="all" className="text-[12px]">All Suppliers</SelectItem>
+                    {suppliers.map(s => (
+                      <SelectItem key={s.id} value={s.id} className="text-[12px]">{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={customerId} onValueChange={setCustomerId}>
+                  <SelectTrigger className="w-[200px] h-9 bg-[#1e40af] border-[#1e40af] rounded-none text-[12px] font-black text-white focus:ring-0">
+                    <SelectValue placeholder="Select Storefront" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-none border-[#1e3a8a]">
+                    {customers.map((c) => (
+                      <SelectItem key={c.id} value={c.id} className="text-[12px] font-medium">
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
           </div>
           <div className="space-y-1.5">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Catalog Item</span>
-            <Select value={productId} onValueChange={setProductId} disabled={!customerId || productsLoading}>
+            <Select value={productId} onValueChange={setProductId} disabled={productsLoading}>
               <SelectTrigger className="h-10 border-[#cbd5e1] bg-white rounded-none text-[13px] font-bold">
-                <SelectValue placeholder={!customerId ? "Select a storefront first" : productsLoading ? "Loading products…" : "Select Product"} />
+                <SelectValue placeholder={productsLoading ? "Loading products…" : "Select Product"} />
               </SelectTrigger>
               <SelectContent className="rounded-none">
                 {productsList.map(p => (

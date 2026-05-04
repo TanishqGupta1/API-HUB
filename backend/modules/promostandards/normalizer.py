@@ -172,21 +172,19 @@ async def upsert_products(
                 {
                     "product_id": pid_db,
                     "url": m.url,
+                    "supplier_image_url": m.url,
                     "image_type": m.media_type or "front",
                     "color": m.color_name,
                     "sort_order": 0,
                 }
             )
         if image_rows:
-            # Deduplicate by URL within this batch — SanMar emits the same
-            # catalog image URL for every colour, which causes PostgreSQL to
-            # reject the batch ("ON CONFLICT DO UPDATE command cannot affect
-            # row a second time"). Keep the first occurrence of each URL.
+            # Deduplicate by URL within this batch
             seen_urls: set[str] = set()
             deduped_rows: list[dict] = []
             for row in image_rows:
-                if row["url"] not in seen_urls:
-                    seen_urls.add(row["url"])
+                if row["supplier_image_url"] not in seen_urls:
+                    seen_urls.add(row["supplier_image_url"])
                     deduped_rows.append(row)
             image_rows = deduped_rows
 
@@ -197,6 +195,7 @@ async def upsert_products(
                     set_={
                         "image_type": img_stmt.excluded.image_type,
                         "color": img_stmt.excluded.color,
+                        "supplier_image_url": img_stmt.excluded.supplier_image_url,
                     },
                 )
                 await db.execute(img_stmt)
