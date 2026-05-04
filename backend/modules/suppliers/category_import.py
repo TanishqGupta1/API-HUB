@@ -122,6 +122,7 @@ async def _run_category_import(
 
             cat_slug = re.sub(r"[^a-z0-9]+", "-", category_name.lower()).strip("-")
 
+            # Ensure category exists — use external_id key for idempotency
             cat_res = await session.execute(
                 select(Category).where(
                     Category.supplier_id == supplier_id,
@@ -144,7 +145,6 @@ async def _run_category_import(
                 # Fetch media for all products in this batch
                 product_ids = [p.product_id for p in products]
                 media_items = await media_client.get_media(product_ids)
-
             await upsert_products(
                 session,
                 supplier_id,
