@@ -23,6 +23,10 @@ Parameters:
     Description: Base domain (e.g. staging.example.com). Subdomains api./app./n8n. will be created.
   VpcId:
     Type: AWS::EC2::VPC::Id
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: VPC CIDR block — used to restrict RDS ingress to this VPC only
   PrivateSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Private subnets for RDS and ECS Fargate tasks
@@ -52,6 +56,17 @@ Resources:
         GenerateStringKey: value
         PasswordLength: 44
         ExcludePunctuation: false
+
+  JwtSecretKey:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub api-hub/${EnvironmentName}/JWT_SECRET_KEY
+      Description: HMAC-SHA256 key for JWT signing — rotate independently of the Fernet key
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: value
+        PasswordLength: 64
+        ExcludePunctuation: true
 
   IngestSharedSecret:
     Type: AWS::SecretsManager::Secret
@@ -91,7 +106,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 5432
           ToPort: 5432
-          CidrIp: 10.0.0.0/8
+          CidrIp: !Ref VpcCidr
 
   PostgresDb:
     Type: AWS::RDS::DBInstance
@@ -146,6 +161,7 @@ Resources:
                 Action: secretsmanager:GetSecretValue
                 Resource:
                   - !Ref SecretKey
+                  - !Ref JwtSecretKey
                   - !Ref IngestSharedSecret
                   - !Ref PostgresUrlSecret
 
@@ -167,13 +183,15 @@ Resources:
             RuntimeEnvironmentVariables:
               - Name: ENVIRONMENT
                 Value: production
-              - Name: CORS_ORIGINS
+              - Name: ALLOWED_ORIGINS
                 Value: !Sub https://app.${DomainName}
               - Name: N8N_BASE_URL
                 Value: !Sub https://n8n.${DomainName}
             RuntimeEnvironmentSecrets:
               - Name: SECRET_KEY
                 Value: !Sub '{{resolve:secretsmanager:api-hub/${EnvironmentName}/SECRET_KEY:SecretString:value}}'
+              - Name: JWT_SECRET_KEY
+                Value: !Sub '{{resolve:secretsmanager:api-hub/${EnvironmentName}/JWT_SECRET_KEY:SecretString:value}}'
               - Name: INGEST_SHARED_SECRET
                 Value: !Sub '{{resolve:secretsmanager:api-hub/${EnvironmentName}/INGEST_SHARED_SECRET:SecretString:value}}'
               - Name: POSTGRES_URL

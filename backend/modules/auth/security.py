@@ -6,6 +6,8 @@ from jose import jwt
 from passlib.context import CryptContext
 
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback-dev-secret-change-in-production")
+# Separate key for JWT signing — rotate without forcing DB re-encryption of EncryptedJSON columns.
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", SECRET_KEY)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480   # 8 hours
 REFRESH_TOKEN_EXPIRE_DAYS = 30
@@ -27,7 +29,7 @@ def create_access_token(payload: dict[str, Any]) -> str:
         "exp": datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         "type": "access",
     }
-    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(data, JWT_SECRET_KEY, algorithm=ALGORITHM)
 
 
 def create_refresh_token(payload: dict[str, Any]) -> str:
@@ -36,8 +38,8 @@ def create_refresh_token(payload: dict[str, Any]) -> str:
         "exp": datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
         "type": "refresh",
     }
-    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(data, JWT_SECRET_KEY, algorithm=ALGORITHM)
 
 
 def decode_token(token: str) -> dict[str, Any]:
-    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    return jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])

@@ -11,6 +11,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from database import async_session
+
 from modules.catalog.models import CustomerProductSelection, Product, ProductOption
 from modules.customers.models import Customer
 from modules.decorations.models import CustomerProductDecoration
@@ -137,19 +139,23 @@ async def execute_push(
     await db.commit()
     await db.refresh(log)
 
-    # Optional fire-and-forget n8n trigger
-    await trigger_n8n_push(payload)
+    try:
+        await trigger_n8n_push(payload)
+    except Exception as exc:
+        async with async_session() as update_db:
+            log_row = await update_db.get(ProductPushLog, log.id)
+            if log_row:
+                log_row.status = "failed"
+                log_row.error = str(exc)
+                await update_db.commit()
 
     return log, payload
 
 
 async def trigger_n8n_push(payload: dict[str, Any]) -> None:
-    """POST payload to N8N_PUSH_WEBHOOK_URL if configured. Errors are silently logged."""
+    """POST payload to N8N_PUSH_WEBHOOK_URL if configured. Raises on failure."""
     webhook_url = os.getenv("N8N_PUSH_WEBHOOK_URL")
     if not webhook_url:
         return
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(webhook_url, json=payload)
-    except Exception as exc:
-        print(f"[ops_push] n8n trigger failed: {exc}")
+    async with httpx.AsyncClient(timeout=10) as client:
+        await client.post(webhook_url, json=payload)

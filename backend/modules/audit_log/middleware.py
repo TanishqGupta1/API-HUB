@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -11,6 +12,7 @@ from modules.audit_log.models import AuditLog
 from modules.auth.security import decode_token
 
 _WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+logger = logging.getLogger(__name__)
 
 
 class AuditLogMiddleware(BaseHTTPMiddleware):
@@ -31,8 +33,8 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         if auth_header.startswith("Bearer "):
             try:
                 payload = decode_token(auth_header[7:])
-                user_email = payload.get("sub")
-                user_id = payload.get("uid")
+                user_email = payload.get("email")   # email claim added in _token_payload
+                user_id = payload.get("sub")         # sub is the user UUID
             except Exception:
                 pass
 
@@ -48,6 +50,6 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
                 ))
                 await db.commit()
         except Exception:
-            pass  # never let audit log errors affect the response
+            logger.exception("audit log write failed")
 
         return response

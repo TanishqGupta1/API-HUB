@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 def _token_payload(user: User) -> dict:
-    payload: dict = {"sub": str(user.id), "role": user.role}
+    payload: dict = {"sub": str(user.id), "email": user.email, "role": user.role}
     if user.customer_id:
         payload["customer_id"] = str(user.customer_id)
     return payload

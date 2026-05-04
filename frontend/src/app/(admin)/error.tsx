@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { log } from "@/lib/log";
 
 export default function AdminError({
   error,
@@ -10,7 +11,7 @@ export default function AdminError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    log.error(error);
   }, [error]);
 
   return (
