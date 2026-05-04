@@ -68,6 +68,10 @@ def _classify_fault_xml(xml_bytes: bytes) -> None:
 class PromoStandardsAdapter(BaseAdapter):
     product_type = "apparel"
 
+    def __init__(self, supplier, db):
+        super().__init__(supplier=supplier, db=db)
+        self._client_cache: dict[str, Any] = {}
+
     def _require_auth(self) -> dict:
         auth = dict(self.supplier.auth_config or {})
         ps_id = auth.get("id")
@@ -159,9 +163,13 @@ class PromoStandardsAdapter(BaseAdapter):
     # ----- Transport hooks (production using zeep/client) -----
 
     def _get_client(self, service_type: str) -> Any:
-        from .client import PromoStandardsClient
-        wsdl = self._wsdl_for(service_type)
-        return PromoStandardsClient(wsdl_url=wsdl, auth_config=self.supplier.auth_config)
+        if service_type not in self._client_cache:
+            from .client import PromoStandardsClient
+            wsdl = self._wsdl_for(service_type)
+            self._client_cache[service_type] = PromoStandardsClient(
+                wsdl_url=wsdl, auth_config=self.supplier.auth_config
+            )
+        return self._client_cache[service_type]
 
     async def _call_get_product_sellable(self) -> list[ProductRef]:
         client = self._get_client("PRODUCT")

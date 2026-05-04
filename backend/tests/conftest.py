@@ -50,6 +50,10 @@ async def _create_schema():
     if not _SCHEMA_CREATED:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            from main import _SCHEMA_UPGRADES
+            from sqlalchemy import text
+            for stmt in _SCHEMA_UPGRADES:
+                await conn.execute(text(stmt))
         _SCHEMA_CREATED = True
     yield
     # No engine.dispose() here to avoid closing resources needed by other tests

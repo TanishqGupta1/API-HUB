@@ -79,12 +79,16 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
         id: res.job_id,
         status: "running",
         records_processed: 0,
+        total_products: 0,
+        success_count: 0,
+        failed_count: 0,
+        discovery_mode: null,
         supplier_id: supplierId,
         supplier_name: "SanMar",
-        job_type: "full", // approximation
+        job_type: "full",
         started_at: new Date().toISOString(),
         completed_at: null,
-        error_log: null
+        error_log: null,
       });
 
       toast.success(`Import started for ${defaultCategory}`);

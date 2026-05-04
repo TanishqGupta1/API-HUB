@@ -31,9 +31,11 @@ class VariantPriceRead(BaseModel):
 class ProductImageRead(BaseModel):
     id: UUID
     url: str
+    supplier_image_url: Optional[str] = None
     image_type: str
-    color: Optional[str]
+    color: Optional[str] = None
     sort_order: int
+    checksum: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -99,6 +101,7 @@ class ProductRead(BaseModel):
     id: UUID
     supplier_id: UUID
     supplier_name: Optional[str] = None
+    supplier_has_decoration_overlay: bool = False
     supplier_sku: str
     product_name: str
     brand: Optional[str] = None
@@ -113,12 +116,29 @@ class ProductRead(BaseModel):
     archived_at: Optional[datetime] = None
     variants: list[VariantRead] = []
     images: list[ProductImageRead] = []
+    images_by_color: dict[str, list[ProductImageRead]] = {}
     options: list[ProductOptionRead] = []
     apparel_details: Optional[ApparelDetailsRead] = None
     print_details: Optional[PrintDetailsRead] = None
     sizes: list[ProductSizeRead] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def group_images_by_color(self) -> "ProductRead":
+        if not self.images:
+            return self
+        # Sort images before grouping
+        sorted_imgs = sorted(self.images, key=lambda i: i.sort_order)
+        self.images = sorted_imgs
+        grouped = {}
+        for img in sorted_imgs:
+            color_key = (img.color or "general").lower().replace(" ", "_")
+            if color_key not in grouped:
+                grouped[color_key] = []
+            grouped[color_key].append(img)
+        self.images_by_color = grouped
+        return self
 
 
 class ProductListRead(BaseModel):
@@ -199,9 +219,11 @@ class PrintDetailsIngest(BaseModel):
 
 class ImageIngest(BaseModel):
     url: str
+    supplier_image_url: Optional[str] = None
     image_type: str = "front"
     color: Optional[str] = None
     sort_order: int = 0
+    checksum: Optional[str] = None
 
 
 class OptionAttributeIngest(BaseModel):

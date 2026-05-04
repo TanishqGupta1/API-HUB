@@ -49,6 +49,8 @@ class Product(Base):
     ops_product_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     external_catalogue: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     last_synced: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_image_fetch_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_image_fetch_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
@@ -108,9 +110,11 @@ class ProductImage(Base):
         ForeignKey("products.id", ondelete="CASCADE"), index=True
     )
     url: Mapped[str] = mapped_column(Text)
-    image_type: Mapped[str] = mapped_column(String(50), default="front")
+    supplier_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    image_type: Mapped[str] = mapped_column(String(50), default="front")  # front | back | side | detail | lifestyle
     color: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    checksum: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     product: Mapped["Product"] = relationship(back_populates="images")
 

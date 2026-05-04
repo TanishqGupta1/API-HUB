@@ -26,7 +26,7 @@ async def test_trigger_import_route(seed_supplier: Supplier):
 
 @pytest.mark.asyncio
 async def test_get_sync_job_status_route(seed_supplier: Supplier):
-    """GET /api/sync_jobs/{id} returns the status of an import job."""
+    """GET /api/sync-jobs/{id} returns the status of an import job."""
     from modules.sync_jobs.models import SyncJob
     import uuid
     
@@ -43,7 +43,7 @@ async def test_get_sync_job_status_route(seed_supplier: Supplier):
         job_id = job.id
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.get(f"/api/sync_jobs/{job_id}")
+        response = await ac.get(f"/api/sync-jobs/{job_id}")
         
     assert response.status_code == 200
     data = response.json()

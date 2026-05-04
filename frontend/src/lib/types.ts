@@ -142,6 +142,7 @@ export interface Product {
   id: string;
   supplier_id: string;
   supplier_name: string;
+  supplier_has_decoration_overlay: boolean;
   supplier_sku: string;
   product_name: string;
   brand: string | null;

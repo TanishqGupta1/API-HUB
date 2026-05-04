@@ -17,6 +17,7 @@ import modules.sync_jobs.models  # noqa: F401
 import modules.master_options.models  # noqa: F401
 import modules.push_mappings.models  # noqa: F401
 import modules.ops_config.models  # noqa: F401
+import modules.decorations.models  # noqa: F401
 
 from modules.suppliers.models import Supplier
 from modules.catalog.models import Product, ProductVariant
@@ -46,6 +47,7 @@ import modules.promostandards.sanmar_adapter  # noqa: F401  registers SanMarAdap
 import modules.promostandards.alphabroder_adapter  # noqa: F401  registers AlphabroderAdapter
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
+from modules.decorations.routes import router as decorations_router
 
 
 # Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
@@ -75,6 +77,40 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE",
     "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sync_jobs' AND column_name='finished_at') THEN UPDATE sync_jobs SET completed_at = finished_at WHERE completed_at IS NULL AND finished_at IS NOT NULL; ALTER TABLE sync_jobs DROP COLUMN finished_at; END IF; END $$",
     "UPDATE sync_jobs SET status = 'pending' WHERE status = 'queued'",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS has_decoration_overlay BOOLEAN NOT NULL DEFAULT FALSE",
+    """CREATE TABLE IF NOT EXISTS customer_product_decorations (
+        customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        product_id  UUID NOT NULL REFERENCES products(id)  ON DELETE CASCADE,
+        decoration_options JSONB NOT NULL DEFAULT '[]',
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (customer_id, product_id)
+    )""",
+    # Fix SanMar MultipleResultsFound: old (product_id, color, size) constraint breaks with NULL values.
+    # Drop it and add a clean (product_id, sku) unique constraint instead.
+    "ALTER TABLE product_variants DROP CONSTRAINT IF EXISTS uq_variant_product_color_size",
+    # Inline dedup before adding unique constraint (Blocker 3)
+    """DO $$ BEGIN
+    DELETE FROM product_variants
+    WHERE id IN (
+        SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY product_id, sku ORDER BY id) as rn
+            FROM product_variants
+            WHERE sku IS NOT NULL
+        ) sub
+        WHERE rn > 1
+    );
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_variants_product_sku') THEN
+        ALTER TABLE product_variants ADD CONSTRAINT uq_product_variants_product_sku UNIQUE (product_id, sku);
+    END IF;
+    END $$""",
+    "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS supplier_image_url TEXT",
+    "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS checksum VARCHAR(64)",
+    "CREATE INDEX IF NOT EXISTS idx_product_images_checksum ON product_images(checksum)",
+    # New image tracking columns (Blocker 2 & 6)
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_image_fetch_at TIMESTAMP WITH TIME ZONE NULL",
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_image_fetch_attempt_at TIMESTAMP WITH TIME ZONE NULL",
+    # Fix ProductImage upsert key (Moderate 7)
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_images_supplier_url') THEN ALTER TABLE product_images ADD CONSTRAINT uq_product_images_supplier_url UNIQUE (product_id, supplier_image_url); END IF; END $$",
 ]
 
 
@@ -102,10 +138,17 @@ async def lifespan(app: FastAPI):
         async with async_session() as db:
             await ensure_vg_ops_supplier(db)
 
-    # Start the background scheduler
-    asyncio.create_task(start_scheduler(interval_hours=24))
-    
+    # Start the background scheduler (sleeps first; no-op if DISABLE_SCHEDULER=true)
+    _scheduler_task = asyncio.create_task(start_scheduler(interval_hours=24))
+
     yield
+
+    # Graceful shutdown: cancel scheduler before closing DB pool
+    _scheduler_task.cancel()
+    try:
+        await _scheduler_task
+    except asyncio.CancelledError:
+        pass
     await engine.dispose()
     from modules.n8n_proxy import routes as _n8n_proxy
     if _n8n_proxy._http_client is not None:
@@ -152,6 +195,7 @@ app.include_router(promostandards_sync_router)
 app.include_router(import_jobs_router)
 app.include_router(pricing_router)
 app.include_router(pricing_customer_router)
+app.include_router(decorations_router)
 
 
 @app.get("/health")
