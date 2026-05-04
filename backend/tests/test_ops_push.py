@@ -61,15 +61,14 @@ async def test_push_ready_product(setup_data, client: AsyncClient, db):
     assert res.status_code == 200
     assert res.json()["status"] == "success"
     
-    # Check mappings
+    # Check mappings (should NOT be created yet)
     mapping = (await db.execute(
         select(PushMapping).where(
             PushMapping.source_product_id == product_id,
             PushMapping.customer_id == customer_id
         )
     )).scalar_one_or_none()
-    assert mapping is not None
-    assert mapping.target_ops_product_id == 99999
+    assert mapping is None
     
     # Check log
     log = (await db.execute(
@@ -79,7 +78,7 @@ async def test_push_ready_product(setup_data, client: AsyncClient, db):
         )
     )).scalar_one_or_none()
     assert log is not None
-    assert log.status == "success"
+    assert log.status == "pending"
 
 @pytest.mark.asyncio
 async def test_push_decorated_product(setup_data, client: AsyncClient, db):
@@ -103,7 +102,7 @@ async def test_push_decorated_product(setup_data, client: AsyncClient, db):
     assert res_hist.status_code == 200
     history = res_hist.json()
     assert len(history) >= 1
-    assert history[0]["status"] == "success"
+    assert history[0]["status"] == "pending"
 
 @pytest.mark.asyncio
 async def test_name_conflict_handling(setup_data, client: AsyncClient, db):

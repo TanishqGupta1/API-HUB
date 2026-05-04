@@ -29,12 +29,8 @@ import {
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { Supplier } from "@/lib/types";
-
-const toast = {
-  success: (msg: string) => console.info("[ok]", msg),
-  error: (msg: string) => alert(msg),
-  info: (msg: string) => console.info("[info]", msg),
-};
+import { toast } from "sonner";
+import { log } from "@/lib/log";
 
 // ─── Component: OptionCard ──────────────────────────────────────────────────
 
@@ -232,6 +228,7 @@ export default function ProductOptionsPage() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [supplierId, setSupplierId] = useState<string>("all");
 
   const fetchOptions = async (pid: string) => {
     try {
@@ -259,7 +256,7 @@ export default function ProductOptionsPage() {
     })();
   }, []);
 
-  // Re-fetch products when storefront changes
+  // Re-fetch products when storefront or supplier filter changes
   useEffect(() => {
     if (!customerId || customers.length === 0 || suppliers.length === 0) return;
     
@@ -269,33 +266,23 @@ export default function ProductOptionsPage() {
       try {
         const params = new URLSearchParams({ limit: "500" });
         
-        // Auto-detect supplier from storefront name
-        const selectedCustomer = customers.find(c => c.id === customerId);
-        let matchedSupplier = null;
-        
-        if (selectedCustomer) {
-          matchedSupplier = suppliers.find(s => 
-            s.name.toLowerCase().includes(selectedCustomer.name.toLowerCase()) ||
-            selectedCustomer.name.toLowerCase().includes(s.name.toLowerCase())
-          );
-          
-          if (matchedSupplier) {
-            params.set("supplier_id", matchedSupplier.id);
-          } else {
-            // Fallback to original behavior: show only products already pushed to this node
-            params.set("customer_id", customerId);
-          }
+        if (supplierId && supplierId !== "all") {
+          params.set("supplier_id", supplierId);
+        } else {
+          // Default: show only products already pushed to this storefront node
+          params.set("customer_id", customerId);
         }
 
         const p = await api<any[]>(`/api/products?${params.toString()}`);
         setProductsList(p);
       } catch (e: any) {
+        log.error("Failed to fetch products", e);
         toast.error(e.message);
       } finally {
         setProductsLoading(false);
       }
     })();
-  }, [customerId, customers, suppliers]);
+  }, [customerId, supplierId, customers, suppliers]);
 
   useEffect(() => {
     if (!productId || !customerId) {
@@ -437,16 +424,35 @@ export default function ProductOptionsPage() {
         <div className="px-5 py-4 border-b border-[#e2e8f0] bg-slate-50/30 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Storefront</span>
-            <Select value={customerId} onValueChange={setCustomerId}>
-              <SelectTrigger className="h-10 border-[#cbd5e1] bg-white rounded-none text-[13px] font-bold">
-                <SelectValue placeholder="Select Storefront" />
-              </SelectTrigger>
-              <SelectContent className="rounded-none">
-                {customers.map(c => (
-                  <SelectItem key={c.id} value={c.id} className="font-bold">{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <div className="flex items-center gap-2">
+                <Select value={supplierId} onValueChange={setSupplierId}>
+                  <SelectTrigger className="w-[180px] h-9 bg-white border-[#cbd5e1] rounded-none text-[12px] font-medium text-[#1e40af] focus:ring-[#3b82f6]">
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-3.5 h-3.5 text-[#3b82f6]" />
+                      <SelectValue placeholder="All Suppliers" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent className="rounded-none border-[#cbd5e1]">
+                    <SelectItem value="all" className="text-[12px]">All Suppliers</SelectItem>
+                    {suppliers.map(s => (
+                      <SelectItem key={s.id} value={s.id} className="text-[12px]">{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={customerId} onValueChange={setCustomerId}>
+                  <SelectTrigger className="w-[200px] h-9 bg-[#1e40af] border-[#1e40af] rounded-none text-[12px] font-black text-white focus:ring-0">
+                    <SelectValue placeholder="Select Storefront" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-none border-[#1e3a8a]">
+                    {customers.map((c) => (
+                      <SelectItem key={c.id} value={c.id} className="text-[12px] font-medium">
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
           </div>
           <div className="space-y-1.5">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Catalog Item</span>

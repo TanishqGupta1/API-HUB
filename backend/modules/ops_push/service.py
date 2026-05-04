@@ -84,12 +84,12 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
         if mapping:
             # Update existing intent
             push_log.ops_product_id = str(mapping.target_ops_product_id)
-            push_log.status = "success"
+            push_log.status = "pending"
         else:
             # Create new intent
             # Note: We do NOT create a PushMapping with a fake ID here.
             # Real ID will be back-filled by n8n callback.
-            push_log.status = "success"
+            push_log.status = "pending"
             push_log.ops_product_id = "PENDING"
             
         await db.commit()
