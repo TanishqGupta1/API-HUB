@@ -56,7 +56,6 @@ async def push_product_route(
         result = await push_product(db, customer_id, product_id)
         if result["status"] == "failed":
             raise HTTPException(500, result["message"])
-        
         if result["status"] == "pending":
             response.status_code = 202
             

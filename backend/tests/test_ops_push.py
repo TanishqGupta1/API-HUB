@@ -95,7 +95,7 @@ async def test_push_decorated_product(setup_data, client: AsyncClient, db):
     await db.commit()
     
     res = await client.post(f"/api/push/{customer_id}/{product_id}")
-    assert res.status_code == 200
+    assert res.status_code == 202
     
     # Check history endpoint
     res_hist = await client.get(f"/api/push/history/{customer_id}/{product_id}")
@@ -111,7 +111,7 @@ async def test_name_conflict_handling(setup_data, client: AsyncClient, db):
     await db.commit()
     
     res = await client.post(f"/api/push/{setup_data['customer'].id}/{setup_data['product'].id}")
-    assert res.status_code == 200
+    assert res.status_code == 202
     
     # In service, it should have been renamed to "VG-Essential Tee" but we don't have a way to assert it
     # from outside without inspecting the mock client, but we assert it completes successfully.
@@ -138,7 +138,7 @@ async def test_idempotent_push(setup_data, client: AsyncClient, db):
     
     # Push again
     res = await client.post(f"/api/push/{customer_id}/{product_id}")
-    assert res.status_code == 200
+    assert res.status_code == 202
     
     # Check only one mapping exists
     mappings = (await db.execute(
