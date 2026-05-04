@@ -50,6 +50,23 @@ export default function CustomerCatalogPage() {
     (p) => p.supplier_has_decoration_overlay && !p.decoration_ready,
   ).length;
 
+  const handlePush = async (e: React.MouseEvent, productId: string) => {
+    e.preventDefault();
+    if (!id) return;
+    try {
+      await api(`/api/push/${id}/${productId}`, { method: "POST" });
+      // Update local state to show pushed
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.product_id === productId ? { ...p, ops_product_id: "pending" } : p
+        )
+      );
+    } catch (err) {
+      console.error("Failed to push product", err);
+      alert("Failed to push product");
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
       {/* Header */}
@@ -119,64 +136,82 @@ export default function CustomerCatalogPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((p) => {
             const needsDecoration = p.supplier_has_decoration_overlay && !p.decoration_ready;
+            const isPushable = !needsDecoration;
+
             return (
-              <Link
+              <div
                 key={p.product_id}
-                href={`/storefront/vg/product/${p.product_id}`}
-                className="group flex flex-col bg-white border border-[#cfccc8] rounded-xl overflow-hidden shadow-sm hover:border-[#1e4d92] hover:shadow-md transition-all"
+                className="group flex flex-col bg-white border border-[#cfccc8] rounded-xl overflow-hidden shadow-sm hover:border-[#1e4d92] hover:shadow-md transition-all relative"
               >
-                {/* Image */}
-                <div className="aspect-square bg-[#f2f0ed] relative overflow-hidden">
-                  {p.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={p.image_url}
-                      alt={p.product_name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Package className="w-10 h-10 text-[#cfccc8]" />
+                <Link href={`/storefront/vg/product/${p.product_id}`} className="block flex-1">
+                  {/* Image */}
+                  <div className="aspect-square bg-[#f2f0ed] relative overflow-hidden">
+                    {p.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={p.image_url}
+                        alt={p.product_name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-10 h-10 text-[#cfccc8]" />
+                      </div>
+                    )}
+
+                    {/* Badges */}
+                    <div className="absolute top-2 left-2 flex flex-col gap-1">
+                      {needsDecoration && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 border border-yellow-300 px-2 py-0.5 text-[10px] font-bold text-yellow-800">
+                          <AlertTriangle className="w-3 h-3" />
+                          Needs Decoration
+                        </span>
+                      )}
+                      {p.supplier_has_decoration_overlay && p.decoration_ready && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Decorated
+                        </span>
+                      )}
                     </div>
-                  )}
 
-                  {/* Badges */}
-                  <div className="absolute top-2 left-2 flex flex-col gap-1">
-                    {needsDecoration && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 border border-yellow-300 px-2 py-0.5 text-[10px] font-bold text-yellow-800">
-                        <AlertTriangle className="w-3 h-3" />
-                        Needs Decoration
-                      </span>
-                    )}
-                    {p.supplier_has_decoration_overlay && p.decoration_ready && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                        <CheckCircle2 className="w-3 h-3" />
-                        Decorated
+                    {/* Pushed badge */}
+                    {p.ops_product_id && (
+                      <span className="absolute top-2 right-2 rounded-full bg-[#eef4fb] border border-[#1e4d92] px-2 py-0.5 text-[10px] font-bold text-[#1e4d92]">
+                        Pushed
                       </span>
                     )}
                   </div>
 
-                  {/* Pushed badge */}
-                  {p.ops_product_id && (
-                    <span className="absolute top-2 right-2 rounded-full bg-[#eef4fb] border border-[#1e4d92] px-2 py-0.5 text-[10px] font-bold text-[#1e4d92]">
-                      Pushed
-                    </span>
+                  {/* Info */}
+                  <div className="p-3 flex flex-col gap-1">
+                    <p className="text-[12px] font-bold text-[#1e1e24] leading-snug line-clamp-2">
+                      {p.product_name}
+                    </p>
+                    <div className="flex items-center gap-2 mt-auto pt-2">
+                      <span className="font-mono text-[10px] text-[#888894]">{p.supplier_sku}</span>
+                      <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-[#888894] bg-[#f2f0ed] px-1.5 py-0.5 rounded">
+                        {p.product_type}
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* Push Button Container */}
+                <div className="p-3 pt-0 mt-auto border-t border-[#f2f0ed] flex items-center justify-between">
+                  <Link href={`/customers/${id}/catalog/${p.product_id}/history`} className="text-[10px] font-semibold text-[#1e4d92] hover:underline">
+                    View History
+                  </Link>
+                  {isPushable && (
+                    <button
+                      onClick={(e) => handlePush(e, p.product_id)}
+                      className="text-[10px] font-bold bg-[#1e1e24] text-white px-3 py-1.5 rounded hover:bg-[#383842] transition-colors"
+                    >
+                      {p.ops_product_id ? "Push Update" : "Push to OPS"}
+                    </button>
                   )}
                 </div>
-
-                {/* Info */}
-                <div className="p-3 flex flex-col gap-1 flex-1">
-                  <p className="text-[12px] font-bold text-[#1e1e24] leading-snug line-clamp-2">
-                    {p.product_name}
-                  </p>
-                  <div className="flex items-center gap-2 mt-auto pt-2">
-                    <span className="font-mono text-[10px] text-[#888894]">{p.supplier_sku}</span>
-                    <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-[#888894] bg-[#f2f0ed] px-1.5 py-0.5 rounded">
-                      {p.product_type}
-                    </span>
-                  </div>
-                </div>
-              </Link>
+              </div>
             );
           })}
         </div>

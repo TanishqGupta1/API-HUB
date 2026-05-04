@@ -71,6 +71,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
         body: JSON.stringify({
           category_name: defaultCategory,
           limit: 10,
+          fetch_images: includeImages,
         }),
       });
       

@@ -1,6 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import UUID
+import os
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select, text, delete
@@ -176,8 +177,6 @@ async def get_product(
     data.supplier_name = supplier.name if supplier else None
     data.supplier_has_decoration_overlay = bool(supplier.has_decoration_overlay) if supplier else False
     # Lazy Pull: Gate behind env flag and 1h debounce
-    import os
-    from datetime import timedelta
     ENABLE_LAZY_IMAGES = os.getenv("ENABLE_LAZY_IMAGES", "false").lower() == "true"
     
     if (

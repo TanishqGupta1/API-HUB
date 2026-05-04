@@ -152,9 +152,8 @@ async def upsert_products(
             for variant_batch in _chunks(variant_rows, _BATCH_SIZE):
                 v_stmt = pg_insert(ProductVariant).values(list(variant_batch))
                 v_stmt = v_stmt.on_conflict_do_update(
-                    constraint="uq_variant_product_color_size",
+                    constraint="uq_product_variants_product_sku",
                     set_={
-                        "sku": v_stmt.excluded.sku,
                         "base_price": v_stmt.excluded.base_price,
                         "inventory": v_stmt.excluded.inventory,
                         "warehouse": v_stmt.excluded.warehouse,
@@ -172,28 +171,26 @@ async def upsert_products(
                 {
                     "product_id": pid_db,
                     "url": m.url,
+                    "supplier_image_url": m.url,
                     "image_type": m.media_type or "front",
                     "color": m.color_name,
                     "sort_order": 0,
                 }
             )
         if image_rows:
-            # Deduplicate by URL within this batch — SanMar emits the same
-            # catalog image URL for every colour, which causes PostgreSQL to
-            # reject the batch ("ON CONFLICT DO UPDATE command cannot affect
-            # row a second time"). Keep the first occurrence of each URL.
+            # Deduplicate by URL within this batch
             seen_urls: set[str] = set()
             deduped_rows: list[dict] = []
             for row in image_rows:
-                if row["url"] not in seen_urls:
-                    seen_urls.add(row["url"])
+                if row["supplier_image_url"] not in seen_urls:
+                    seen_urls.add(row["supplier_image_url"])
                     deduped_rows.append(row)
             image_rows = deduped_rows
 
             for image_batch in _chunks(image_rows, _BATCH_SIZE):
                 img_stmt = pg_insert(ProductImage).values(list(image_batch))
                 img_stmt = img_stmt.on_conflict_do_update(
-                    constraint="uq_product_image_url",
+                    constraint="uq_product_images_supplier_url",
                     set_={
                         "image_type": img_stmt.excluded.image_type,
                         "color": img_stmt.excluded.color,

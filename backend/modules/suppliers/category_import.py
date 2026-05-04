@@ -47,6 +47,7 @@ class CategoryRead(BaseModel):
 class ImportCategoryRequest(BaseModel):
     category_name: str = Field(min_length=1, max_length=100)
     limit: int = Field(default=10, ge=1, le=500)
+    fetch_images: bool = False
 
 
 class ImportCategoryResponse(BaseModel):
@@ -91,16 +92,13 @@ async def _run_category_import(
     supplier_id: UUID,
     auth_config: dict,
     wsdl_product: str,
+    wsdl_media: str | None,
     category_name: str,
     limit: int,
     extension_wsdl_url: str | None = None,
+    fetch_images: bool = False,
 ) -> None:
-    """Fetch N products by category via PS SOAP and upsert into hub.
-
-    If ``extension_wsdl_url`` is provided (SanMar case), the category call
-    is routed to that WSDL because ``getProductInfoByCategory`` is a SanMar
-    non-PS extension, not on the standard ProductData binding.
-    """
+    """Fetch N products by category via PS SOAP and upsert into hub."""
     from modules.promostandards.client import PromoStandardsClient
     from modules.promostandards.normalizer import upsert_products
     from modules.catalog.models import Category, Product
@@ -122,10 +120,8 @@ async def _run_category_import(
                 extension_wsdl_url=extension_wsdl_url,
             )
 
-            import re
             cat_slug = re.sub(r"[^a-z0-9]+", "-", category_name.lower()).strip("-")
 
-            # Ensure category exists — use external_id key for idempotency
             cat_res = await session.execute(
                 select(Category).where(
                     Category.supplier_id == supplier_id,
@@ -142,13 +138,20 @@ async def _run_category_import(
                 session.add(db_cat)
                 await session.flush()
 
+            media_items = []
+            if fetch_images and wsdl_media and products:
+                media_client = PromoStandardsClient(wsdl_media, auth_config)
+                # Fetch media for all products in this batch
+                product_ids = [p.product_id for p in products]
+                media_items = await media_client.get_media(product_ids)
+
             await upsert_products(
                 session,
                 supplier_id,
                 products,
                 inventory=None,
                 pricing=None,
-                media=None,
+                media=media_items,
                 category_id=db_cat.id
             )
 
@@ -273,6 +276,7 @@ async def import_category(
             "Product Data WSDL not found in supplier endpoint cache. "
             "Run the endpoint sync first.",
         )
+    wsdl_media = resolve_wsdl_url(endpoints, "media_content") if body.fetch_images else None
 
     job = SyncJob(
         supplier_id=supplier.id,
@@ -301,9 +305,11 @@ async def import_category(
         supplier.id,
         dict(supplier.auth_config or {}),
         wsdl_product,
+        wsdl_media,
         body.category_name,
         body.limit,
         extension_wsdl_url,
+        body.fetch_images,
     )
 
     return ImportCategoryResponse(
