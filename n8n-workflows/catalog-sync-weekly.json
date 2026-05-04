@@ -59,7 +59,7 @@
           "parameters": [
             {
               "name": "mode",
-              "value": "full"
+              "value": "full_sellable"
             }
           ]
         },
