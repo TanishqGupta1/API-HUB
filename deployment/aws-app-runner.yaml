@@ -1,0 +1,335 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  API-HUB stack — App Runner (api + frontend), ECS Fargate (n8n),
+  RDS PostgreSQL 16, Secrets Manager.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: staging
+    AllowedValues: [staging, production]
+  ApiEcrImageUri:
+    Type: String
+    Description: ECR image URI for the FastAPI backend (e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/api-hub-api:sha-abc123)
+  FrontendEcrImageUri:
+    Type: String
+    Description: ECR image URI for the Next.js frontend
+  N8nEcrImageUri:
+    Type: String
+    Description: ECR image URI for n8n (use n8nio/n8n:latest if not customising)
+    Default: n8nio/n8n:latest
+  DomainName:
+    Type: String
+    Description: Base domain (e.g. staging.example.com). Subdomains api./app./n8n. will be created.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnets for RDS and ECS Fargate tasks
+  PublicSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Public subnets for load balancer (n8n)
+  DbUsername:
+    Type: String
+    Default: vg_user
+  DbPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: At least 16 characters; stored in Secrets Manager
+
+Resources:
+
+  # ── Secrets Manager ──────────────────────────────────────────────────────────
+
+  SecretKey:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub api-hub/${EnvironmentName}/SECRET_KEY
+      Description: Fernet key for EncryptedJSON columns
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: value
+        PasswordLength: 44
+        ExcludePunctuation: false
+
+  IngestSharedSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub api-hub/${EnvironmentName}/INGEST_SHARED_SECRET
+      Description: Shared secret for n8n → FastAPI ingest endpoints
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: value
+        PasswordLength: 48
+        ExcludePunctuation: true
+
+  PostgresUrlSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn: PostgresDb
+    Properties:
+      Name: !Sub api-hub/${EnvironmentName}/POSTGRES_URL
+      Description: Async SQLAlchemy connection string
+      SecretString: !Sub
+        - postgresql+asyncpg://${DbUsername}:${DbPassword}@${Endpoint}:5432/vg_hub
+        - Endpoint: !GetAtt PostgresDb.Endpoint.Address
+
+  # ── RDS PostgreSQL ────────────────────────────────────────────────────────────
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: api-hub RDS subnets
+      SubnetIds: !Ref PrivateSubnetIds
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: api-hub RDS — allow Postgres from within VPC
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.0.0.0/8
+
+  PostgresDb:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub api-hub-${EnvironmentName}
+      Engine: postgres
+      EngineVersion: '16.3'
+      DBInstanceClass: db.t4g.small
+      AllocatedStorage: '20'
+      StorageType: gp3
+      MasterUsername: !Ref DbUsername
+      MasterUserPassword: !Ref DbPassword
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups: [!Ref DbSecurityGroup]
+      MultiAZ: !If [IsProduction, true, false]
+      PubliclyAccessible: false
+      BackupRetentionPeriod: !If [IsProduction, 14, 7]
+      StorageEncrypted: true
+      DeletionProtection: !If [IsProduction, true, false]
+
+  # ── IAM Roles ─────────────────────────────────────────────────────────────────
+
+  AppRunnerBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: build.apprunner.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+
+  ApiInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: tasks.apprunner.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SecretsRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref SecretKey
+                  - !Ref IngestSharedSecret
+                  - !Ref PostgresUrlSecret
+
+  # ── App Runner: FastAPI backend ───────────────────────────────────────────────
+
+  ApiService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Sub api-hub-api-${EnvironmentName}
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerBuildRole.Arn
+        AutoDeploymentsEnabled: false
+        ImageRepository:
+          ImageRepositoryType: ECR
+          ImageIdentifier: !Ref ApiEcrImageUri
+          ImageConfiguration:
+            Port: '8000'
+            RuntimeEnvironmentVariables:
+              - Name: ENVIRONMENT
+                Value: production
+              - Name: CORS_ORIGINS
+                Value: !Sub https://app.${DomainName}
+              - Name: N8N_BASE_URL
+                Value: !Sub https://n8n.${DomainName}
+            RuntimeEnvironmentSecrets:
+              - Name: SECRET_KEY
+                Value: !Sub '{{resolve:secretsmanager:api-hub/${EnvironmentName}/SECRET_KEY:SecretString:value}}'
+              - Name: INGEST_SHARED_SECRET
+                Value: !Sub '{{resolve:secretsmanager:api-hub/${EnvironmentName}/INGEST_SHARED_SECRET:SecretString:value}}'
+              - Name: POSTGRES_URL
+                Value: !Sub '{{resolve:secretsmanager:api-hub/${EnvironmentName}/POSTGRES_URL}}'
+      InstanceConfiguration:
+        Cpu: 1024
+        Memory: 2048
+        InstanceRoleArn: !GetAtt ApiInstanceRole.Arn
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: /health
+        Interval: 10
+        Timeout: 5
+        HealthyThreshold: 1
+        UnhealthyThreshold: 3
+
+  # ── App Runner: Next.js frontend ─────────────────────────────────────────────
+
+  FrontendService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Sub api-hub-frontend-${EnvironmentName}
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerBuildRole.Arn
+        AutoDeploymentsEnabled: false
+        ImageRepository:
+          ImageRepositoryType: ECR
+          ImageIdentifier: !Ref FrontendEcrImageUri
+          ImageConfiguration:
+            Port: '3000'
+            RuntimeEnvironmentVariables:
+              - Name: NEXT_PUBLIC_API_URL
+                Value: !Sub https://api.${DomainName}
+              - Name: NEXT_PUBLIC_N8N_URL
+                Value: !Sub https://n8n.${DomainName}
+      InstanceConfiguration:
+        Cpu: 1024
+        Memory: 2048
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: /
+        Interval: 10
+        Timeout: 5
+
+  # ── ECS Fargate: n8n (requires persistent storage) ───────────────────────────
+
+  N8nCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub api-hub-n8n-${EnvironmentName}
+
+  N8nEfs:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+
+  N8nTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: N8nSecretsRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref IngestSharedSecret
+
+  N8nExecRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  N8nTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub api-hub-n8n-${EnvironmentName}
+      Cpu: '1024'
+      Memory: '2048'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      TaskRoleArn: !GetAtt N8nTaskRole.Arn
+      ExecutionRoleArn: !GetAtt N8nExecRole.Arn
+      Volumes:
+        - Name: n8n-data
+          EFSVolumeConfiguration:
+            FilesystemId: !Ref N8nEfs
+      ContainerDefinitions:
+        - Name: n8n
+          Image: !Ref N8nEcrImageUri
+          PortMappings:
+            - ContainerPort: 5678
+          MountPoints:
+            - SourceVolume: n8n-data
+              ContainerPath: /home/node/.n8n
+          Environment:
+            - Name: N8N_HOST
+              Value: '0.0.0.0'
+            - Name: N8N_PORT
+              Value: '5678'
+            - Name: N8N_PROTOCOL
+              Value: https
+            - Name: N8N_EDITOR_BASE_URL
+              Value: !Sub https://n8n.${DomainName}
+            - Name: API_HUB_BASE_URL
+              Value: !GetAtt ApiService.ServiceUrl
+            - Name: N8N_BLOCK_ENV_ACCESS_IN_NODE
+              Value: 'false'
+          Secrets:
+            - Name: INGEST_SHARED_SECRET
+              ValueFrom: !Ref IngestSharedSecret
+
+# ── Conditions ────────────────────────────────────────────────────────────────
+
+Conditions:
+  IsProduction: !Equals [!Ref EnvironmentName, production]
+
+# ── Outputs ───────────────────────────────────────────────────────────────────
+
+Outputs:
+  ApiServiceUrl:
+    Description: App Runner URL for the FastAPI backend
+    Value: !GetAtt ApiService.ServiceUrl
+    Export:
+      Name: !Sub api-hub-${EnvironmentName}-api-url
+
+  FrontendServiceUrl:
+    Description: App Runner URL for the Next.js frontend
+    Value: !GetAtt FrontendService.ServiceUrl
+    Export:
+      Name: !Sub api-hub-${EnvironmentName}-frontend-url
+
+  PostgresEndpoint:
+    Description: RDS endpoint address
+    Value: !GetAtt PostgresDb.Endpoint.Address
+    Export:
+      Name: !Sub api-hub-${EnvironmentName}-db-endpoint
+
+  SecretKeyArn:
+    Value: !Ref SecretKey
+  IngestSecretArn:
+    Value: !Ref IngestSharedSecret
+  PostgresUrlSecretArn:
+    Value: !Ref PostgresUrlSecret

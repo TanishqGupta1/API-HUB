@@ -262,7 +262,7 @@ async def test_customer_quote_endpoint_happy_path(db, seed_supplier):
     async with AsyncClient(transport=ASGITransport(app=main.app), base_url="http://test") as client:
         resp = await client.post(f"/api/customers/{cid}/pricing/quote", json={
             "product_id": str(pid), "variant_id": str(vid), "qty": 4,
-        })
+        }, headers={"X-Ingest-Secret": "test-secret-do-not-use-in-prod"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["base_unit_price"] == "10.00"
@@ -306,6 +306,7 @@ async def test_customer_quote_endpoint_unknown_customer(db, seed_supplier):
         resp = await client.post(
             "/api/customers/00000000-0000-0000-0000-000000000000/pricing/quote",
             json={"product_id": str(pid), "variant_id": str(vid), "qty": 1},
+            headers={"X-Ingest-Secret": "test-secret-do-not-use-in-prod"},
         )
     assert resp.status_code == 404
     assert "customer" in resp.text.lower()

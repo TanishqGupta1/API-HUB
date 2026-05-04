@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { Customer } from "@/lib/types";
-import { ArrowLeft, Package, AlertTriangle, CheckCircle2, Search } from "lucide-react";
+import { ArrowLeft, Package, AlertTriangle, CheckCircle2, Search, Send, Loader2 } from "lucide-react";
 
 interface CatalogProduct {
   product_id: string;
@@ -19,6 +19,8 @@ interface CatalogProduct {
   decoration_ready: boolean;
 }
 
+type PushState = "idle" | "pushing" | "pushed" | "error";
+
 export default function CustomerCatalogPage() {
   const { id } = useParams<{ id: string }>();
 
@@ -26,6 +28,8 @@ export default function CustomerCatalogPage() {
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [pushStates, setPushStates] = useState<Record<string, PushState>>({});
+  const [pushErrors, setPushErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!id) return;
@@ -36,9 +40,32 @@ export default function CustomerCatalogPage() {
       .then(([cust, prods]) => {
         setCustomer(cust);
         setProducts(prods);
+        // Pre-mark already-pushed products
+        const initial: Record<string, PushState> = {};
+        prods.forEach((p) => {
+          if (p.ops_product_id) initial[p.product_id] = "pushed";
+        });
+        setPushStates(initial);
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  async function handlePush(e: React.MouseEvent, productId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setPushStates((s) => ({ ...s, [productId]: "pushing" }));
+    setPushErrors((s) => { const n = { ...s }; delete n[productId]; return n; });
+    try {
+      await api(`/api/customers/${id}/push/${productId}`, { method: "POST" });
+      setPushStates((s) => ({ ...s, [productId]: "pushed" }));
+    } catch (err) {
+      setPushStates((s) => ({ ...s, [productId]: "error" }));
+      setPushErrors((s) => ({
+        ...s,
+        [productId]: err instanceof Error ? err.message : "Push failed",
+      }));
+    }
+  }
 
   const filtered = products.filter(
     (p) =>
@@ -119,64 +146,109 @@ export default function CustomerCatalogPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((p) => {
             const needsDecoration = p.supplier_has_decoration_overlay && !p.decoration_ready;
+            const pushState = pushStates[p.product_id] ?? "idle";
+            const pushError = pushErrors[p.product_id];
+            const isPushed = pushState === "pushed";
+            const isPushing = pushState === "pushing";
+
             return (
-              <Link
+              <div
                 key={p.product_id}
-                href={`/storefront/vg/product/${p.product_id}`}
                 className="group flex flex-col bg-white border border-[#cfccc8] rounded-xl overflow-hidden shadow-sm hover:border-[#1e4d92] hover:shadow-md transition-all"
               >
-                {/* Image */}
-                <div className="aspect-square bg-[#f2f0ed] relative overflow-hidden">
-                  {p.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={p.image_url}
-                      alt={p.product_name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Package className="w-10 h-10 text-[#cfccc8]" />
+                {/* Image — clickable link */}
+                <Link href={`/storefront/vg/product/${p.product_id}`} className="block">
+                  <div className="aspect-square bg-[#f2f0ed] relative overflow-hidden">
+                    {p.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={p.image_url}
+                        alt={p.product_name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-10 h-10 text-[#cfccc8]" />
+                      </div>
+                    )}
+
+                    {/* Badges */}
+                    <div className="absolute top-2 left-2 flex flex-col gap-1">
+                      {needsDecoration && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 border border-yellow-300 px-2 py-0.5 text-[10px] font-bold text-yellow-800">
+                          <AlertTriangle className="w-3 h-3" />
+                          Needs Decoration
+                        </span>
+                      )}
+                      {p.supplier_has_decoration_overlay && p.decoration_ready && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Decorated
+                        </span>
+                      )}
                     </div>
-                  )}
 
-                  {/* Badges */}
-                  <div className="absolute top-2 left-2 flex flex-col gap-1">
-                    {needsDecoration && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 border border-yellow-300 px-2 py-0.5 text-[10px] font-bold text-yellow-800">
-                        <AlertTriangle className="w-3 h-3" />
-                        Needs Decoration
-                      </span>
-                    )}
-                    {p.supplier_has_decoration_overlay && p.decoration_ready && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                        <CheckCircle2 className="w-3 h-3" />
-                        Decorated
+                    {/* Pushed badge */}
+                    {isPushed && (
+                      <span className="absolute top-2 right-2 rounded-full bg-[#eef4fb] border border-[#1e4d92] px-2 py-0.5 text-[10px] font-bold text-[#1e4d92]">
+                        Pushed
                       </span>
                     )}
                   </div>
+                </Link>
 
-                  {/* Pushed badge */}
-                  {p.ops_product_id && (
-                    <span className="absolute top-2 right-2 rounded-full bg-[#eef4fb] border border-[#1e4d92] px-2 py-0.5 text-[10px] font-bold text-[#1e4d92]">
-                      Pushed
-                    </span>
-                  )}
-                </div>
-
-                {/* Info */}
+                {/* Info + Push button */}
                 <div className="p-3 flex flex-col gap-1 flex-1">
-                  <p className="text-[12px] font-bold text-[#1e1e24] leading-snug line-clamp-2">
-                    {p.product_name}
-                  </p>
-                  <div className="flex items-center gap-2 mt-auto pt-2">
-                    <span className="font-mono text-[10px] text-[#888894]">{p.supplier_sku}</span>
-                    <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-[#888894] bg-[#f2f0ed] px-1.5 py-0.5 rounded">
-                      {p.product_type}
-                    </span>
-                  </div>
+                  <Link href={`/storefront/vg/product/${p.product_id}`} className="block">
+                    <p className="text-[12px] font-bold text-[#1e1e24] leading-snug line-clamp-2">
+                      {p.product_name}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="font-mono text-[10px] text-[#888894]">{p.supplier_sku}</span>
+                      <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-[#888894] bg-[#f2f0ed] px-1.5 py-0.5 rounded">
+                        {p.product_type}
+                      </span>
+                    </div>
+                  </Link>
+
+                  {/* Push error */}
+                  {pushError && (
+                    <p className="text-[10px] text-red-600 mt-1 leading-snug">{pushError}</p>
+                  )}
+
+                  {/* Push button */}
+                  <button
+                    onClick={(e) => handlePush(e, p.product_id)}
+                    disabled={isPushing || needsDecoration}
+                    title={needsDecoration ? "Add decoration before pushing" : isPushed ? "Push again" : "Push to storefront"}
+                    className="mt-2 flex items-center justify-center gap-1.5 w-full py-1.5 rounded border text-[11px] font-bold transition-colors"
+                    style={{
+                      background: isPushed ? "var(--paper)" : "var(--blue)",
+                      color: isPushed ? "var(--blue)" : "#fff",
+                      borderColor: "var(--blue)",
+                      opacity: needsDecoration ? 0.4 : isPushing ? 0.7 : 1,
+                      cursor: needsDecoration || isPushing ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isPushing ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Pushing…
+                      </>
+                    ) : isPushed ? (
+                      <>
+                        <CheckCircle2 className="w-3 h-3" />
+                        Pushed
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3 h-3" />
+                        Push to OPS
+                      </>
+                    )}
+                  </button>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>

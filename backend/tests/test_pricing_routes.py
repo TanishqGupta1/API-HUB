@@ -161,7 +161,7 @@ async def test_customer_quote_applies_markup(db, seed_supplier):
             "product_id": str(pid),
             "variant_id": str(variant_id),
             "qty": 2,
-        })
+        }, headers={"X-Ingest-Secret": "test-secret-do-not-use-in-prod"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["base_unit_price"] == "10.00"

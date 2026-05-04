@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from modules.auth.dependencies import CurrentUser
 from modules.markup.models import MarkupRule
 from modules.push_log.models import ProductPushLog
 
@@ -40,14 +41,21 @@ async def _with_counts(db: AsyncSession, customer: Customer) -> CustomerRead:
 
 
 @router.get("", response_model=list[CustomerRead])
-async def list_customers(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Customer).order_by(Customer.created_at.desc()))
+async def list_customers(current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    if current_user.role == "customer_admin":
+        result = await db.execute(
+            select(Customer).where(Customer.id == current_user.customer_id)
+        )
+    else:
+        result = await db.execute(select(Customer).order_by(Customer.created_at.desc()))
     customers = result.scalars().all()
     return [await _with_counts(db, c) for c in customers]
 
 
 @router.post("", response_model=CustomerRead, status_code=201)
-async def create_customer(body: CustomerCreate, db: AsyncSession = Depends(get_db)):
+async def create_customer(body: CustomerCreate, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    if current_user.role != "vg_admin":
+        raise HTTPException(403, "Only VG admins can create customers")
     customer = Customer(
         name=body.name,
         ops_base_url=body.ops_base_url,
@@ -62,7 +70,9 @@ async def create_customer(body: CustomerCreate, db: AsyncSession = Depends(get_d
 
 
 @router.get("/{customer_id}", response_model=CustomerRead)
-async def get_customer(customer_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_customer(customer_id: UUID, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    if current_user.role == "customer_admin" and current_user.customer_id != customer_id:
+        raise HTTPException(403, "Access denied")
     result = await db.execute(select(Customer).where(Customer.id == customer_id))
     customer = result.scalar_one_or_none()
     if not customer:
@@ -74,13 +84,19 @@ async def get_customer(customer_id: UUID, db: AsyncSession = Depends(get_db)):
 async def update_customer(
     customer_id: UUID,
     body: dict,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.role == "customer_admin" and current_user.customer_id != customer_id:
+        raise HTTPException(403, "Access denied")
     result = await db.execute(select(Customer).where(Customer.id == customer_id))
     customer = result.scalar_one_or_none()
     if not customer:
         raise HTTPException(404, "Customer not found")
-    for field in ("name", "ops_base_url", "ops_token_url", "ops_client_id", "is_active"):
+    allowed_fields = ("name", "ops_base_url", "ops_token_url", "ops_client_id")
+    if current_user.role == "vg_admin":
+        allowed_fields = (*allowed_fields, "is_active")
+    for field in allowed_fields:
         if field in body:
             setattr(customer, field, body[field])
     if "ops_client_secret" in body and body["ops_client_secret"]:
@@ -91,7 +107,9 @@ async def update_customer(
 
 
 @router.delete("/{customer_id}")
-async def delete_customer(customer_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_customer(customer_id: UUID, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    if current_user.role != "vg_admin":
+        raise HTTPException(403, "Only VG admins can delete customers")
     result = await db.execute(select(Customer).where(Customer.id == customer_id))
     customer = result.scalar_one_or_none()
     if not customer:
@@ -102,7 +120,9 @@ async def delete_customer(customer_id: UUID, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/{customer_id}/test")
-async def test_customer(customer_id: UUID, db: AsyncSession = Depends(get_db)):
+async def test_customer(customer_id: UUID, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    if current_user.role == "customer_admin" and current_user.customer_id != customer_id:
+        raise HTTPException(403, "Access denied")
     result = await db.execute(select(Customer).where(Customer.id == customer_id))
     customer = result.scalar_one_or_none()
     if not customer:

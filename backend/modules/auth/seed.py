@@ -1,0 +1,22 @@
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .models import User
+from .security import hash_password
+
+DEFAULT_EMAIL = "admin@localhost"
+DEFAULT_PASSWORD = "admin"
+
+
+async def ensure_default_admin(db: AsyncSession) -> None:
+    count = (await db.execute(select(func.count()).select_from(User))).scalar()
+    if count and count > 0:
+        return
+    user = User(
+        email=DEFAULT_EMAIL,
+        hashed_password=hash_password(DEFAULT_PASSWORD),
+        role="vg_admin",
+    )
+    db.add(user)
+    await db.commit()
+    print(f"[auth] Created default admin — email: {DEFAULT_EMAIL}  password: {DEFAULT_PASSWORD}")

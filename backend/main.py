@@ -18,6 +18,8 @@ import modules.master_options.models  # noqa: F401
 import modules.push_mappings.models  # noqa: F401
 import modules.ops_config.models  # noqa: F401
 import modules.decorations.models  # noqa: F401
+import modules.auth.models  # noqa: F401
+import modules.audit_log.models  # noqa: F401
 
 from modules.suppliers.models import Supplier
 from modules.catalog.models import Product, ProductVariant
@@ -33,7 +35,7 @@ from modules.n8n_proxy.routes import router as n8n_proxy_router
 from modules.ps_directory.routes import router as ps_router
 from modules.promostandards.routes import router as promostandards_sync_router
 from modules.sync_jobs.routes import router as sync_jobs_router
-from modules.ops_push.routes import router as ops_push_router
+from modules.ops_push.routes import router as ops_push_router, push_action_router as ops_push_action_router
 from modules.push_candidates.routes import router as push_candidates_router
 from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
@@ -42,9 +44,16 @@ from modules.pricing.routes import router as pricing_router, customer_router as 
 
 import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
 import modules.rest_connector.fourover_adapter  # noqa: F401  registers FourOverAdapter
+import modules.rest_connector.ss_adapter  # noqa: F401  registers SSAdapter
+import modules.promostandards.sanmar_adapter  # noqa: F401  registers SanMarAdapter
+import modules.promostandards.alphabroder_adapter  # noqa: F401  registers AlphabroderAdapter
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
 from modules.decorations.routes import router as decorations_router
+from modules.auth.routes import router as auth_router
+from modules.auth.dependencies import get_current_user
+from modules.audit_log.routes import router as audit_log_router
+from modules.audit_log.middleware import AuditLogMiddleware
 
 
 # Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
@@ -82,6 +91,53 @@ _SCHEMA_UPGRADES: list[str] = [
         updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (customer_id, product_id)
     )""",
+    # Fix SanMar MultipleResultsFound: old (product_id, color, size) constraint breaks with NULL values.
+    # Drop it and add a clean (product_id, sku) unique constraint instead.
+    "ALTER TABLE product_variants DROP CONSTRAINT IF EXISTS uq_variant_product_color_size",
+    # Inline dedup before adding unique constraint (Blocker 3)
+    """DO $$ BEGIN
+    DELETE FROM product_variants
+    WHERE id IN (
+        SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY product_id, sku ORDER BY id) as rn
+            FROM product_variants
+            WHERE sku IS NOT NULL
+        ) sub
+        WHERE rn > 1
+    );
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_variants_product_sku') THEN
+        ALTER TABLE product_variants ADD CONSTRAINT uq_product_variants_product_sku UNIQUE (product_id, sku);
+    END IF;
+    END $$""",
+    "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS supplier_image_url TEXT",
+    "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS checksum VARCHAR(64)",
+    "CREATE INDEX IF NOT EXISTS idx_product_images_checksum ON product_images(checksum)",
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_image_fetch_at TIMESTAMP WITH TIME ZONE NULL",
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_image_fetch_attempt_at TIMESTAMP WITH TIME ZONE NULL",
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_images_supplier_url') THEN ALTER TABLE product_images ADD CONSTRAINT uq_product_images_supplier_url UNIQUE (product_id, supplier_image_url); END IF; END $$",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS push_name_prefix VARCHAR(32)",
+    """CREATE TABLE IF NOT EXISTS customer_product_selections (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        status VARCHAR(50) NOT NULL DEFAULT 'selected',
+        added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        pushed_at TIMESTAMPTZ,
+        CONSTRAINT uq_customer_product_selection UNIQUE (customer_id, product_id)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_customer_product_selections_customer ON customer_product_selections(customer_id)",
+    "CREATE INDEX IF NOT EXISTS idx_customer_product_selections_product ON customer_product_selections(product_id)",
+    """CREATE TABLE IF NOT EXISTS audit_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_email VARCHAR(255),
+        user_id VARCHAR(36),
+        method VARCHAR(10) NOT NULL,
+        path TEXT NOT NULL,
+        status_code INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_email ON audit_logs(user_email)",
 ]
 
 
@@ -105,23 +161,45 @@ async def lifespan(app: FastAPI):
 
     if ENVIRONMENT == "development":
         from modules.suppliers.demo_seed import ensure_vg_ops_supplier
+        from modules.auth.seed import ensure_default_admin
 
         async with async_session() as db:
             await ensure_vg_ops_supplier(db)
+            await ensure_default_admin(db)
 
-    # Start the background scheduler
-    asyncio.create_task(start_scheduler(interval_hours=24))
-    
+    # Start the background scheduler (sleeps first; no-op if DISABLE_SCHEDULER=true)
+    _scheduler_task = asyncio.create_task(start_scheduler(interval_hours=24))
+
     yield
+
+    # Graceful shutdown: cancel scheduler before closing DB pool
+    _scheduler_task.cancel()
+    try:
+        await _scheduler_task
+    except asyncio.CancelledError:
+        pass
     await engine.dispose()
+    from modules.n8n_proxy import routes as _n8n_proxy
+    if _n8n_proxy._http_client is not None:
+        await _n8n_proxy._http_client.aclose()
 
 
 import os
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173").split(",")
 
-app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
+app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(AuditLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -131,32 +209,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
-app.include_router(suppliers_router)
-app.include_router(customers_router)
-app.include_router(markup_router)
-app.include_router(markup_push_router)
-app.include_router(push_log_router)
-app.include_router(push_status_router)
-app.include_router(ps_router)
-app.include_router(catalog_router)
-app.include_router(categories_router)
+# Auth — no token required on these routes
+app.include_router(auth_router)
+# Ingest — uses INGEST_SHARED_SECRET, not JWT
 app.include_router(catalog_ingest_router)
 app.include_router(master_options_ingest_router)
-app.include_router(master_options_router)
-app.include_router(master_options_product_config_router)
-app.include_router(n8n_proxy_router)
-app.include_router(sync_jobs_router)
-app.include_router(ops_push_router)
-app.include_router(push_candidates_router)
-app.include_router(push_mappings_router)
-app.include_router(ops_config_router)
-app.include_router(category_import_router)
-app.include_router(promostandards_sync_router)
-app.include_router(import_jobs_router)
-app.include_router(pricing_router)
-app.include_router(pricing_customer_router)
-app.include_router(decorations_router)
+
+# All admin-facing routers require a valid JWT
+_auth = [Depends(get_current_user)]
+app.include_router(suppliers_router, dependencies=_auth)
+app.include_router(customers_router, dependencies=_auth)
+app.include_router(markup_router, dependencies=_auth)
+app.include_router(markup_push_router, dependencies=_auth)
+app.include_router(push_log_router, dependencies=_auth)
+app.include_router(push_status_router, dependencies=_auth)
+app.include_router(ps_router, dependencies=_auth)
+app.include_router(catalog_router, dependencies=_auth)
+app.include_router(categories_router, dependencies=_auth)
+app.include_router(master_options_router, dependencies=_auth)
+app.include_router(master_options_product_config_router, dependencies=_auth)
+app.include_router(n8n_proxy_router, dependencies=_auth)
+app.include_router(sync_jobs_router, dependencies=_auth)
+app.include_router(ops_push_router, dependencies=_auth)
+app.include_router(ops_push_action_router, dependencies=_auth)
+app.include_router(push_candidates_router, dependencies=_auth)
+app.include_router(push_mappings_router, dependencies=_auth)
+app.include_router(ops_config_router, dependencies=_auth)
+app.include_router(category_import_router, dependencies=_auth)
+app.include_router(promostandards_sync_router, dependencies=_auth)
+app.include_router(import_jobs_router, dependencies=_auth)
+app.include_router(pricing_router, dependencies=_auth)
+app.include_router(pricing_customer_router, dependencies=_auth)
+app.include_router(decorations_router, dependencies=_auth)
+app.include_router(audit_log_router, dependencies=_auth)
 
 
 @app.get("/health")

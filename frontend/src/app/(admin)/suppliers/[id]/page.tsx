@@ -7,7 +7,17 @@ import { log } from "@/lib/log";
 import { Supplier } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, ShieldCheck, Trash2, Lock, Globe, Package, Calendar, Activity } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Trash2, Lock, Globe, Package, Calendar, Activity, Cpu } from "lucide-react";
+
+const ADAPTER_OPTIONS = [
+  { value: "", label: "— None (manual / legacy)" },
+  { value: "OPSAdapter", label: "OPSAdapter — OnPrintShop GraphQL" },
+  { value: "SanMarAdapter", label: "SanMarAdapter — SanMar PromoStandards SOAP" },
+  { value: "AlphabroderAdapter", label: "AlphabroderAdapter — Alphabroder PromoStandards SOAP" },
+  { value: "SSAdapter", label: "SSAdapter — S&S Activewear REST" },
+  { value: "FourOverAdapter", label: "FourOverAdapter — 4Over REST + HMAC" },
+  { value: "PromoStandardsAdapter", label: "PromoStandardsAdapter — Generic SOAP" },
+];
 
 export default function SupplierDetailPage() {
   const router = useRouter();
@@ -167,6 +177,25 @@ export default function SupplierDetailPage() {
                   className="h-11 border-[#cfccc8] font-mono text-[13px] uppercase"
                   placeholder="e.g. SANMAR"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[13px] font-semibold text-[#484852] mb-1.5 flex items-center gap-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-[#1e4d92]" />
+                  Adapter Class
+                </label>
+                <select
+                  value={supplier.adapter_class || ""}
+                  onChange={(e) => setSupplier({ ...supplier, adapter_class: e.target.value || null })}
+                  className="w-full h-11 px-3 border border-[#cfccc8] rounded-md bg-white font-mono text-[13px] text-[#1e1e24] focus:outline-none focus:ring-2 focus:ring-[#1e4d92] focus:border-transparent"
+                >
+                  {ADAPTER_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-[#888894] mt-1.5">
+                  Required for scheduled sync. Must match a registered adapter in the backend.
+                </p>
               </div>
             </div>
           </div>

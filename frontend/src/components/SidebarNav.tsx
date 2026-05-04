@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { clearSession, getUser, type AuthUser } from "@/lib/auth";
 
 const NAV_ITEMS = [
   {
@@ -138,6 +140,37 @@ const NAV_ITEMS = [
     section: "Actions",
     items: [
       {
+        href: "/monitoring",
+        label: "System Health",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+          </svg>
+        ),
+      },
+      {
+        href: "/audit-log",
+        label: "Audit Log",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
+        ),
+      },
+      {
+        href: "/push-log",
+        label: "Push Log",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+          </svg>
+        ),
+      },
+      {
         href: "/api-registry",
         label: "API Registry",
         icon: (
@@ -148,12 +181,35 @@ const NAV_ITEMS = [
           </svg>
         ),
       },
+      {
+        href: "/settings",
+        label: "Settings",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        ),
+      },
     ],
   },
 ];
 
 export default function SidebarNav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    setUser(getUser());
+  }, []);
+
+  function handleLogout() {
+    clearSession();
+    router.push("/login");
+  }
+
+  const isVGAdmin = user?.role === "vg_admin";
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -178,6 +234,12 @@ export default function SidebarNav() {
     return false;
   };
 
+  // customer_admin only sees their storefront — hide supplier/config management
+  const visibleGroups = NAV_ITEMS.filter((group) => {
+    if (isVGAdmin) return true;
+    return group.section === "Storefront";
+  });
+
   return (
     <nav className="sidebar">
       <div className="sidebar-header">
@@ -185,7 +247,7 @@ export default function SidebarNav() {
         <div className="sidebar-subtitle">Blueprint v0.3 | Universal Connector</div>
       </div>
 
-      {NAV_ITEMS.map((group) => (
+      {visibleGroups.map((group) => (
         <div className="nav-group" key={group.section}>
           <div className="nav-section">{group.section}</div>
           {group.items.map((item) => (
@@ -204,11 +266,38 @@ export default function SidebarNav() {
       ))}
 
       <div style={{ marginTop: "auto", padding: "24px", borderTop: "1px dashed var(--border)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--green)" }} />
-          <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase" }}>
-            Engine Online
-          </span>
+        {user && (
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--ink)", marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {user.email}
+            </div>
+            <div style={{ fontSize: "10px", fontFamily: "var(--font-mono)", color: "var(--ink-muted)", textTransform: "uppercase" }}>
+              {user.role === "vg_admin" ? "VG Admin" : "Customer Admin"}
+            </div>
+          </div>
+        )}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--green)" }} />
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase" }}>
+              Online
+            </span>
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{
+              fontSize: "11px",
+              fontWeight: 600,
+              color: "var(--ink-muted)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "2px 6px",
+              borderRadius: "3px",
+            }}
+          >
+            Sign out
+          </button>
         </div>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--ink-faint)", marginTop: "4px" }}>
           v0.3.0-alpha

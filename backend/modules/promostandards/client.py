@@ -135,7 +135,7 @@ class PromoStandardsClient:
 
     def get_service_with_history(self) -> tuple[Any, Any]:
         """Return (service, history_plugin). History allows raw XML access."""
-        if self._service is not None and self._history is not None:
+        if self._service is not None:
             return self._service, self._history
 
         from zeep.settings import Settings
