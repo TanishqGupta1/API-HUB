@@ -222,27 +222,3 @@ This tells Next.js not to bundle these two packages — they stay as external `r
 The build failure was a latent bug that would have broken any production deployment. The `"use client"` directive on `configure/page.tsx` does not prevent Next.js from running the page's module graph on the server during static generation — it only affects hydration. Any server-side import of `jsdom` without the external package flag will silently work in dev (webpack dev mode handles `__dirname` differently) but fail in production builds.
 
 Catching this in the build step — rather than during a live deployment — is exactly what final verification is for.
-
-
-2026-04-27-phase0-hygiene.md
-
-Task	File	What
-Task 5	|| frontend/tailwind.config.js	|| Delete it — dead file, .ts version is live
-
-Task 7	|| frontend/src/components/mappings/sanmar-mapping-panel.tsx:52	|| Replace console.error("Polling error", e) with log.error(...)
-
-Task 9 ||	docs/code_review_all_tasks.md	|| Update resolution state for each item
-
-Task 11	—	|| Final lint + build + PR
-
-
-2026-04-24-aws-deployment-readiness.md
-
-Task	File	What
-Task 6	||  docker-compose.yml + .env.example	 ||   Add API_HUB_BASE_URL + CORS_ORIGINS env passthrough to services
-
-Task 7	 || n8n-nodes-onprintshop/.npmignore	  || Create it so package installs cleanly from GitHub
-
-Task 11	||deployment/aws-app-runner.yaml + deployment/README.md	|| AWS App Runner config — only file truly missing
-
-Task 12	|| backend/seed_demo.py	|| Set product.category string field (currently not set, breaks PDP demo)

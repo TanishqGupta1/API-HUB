@@ -115,7 +115,7 @@ Resources:
   AppRunnerECRRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: AppRunnerECRAccessRole
+      RoleName: !Sub "${AWS::StackName}-ecr-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
