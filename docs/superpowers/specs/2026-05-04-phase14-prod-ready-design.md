@@ -241,6 +241,136 @@ Resolve before D ships:
 - Production AWS account: shared with staging, or separate?
 - Existing OPS OAuth credentials in current n8n: who handles the export-import procedure?
 
+## Discussion log + decisions
+
+This section records the decisions made during the brainstorm so future readers (and team members joining the work) can see the tradeoffs and pick up the thread without re-litigating.
+
+### D1 — Why is `host.docker.internal` a problem?
+
+**Discussion:** It works in dev (Docker Desktop on macOS) and gets baked into `.env.example` as the default for `API_BASE_URL`. The string then leaks into every config file that's copied from the example. It's a Docker-Desktop-only DNS name; doesn't resolve on Linux Docker without `--add-host`, doesn't exist on ECS, k8s, App Runner, n8n.cloud, etc.
+
+**Decision:** Promote inter-service URLs from "defaults with localhost values" to "required env vars per environment, no defaults in production." Local dev sets values in `.env`. Cloud envs set values per task definition. Subsystem B implements.
+
+**Alternative considered:** Conditional defaults based on `ENVIRONMENT` flag. Rejected — config that depends on a flag-of-a-flag is hard to debug. Fail-loud is clearer.
+
+### D2 — Do we even need n8n?
+
+**Discussion:** n8n owns OPS push, scheduling, OAuth2 token mgmt for OPS, and the OnPrintShop custom node. All are replaceable with FastAPI + `httpx` + `tenacity` + EventBridge. We considered ripping it out.
+
+What we'd lose: visual workflow editor (non-engineers can tweak), drag-drop node ecosystem for future suppliers, sales-narrative value ("we have a workflow engine").
+
+What we'd gain: one less service, no shared-secret boundary inside our own stack, simpler deploy.
+
+**Decision:** Keep n8n in V1. Treat it as a *pluggable* outbound webhook target — backend POSTs payload to a configurable URL, n8n is just one possible consumer. This decoupling (subsystem B) keeps the option open to swap later (Lambda, Render worker, native Python queue) without rewriting the backend.
+
+**Tradeoff accepted:** ~$30–50/mo running cost + the operational complexity of an extra service, in exchange for the workflow editor and node ecosystem.
+
+### D3 — n8n.cloud Starter doesn't support community nodes
+
+**Discussion:** "Any cloud n8n" was the original ask. Reality: n8n.cloud Starter blocks community nodes; OnPrintShop node won't load. n8n.cloud Pro+ allows them but costs more.
+
+**Decision:** Phase 14 supports any n8n that allows community nodes — n8n.cloud Pro+, Render, Fly, ECS Fargate, self-hosted Docker. Documented as a constraint in the README. n8n.cloud Starter explicitly unsupported.
+
+### D4 — Custom node distribution: npm vs Docker image
+
+**Discussion:** Three options for shipping the OnPrintShop n8n node:
+- Publish `@visualgraphx/n8n-nodes-onprintshop` to npm — clean, standard, but requires the npm scope to be registered (slow ops process) and n8n.cloud nodes-via-npm flow varies by tier
+- GitHub Packages — works, but requires n8n config to authenticate with a GH token
+- Build a custom n8n Docker image with the node baked in via `N8N_CUSTOM_EXTENSIONS` — works everywhere we control the Docker host
+
+**Decision:** Custom Docker image. Subsystem B builds `n8n.Dockerfile` (or `n8n-nodes-onprintshop/Dockerfile.n8n`), pushed to ECR alongside backend + frontend. Used in dev compose and ECS Fargate.
+
+**Alternative kept open:** Publish to npm later if/when we want non-Docker n8n hosts to install the node.
+
+### D5 — Deploy target: EC2 vs App Runner vs ECS Fargate
+
+**Discussion:** Three real options:
+
+| Target | Cost (rough) | Pros | Cons |
+|--------|--------------|------|------|
+| Single EC2 + docker-compose | ~$20/mo | Cheapest, fastest to ship | No HA, manual TLS, manual backups, n8n exposed unless firewalled |
+| App Runner | ~$50/mo | Managed compute, auto-HTTPS, simple | No persistent volumes for n8n, no Cloud Map service discovery |
+| ECS Fargate | ~$130/mo | Real prod posture, EFS for n8n, Cloud Map, IAM per task | Most complex CFN, ALB cost adds floor |
+
+**Decision:** ECS Fargate. App Runner can't host n8n (no volumes). EC2 is fine for hobby projects but lacks HA + TLS + service discovery out of the box. Subsystem D writes the ECS CFN.
+
+**Cost accepted:** ~$130/mo per environment. Single staging env to start; production env added when product-ready.
+
+### D6 — Subsystem ordering
+
+**Discussion:** Three orderings considered:
+- A → B → C → D: foundation, contracts, surface, infra
+- B → A → C → D: contracts first, then container hardening
+- C parallel to B: auth surface independent of n8n contract changes
+
+**Decision:** A → B → C(parallel-eligible) → D. A is foundation (startup checks live in the code paths B + C extend). B before D so D's task definitions inject the env vars B introduces. C is auth-surface-only; doesn't depend on B. If two devs work concurrently, C can land alongside B. D last because it needs A + B + C in main to reflect real prod posture.
+
+### D7 — Single mega-PR vs four separate PRs
+
+**Discussion:** All four subsystems on one `dev/phase14-prod-ready` branch is appealing for "ship in one shot." Reality: ~1500 LOC of spread across auth + infra + config + Dockerfiles is unreviewable, and a single rollback would lose unrelated work.
+
+**Decision:** Four separate branches off main, each with its own PR. Phase 14 closes when all four PRs merge + a staging ECS deploy succeeds. No long-running parent branch.
+
+### D8 — PR #79 fate
+
+**Discussion:** PR #79 contains ~80% of the auth code we want for subsystem C, plus audit log, plus alembic, plus a (broken) CFN template. Latest commit on #79 introduced unresolved git conflict markers in the CFN file — `aws cloudformation validate-template` would fail. Merging it ships broken YAML to main.
+
+**Decision:** Don't merge #79. Leave it open as the cherry-pick source for subsystem C (auth + audit + alembic files only). Subsystem D writes a fresh CFN; ignores #79's deployment artifacts. Net waste: ~20% of #79's diff (CFN template + a few config tweaks).
+
+### D9 — Token storage: localStorage vs httpOnly cookie
+
+**Discussion:** PR #79 stores JWT in `localStorage` and additionally writes a non-httpOnly cookie for the Next.js middleware to read. Comment in code acknowledges the XSS exposure. Project also server-renders DOMPurify for storefront descriptions — XSS surface is non-trivial.
+
+**Decision:** Backend `/api/auth/login` sets the JWT as httpOnly + Secure + SameSite=Lax cookie. Body returns user info only, no token. Frontend `lib/auth.ts` drops localStorage usage. `api.ts` drops `Authorization: Bearer` injection (cookie auto-sends). Subsystem C implements.
+
+**V2 follow-up:** Refresh-token rotation. V1 ships 8-hour access token + re-login on expiry.
+
+### D10 — `SECRET_KEY` reused for JWT signing vs separate
+
+**Discussion:** PR #79 uses `SECRET_KEY` (Fernet) as the JWT HMAC key. Mixing key purposes means rotating one rotates the other. Fernet rotation invalidates all `EncryptedJSON` rows; JWT rotation just invalidates active sessions — these have very different operational profiles.
+
+**Decision:** Separate `JWT_SECRET_KEY` env var. Falls back to `SECRET_KEY` only in dev, with a startup warning. In prod, must be explicitly set.
+
+### D11 — Default admin auto-seed
+
+**Discussion:** PR #79 (after fixes) auto-creates `admin@localhost` with a random password when DB has 0 users and `ENVIRONMENT=development`. Mitigates the original `admin/admin` risk but still creates a known user account.
+
+**Decision:** Drop the auto-seed entirely. First-run flow: empty DB → frontend redirects to `/setup` → user creates first admin via `POST /api/auth/setup` (which 409s if any user already exists). No magic admin account.
+
+### D12 — Storefront subdomain split
+
+**Discussion:** Frontend Next.js app serves both admin (`/(admin)/...`) and public storefront (`/storefront/...`). Two options:
+- Keep on one host, whitelist `/storefront/*` in middleware (cheap)
+- Split into two Next.js apps on `app.example.com` (admin) and `shop.example.com` (storefront) — clean boundaries, easier Cloudflare cache rules, separate deploy cadence
+
+**Decision:** Keep on one host for V1. Whitelist `/storefront/*` in `middleware.ts`. Split is V2 if needed.
+
+### D13 — n8n single-task on Fargate = downtime during deploys
+
+**Discussion:** EFS supports multi-task mounts but n8n is single-writer (workflow execution state in `~/.n8n`). Task count must stay at 1. Rolling deploys briefly stop the n8n editor and any running workflow executions.
+
+**Decision:** Accept 30-second downtime windows during deploys. Schedule deploys outside business hours. If downtime becomes painful, V2 explores moving cron schedules to EventBridge + FastAPI cron, leaving n8n only for on-demand workflows.
+
+### D14 — Multi-region / DR
+
+**Discussion:** Cross-region RDS replicas, multi-region ALB, etc. — out of scope for V1.
+
+**Decision:** Single region (us-east-1 default). RDS automated backups (7 days staging, 14 days production). RPO ~1 hour, RTO ~30 min. Documented in deploy README.
+
+### D15 — `client_secret` in n8n webhook payload
+
+**Discussion:** Backend currently sends `customer.ops_auth_config.client_secret` in the JSON payload to the n8n webhook so n8n can call OPS. This is plaintext over HTTP.
+
+**Decision (V1):** Webhook URL must point inside the VPC (Cloud Map private DNS). Documented constraint. Subsystem B's contract doc spells it out.
+
+**V2 follow-up:** Move OPS credentials to AWS Secrets Manager and have n8n read them directly via IAM-based access. Backend stops shipping secrets in payloads.
+
+### D16 — Storefront cookie auth
+
+**Discussion:** Storefront is buyer-facing. Should it have its own auth (customer login) or stay anonymous?
+
+**Decision:** Stay anonymous in V1. Storefront serves catalog + product detail + cart-as-localStorage. Phase 15+ adds buyer accounts if the product needs order history etc.
+
 ## Sources
 
 - PR #79: https://github.com/VisualGraphxLLC/API-HUB/pull/79 (cherry-pick source for C)
