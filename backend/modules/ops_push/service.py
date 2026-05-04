@@ -1,9 +1,12 @@
 import uuid
+import os
+import httpx
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
+from database import async_session
 
 from modules.catalog.models import Product
 from modules.customers.models import Customer
@@ -54,9 +57,11 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
     
     # 4. Handle name conflict (Internal logic for now)
     desired_name = payload["name"]
-    # For Phase 8/9, we will implement real OPS name checking via n8n or GraphQL
-    # For now, we apply standard prefixes
-    prefix = "SM-" if (supplier.promostandards_code and supplier.promostandards_code.upper() == "SANMAR") else "VG-"
+    # Use supplier.promostandards_code or fall back to slug-derived prefix
+    if supplier.promostandards_code and supplier.promostandards_code.upper() == "SANMAR":
+        prefix = "SM-"
+    else:
+        prefix = f"{supplier.slug[:2].upper()}-"
     payload["name"] = f"{prefix}{desired_name}"
 
     # 5. Check push_mappings for idempotency
@@ -93,11 +98,48 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
             push_log.ops_product_id = "PENDING"
             
         await db.commit()
-        return {"status": "success", "message": "Product payload prepared for n8n push.", "payload": payload}
+        await db.refresh(push_log)
+
+        # 7. Trigger n8n webhook
+        webhook_url = os.getenv("N8N_PUSH_WEBHOOK_URL")
+        if webhook_url:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await client.post(webhook_url, json={
+                        "push_log_id": str(push_log.id),
+                        "customer_id": str(customer_id),
+                        "product_id": str(product_id),
+                        "payload": payload,
+                        "ops_auth": {
+                            "base_url": customer.ops_base_url,
+                            "token_url": customer.ops_token_url,
+                            "client_id": customer.ops_client_id,
+                            "client_secret": customer.ops_auth_config.get("client_secret")
+                        }
+                    })
+            except Exception as trigger_err:
+                # Log but don't fail the whole request (the job is queued in DB)
+                print(f"Failed to trigger n8n: {trigger_err}")
+
+        return {
+            "status": "pending", 
+            "push_log_id": str(push_log.id),
+            "message": "Product payload prepared and queued for n8n push.", 
+            "payload": payload
+        }
         
     except Exception as e:
         await db.rollback()
-        # Create a fresh session for the error log if needed, or just log to stdout
-        # Since we're in a route dependency, we can't easily get a new session without a factory
-        # For now, we rely on the caller's session management
+        # Use a fresh session for the error log so it survives the rollback
+        async with async_session() as audit_session:
+            fail_log = ProductPushLog(
+                product_id=product_id,
+                customer_id=customer_id,
+                status="failed",
+                error=str(e),
+                pushed_at=datetime.now(timezone.utc)
+            )
+            audit_session.add(fail_log)
+            await audit_session.commit()
+            
         return {"status": "failed", "message": str(e)}

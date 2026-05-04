@@ -58,8 +58,8 @@ async def test_push_ready_product(setup_data, client: AsyncClient, db):
     product_id = setup_data["product"].id
     
     res = await client.post(f"/api/push/{customer_id}/{product_id}")
-    assert res.status_code == 200
-    assert res.json()["status"] == "success"
+    assert res.status_code == 202
+    assert res.json()["status"] == "pending"
     
     # Check mappings (should NOT be created yet)
     mapping = (await db.execute(
