@@ -1,0 +1,13 @@
+# Source files — only dist/ ships
+nodes/
+credentials/
+scripts/
+gulpfile.js
+tsconfig.json
+
+# Dev dependencies and build artefacts
+node_modules/
+*.tgz
+
+# Docs that don't need to ship
+OPS-NODE-GAP-ANALYSIS.md
