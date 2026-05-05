@@ -24,7 +24,10 @@ services:
     environment:
       - POSTGRES_URL=postgresql+asyncpg://${POSTGRES_USER:-vg_user}:${POSTGRES_PASSWORD:-vg_pass}@postgres:5432/${POSTGRES_DB:-vg_hub}
       - SECRET_KEY=${SECRET_KEY:-y0uR_s3cr3t_k3y_h3r3}
-      - N8N_BASE_URL=http://n8n:5678
+      - N8N_API_BASE_URL=${N8N_API_BASE_URL:-http://n8n:5678}
+      - N8N_WEBHOOK_BASE_URL=${N8N_WEBHOOK_BASE_URL:-http://n8n:5678}
+      - N8N_PUSH_WEBHOOK_URL=${N8N_PUSH_WEBHOOK_URL:-}
+      - API_BASE_URL=${API_BASE_URL:-http://api:8000}
       - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173}
     volumes:
@@ -44,7 +47,7 @@ services:
       - NODE_FUNCTION_ALLOW_EXTERNAL=*
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET}
-      - API_BASE_URL=${API_BASE_URL:-http://host.docker.internal:8000}
+      - API_BASE_URL=${API_BASE_URL:-http://api:8000}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n-nodes-onprintshop:/opt/custom-nodes/n8n-nodes-onprintshop
