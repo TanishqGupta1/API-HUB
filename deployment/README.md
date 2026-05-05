@@ -1,106 +1,93 @@
-# Deployment — AWS App Runner
+# Deployment — AWS ECS Fargate
 
-This folder contains the CloudFormation template to deploy API-HUB to AWS App Runner.
+API-HUB runs on AWS ECS Fargate. Three services in one cluster behind
+a shared ALB:
 
-Two services are deployed:
-- **api-hub-backend** — FastAPI on port 8000
-- **api-hub-frontend** — Next.js standalone on port 3000
+| Subdomain                   | Service             | Container | Port |
+|-----------------------------|---------------------|-----------|------|
+| `api.<domain>`              | api-hub-backend     | FastAPI   | 8000 |
+| `app.<domain>`              | api-hub-frontend    | Next.js   | 3000 |
+| `n8n.<domain>`              | api-hub-n8n         | n8n + OnPrintShop | 5678 |
 
----
+Inter-service traffic uses Cloud Map private DNS (e.g.
+`backend.api-hub.local:8000`). RDS Postgres in private subnets, EFS
+for n8n state, all secrets in Secrets Manager.
 
-## Prerequisites
+## One-time prerequisites
 
-1. AWS CLI configured (`aws configure`)
-2. An ECR repository for each image
-3. An RDS PostgreSQL 16 instance (or compatible managed Postgres)
-4. Docker installed locally to build and push images
+1. **Route 53 hosted zone** for the chosen domain (e.g. `staging.example.com`)
+2. **ACM certificate** in the deploy region covering `*.<domain>`
+3. **VPC** with at least 2 public + 2 private subnets and a NAT gateway
+4. **GitHub OIDC role** in IAM trusting `repo:VisualGraphxLLC/API-HUB:ref:refs/heads/main`
+   with permissions: ECR push, CloudFormation deploy, ECS register/run-task,
+   PassRole on the task roles, Secrets Manager Read.
+5. **GitHub repo secret** `AWS_OIDC_ROLE_ARN` set to the role ARN above
 
----
+Update `deployment/ecs/parameters/staging.json` with the VPC ID, subnet
+IDs, hosted zone ID, ACM cert ARN, and domain.
 
-## Step 1 — Build and push Docker images
-
-```bash
-AWS_ACCOUNT=123456789012
-AWS_REGION=us-east-1
-
-# Authenticate Docker to ECR
-aws ecr get-login-password --region $AWS_REGION \
-  | docker login --username AWS --password-stdin $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
-
-# Create ECR repos (one-time)
-aws ecr create-repository --repository-name api-hub-backend --region $AWS_REGION
-aws ecr create-repository --repository-name api-hub-frontend --region $AWS_REGION
-
-# Build + push backend
-docker build -t api-hub-backend ./backend
-docker tag api-hub-backend:latest $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/api-hub-backend:latest
-docker push $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/api-hub-backend:latest
-
-# Build + push frontend
-docker build --target runner -t api-hub-frontend ./frontend
-docker tag api-hub-frontend:latest $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/api-hub-frontend:latest
-docker push $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/api-hub-frontend:latest
-```
-
----
-
-## Step 2 — Deploy the CloudFormation stack
+## First deploy
 
 ```bash
+# Local one-shot, before CI is wired up:
 aws cloudformation deploy \
-  --template-file deployment/aws-app-runner.yaml \
-  --stack-name api-hub \
+  --template-file deployment/ecs/api-hub.yaml \
+  --stack-name api-hub-staging \
+  --region us-east-1 \
   --capabilities CAPABILITY_IAM \
   --parameter-overrides \
-    PostgresUrl="postgresql+asyncpg://user:pass@your-rds-host:5432/vg_hub" \
-    SecretKey="your-fernet-key" \
-    IngestSharedSecret="your-ingest-secret" \
-    AllowedOrigins="https://your-frontend-domain.com" \
-    NextPublicApiUrl="https://your-backend-domain.com" \
-    NextPublicN8nUrl="https://your-n8n-domain.com" \
-    BackendImageUri="$AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/api-hub-backend:latest" \
-    FrontendImageUri="$AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/api-hub-frontend:latest"
+    EnvironmentName=staging \
+    DomainName=staging.example.com \
+    HostedZoneId=Z123 \
+    AcmCertificateArn=arn:aws:acm:us-east-1:...:certificate/... \
+    VpcId=vpc-... \
+    PublicSubnetIds=subnet-aaa,subnet-bbb \
+    PrivateSubnetIds=subnet-ccc,subnet-ddd \
+    BackendImageUri=... FrontendImageUri=... N8nImageUri=...
 ```
 
----
-
-## Step 3 — Get service URLs
+After the stack creates, run the Alembic migration as a one-off ECS task:
 
 ```bash
-aws cloudformation describe-stacks \
-  --stack-name api-hub \
-  --query "Stacks[0].Outputs"
+aws ecs run-task \
+  --cluster api-hub-staging \
+  --launch-type FARGATE \
+  --task-definition api-hub-migrate
 ```
 
-This prints the App Runner URLs for both backend and frontend.
+## Subsequent deploys
 
----
+Push to `main` → GitHub Actions:
+1. Builds backend, frontend, and n8n images, pushes to ECR with the SHA tag
+2. Deploys the CFN stack with new image URIs
+3. Runs `alembic upgrade head` as a one-off Fargate task
 
-## Environment variables reference
-
-| Variable | Service | Required | Description |
-|----------|---------|----------|-------------|
-| `POSTGRES_URL` | backend | Yes | Full asyncpg connection string |
-| `SECRET_KEY` | backend | Yes | Fernet key for encrypted DB columns |
-| `INGEST_SHARED_SECRET` | backend | Yes | Auth header for n8n → FastAPI ingest |
-| `ALLOWED_ORIGINS` | backend | Yes | Comma-separated CORS origins |
-| `N8N_BASE_URL` | backend | Yes | URL of n8n instance |
-| `NEXT_PUBLIC_API_URL` | frontend | Yes | Backend URL visible to the browser |
-| `NEXT_PUBLIC_N8N_URL` | frontend | No | n8n URL for workflow trigger buttons |
-
----
-
-## Updating after code changes
-
+Rollback: re-run the workflow with the previous SHA, or:
 ```bash
-# Rebuild + push the changed image, then redeploy
-docker build -t api-hub-backend ./backend
-docker tag api-hub-backend:latest $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/api-hub-backend:latest
-docker push $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/api-hub-backend:latest
-
-# Trigger App Runner to pull the new image
-aws apprunner start-deployment \
-  --service-arn $(aws apprunner list-services \
-    --query "ServiceSummaryList[?ServiceName=='api-hub-backend'].ServiceArn" \
-    --output text)
+aws cloudformation deploy \
+  --parameter-overrides \
+    BackendImageUri=<previous-sha-uri> \
+    ... # others unchanged
 ```
+
+## Cost (staging)
+
+| Service | Configuration | Monthly |
+|---------|---------------|--------:|
+| ECS Fargate (3 services × 0.5 vCPU / 1 GB) | always-on | ~$50 |
+| ALB | always-on | ~$20 |
+| RDS db.t4g.small (Multi-AZ off in staging) | 20 GB gp3 | ~$25 |
+| EFS | 1 GB | ~$1 |
+| Secrets Manager (5 secrets) | — | ~$2 |
+| CloudWatch Logs (30-day retention) | low traffic | ~$5 |
+| Route 53 hosted zone | — | $0.50 |
+| **Total** | | **~$104/mo** |
+
+Production with Multi-AZ RDS adds ~$40/mo.
+
+## DR / backups
+
+- RDS automated backups: 7 days (staging) / 14 days (production)
+- RPO ~1 hour (PITR), RTO ~30 min (RDS restore + ECS service replace)
+- No cross-region replicas in V1 (per spec D14)
+- Pre-deploy snapshots (manual): `aws rds create-db-snapshot --db-instance-identifier api-hub-staging --db-snapshot-identifier api-hub-staging-pre-deploy-<date>`
