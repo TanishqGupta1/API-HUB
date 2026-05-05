@@ -357,7 +357,8 @@ async def update_media_only(
                 deduped.append(r)
         
         for batch in _chunks(deduped, _BATCH_SIZE):
-            stmt = pg_insert(ProductImage).values(batch).on_conflict_do_update(
+            stmt = pg_insert(ProductImage).values(batch)
+            stmt = stmt.on_conflict_do_update(
                 constraint="uq_product_images_supplier_url",
                 set_={
                     "image_type": stmt.excluded.image_type,
