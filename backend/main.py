@@ -187,14 +187,20 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127
 
 app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
+_IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
+_CORS_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+_CORS_HEADERS = ["Authorization", "Content-Type", "X-Ingest-Secret"]
+
+_cors_kwargs: dict = dict(
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=_CORS_METHODS,
+    allow_headers=_CORS_HEADERS,
 )
+if not _IS_PRODUCTION:
+    _cors_kwargs["allow_origin_regex"] = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 # Routers
 app.include_router(suppliers_router)
