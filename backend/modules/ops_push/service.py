@@ -16,6 +16,9 @@ from modules.push_mappings.models import PushMapping
 from modules.push_log.models import ProductPushLog
 from .merge import merge_product_with_decorations
 
+import logging
+logger = logging.getLogger(__name__)
+
 async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uuid.UUID) -> dict:
     """
     Push a product to OPS (Create or Update).
@@ -99,6 +102,8 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
 
         # 7. Trigger n8n webhook
         webhook_url = os.getenv("N8N_PUSH_WEBHOOK_URL")
+        trigger_failed = False
+        error_msg = None
         if webhook_url:
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
@@ -116,13 +121,21 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
                     })
                     response.raise_for_status()
             except Exception as trigger_err:
-                # Log but don't fail the whole request (the job is queued in DB)
-                print(f"Failed to trigger n8n: {trigger_err}")
+                trigger_failed = True
+                error_msg = str(trigger_err)
+                # Log the failure in a fresh session since the outer one is already committed
+                async with async_session() as fail_session:
+                    row = await fail_session.get(ProductPushLog, push_log.id)
+                    if row:
+                        row.status = "failed"
+                        row.error = f"n8n trigger failed: {trigger_err}"
+                        await fail_session.commit()
+                logger.warning(f"Failed to trigger n8n: {trigger_err}")
 
         return {
-            "status": "pending", 
+            "status": "failed" if trigger_failed else "pending", 
             "push_log_id": str(push_log.id),
-            "message": "Product payload prepared and queued for n8n push.", 
+            "message": f"n8n trigger failed: {error_msg}" if trigger_failed else "Product payload prepared and queued for n8n push.", 
             "payload": payload
         }
         
