@@ -192,7 +192,7 @@ async def upsert_products(
             for image_batch in _chunks(image_rows, _BATCH_SIZE):
                 img_stmt = pg_insert(ProductImage).values(list(image_batch))
                 img_stmt = img_stmt.on_conflict_do_update(
-                    constraint="uq_product_image_url",
+                    constraint="uq_product_images_supplier_url",
                     set_={
                         "image_type": img_stmt.excluded.image_type,
                         "color": img_stmt.excluded.color,
@@ -358,11 +358,11 @@ async def update_media_only(
         
         for batch in _chunks(deduped, _BATCH_SIZE):
             stmt = pg_insert(ProductImage).values(batch).on_conflict_do_update(
-                constraint="uq_product_image_url",
+                constraint="uq_product_images_supplier_url",
                 set_={
-                    "image_type": pg_insert(ProductImage).excluded.image_type,
-                    "color": pg_insert(ProductImage).excluded.color,
-                    "supplier_image_url": pg_insert(ProductImage).excluded.supplier_image_url,
+                    "image_type": stmt.excluded.image_type,
+                    "color": stmt.excluded.color,
+                    "supplier_image_url": stmt.excluded.supplier_image_url,
                 },
             )
             await db.execute(stmt)

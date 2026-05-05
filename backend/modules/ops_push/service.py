@@ -57,11 +57,8 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
     
     # 4. Handle name conflict (Internal logic for now)
     desired_name = payload["name"]
-    # Use supplier.promostandards_code or fall back to slug-derived prefix
-    if supplier.promostandards_code and supplier.promostandards_code.upper() == "SANMAR":
-        prefix = "SM-"
-    else:
-        prefix = f"{supplier.slug[:2].upper()}-"
+    # Use supplier.push_name_prefix or fall back to slug-derived prefix
+    prefix = supplier.push_name_prefix or f"{supplier.slug[:2].upper()}-"
     payload["name"] = f"{prefix}{desired_name}"
 
     # 5. Check push_mappings for idempotency
@@ -114,7 +111,7 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
                             "base_url": customer.ops_base_url,
                             "token_url": customer.ops_token_url,
                             "client_id": customer.ops_client_id,
-                            "client_secret": customer.ops_auth_config.get("client_secret")
+                            "client_secret": (customer.ops_auth_config or {}).get("client_secret")
                         }
                     })
             except Exception as trigger_err:

@@ -30,6 +30,7 @@ class Supplier(Base):
     last_full_sync: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_delta_sync: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     has_decoration_overlay: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    push_name_prefix: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
