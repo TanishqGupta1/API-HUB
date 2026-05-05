@@ -37,7 +37,10 @@ services:
         condition: service_healthy
 
   n8n:
-    image: n8nio/n8n:latest
+    build:
+      context: .
+      dockerfile: n8n.Dockerfile
+    image: api-hub-n8n:dev
     profiles: ["dev"]
     ports:
       - "5678:5678"
@@ -51,16 +54,6 @@ services:
       - API_BASE_URL=${API_BASE_URL:-http://api:8000}
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./n8n-nodes-onprintshop:/opt/custom-nodes/n8n-nodes-onprintshop
-    entrypoint: /bin/sh
-    command:
-      - -c
-      - |
-        mkdir -p /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop
-        cp -r /opt/custom-nodes/n8n-nodes-onprintshop/package.json /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop/
-        cp -r /opt/custom-nodes/n8n-nodes-onprintshop/dist /home/node/.n8n/nodes/node_modules/n8n-nodes-onprintshop/
-        echo '{"name":"installed-nodes","version":"1.0.0","dependencies":{"n8n-nodes-onprintshop":"*"}}' > /home/node/.n8n/nodes/package.json
-        exec n8n start
     depends_on:
       postgres:
         condition: service_healthy

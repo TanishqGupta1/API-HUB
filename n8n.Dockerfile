@@ -13,9 +13,10 @@ RUN npm run build
 
 FROM n8nio/n8n:latest
 USER root
-RUN mkdir -p /home/node/.n8n/custom \
- && chown -R node:node /home/node/.n8n/custom
-COPY --from=node-build --chown=node:node /build/dist /home/node/.n8n/custom/n8n-nodes-onprintshop/dist
-COPY --from=node-build --chown=node:node /build/package.json /home/node/.n8n/custom/n8n-nodes-onprintshop/package.json
+# Use /opt/custom-nodes so the node survives the n8n_data volume mount at /home/node/.n8n
+RUN mkdir -p /opt/custom-nodes/n8n-nodes-onprintshop \
+ && chown -R node:node /opt/custom-nodes
+COPY --from=node-build --chown=node:node /build/dist /opt/custom-nodes/n8n-nodes-onprintshop/dist
+COPY --from=node-build --chown=node:node /build/package.json /opt/custom-nodes/n8n-nodes-onprintshop/package.json
 USER node
-ENV N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
+ENV N8N_CUSTOM_EXTENSIONS=/opt/custom-nodes
