@@ -1,11 +1,11 @@
 name: Deploy to ECS (staging)
 
-# Devops workflow: push to `dev` branch → staging deploy.
-# `main` stays as the reviewed baseline; promote to production via a
-# separate workflow on tag push (Phase 4 in deployment/RUNBOOK.md).
+# AUTO-DEPLOY DISABLED. Trigger only via manual run:
+#   GitHub Actions tab → 'Deploy to ECS (staging)' → 'Run workflow' button.
+# To re-enable auto-deploy on push, uncomment the `push` block below.
 on:
-  push:
-    branches: [dev]
+  # push:
+  #   branches: [dev]
   workflow_dispatch:
 
 permissions:
