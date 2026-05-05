@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -38,6 +39,30 @@ from modules.push_candidates.routes import router as push_candidates_router
 from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
 from modules.suppliers.category_import import router as category_import_router
+
+_PROD_REQUIRED_ENV_VARS = (
+    "SECRET_KEY",
+    "INGEST_SHARED_SECRET",
+    "ALLOWED_ORIGINS",
+    "POSTGRES_URL",
+)
+
+
+def _require_prod_env() -> None:
+    """Refuse to boot in production if required env vars are missing.
+
+    Called at the top of the lifespan handler. In development the check is
+    a no-op so local dev still works without a full prod env.
+    """
+    if os.getenv("ENVIRONMENT", "development").lower() != "production":
+        return
+    missing = [v for v in _PROD_REQUIRED_ENV_VARS if not os.getenv(v, "").strip()]
+    if missing:
+        raise RuntimeError(
+            "Production startup blocked. Missing required env vars: "
+            + ", ".join(missing)
+            + ". Set them in the task definition / ECS secrets / Secrets Manager."
+        )
 from modules.pricing.routes import router as pricing_router, customer_router as pricing_customer_router
 
 import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
