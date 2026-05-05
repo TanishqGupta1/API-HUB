@@ -141,6 +141,7 @@ _SCHEMA_UPGRADES: list[str] = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _require_prod_env()
     import asyncio
     retries = 5
     while retries > 0:
