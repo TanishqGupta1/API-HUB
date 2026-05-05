@@ -1,6 +1,9 @@
+import os
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
+
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -12,6 +15,22 @@ from modules.decorations.models import CustomerProductDecoration
 from modules.push_mappings.models import PushMapping
 from modules.push_log.models import ProductPushLog
 from .merge import merge_product_with_decorations
+
+async def trigger_n8n_push(payload: dict[str, Any]) -> None:
+    """POST payload to N8N_PUSH_WEBHOOK_URL.
+
+    Silently skips in dev when the env var is unset.
+    Raises in production if unset, or on any non-2xx response.
+    """
+    webhook_url = os.getenv("N8N_PUSH_WEBHOOK_URL", "").strip()
+    if not webhook_url:
+        if os.getenv("ENVIRONMENT", "development").lower() == "production":
+            raise RuntimeError("N8N_PUSH_WEBHOOK_URL is required in production")
+        return
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(webhook_url, json=payload)
+        response.raise_for_status()
+
 
 async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uuid.UUID) -> dict:
     """
