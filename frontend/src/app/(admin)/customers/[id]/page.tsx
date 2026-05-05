@@ -2,20 +2,22 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import { Customer } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { 
-  ArrowLeft, 
-  Settings2, 
+import {
+  ArrowLeft,
+  Settings2,
   Save,
   Globe,
   Database,
   Link as LinkIcon,
   ShieldCheck,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  LayoutGrid,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -92,7 +94,7 @@ export default function CustomerSettingsPage() {
         <Button 
           onClick={handleSave} 
           disabled={saving}
-          className="bg-[#1e4d92] hover:bg-[#173d74] font-bold text-xs uppercase tracking-wider h-11 px-8 shadow-lg shadow-blue-900/10"
+          className="bg-[#1e4d92] hover:bg-[#173d74] text-white font-bold text-xs uppercase tracking-wider h-11 px-8 shadow-lg shadow-blue-900/10"
         >
           {saving ? "Saving..." : "Save Configuration"}
           <Save className="w-4 h-4 ml-2" />
@@ -200,9 +202,16 @@ export default function CustomerSettingsPage() {
                 <span className="text-sm font-medium">Pricing Rules</span>
                 <span className="text-lg font-black">{customer.markup_rules_count || 0}</span>
               </div>
-              <div className="pt-4 border-t border-white/10 mt-4">
-                <a 
-                  href={customer.ops_base_url} 
+              <div className="pt-4 border-t border-white/10 mt-4 space-y-2">
+                <Link
+                  href={`/customers/${id}/catalog`}
+                  className="flex items-center justify-between p-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-xs font-bold"
+                >
+                  View Product Catalog
+                  <LayoutGrid className="w-4 h-4" />
+                </Link>
+                <a
+                  href={customer.ops_base_url}
                   target="_blank"
                   className="flex items-center justify-between p-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-xs font-bold"
                 >
@@ -216,7 +225,7 @@ export default function CustomerSettingsPage() {
           <div className="bg-[#fdf2f2] border border-[#f5c6cb] rounded-2xl p-6 space-y-4">
              <h3 className="text-[10px] font-black uppercase tracking-widest text-[#b93232]">Danger Zone</h3>
              <p className="text-[11px] text-[#b93232] font-medium leading-relaxed">
-               Deactivating this instance will stop all product syncs immediately. Existing products on the storefront will remain but won't be updated.
+               Deactivating this instance will stop all product syncs immediately. Existing products on the storefront will remain but won&apos;t be updated.
              </p>
              <Button variant="outline" className="w-full border-[#f5c6cb] text-[#b93232] hover:bg-[#b93232] hover:text-white font-bold text-[10px] uppercase tracking-wider h-10 transition-all">
                 Terminate Node Connection

@@ -16,19 +16,25 @@ for that source adapter.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from database import async_session, get_db
 from modules.promostandards.resolver import resolve_wsdl_url
 from modules.suppliers.models import Supplier
 from modules.suppliers.service import get_cached_endpoints
 from modules.sync_jobs.models import SyncJob
+from modules.promostandards.client import PromoStandardsClient
+from modules.promostandards.normalizer import upsert_products, update_media_only
+from modules.catalog.models import Category, Product
+from modules.import_jobs.service import log as import_log
 
 router = APIRouter(prefix="/api/suppliers", tags=["category_import"])
 
@@ -47,6 +53,7 @@ class CategoryRead(BaseModel):
 class ImportCategoryRequest(BaseModel):
     category_name: str = Field(min_length=1, max_length=100)
     limit: int = Field(default=10, ge=1, le=500)
+    fetch_images: bool = False
 
 
 class ImportCategoryResponse(BaseModel):
@@ -91,16 +98,13 @@ async def _run_category_import(
     supplier_id: UUID,
     auth_config: dict,
     wsdl_product: str,
+    wsdl_media: str | None,
     category_name: str,
     limit: int,
     extension_wsdl_url: str | None = None,
+    fetch_images: bool = False,
 ) -> None:
-    """Fetch N products by category via PS SOAP and upsert into hub.
-
-    If ``extension_wsdl_url`` is provided (SanMar case), the category call
-    is routed to that WSDL because ``getProductInfoByCategory`` is a SanMar
-    non-PS extension, not on the standard ProductData binding.
-    """
+    """Fetch N products by category via PS SOAP and upsert into hub."""
     from modules.promostandards.client import PromoStandardsClient
     from modules.promostandards.normalizer import upsert_products
     from modules.catalog.models import Category, Product
@@ -122,12 +126,26 @@ async def _run_category_import(
                 extension_wsdl_url=extension_wsdl_url,
             )
 
-            # Ensure category exists in DB
-            from modules.catalog.models import Category
+            if job:
+                job.total_products = len(products)
+                await session.commit()
+                await session.refresh(job)
+
+            if not products:
+                # Still finalize if no products found
+                if job:
+                    job.status = "completed"
+                    job.completed_at = datetime.now(timezone.utc)
+                    await session.commit()
+                return
+
+            cat_slug = re.sub(r"[^a-z0-9]+", "-", category_name.lower()).strip("-")
+
+            # Ensure category exists — use external_id key for idempotency
             cat_res = await session.execute(
                 select(Category).where(
                     Category.supplier_id == supplier_id,
-                    Category.name == category_name
+                    Category.external_id == cat_slug
                 )
             )
             db_cat = cat_res.scalar_one_or_none()
@@ -135,24 +153,45 @@ async def _run_category_import(
                 db_cat = Category(
                     supplier_id=supplier_id,
                     name=category_name,
-                    external_id=category_name, # SanMar uses name as ID
+                    external_id=cat_slug,
                 )
                 session.add(db_cat)
                 await session.flush()
-            
+
+            # 1. Save products immediately (Catalog Data)
             await upsert_products(
-                session, 
-                supplier_id, 
-                products, 
-                inventory=None, 
-                pricing=None, 
+                session,
+                supplier_id,
+                products,
+                inventory=None,
+                pricing=None,
                 media=None,
                 category_id=db_cat.id
             )
+            
+            if job:
+                job.records_processed = len(products)
+                await session.commit()
+                await session.refresh(job)
+
+            # 2. Enrich images in background if requested
+            if fetch_images and wsdl_media and products:
+                media_client = PromoStandardsClient(wsdl_media, auth_config)
+                for i, p in enumerate(products):
+                    try:
+                        # Update progress in error_log for visibility
+                        if job:
+                            job.error_log = f"Enriching media for {p.product_id} ({i+1}/{len(products)})..."
+                            await session.commit()
+                        
+                        media_items = await media_client.get_media([p.product_id])
+                        if media_items:
+                            await update_media_only(session, supplier_id, media_items)
+                    except Exception as e:
+                        import_log.warning("Media enrichment failed for %s: %s", p.product_id, e)
 
             # Upsert a Category row for this category_name so the sidebar shows it
             if products:
-                cat_slug = re.sub(r"[^a-z0-9]+", "-", category_name.lower()).strip("-")
                 stmt = pg_insert(Category).values(
                     supplier_id=supplier_id,
                     external_id=cat_slug,
@@ -180,15 +219,16 @@ async def _run_category_import(
             job2 = await session.get(SyncJob, job_id)
             if job2:
                 job2.status = "completed"
-                job2.records_processed = len(products)
-                job2.finished_at = datetime.now(timezone.utc)
+                job2.error_log = None # Clear the status message
+                job2.completed_at = datetime.now(timezone.utc)
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
-            job3 = await session.get(SyncJob, job_id)
-            if job3:
-                job3.status = "failed"
-                job3.error_log = str(exc)
-                job3.finished_at = datetime.now(timezone.utc)
+            import traceback
+            traceback.print_exc()
+            if job:
+                job.status = "failed"
+                job.error_log = str(exc)
+                job.completed_at = datetime.now(timezone.utc)
                 await session.commit()
 
 
@@ -272,6 +312,7 @@ async def import_category(
             "Product Data WSDL not found in supplier endpoint cache. "
             "Run the endpoint sync first.",
         )
+    wsdl_media = resolve_wsdl_url(endpoints, "media_content") if body.fetch_images else None
 
     job = SyncJob(
         supplier_id=supplier.id,
@@ -300,9 +341,11 @@ async def import_category(
         supplier.id,
         dict(supplier.auth_config or {}),
         wsdl_product,
+        wsdl_media,
         body.category_name,
         body.limit,
         extension_wsdl_url,
+        body.fetch_images,
     )
 
     return ImportCategoryResponse(

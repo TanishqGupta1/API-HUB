@@ -11,6 +11,7 @@ export interface Supplier {
   protocol: string;
   promostandards_code: string | null;
   base_url: string | null;
+  adapter_class: string | null;
   auth_config: Record<string, string>;
   field_mappings: Record<string, string> | null;
   is_active: boolean;
@@ -24,6 +25,7 @@ export interface SupplierCreate {
   protocol: string;
   promostandards_code?: string | null;
   base_url?: string | null;
+  adapter_class?: string | null;
   auth_config?: Record<string, string>;
 }
 
@@ -44,6 +46,16 @@ export interface PSEndpoint {
 }
 
 /* ─── Product Catalog ────────────────────────────────────────────────────── */
+export interface VariantPriceTier {
+  group_name: string;
+  qty_min: number;
+  qty_max: number;
+  price: string;        // backend returns Decimal as string for precision
+  currency: string;
+  effective_from?: string | null;
+  effective_to?: string | null;
+}
+
 export interface Variant {
   id: string;
   color: string | null;
@@ -52,7 +64,52 @@ export interface Variant {
   base_price: number | null;
   inventory: number | null;
   warehouse: string | null;
+  part_id: string | null;
+  gtin: string | null;
+  flags: Record<string, unknown> | null;   // pms_color, standard_color, label_size, weight_oz
+  prices: VariantPriceTier[];
 }
+
+export interface ApparelDetails {
+  ps_part_id: string | null;
+  apparel_style: string | null;
+  is_closeout: boolean;
+  is_hazmat: boolean | null;
+  is_caution: boolean;
+  caution_comment: string | null;
+  is_on_demand: boolean | null;
+  fabric_specs: Record<string, unknown> | null;
+  fob_points: Array<Record<string, unknown>> | null;
+  keywords: string[] | null;
+}
+
+export interface PrintDetails {
+  ops_product_id_int: number | null;
+  default_category_id: number | null;
+  external_catalogue: number | null;
+  width_min: string | null;
+  width_max: string | null;
+  height_min: string | null;
+  height_max: string | null;
+  formula: Record<string, unknown> | null;
+  size_template_id: number | null;
+}
+
+export interface ProductSize {
+  id: string;
+  ops_size_id: number | null;
+  size_title: string;
+  size_width: string;
+  size_height: string;
+  width_min: string | null;
+  width_max: string | null;
+  height_min: string | null;
+  height_max: string | null;
+  sort_order: number;
+}
+
+export type ProductType = "apparel" | "print" | "template" | "promo";
+export type PricingMethod = "tiered_variants" | "formula";
 
 export interface ProductImage {
   id: string;
@@ -85,13 +142,15 @@ export interface Product {
   id: string;
   supplier_id: string;
   supplier_name: string;
+  supplier_has_decoration_overlay: boolean;
   supplier_sku: string;
   product_name: string;
   brand: string | null;
   category: string | null;
   category_id: string | null;
   description: string | null;
-  product_type: string;
+  product_type: ProductType;
+  pricing_method: PricingMethod | null;
   image_url: string | null;
   ops_product_id: string | null;
   external_catalogue: number | null;
@@ -100,6 +159,9 @@ export interface Product {
   variants: Variant[];
   images: ProductImage[];
   options: ProductOption[];
+  apparel_details: ApparelDetails | null;
+  print_details: PrintDetails | null;
+  sizes: ProductSize[];
 }
 
 export interface ProductPushStatus {
@@ -118,7 +180,8 @@ export interface ProductListItem {
   product_name: string;
   brand: string | null;
   category_id: string | null;
-  product_type: string;
+  product_type: ProductType;
+  pricing_method: PricingMethod | null;
   image_url: string | null;
   ops_product_id: string | null;
   external_catalogue: number | null;
@@ -127,6 +190,23 @@ export interface ProductListItem {
   price_max: number | null;
   total_inventory: number | null;
   archived_at: string | null;
+}
+
+/* ─── Pricing Quote ───────────────────────────────────────────────────────── */
+export interface PriceQuoteRequest {
+  product_id: string;
+  variant_id?: string;
+  width?: number;
+  height?: number;
+  qty: number;
+  selected_attribute_ids?: string[];
+}
+
+export interface PriceQuote {
+  unit_price: string;
+  total: string;
+  currency: string;
+  breakdown: Record<string, unknown>;
 }
 
 /* ─── Category (hierarchical) ────────────────────────────────────────────── */
@@ -199,9 +279,13 @@ export interface SyncJob {
   job_type: JobType;
   status: SyncStatus;
   started_at: string;
-  finished_at: string | null;
+  completed_at: string | null;
+  total_products: number;
+  success_count: number;
+  failed_count: number;
   records_processed: number;
   error_log: string | null;
+  discovery_mode: string | null;
 }
 
 /* ─── Dashboard Stats ────────────────────────────────────────────────────── */

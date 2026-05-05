@@ -30,8 +30,11 @@ type SyncJob = {
   job_type: string;
   status: string;
   records_processed: number;
+  total_products: number;
+  success_count: number;
+  failed_count: number;
   started_at: string;
-  finished_at: string | null;
+  completed_at: string | null;
   error_log: string | null;
 };
 
@@ -180,7 +183,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="text-right">
                       <div className="font-mono font-bold text-[#1e1e24] text-[13px]">
-                        {job.records_processed.toLocaleString()} <span className="text-[10px] text-[#888894] font-sans">items</span>
+                        {(job.total_products || job.records_processed || 0).toLocaleString()} <span className="text-[10px] text-[#888894] font-sans">items</span>
                       </div>
                       <div className={`text-[10px] font-black uppercase tracking-tighter ${
                         job.status === 'completed' ? 'text-emerald-600' : 

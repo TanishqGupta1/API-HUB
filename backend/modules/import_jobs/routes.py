@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from modules.suppliers.models import Supplier
+from modules.sync_jobs.models import SyncJob
+from modules.sync_jobs.schemas import SyncJobRead
 
 from .schemas import ImportRequest, ImportResponse
 from .service import create_pending_import_job, run_existing_import_job
@@ -34,14 +38,11 @@ async def trigger_import(
             f"configure one before importing",
         )
 
-    from sqlalchemy import select
-    from modules.sync_jobs.models import SyncJob
-
     in_flight = (await db.execute(
         select(SyncJob.id).where(
             SyncJob.supplier_id == supplier_id,
             SyncJob.job_type == f"import:{body.mode.value}",
-            SyncJob.status.in_(("queued", "running")),
+            SyncJob.status.in_(("pending", "running")),
         ).limit(1)
     )).scalar_one_or_none()
     if in_flight is not None:
@@ -67,3 +68,20 @@ async def trigger_import(
         mode=body.mode,
         accepted_at=datetime.now(timezone.utc).isoformat(),
     )
+
+
+@router.get("/{supplier_id}/sync-jobs", response_model=list[SyncJobRead], tags=["sync_jobs"])
+async def list_supplier_sync_jobs(
+    supplier_id: uuid.UUID,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db)
+):
+    """List sync jobs for a specific supplier."""
+    stmt = (
+        select(SyncJob)
+        .where(SyncJob.supplier_id == supplier_id)
+        .order_by(SyncJob.started_at.desc())
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()

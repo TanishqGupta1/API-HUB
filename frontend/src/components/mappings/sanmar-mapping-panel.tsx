@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import type { SupplierCategoryBrowse, ImportCategoryResponse, SyncJob } from "@/lib/types";
 import { toast } from "sonner";
 import { Download, Loader2, CheckCircle2, AlertCircle, Clock } from "lucide-react";
@@ -38,23 +39,33 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
   }, [supplierId]);
 
   // 2. Polling for Active Job
+  const pollFailures = useRef(0);
   useEffect(() => {
-    if (!activeJob || activeJob.status === "completed" || activeJob.status === "failed") return;
+    if (!activeJob || activeJob.status === "completed" || activeJob.status === "failed") {
+      pollFailures.current = 0;
+      return;
+    }
 
     const interval = setInterval(async () => {
       try {
         const updated = await api<SyncJob>(`/api/sync-jobs/${activeJob.id}`);
+        pollFailures.current = 0;
         setActiveJob(updated);
-        if (updated.status === "completed" && onSyncComplete) {
+        if ((updated.status === "completed" || updated.status === "failed") && onSyncComplete) {
           onSyncComplete();
         }
-      } catch (e) {
-        console.error("Polling error", e);
+      } catch (e: any) {
+        pollFailures.current += 1;
+        log.error("Polling error", e);
+        // Stop polling if the job no longer exists (404) or after 5 consecutive failures
+        if (e?.status === 404 || pollFailures.current >= 5) {
+          setActiveJob((prev) => prev ? { ...prev, status: "failed", error_log: "Job not found or API unreachable. Refresh to check." } : null);
+        }
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [activeJob]);
+  }, [activeJob?.id, activeJob?.status]);
 
   const defaultCategory = value["sanmar.default_category"] || "";
   const includeImages = value["sanmar.include_images"] === "true";
@@ -71,6 +82,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
         body: JSON.stringify({
           category_name: defaultCategory,
           limit: 10,
+          fetch_images: includeImages,
         }),
       });
       
@@ -79,12 +91,16 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
         id: res.job_id,
         status: "running",
         records_processed: 0,
+        total_products: 0,
+        success_count: 0,
+        failed_count: 0,
+        discovery_mode: null,
         supplier_id: supplierId,
         supplier_name: "SanMar",
-        job_type: "full", // approximation
+        job_type: "full",
         started_at: new Date().toISOString(),
-        finished_at: null,
-        error_log: null
+        completed_at: null,
+        error_log: null,
       });
 
       toast.success(`Import started for ${defaultCategory}`);
@@ -162,10 +178,10 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
                 <span className="font-black text-[#1e4d92] mr-1">{activeJob.records_processed}</span>
                 records synchronized
               </div>
-              {activeJob.finished_at && (
+              {activeJob.completed_at && (
                 <div className="text-[10px] font-bold text-[#cfccc8] uppercase tracking-wider flex items-center gap-2">
                   <Clock className="w-3.5 h-3.5" />
-                  {new Date(activeJob.finished_at).toLocaleTimeString()}
+                  {new Date(activeJob.completed_at).toLocaleTimeString()}
                 </div>
               )}
             </div>

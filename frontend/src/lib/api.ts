@@ -1,20 +1,32 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options?.headers as Record<string, string>),
   };
 
-  const secret = process.env.NEXT_PUBLIC_INGEST_SECRET;
-  if (secret) {
-    headers["X-Ingest-Secret"] = secret;
-  }
-
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
+    credentials: "include",
   });
+
+  if (res.status === 401) {
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login") && !window.location.pathname.startsWith("/setup")) {
+      window.location.href = "/login";
+    }
+    throw new ApiError(401, "Session expired");
+  }
 
   if (!res.ok) {
     const contentType = res.headers.get("content-type") ?? "";
@@ -28,7 +40,7 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
       // Truncate HTML responses to avoid flooding the UI
       if (message.length > 200) message = message.slice(0, 200) + "…";
     }
-    throw new Error(`API ${res.status}: ${message}`);
+    throw new ApiError(res.status, message);
   }
 
   return res.json() as Promise<T>;

@@ -126,35 +126,49 @@ class PromoStandardsClient:
         self.wsdl_url = wsdl_url
         self.auth_config = auth_config or {}
         self._service = service
+        self._history = None
 
     # -- zeep bootstrap ----------------------------------------------------
 
     def _get_service(self) -> Any:
-        if self._service is not None:
-            return self._service
-        # xml_huge_tree is needed for suppliers that return very large XML responses.
+        return self.get_service_with_history()[0]
+
+    def get_service_with_history(self) -> tuple[Any, Any]:
+        """Return (service, history_plugin). History allows raw XML access."""
+        if self._service is not None and self._history is not None:
+            return self._service, self._history
+
         from zeep.settings import Settings
+        from zeep.plugins import HistoryPlugin
         settings = Settings(strict=False, xml_huge_tree=True)
         transport = Transport(
             cache=SqliteCache(), timeout=30, operation_timeout=120
         )
+        self._history = HistoryPlugin()
 
         try:
-            self._service = ZeepClient(
-                self.wsdl_url, transport=transport, settings=settings
-            ).service
+            client = ZeepClient(
+                self.wsdl_url, 
+                transport=transport, 
+                settings=settings,
+                plugins=[self._history]
+            )
+            self._service = client.service
         except ValueError as e:
             if "no default service defined" in str(e).lower() and "?wsdl" not in self.wsdl_url.lower():
-                # Some .NET services return HTML at the base URL and require ?wsdl
                 retry_url = self.wsdl_url + ("&wsdl" if "?" in self.wsdl_url else "?wsdl")
                 log.info("No default service at %s, retrying with %s", self.wsdl_url, retry_url)
-                self._service = ZeepClient(
-                    retry_url, transport=transport, settings=settings
-                ).service
+                client = ZeepClient(
+                    retry_url, 
+                    transport=transport, 
+                    settings=settings,
+                    plugins=[self._history]
+                )
+                self._service = client.service
             else:
                 raise
         
-        return self._service
+        return self._service, self._history
 
     def _auth(
         self,
@@ -180,7 +194,7 @@ class PromoStandardsClient:
 
     def _sync_get_sellable_product_ids(self, ws_version: str) -> list[str]:
         svc = self._get_service()
-        response = svc.getProductSellable(**self._auth(ws_version))
+        response = svc.getProductSellable(isSellable=True, **self._auth(ws_version))
 
         container = _attr(response, "ProductSellableArray", "productSellableArray")
         items = _as_list(_attr(container, "ProductSellable", "productSellable"))
@@ -793,25 +807,34 @@ class PromoStandardsClient:
     async def get_media(
         self, product_ids: list[str], ws_version: str = "1.1.0", media_type: str = "Image"
     ) -> list[PSMediaItem]:
-        return await asyncio.to_thread(self._sync_get_media, product_ids, ws_version, media_type)
+        semaphore = asyncio.Semaphore(5)  # Max 5 concurrent SOAP calls
 
-    def _sync_get_media(
-        self, product_ids: list[str], ws_version: str, media_type: str
+        async def _fetch_single_media(pid: str) -> list[PSMediaItem]:
+            async with semaphore:
+                try:
+                    return await asyncio.to_thread(self._sync_get_single_media, pid, ws_version, media_type)
+                except Exception as exc:
+                    log.warning("getMediaContent(%s) failed: %s", pid, exc)
+                    return []
+
+        tasks = [_fetch_single_media(pid) for pid in product_ids]
+        results = await asyncio.gather(*tasks)
+        
+        out: list[PSMediaItem] = []
+        for r in results:
+            out.extend(r)
+        return out
+
+    def _sync_get_single_media(
+        self, product_id: str, ws_version: str, media_type: str
     ) -> list[PSMediaItem]:
         svc = self._get_service()
-        out: list[PSMediaItem] = []
-        for pid in product_ids:
-            try:
-                response = svc.getMediaContent(
-                    productId=pid,
-                    mediaType=media_type,
-                    **self._auth(ws_version)
-                )
-            except Exception as exc:  # noqa: BLE001
-                log.warning("getMediaContent(%s) failed: %s", pid, exc)
-                continue
-            out.extend(self._parse_media(response, pid))
-        return out
+        response = svc.getMediaContent(
+            productId=product_id,
+            mediaType=media_type,
+            **self._auth(ws_version)
+        )
+        return list(self._parse_media(response, product_id))
 
     def _parse_media(self, response: Any, product_id: str) -> Iterable[PSMediaItem]:
         media_container = _attr(response, "MediaContentArray", "mediaContentArray")

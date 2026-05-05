@@ -50,6 +50,10 @@ async def _create_schema():
     if not _SCHEMA_CREATED:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            from main import _SCHEMA_UPGRADES
+            from sqlalchemy import text
+            for stmt in _SCHEMA_UPGRADES:
+                await conn.execute(text(stmt))
         _SCHEMA_CREATED = True
     yield
     # No engine.dispose() here to avoid closing resources needed by other tests
@@ -68,7 +72,13 @@ async def _cleanup_test_customers() -> None:
 
 
 async def _cleanup_test_suppliers() -> None:
-    from modules.catalog.models import Category, Product, ProductImage, ProductVariant
+    from modules.catalog.models import (
+        Category, 
+        Product, 
+        ProductImage, 
+        ProductVariant,
+        CustomerProductSelection
+    )
     from modules.suppliers.models import Supplier
     from modules.sync_jobs.models import SyncJob
 
@@ -89,6 +99,9 @@ async def _cleanup_test_suppliers() -> None:
         ).scalars().all()
 
         if product_ids:
+            await s.execute(
+                delete(CustomerProductSelection).where(CustomerProductSelection.product_id.in_(product_ids))
+            )
             await s.execute(
                 delete(ProductVariant).where(ProductVariant.product_id.in_(product_ids))
             )

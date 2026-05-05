@@ -24,6 +24,7 @@ class SupplierRead(BaseModel):
     protocol: str
     promostandards_code: Optional[str]
     base_url: Optional[str]
+    adapter_class: Optional[str] = None
     auth_config: dict
     field_mappings: Optional[dict] = None
     is_active: bool

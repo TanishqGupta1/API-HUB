@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import Enum
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional, List
 from pydantic import BaseModel
 
@@ -18,6 +19,9 @@ class DiscoveryMode(str, Enum):
     DELTA = "delta"
     FIRST_N = "first_n"
     EXPLICIT_LIST = "explicit_list"
+    FILTERED_SAMPLE = "filtered_sample"
+    FULL_SELLABLE = "full_sellable"
+    CLOSEOUTS = "closeouts"
 
 
 class ProductRef(BaseModel):
@@ -51,9 +55,19 @@ class TransientError(AdapterError):
 class BaseAdapter(ABC):
     """Abstract base class for all supplier adapters."""
 
+    product_type: str  # subclass sets "apparel" | "print"
+
     def __init__(self, supplier: Supplier, db: AsyncSession):
         self.supplier = supplier
         self.db = db
+
+    def get_delta_since_timestamp(self) -> datetime:
+        """Centralized logic for DELTA sync fallback."""
+        from datetime import timezone
+        since = self.supplier.last_delta_sync or self.supplier.last_full_sync
+        if not since:
+            since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        return since
 
     @abstractmethod
     async def discover(self, mode: DiscoveryMode, limit: Optional[int] = None, explicit_list: Optional[List[str]] = None) -> List[ProductRef]:
@@ -66,6 +80,11 @@ class BaseAdapter(ABC):
         pass
 
     @abstractmethod
-    async def discover_changed(self, since: str) -> List[ProductRef]:
+    async def discover_changed(self, since: datetime) -> List[ProductRef]:
         """Discover products that have changed since a given timestamp/marker."""
         pass
+
+    async def discover_closeouts(self) -> List[ProductRef]:
+        """Discover products that are marked as closeout."""
+        raise NotImplementedError
+

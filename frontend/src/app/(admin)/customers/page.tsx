@@ -2,19 +2,25 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Building2, Globe, ArrowRight, ShieldCheck, Activity } from "lucide-react";
+import { Plus, Search, Building2, Globe, ArrowRight, ShieldCheck, Activity, Lock } from "lucide-react";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
-import type { Customer } from "@/lib/types";
+import type { Customer, Supplier } from "@/lib/types";
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api<Customer[]>("/api/customers")
-      .then(setCustomers)
+    Promise.all([
+      api<Customer[]>("/api/customers"),
+      api<Supplier[]>("/api/suppliers")
+    ]).then(([custs, sups]) => {
+      setCustomers(custs);
+      setSuppliers(sups);
+    })
       .catch(log.error)
       .finally(() => setLoading(false));
   }, []);

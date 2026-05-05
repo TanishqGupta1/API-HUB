@@ -1,0 +1,10 @@
+{
+  "unit_price": "12.50",
+  "total": "625.00",
+  "currency": "USD",
+  "breakdown": {
+    "base": "8.00",
+    "area_multiplier": "6.00",
+    "setup_cost": "10.00"
+  }
+}

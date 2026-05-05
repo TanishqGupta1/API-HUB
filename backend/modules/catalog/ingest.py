@@ -86,7 +86,7 @@ async def _start_sync_job(db: AsyncSession, supplier: Supplier, job_type: str) -
 async def _finish_sync_job(db: AsyncSession, job: SyncJob, records: int) -> None:
     job.status = "completed"
     job.records_processed = records
-    job.finished_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(timezone.utc)
     await db.commit()
 
 

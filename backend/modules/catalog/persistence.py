@@ -134,9 +134,12 @@ async def persist_product(
             inventory=v.inventory,
             warehouse=v.warehouse,
         ).on_conflict_do_update(
-            index_elements=["product_id", "color", "size"],
+            # Use named constraint — avoids NULL=NULL mismatches on (color, size)
+            # which caused MultipleResultsFound on SanMar imports.
+            constraint="uq_product_variants_product_sku",
             set_={
-                "sku": v.sku,
+                "color": v.color,
+                "size": v.size,
                 "base_price": v.base_price,
                 "inventory": v.inventory,
                 "warehouse": v.warehouse,
@@ -158,19 +161,23 @@ async def persist_product(
                 ))
 
     # 5. Upsert Images
-    for idx, img in enumerate(item.images):
+    for idx, img in enumerate(item.images or []):
         image_stmt = pg_insert(ProductImage).values(
             product_id=product_id,
             url=img.url,
+            supplier_image_url=img.supplier_image_url,
             image_type=img.image_type,
             color=img.color,
-            sort_order=img.sort_order or idx,
+            sort_order=img.sort_order,
+            checksum=img.checksum,
         ).on_conflict_do_update(
-            index_elements=["product_id", "url"],
+            constraint="uq_product_images_supplier_url",
             set_={
+                "url": img.url,
                 "image_type": img.image_type,
                 "color": img.color,
                 "sort_order": img.sort_order or idx,
+                "checksum": img.checksum,
             },
         )
         await db.execute(image_stmt)

@@ -1,6 +1,6 @@
 from typing import Optional
 import uuid as uuid_mod
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
@@ -17,7 +17,7 @@ class Category(Base):
     )
 
     id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
-    supplier_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("suppliers.id"))
+    supplier_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("suppliers.id", ondelete="CASCADE"))
     external_id: Mapped[str] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(255))
     parent_id: Mapped[Optional[uuid_mod.UUID]] = mapped_column(
@@ -35,7 +35,7 @@ class Product(Base):
     )
 
     id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
-    supplier_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("suppliers.id"))
+    supplier_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("suppliers.id", ondelete="CASCADE"))
     supplier_sku: Mapped[str] = mapped_column(String(255))
     product_name: Mapped[str] = mapped_column(String(500))
     brand: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -49,6 +49,8 @@ class Product(Base):
     ops_product_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     external_catalogue: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     last_synced: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_image_fetch_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_image_fetch_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
@@ -108,9 +110,11 @@ class ProductImage(Base):
         ForeignKey("products.id", ondelete="CASCADE"), index=True
     )
     url: Mapped[str] = mapped_column(Text)
-    image_type: Mapped[str] = mapped_column(String(50), default="front")
+    supplier_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    image_type: Mapped[str] = mapped_column(String(50), default="front")  # front | back | side | detail | lifestyle
     color: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    checksum: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     product: Mapped["Product"] = relationship(back_populates="images")
 
@@ -234,3 +238,21 @@ class ProductSize(Base):
     label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     product: Mapped["Product"] = relationship(back_populates="sizes")
+
+
+class CustomerProductSelection(Base):
+    __tablename__ = "customer_product_selections"
+    __table_args__ = (
+        UniqueConstraint("customer_id", "product_id", name="uq_customer_product_selection"),
+    )
+
+    id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)
+    customer_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[uuid_mod.UUID] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(50), default="selected")  # selected | pushed | stale
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    pushed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    product: Mapped["Product"] = relationship()

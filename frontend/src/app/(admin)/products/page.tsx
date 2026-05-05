@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, X } from "lucide-react";
 import { api } from "@/lib/api";
@@ -17,6 +17,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter]     = useState<"all" | "vg" | "supplier">("all");
   const [supplierSearch, setSupplierSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -71,7 +72,18 @@ export default function ProductsPage() {
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierFilter);
 
-  const displayedProducts = products; // Backend handles filtering now
+  // VG products come from suppliers using the ops_graphql protocol.
+  // Filter by supplier_id (stable) rather than supplier_name (brittle).
+  const vgSupplierIds = useMemo(
+    () => new Set(suppliers.filter((s) => s.protocol === "ops_graphql").map((s) => s.id)),
+    [suppliers],
+  );
+
+  const displayedProducts = products.filter((p) => {
+    if (sourceFilter === "vg") return vgSupplierIds.has(p.supplier_id);
+    if (sourceFilter === "supplier") return !vgSupplierIds.has(p.supplier_id);
+    return true;
+  });
 
   return (
     <div id="s-products">
@@ -97,14 +109,48 @@ export default function ProductsPage() {
       <div className="flex items-center gap-2 mb-8">
         {/* All Products pill */}
         <button
-          onClick={() => { setSupplierFilter("all"); setSupplierSearch(""); setCategoryId(""); }}
+          onClick={() => { setSupplierFilter("all"); setSupplierSearch(""); setCategoryId(""); setSourceFilter("all"); }}
           className={`px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
-            ${supplierFilter === "all" && !categoryId
+            ${supplierFilter === "all" && !categoryId && sourceFilter === "all"
               ? "bg-[#1e1e24] text-white border-[#1e1e24]"
               : "bg-white text-[#484852] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
             }`}
         >
           All Products
+        </button>
+
+        {/* VG source pill */}
+        <button
+          onClick={() => {
+            setSourceFilter(sourceFilter === "vg" ? "all" : "vg");
+            setSupplierFilter("all");
+            setSupplierSearch("");
+            setCategoryId("");
+          }}
+          className={`px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
+            ${sourceFilter === "vg"
+              ? "bg-[#1e4d92] text-white border-[#1e4d92]"
+              : "bg-white text-[#484852] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
+            }`}
+        >
+          ★ VG Products
+        </button>
+
+        {/* Supplier source pill */}
+        <button
+          onClick={() => {
+            setSourceFilter(sourceFilter === "supplier" ? "all" : "supplier");
+            setSupplierFilter("all");
+            setSupplierSearch("");
+            setCategoryId("");
+          }}
+          className={`px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
+            ${sourceFilter === "supplier"
+              ? "bg-[#1e4d92] text-white border-[#1e4d92]"
+              : "bg-white text-[#484852] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
+            }`}
+        >
+          ↓ Supplier Products
         </button>
 
         {/* Supplier dropdown */}

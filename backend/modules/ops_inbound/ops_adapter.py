@@ -123,7 +123,8 @@ class OPSAdapter(BaseAdapter):
             return refs
 
         if mode == DiscoveryMode.DELTA:
-            raise NotImplementedError("DELTA discovery comes in Task 6")
+            since = self.get_delta_since_timestamp()
+            return await self.discover_changed(since)
 
         raise ValueError(f"Unsupported discovery mode for OPS: {mode}")
 

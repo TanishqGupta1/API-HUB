@@ -272,14 +272,24 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 
 ## n8n Setup
 
-1. Run n8n: `docker compose up -d n8n` (OnPrintShop custom node auto-mounted from `./n8n-nodes-onprintshop/`).
-2. Open http://localhost:5678 — first-run prompts for owner account.
-3. Import workflows from `n8n-workflows/` (Settings → Import).
-4. Bind credentials in n8n UI: OnPrintShop OAuth2, Slack webhook, etc.
-5. **Set `API_BASE_URL` env var** on the n8n container (already wired in `docker-compose.yml`).
-6. Activate workflows in the n8n UI. They ship `"active": false` — activating before credentials are bound causes every execution to fail.
+API-HUB delegates outbound integrations (OPS push, scheduled syncs) to n8n.
+The OnPrintShop node is a custom community node baked into our `n8n.Dockerfile`.
 
-See `n8n-workflows/README.md` for activation flow + per-workflow env requirements.
+**Supported n8n hosts:**
+- Self-hosted Docker — `docker build -f n8n.Dockerfile -t api-hub-n8n:latest .`
+- ECS Fargate (Phase 14d)
+- n8n.cloud Pro+ (manual community-node install)
+- Render, Fly, Railway, Hetzner — anywhere Docker runs
+
+**Not supported:** n8n.cloud Starter — community nodes are blocked on that tier.
+
+**Quick start (local dev):**
+1. `docker compose --profile dev up -d` — starts postgres + api + n8n
+2. Import workflow JSONs from `n8n-workflows/` via n8n editor → Workflow → Import from File
+3. Set `INGEST_SHARED_SECRET` and `API_BASE_URL` in `.env` (see `.env.example`)
+4. Configure OnPrintShop credentials per customer via the Customers UI
+
+See [docs/n8n-integration.md](docs/n8n-integration.md) for the full integration contract and [docs/external-n8n-setup.md](docs/external-n8n-setup.md) for using a hosted n8n instead of the bundled one.
 
 ---
 

@@ -6,9 +6,9 @@ import type { SyncJob } from "@/lib/types";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function fmtDuration(startedAt: string, finishedAt: string | null): string {
-  if (!finishedAt) return "—";
-  const s = Math.round((new Date(finishedAt).getTime() - new Date(startedAt).getTime()) / 1000);
+function fmtDuration(startedAt: string, completedAt: string | null): string {
+  if (!completedAt) return "—";
+  const s = Math.round((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000);
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
   const rem = s % 60;
@@ -149,14 +149,14 @@ export default function SyncJobsPage() {
     const attemptMap = new Map<string, SyncJob>();
 
     jobs.forEach((j) => {
-      const jTime = new Date(j.finished_at ?? j.started_at).getTime();
+      const jTime = new Date(j.completed_at ?? j.started_at).getTime();
       const prevAttempt = attemptMap.get(j.supplier_id);
-      if (!prevAttempt || jTime > new Date(prevAttempt.finished_at ?? prevAttempt.started_at).getTime()) {
+      if (!prevAttempt || jTime > new Date(prevAttempt.completed_at ?? prevAttempt.started_at).getTime()) {
         attemptMap.set(j.supplier_id, j);
       }
       if (j.status !== "completed") return;
       const prevSuccess = successMap.get(j.supplier_id);
-      if (!prevSuccess || jTime > new Date(prevSuccess.finished_at ?? prevSuccess.started_at).getTime()) {
+      if (!prevSuccess || jTime > new Date(prevSuccess.completed_at ?? prevSuccess.started_at).getTime()) {
         successMap.set(j.supplier_id, j);
       }
     });
@@ -175,7 +175,7 @@ export default function SyncJobsPage() {
       seen.add(j.supplier_id);
       const lastSuccess = successMap.get(j.supplier_id);
       const lastAttempt = attemptMap.get(j.supplier_id) ?? null;
-      const lastSuccessIso = lastSuccess?.finished_at ?? lastSuccess?.started_at ?? null;
+      const lastSuccessIso = lastSuccess?.completed_at ?? lastSuccess?.started_at ?? null;
       const health = healthFor(lastSuccessIso, lastAttempt?.status);
       entries.push({ id: j.supplier_id, name: j.supplier_name, lastSuccessIso, lastAttempt, health });
     });
@@ -245,39 +245,38 @@ export default function SyncJobsPage() {
         </div>
       </div>
 
-      {/* Per-supplier health strip */}
+      {/* Per-supplier health strip - Scrollable to prevent clutter */}
       {perSupplierHealth.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {perSupplierHealth.map(({ id, name, lastSuccessIso, lastAttempt, health }) => {
-            const displayTime = lastSuccessIso
-              ? timeAgo(lastSuccessIso)
-              : lastAttempt
-              ? timeAgo(lastAttempt.finished_at ?? lastAttempt.started_at)
-              : null;
-            return (
-              <div
-                key={id}
-                className="inline-flex items-center gap-2 px-3 py-[7px] rounded-lg border border-[#cfccc8] bg-white hover:border-[#1e4d92] transition-colors"
-                title={`${name} — ${health.label}${displayTime ? ` · ${displayTime}` : ""}`}
-              >
-                {/* Colored status dot */}
-                <span className={`w-2 h-2 rounded-full shrink-0 ${health.dot}`} />
-                {/* Supplier name */}
-                <span className="text-[12px] font-semibold text-[#1e1e24]">{name}</span>
-                {/* Health label pill */}
-                <span
-                  className="text-[10px] font-bold font-mono uppercase px-[6px] py-[2px] rounded"
-                  style={{ background: health.bgColor, color: health.color }}
+        <div className="bg-[#f9f7f4]/50 border border-[#cfccc8] rounded-xl p-4 mb-6">
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[#888894] mb-3 px-1 flex items-center gap-2">
+            <div className="w-1 h-1 rounded-full bg-[#cfccc8]" />
+            Supplier Connectivity Status
+          </div>
+          <div className="flex flex-wrap gap-2 max-h-[120px] overflow-y-auto pr-2 custom-scrollbar">
+            {perSupplierHealth.map(({ id, name, lastSuccessIso, lastAttempt, health }) => {
+              const displayTime = lastSuccessIso
+                ? timeAgo(lastSuccessIso)
+                : lastAttempt
+                ? timeAgo(lastAttempt.completed_at ?? lastAttempt.started_at)
+                : null;
+              return (
+                <div
+                  key={id}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#cfccc8] bg-white hover:border-[#1e4d92] hover:shadow-sm transition-all duration-200 cursor-default"
+                  title={`${name} — ${health.label}${displayTime ? ` · ${displayTime}` : ""}`}
                 >
-                  {health.label}
-                </span>
-                {/* Time ago */}
-                {displayTime && (
-                  <span className="text-[11px] text-[#888894] font-mono">{displayTime}</span>
-                )}
-              </div>
-            );
-          })}
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${health.dot} ${health.label === 'Fresh' ? 'shadow-[0_0_5px_rgba(36,122,82,0.4)]' : ''}`} />
+                  <span className="text-[11px] font-bold text-[#1e1e24] whitespace-nowrap">{name}</span>
+                  <span
+                    className="text-[9px] font-black font-mono uppercase px-[5px] py-[1px] rounded"
+                    style={{ background: health.bgColor, color: health.color }}
+                  >
+                    {health.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -331,13 +330,32 @@ export default function SyncJobsPage() {
                   </td>
 
                   {/* Records */}
-                  <td className="px-5 py-4 font-mono text-[#1e1e24]">
-                    {j.records_processed > 0 ? j.records_processed.toLocaleString() : "0"}
+                  <td className="px-5 py-4 font-mono">
+                    <div className="flex flex-col">
+                      <div className="text-[13px] font-black text-[#1e1e24]">
+                        {(j.total_products || j.records_processed || 0).toLocaleString()}
+                        <span className="text-[10px] text-[#888894] font-sans font-bold uppercase ml-1.5 tracking-tighter">Items</span>
+                      </div>
+                      {(j.success_count > 0 || j.failed_count > 0) && (
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex items-center gap-1">
+                            <div className="w-1 h-1 rounded-full bg-emerald-500" />
+                            <span className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter">{j.success_count} OK</span>
+                          </div>
+                          {j.failed_count > 0 && (
+                            <div className="flex items-center gap-1">
+                              <div className="w-1 h-1 rounded-full bg-rose-500" />
+                              <span className="text-[9px] font-black text-rose-600 uppercase tracking-tighter">{j.failed_count} ERR</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </td>
 
                   {/* Duration */}
                   <td className="px-5 py-4 font-mono text-[#484852]">
-                    {fmtDuration(j.started_at, j.finished_at)}
+                    {fmtDuration(j.started_at, j.completed_at)}
                   </td>
 
                   {/* Started */}

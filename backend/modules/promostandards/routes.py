@@ -2,7 +2,7 @@
 
 n8n calls these endpoints to kick off SOAP syncs. Each POST returns
 immediately (HTTP 202) with a SyncJob id; the actual SOAP work runs
-as a FastAPI BackgroundTask. n8n polls GET /api/sync-jobs/{job_id}
+as a FastAPI BackgroundTask. n8n polls GET /api/sync_jobs/{job_id}
 until status flips to "completed" or "failed".
 
 Upstream deps (Tanishq T3b + T4) are imported lazily inside the
@@ -114,7 +114,7 @@ async def _finish_job(
     job.status = status
     job.records_processed = records_processed
     job.error_log = error
-    job.finished_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(timezone.utc)
     await session.commit()
 
 
@@ -151,8 +151,13 @@ async def _run_full_product_sync(
 
         try:
             product_client = PromoStandardsClient(wsdl_product, auth_config)
-            product_ids = await product_client.get_sellable_product_ids()
-            
+            raw_ids = await product_client.get_sellable_product_ids()
+            # Deduplicate while preserving order — some suppliers (SanMar) return
+            # duplicate IDs per color/size row; duplicates in one INSERT batch
+            # cause "ON CONFLICT DO UPDATE command cannot affect row a second time".
+            seen: set[str] = set()
+            product_ids = [x for x in raw_ids if not (x in seen or seen.add(x))]
+
             if limit:
                 product_ids = product_ids[:limit]
                 
@@ -180,6 +185,7 @@ async def _run_full_product_sync(
                 session, job_id, status="completed", records_processed=len(products)
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
@@ -232,6 +238,7 @@ async def _run_rest_sync(
                 records_processed=len(products),
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
@@ -268,6 +275,7 @@ async def _run_inventory_sync(
                 session, job_id, status="completed", records_processed=len(inventory)
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
@@ -304,6 +312,7 @@ async def _run_pricing_sync(
                 session, job_id, status="completed", records_processed=len(pricing)
             )
         except Exception as exc:
+            await session.rollback()
             await _finish_job(session, job_id, status="failed", error=str(exc))
 
 
@@ -490,7 +499,7 @@ async def latest_sync_status(
         "job_type": job.job_type,
         "status": job.status,
         "started_at": job.started_at,
-        "finished_at": job.finished_at,
+        "completed_at": job.completed_at,
         "records_processed": job.records_processed,
         "error_log": job.error_log,
     }
