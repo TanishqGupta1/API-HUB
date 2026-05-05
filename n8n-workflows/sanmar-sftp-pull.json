@@ -59,7 +59,7 @@
       },
       "id": "sftp-001",
       "name": "SFTP: List Files",
-      "type": "n8n-nodes-base.sftp",
+      "type": "n8n-nodes-base.ftp",
       "typeVersion": 1,
       "position": [900, 320],
       "credentials": {
@@ -77,7 +77,7 @@
       },
       "id": "sftp-002",
       "name": "SFTP: Download File",
-      "type": "n8n-nodes-base.sftp",
+      "type": "n8n-nodes-base.ftp",
       "typeVersion": 1,
       "position": [1120, 320],
       "credentials": {

@@ -173,11 +173,24 @@ SECRET_KEY=<generate with: python -c "from cryptography.fernet import Fernet; pr
 
 ## n8n Setup
 
-1. Run n8n: `docker compose up -d n8n` (or use existing instance)
-2. Install community nodes: `n8n-nodes-onprintshop` (VisualGraphxLLC)
-3. Import workflow JSON from `n8n-workflows/`
-4. Point HTTP Request nodes at `http://localhost:8000`
-5. Configure OnPrintShop credentials per customer via the Customers UI
+API-HUB delegates outbound integrations (OPS push, scheduled syncs) to n8n.
+The OnPrintShop node is a custom community node baked into our `n8n.Dockerfile`.
+
+**Supported n8n hosts:**
+- Self-hosted Docker — `docker build -f n8n.Dockerfile -t api-hub-n8n:latest .`
+- ECS Fargate (Phase 14d)
+- n8n.cloud Pro+ (manual community-node install)
+- Render, Fly, Railway, Hetzner — anywhere Docker runs
+
+**Not supported:** n8n.cloud Starter — community nodes are blocked on that tier.
+
+**Quick start (local dev):**
+1. `docker compose --profile dev up -d` — starts postgres + api + n8n
+2. Import workflow JSONs from `n8n-workflows/` via n8n editor → Workflow → Import from File
+3. Set `INGEST_SHARED_SECRET` and `API_BASE_URL` in `.env` (see `.env.example`)
+4. Configure OnPrintShop credentials per customer via the Customers UI
+
+See [docs/n8n-integration.md](docs/n8n-integration.md) for the full integration contract.
 
 ---
 

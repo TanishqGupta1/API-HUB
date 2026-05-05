@@ -1,8 +1,9 @@
-import uuid
 import os
-import httpx
+import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
+
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -15,6 +16,22 @@ from modules.decorations.models import CustomerProductDecoration
 from modules.push_mappings.models import PushMapping
 from modules.push_log.models import ProductPushLog
 from .merge import merge_product_with_decorations
+
+async def trigger_n8n_push(payload: dict[str, Any]) -> None:
+    """POST payload to N8N_PUSH_WEBHOOK_URL.
+
+    Silently skips in dev when the env var is unset.
+    Raises in production if unset, or on any non-2xx response.
+    """
+    webhook_url = os.getenv("N8N_PUSH_WEBHOOK_URL", "").strip()
+    if not webhook_url:
+        if os.getenv("ENVIRONMENT", "development").lower() == "production":
+            raise RuntimeError("N8N_PUSH_WEBHOOK_URL is required in production")
+        return
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(webhook_url, json=payload)
+        response.raise_for_status()
+
 
 async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uuid.UUID) -> dict:
     """
@@ -97,31 +114,26 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
         await db.commit()
         await db.refresh(push_log)
 
-        # 7. Trigger n8n webhook
-        webhook_url = os.getenv("N8N_PUSH_WEBHOOK_URL")
-        if webhook_url:
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    await client.post(webhook_url, json={
-                        "push_log_id": str(push_log.id),
-                        "customer_id": str(customer_id),
-                        "product_id": str(product_id),
-                        "payload": payload,
-                        "ops_auth": {
-                            "base_url": customer.ops_base_url,
-                            "token_url": customer.ops_token_url,
-                            "client_id": customer.ops_client_id,
-                            "client_secret": (customer.ops_auth_config or {}).get("client_secret")
-                        }
-                    })
-            except Exception as trigger_err:
-                # Log but don't fail the whole request (the job is queued in DB)
-                print(f"Failed to trigger n8n: {trigger_err}")
+        # 7. Trigger n8n webhook via trigger_n8n_push()
+        # raise_for_status() inside trigger_n8n_push ensures n8n 5xx errors
+        # propagate here so push_log flips to 'failed' instead of staying 'pending'.
+        await trigger_n8n_push({
+            "push_log_id": str(push_log.id),
+            "customer_id": str(customer_id),
+            "product_id": str(product_id),
+            "payload": payload,
+            "ops_auth": {
+                "base_url": customer.ops_base_url,
+                "token_url": customer.ops_token_url,
+                "client_id": customer.ops_client_id,
+                "client_secret": (customer.ops_auth_config or {}).get("client_secret")
+            }
+        })
 
         return {
-            "status": "pending", 
+            "status": "pending",
             "push_log_id": str(push_log.id),
-            "message": "Product payload prepared and queued for n8n push.", 
+            "message": "Product payload prepared and queued for n8n push.",
             "payload": payload
         }
         
