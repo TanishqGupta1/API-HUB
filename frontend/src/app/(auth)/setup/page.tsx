@@ -1,46 +1,41 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { clearCachedUser } from "@/lib/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export default function LoginPage() {
+export default function SetupPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
-
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await fetch(`${API_BASE}/api/auth/setup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ email, password }),
       });
-
       if (!res.ok) {
-        const json = await res.json().catch(() => null);
-        throw new Error(json?.detail ?? "Invalid credentials");
+        const j = await res.json().catch(() => null);
+        if (res.status === 409) {
+          router.push("/login");
+          return;
+        }
+        throw new Error(j?.detail ?? "Setup failed");
       }
-
-      // Cookie is set by the backend; just clear the cached user so the next
-      // fetchUser() pulls fresh data.
       clearCachedUser();
-
-      const next = searchParams.get("next") ?? "/";
-      router.push(next);
-      router.refresh();
+      router.push("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -79,11 +74,14 @@ export default function LoginPage() {
             margin: 0,
           }}
         >
-          Sign in
+          First-run setup
         </h1>
+        <p style={{ marginTop: "8px", marginBottom: 0, color: "var(--ink-muted)", fontSize: 13 }}>
+          Create the first VG admin account. Available only before any user exists.
+        </p>
       </div>
 
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         <div>
           <label
             htmlFor="email"
@@ -132,13 +130,14 @@ export default function LoginPage() {
               marginBottom: "6px",
             }}
           >
-            Password
+            Password (min 12 chars)
           </label>
           <input
             id="password"
             type="password"
-            autoComplete="current-password"
+            autoComplete="new-password"
             required
+            minLength={12}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             style={{
@@ -184,7 +183,7 @@ export default function LoginPage() {
             opacity: loading ? 0.7 : 1,
           }}
         >
-          {loading ? "Signing in…" : "Sign in"}
+          {loading ? "Creating…" : "Create admin"}
         </button>
       </form>
     </div>

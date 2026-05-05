@@ -18,7 +18,15 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
+    credentials: "include",
   });
+
+  if (res.status === 401) {
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login") && !window.location.pathname.startsWith("/setup")) {
+      window.location.href = "/login";
+    }
+    throw new ApiError(401, "Session expired");
+  }
 
   if (!res.ok) {
     const contentType = res.headers.get("content-type") ?? "";
