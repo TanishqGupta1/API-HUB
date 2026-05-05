@@ -75,9 +75,8 @@ Stock and pricing are **not** in this workflow yet — they're separate OPS quer
 All workflow URLs use `{{ $env.API_BASE_URL }}` so the address is configurable per environment.
 Set `API_BASE_URL` in the n8n container's environment (already wired in `docker-compose.yml`):
 
-- **macOS/Windows Docker Desktop (default):** `http://host.docker.internal:8000`
-- **Linux / all-Docker stack:** `http://api:8000`
-- **Production:** your public or internal API hostname
+- **Docker Compose (all platforms):** `http://api:8000` (Compose service DNS — set in `docker-compose.yml`)
+- **Production:** your public or internal API hostname (set `API_BASE_URL` in task definition / `.env`)
 
 ## Activation
 
