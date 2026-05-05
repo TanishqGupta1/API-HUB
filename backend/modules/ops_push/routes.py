@@ -49,12 +49,16 @@ async def get_processed_image(
 async def push_product_route(
     customer_id: UUID,
     product_id: UUID,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     try:
         result = await push_product(db, customer_id, product_id)
         if result["status"] == "failed":
             raise HTTPException(500, result["message"])
+        if result["status"] == "pending":
+            response.status_code = 202
+            
         return result
     except ValueError as e:
         raise HTTPException(404, str(e))

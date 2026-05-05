@@ -21,7 +21,8 @@ def merge_product_with_decorations(product: Any, decorations: list[dict] | None)
             dec_cost += float(dec.get("price_addition", 0.0) or 0.0)
             dec_areas.append({
                 "placement": dec.get("placement"),
-                "method": dec.get("method")
+                "method": dec.get("method"),
+                "price": float(dec.get("price_addition", 0.0) or 0.0)
             })
 
     if hasattr(product, "variants") and product.variants:

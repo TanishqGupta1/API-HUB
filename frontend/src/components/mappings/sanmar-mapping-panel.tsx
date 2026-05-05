@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type { SupplierCategoryBrowse, ImportCategoryResponse, SyncJob } from "@/lib/types";
@@ -39,23 +39,33 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
   }, [supplierId]);
 
   // 2. Polling for Active Job
+  const pollFailures = useRef(0);
   useEffect(() => {
-    if (!activeJob || activeJob.status === "completed" || activeJob.status === "failed") return;
+    if (!activeJob || activeJob.status === "completed" || activeJob.status === "failed") {
+      pollFailures.current = 0;
+      return;
+    }
 
     const interval = setInterval(async () => {
       try {
         const updated = await api<SyncJob>(`/api/sync-jobs/${activeJob.id}`);
+        pollFailures.current = 0;
         setActiveJob(updated);
-        if (updated.status === "completed" && onSyncComplete) {
+        if ((updated.status === "completed" || updated.status === "failed") && onSyncComplete) {
           onSyncComplete();
         }
-      } catch (e) {
+      } catch (e: any) {
+        pollFailures.current += 1;
         log.error("Polling error", e);
+        // Stop polling if the job no longer exists (404) or after 5 consecutive failures
+        if (e?.status === 404 || pollFailures.current >= 5) {
+          setActiveJob((prev) => prev ? { ...prev, status: "failed", error_log: "Job not found or API unreachable. Refresh to check." } : null);
+        }
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [activeJob]);
+  }, [activeJob?.id, activeJob?.status]);
 
   const defaultCategory = value["sanmar.default_category"] || "";
   const includeImages = value["sanmar.include_images"] === "true";

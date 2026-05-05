@@ -807,25 +807,34 @@ class PromoStandardsClient:
     async def get_media(
         self, product_ids: list[str], ws_version: str = "1.1.0", media_type: str = "Image"
     ) -> list[PSMediaItem]:
-        return await asyncio.to_thread(self._sync_get_media, product_ids, ws_version, media_type)
+        semaphore = asyncio.Semaphore(5)  # Max 5 concurrent SOAP calls
 
-    def _sync_get_media(
-        self, product_ids: list[str], ws_version: str, media_type: str
+        async def _fetch_single_media(pid: str) -> list[PSMediaItem]:
+            async with semaphore:
+                try:
+                    return await asyncio.to_thread(self._sync_get_single_media, pid, ws_version, media_type)
+                except Exception as exc:
+                    log.warning("getMediaContent(%s) failed: %s", pid, exc)
+                    return []
+
+        tasks = [_fetch_single_media(pid) for pid in product_ids]
+        results = await asyncio.gather(*tasks)
+        
+        out: list[PSMediaItem] = []
+        for r in results:
+            out.extend(r)
+        return out
+
+    def _sync_get_single_media(
+        self, product_id: str, ws_version: str, media_type: str
     ) -> list[PSMediaItem]:
         svc = self._get_service()
-        out: list[PSMediaItem] = []
-        for pid in product_ids:
-            try:
-                response = svc.getMediaContent(
-                    productId=pid,
-                    mediaType=media_type,
-                    **self._auth(ws_version)
-                )
-            except Exception as exc:  # noqa: BLE001
-                log.warning("getMediaContent(%s) failed: %s", pid, exc)
-                continue
-            out.extend(self._parse_media(response, pid))
-        return out
+        response = svc.getMediaContent(
+            productId=product_id,
+            mediaType=media_type,
+            **self._auth(ws_version)
+        )
+        return list(self._parse_media(response, product_id))
 
     def _parse_media(self, response: Any, product_id: str) -> Iterable[PSMediaItem]:
         media_container = _attr(response, "MediaContentArray", "mediaContentArray")

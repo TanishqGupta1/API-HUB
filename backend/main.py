@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -38,6 +39,30 @@ from modules.push_candidates.routes import router as push_candidates_router
 from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
 from modules.suppliers.category_import import router as category_import_router
+
+_PROD_REQUIRED_ENV_VARS = (
+    "SECRET_KEY",
+    "INGEST_SHARED_SECRET",
+    "ALLOWED_ORIGINS",
+    "POSTGRES_URL",
+)
+
+
+def _require_prod_env() -> None:
+    """Refuse to boot in production if required env vars are missing.
+
+    Called at the top of the lifespan handler. In development the check is
+    a no-op so local dev still works without a full prod env.
+    """
+    if os.getenv("ENVIRONMENT", "development").lower() != "production":
+        return
+    missing = [v for v in _PROD_REQUIRED_ENV_VARS if not os.getenv(v, "").strip()]
+    if missing:
+        raise RuntimeError(
+            "Production startup blocked. Missing required env vars: "
+            + ", ".join(missing)
+            + ". Set them in the task definition / ECS secrets / Secrets Manager."
+        )
 from modules.pricing.routes import router as pricing_router, customer_router as pricing_customer_router
 
 import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
@@ -73,6 +98,7 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS discovery_mode VARCHAR(32)",
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS total_products INTEGER DEFAULT 0",
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS success_count INTEGER DEFAULT 0",
+    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS push_name_prefix VARCHAR(32)",
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS failed_count INTEGER DEFAULT 0",
     "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE",
     "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sync_jobs' AND column_name='finished_at') THEN UPDATE sync_jobs SET completed_at = finished_at WHERE completed_at IS NULL AND finished_at IS NOT NULL; ALTER TABLE sync_jobs DROP COLUMN finished_at; END IF; END $$",
@@ -116,6 +142,7 @@ _SCHEMA_UPGRADES: list[str] = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _require_prod_env()
     import asyncio
     retries = 5
     while retries > 0:
@@ -161,14 +188,20 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127
 
 app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
+_IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
+_CORS_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+_CORS_HEADERS = ["Authorization", "Content-Type", "X-Ingest-Secret"]
+
+_cors_kwargs: dict = dict(
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=_CORS_METHODS,
+    allow_headers=_CORS_HEADERS,
 )
+if not _IS_PRODUCTION:
+    _cors_kwargs["allow_origin_regex"] = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 # Routers
 app.include_router(suppliers_router)
