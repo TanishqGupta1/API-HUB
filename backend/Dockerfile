@@ -16,9 +16,10 @@ ENV PYTHONPATH=/app:/deps \
 # libpq5 needed by asyncpg/psycopg at runtime; keep image lean
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libpq5 \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd -m -u 1000 app
 COPY --from=builder /deps /deps
-COPY . .
+COPY --chown=app:app . .
+USER app
 EXPOSE 8000
-# Production CMD — no --reload
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

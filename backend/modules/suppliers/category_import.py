@@ -16,19 +16,25 @@ for that source adapter.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from database import async_session, get_db
 from modules.promostandards.resolver import resolve_wsdl_url
 from modules.suppliers.models import Supplier
 from modules.suppliers.service import get_cached_endpoints
 from modules.sync_jobs.models import SyncJob
+from modules.promostandards.client import PromoStandardsClient
+from modules.promostandards.normalizer import upsert_products, update_media_only
+from modules.catalog.models import Category, Product
+from modules.import_jobs.service import log as import_log
 
 router = APIRouter(prefix="/api/suppliers", tags=["category_import"])
 
@@ -120,6 +126,19 @@ async def _run_category_import(
                 extension_wsdl_url=extension_wsdl_url,
             )
 
+            if job:
+                job.total_products = len(products)
+                await session.commit()
+                await session.refresh(job)
+
+            if not products:
+                # Still finalize if no products found
+                if job:
+                    job.status = "completed"
+                    job.completed_at = datetime.now(timezone.utc)
+                    await session.commit()
+                return
+
             cat_slug = re.sub(r"[^a-z0-9]+", "-", category_name.lower()).strip("-")
 
             # Ensure category exists — use external_id key for idempotency
@@ -139,21 +158,37 @@ async def _run_category_import(
                 session.add(db_cat)
                 await session.flush()
 
-            media_items = []
-            if fetch_images and wsdl_media and products:
-                media_client = PromoStandardsClient(wsdl_media, auth_config)
-                # Fetch media for all products in this batch
-                product_ids = [p.product_id for p in products]
-                media_items = await media_client.get_media(product_ids)
+            # 1. Save products immediately (Catalog Data)
             await upsert_products(
                 session,
                 supplier_id,
                 products,
                 inventory=None,
                 pricing=None,
-                media=media_items,
+                media=None,
                 category_id=db_cat.id
             )
+            
+            if job:
+                job.records_processed = len(products)
+                await session.commit()
+                await session.refresh(job)
+
+            # 2. Enrich images in background if requested
+            if fetch_images and wsdl_media and products:
+                media_client = PromoStandardsClient(wsdl_media, auth_config)
+                for i, p in enumerate(products):
+                    try:
+                        # Update progress in error_log for visibility
+                        if job:
+                            job.error_log = f"Enriching media for {p.product_id} ({i+1}/{len(products)})..."
+                            await session.commit()
+                        
+                        media_items = await media_client.get_media([p.product_id])
+                        if media_items:
+                            await update_media_only(session, supplier_id, media_items)
+                    except Exception as e:
+                        import_log.warning("Media enrichment failed for %s: %s", p.product_id, e)
 
             # Upsert a Category row for this category_name so the sidebar shows it
             if products:
@@ -184,15 +219,16 @@ async def _run_category_import(
             job2 = await session.get(SyncJob, job_id)
             if job2:
                 job2.status = "completed"
-                job2.records_processed = len(products)
+                job2.error_log = None # Clear the status message
                 job2.completed_at = datetime.now(timezone.utc)
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
-            job3 = await session.get(SyncJob, job_id)
-            if job3:
-                job3.status = "failed"
-                job3.error_log = str(exc)
-                job3.completed_at = datetime.now(timezone.utc)
+            import traceback
+            traceback.print_exc()
+            if job:
+                job.status = "failed"
+                job.error_log = str(exc)
+                job.completed_at = datetime.now(timezone.utc)
                 await session.commit()
 
 

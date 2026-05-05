@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-INGEST_SECRET = os.getenv("INGEST_SHARED_SECRET", "vg-hub-ingest-secret-2026")
+INGEST_SECRET = os.environ["INGEST_SHARED_SECRET"]
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 def transform_ops_data(raw_data):
