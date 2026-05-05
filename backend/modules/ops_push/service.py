@@ -102,7 +102,7 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
         if webhook_url:
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    await client.post(webhook_url, json={
+                    response = await client.post(webhook_url, json={
                         "push_log_id": str(push_log.id),
                         "customer_id": str(customer_id),
                         "product_id": str(product_id),
