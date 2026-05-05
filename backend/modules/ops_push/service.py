@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -17,6 +18,8 @@ from modules.push_mappings.models import PushMapping
 from modules.push_log.models import ProductPushLog
 from .merge import merge_product_with_decorations
 
+logger = logging.getLogger(__name__)
+
 async def trigger_n8n_push(payload: dict[str, Any]) -> None:
     """POST payload to N8N_PUSH_WEBHOOK_URL.
 
@@ -31,7 +34,6 @@ async def trigger_n8n_push(payload: dict[str, Any]) -> None:
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.post(webhook_url, json=payload)
         response.raise_for_status()
-
 
 async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uuid.UUID) -> dict:
     """
