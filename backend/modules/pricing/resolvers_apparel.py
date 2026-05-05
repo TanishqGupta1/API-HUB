@@ -73,6 +73,11 @@ class TieredVariantResolver:
         """Return the tier whose [quantity_min, quantity_max] band contains qty.
 
         When multiple tiers match (e.g. MSRP + Net), prefer Net > Sale > MSRP > Case.
+
+        TODO: Tier priority order (Net > Sale > MSRP > Case) is assumed based on standard
+        wholesale convention but has NOT been confirmed with Christian / SanMar account rep.
+        If SanMar's API returns a different preferred price_type, update the priority dict below.
+        Confirm before V1 goes to production. (PR #81 review note — 2026-05-04)
         """
         rows = (await db.execute(
             select(VariantPrice).where(
