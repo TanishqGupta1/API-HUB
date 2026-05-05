@@ -1,8 +1,12 @@
 name: Deploy to ECS (staging)
 
+# Devops workflow: push to `dev` branch → staging deploy.
+# `main` stays as the reviewed baseline; promote to production via a
+# separate workflow on tag push (Phase 4 in deployment/RUNBOOK.md).
 on:
   push:
-    branches: [main]
+    branches: [dev]
+  workflow_dispatch:
 
 permissions:
   id-token: write   # for OIDC AWS auth
