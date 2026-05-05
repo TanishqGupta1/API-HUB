@@ -25,17 +25,20 @@ def _key() -> str:
 
 
 def _base() -> str:
-    url = os.getenv("N8N_BASE_URL")
-    if not url:
+    # N8N_API_BASE_URL is the canonical var; N8N_BASE_URL kept for backward compat
+    url = os.getenv("N8N_API_BASE_URL") or os.getenv("N8N_BASE_URL")
+    if url:
+        return url.rstrip("/")
+    if os.getenv("ENVIRONMENT", "development").lower() == "production":
         raise RuntimeError(
-            "N8N_BASE_URL environment variable is required. "
-            "Set it to http://n8n:5678 (docker-compose) or an internal service URL in production."
+            "N8N_API_BASE_URL must be set in production. "
+            "In ECS this comes from the task definition; in dev set it in .env."
         )
-    return url.rstrip("/")
+    return "http://n8n:5678"
 
 
 def _webhook_base() -> str:
-    return os.getenv("N8N_WEBHOOK_BASE", _base()).rstrip("/")
+    return (os.getenv("N8N_WEBHOOK_BASE_URL") or os.getenv("N8N_WEBHOOK_BASE") or _base()).rstrip("/")
 
 
 def _client() -> httpx.AsyncClient:
