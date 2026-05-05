@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, X } from "lucide-react";
 import { api } from "@/lib/api";
@@ -72,12 +72,16 @@ export default function ProductsPage() {
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierFilter);
 
-  const isVg = (p: ProductListItem) =>
-    (p.supplier_name ?? "").toLowerCase().includes("visual graphics");
+  // VG products come from suppliers using the ops_graphql protocol.
+  // Filter by supplier_id (stable) rather than supplier_name (brittle).
+  const vgSupplierIds = useMemo(
+    () => new Set(suppliers.filter((s) => s.protocol === "ops_graphql").map((s) => s.id)),
+    [suppliers],
+  );
 
   const displayedProducts = products.filter((p) => {
-    if (sourceFilter === "vg") return isVg(p);
-    if (sourceFilter === "supplier") return !isVg(p);
+    if (sourceFilter === "vg") return vgSupplierIds.has(p.supplier_id);
+    if (sourceFilter === "supplier") return !vgSupplierIds.has(p.supplier_id);
     return true;
   });
 
