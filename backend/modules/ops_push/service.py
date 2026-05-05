@@ -114,6 +114,7 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
                             "client_secret": (customer.ops_auth_config or {}).get("client_secret")
                         }
                     })
+                    response.raise_for_status()
             except Exception as trigger_err:
                 # Log but don't fail the whole request (the job is queued in DB)
                 print(f"Failed to trigger n8n: {trigger_err}")
