@@ -20,6 +20,8 @@ from .merge import merge_product_with_decorations
 
 logger = logging.getLogger(__name__)
 
+
+
 async def trigger_n8n_push(payload: dict[str, Any]) -> None:
     """POST payload to N8N_PUSH_WEBHOOK_URL.
 
@@ -140,17 +142,15 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
         }
         
     except Exception as e:
-        await db.rollback()
-        # Use a fresh session for the error log so it survives the rollback
+        error_message = f"n8n trigger failed: {e}"
+        # The pending push_log row was already committed on the happy-path
+        # commit above, so we UPDATE it (instead of inserting a duplicate).
+        # Use a fresh session because the outer transaction may be in a
+        # rollback state.
         async with async_session() as audit_session:
-            fail_log = ProductPushLog(
-                product_id=product_id,
-                customer_id=customer_id,
-                status="failed",
-                error=str(e),
-                pushed_at=datetime.now(timezone.utc)
-            )
-            audit_session.add(fail_log)
-            await audit_session.commit()
-            
-        return {"status": "failed", "message": str(e)}
+            existing = await audit_session.get(ProductPushLog, push_log.id)
+            if existing:
+                existing.status = "failed"
+                existing.error = error_message
+                await audit_session.commit()
+        return {"status": "failed", "message": error_message}

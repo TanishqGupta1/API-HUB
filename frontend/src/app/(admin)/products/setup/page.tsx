@@ -6,7 +6,6 @@ import {
   Search,
   ChevronLeft,
   Copy,
-  Star,
   Settings,
   GripVertical,
   ArrowUpDown,
@@ -28,7 +27,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
-import { Supplier } from "@/lib/types";
 import { toast } from "sonner";
 import { log } from "@/lib/log";
 
@@ -392,13 +390,12 @@ export default function ProductOptionsPage() {
         <div className="border-b border-[#e2e8f0] px-5 py-3 flex items-center justify-between bg-white">
           <div className="flex items-center gap-2 text-[14px] font-bold text-[#2563eb]">
             <span className="uppercase tracking-tight">Assign Product Options</span>
-            <span className="text-[#94a3b8]">»</span>
-            <span className="text-[#1e293b]">{selectedProductName}</span>
-            <span className="ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#22c55e] text-white text-[11px]">
-              ✓
-            </span>
-            <Settings className="w-4 h-4 text-[#64748b] ml-1" />
-            <Star className="w-4 h-4 text-[#f59e0b] fill-[#f59e0b] ml-1" />
+            {productId && (
+              <>
+                <span className="text-[#94a3b8]">»</span>
+                <span className="text-[#1e293b] font-semibold">{selectedProductName}</span>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -421,48 +418,53 @@ export default function ProductOptionsPage() {
         </div>
 
         {/* Product Selectors Integration */}
-        <div className="px-5 py-4 border-b border-[#e2e8f0] bg-slate-50/30 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="px-5 py-4 border-b border-[#e2e8f0] bg-slate-50/30 grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Storefront */}
           <div className="space-y-1.5">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Storefront</span>
-              <div className="flex items-center gap-2">
-                <Select value={supplierId} onValueChange={setSupplierId}>
-                  <SelectTrigger className="w-[180px] h-9 bg-white border-[#cbd5e1] rounded-none text-[12px] font-medium text-[#1e40af] focus:ring-[#3b82f6]">
-                    <div className="flex items-center gap-2">
-                      <Filter className="w-3.5 h-3.5 text-[#3b82f6]" />
-                      <SelectValue placeholder="All Suppliers" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent className="rounded-none border-[#cbd5e1]">
-                    <SelectItem value="all" className="text-[12px]">All Suppliers</SelectItem>
-                    {suppliers.map(s => (
-                      <SelectItem key={s.id} value={s.id} className="text-[12px]">{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={customerId} onValueChange={setCustomerId}>
-                  <SelectTrigger className="w-[200px] h-9 bg-[#1e40af] border-[#1e40af] rounded-none text-[12px] font-black text-white focus:ring-0">
-                    <SelectValue placeholder="Select Storefront" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-none border-[#1e3a8a]">
-                    {customers.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="text-[12px] font-medium">
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <Select value={customerId} onValueChange={(v) => { setCustomerId(v); setProductId(""); }}>
+              <SelectTrigger className="h-9 bg-white border-[#cbd5e1] rounded-none text-[12px] font-semibold text-[#1e293b] focus:ring-1 focus:ring-[#3b82f6]">
+                <SelectValue placeholder="Select Storefront" />
+              </SelectTrigger>
+              <SelectContent className="rounded-none border-[#cbd5e1]">
+                {customers.map((c) => (
+                  <SelectItem key={c.id} value={c.id} className="text-[12px] font-medium">
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          {/* Supplier Filter */}
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Filter by Supplier</span>
+            <Select value={supplierId} onValueChange={(v) => { setSupplierId(v); setProductId(""); }} disabled={!customerId}>
+              <SelectTrigger className="h-9 bg-white border-[#cbd5e1] rounded-none text-[12px] font-medium text-[#1e293b] focus:ring-1 focus:ring-[#3b82f6] disabled:opacity-40">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-3.5 h-3.5 text-[#3b82f6] shrink-0" />
+                  <SelectValue placeholder="All Suppliers" />
+                </div>
+              </SelectTrigger>
+              <SelectContent className="rounded-none border-[#cbd5e1]">
+                <SelectItem value="all" className="text-[12px]">All Suppliers</SelectItem>
+                {suppliers.map(s => (
+                  <SelectItem key={s.id} value={s.id} className="text-[12px]">{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Catalog Item */}
           <div className="space-y-1.5">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Catalog Item</span>
-            <Select value={productId} onValueChange={setProductId} disabled={productsLoading}>
-              <SelectTrigger className="h-10 border-[#cbd5e1] bg-white rounded-none text-[13px] font-bold">
-                <SelectValue placeholder={productsLoading ? "Loading products…" : "Select Product"} />
+            <Select value={productId} onValueChange={setProductId} disabled={!customerId || productsLoading}>
+              <SelectTrigger className="h-9 border-[#cbd5e1] bg-white rounded-none text-[12px] font-semibold disabled:opacity-40">
+                <SelectValue placeholder={productsLoading ? "Loading products…" : !customerId ? "Select storefront first" : "Select Product"} />
               </SelectTrigger>
               <SelectContent className="rounded-none">
                 {productsList.map(p => (
-                  <SelectItem key={p.id} value={p.id} className="font-bold">{p.product_name}</SelectItem>
+                  <SelectItem key={p.id} value={p.id} className="font-medium text-[12px]">{p.product_name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -519,11 +521,18 @@ export default function ProductOptionsPage() {
         {/* Options grid */}
         <div className="p-5 bg-[#f8fafc]">
           {!productId ? (
-            <div className="py-32 text-center flex flex-col items-center justify-center space-y-4">
-               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
-                  <Filter className="w-8 h-8" />
-               </div>
-               <div className="text-slate-400 font-bold text-sm uppercase tracking-widest">Select a product to configure options</div>
+            <div className="py-28 text-center flex flex-col items-center justify-center space-y-3">
+              <div className="w-14 h-14 bg-white border border-[#e2e8f0] rounded-2xl flex items-center justify-center shadow-sm">
+                <Settings className="w-7 h-7 text-[#3b82f6]" />
+              </div>
+              <div className="text-[#1e293b] font-black text-sm uppercase tracking-widest">
+                {!customerId ? "Select a storefront to begin" : "Now select a catalog item above"}
+              </div>
+              <div className="text-[12px] text-slate-400 max-w-xs">
+                {!customerId
+                  ? "Pick a storefront → filter by supplier → choose a product to configure its options."
+                  : "Choose a product from the Catalog Item dropdown to view and edit its decoration options."}
+              </div>
             </div>
           ) : filteredOptions.length === 0 ? (
             <div className="py-20 text-center text-[#94a3b8] text-sm font-bold uppercase tracking-widest">

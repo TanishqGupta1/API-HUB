@@ -14,17 +14,13 @@ from .dependencies import CurrentUser, VGAdmin
 from .models import User
 from .schemas import (
     LoginRequest,
-    RefreshRequest,
     SetupRequest,
-    TokenResponse,
     UserCreate,
     UserRead,
 )
 from .security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
-    create_refresh_token,
-    decode_token,
     hash_password,
     verify_password,
 )
@@ -126,10 +122,7 @@ async def setup_first_admin(
 
 @router.post("/users", response_model=UserRead, status_code=201)
 async def create_user(body: UserCreate, _: VGAdmin, db: AsyncSession = Depends(get_db)) -> User:
-    if body.role == "customer_admin" and not body.customer_id:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "customer_admin requires customer_id"
-        )
+    # role/customer_id consistency enforced by UserCreate.model_validator
     user = User(
         email=body.email,
         hashed_password=hash_password(body.password),
