@@ -8,20 +8,46 @@ from pydantic import BaseModel, Field, ConfigDict
 class MarkupRuleCreate(BaseModel):
     customer_id: UUID
     scope: str = "all"
-    markup_pct: float
+    markup_pct: Optional[float] = None
+    markup_amount: Optional[float] = None
     min_margin: Optional[float] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
     rounding: str = "none"
     priority: int = 0
+    is_active: bool = True
+    effective_from: Optional[datetime] = None
+    effective_until: Optional[datetime] = None
+
+
+class MarkupRuleUpdate(BaseModel):
+    scope: Optional[str] = None
+    markup_pct: Optional[float] = None
+    markup_amount: Optional[float] = None
+    min_margin: Optional[float] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    rounding: Optional[str] = None
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
+    effective_from: Optional[datetime] = None
+    effective_until: Optional[datetime] = None
 
 
 class MarkupRuleRead(BaseModel):
     id: UUID
     customer_id: UUID
     scope: str
-    markup_pct: float
+    markup_pct: Optional[float]
+    markup_amount: Optional[float]
     min_margin: Optional[float]
+    min_price: Optional[float]
+    max_price: Optional[float]
     rounding: str
     priority: int
+    is_active: bool
+    effective_from: Optional[datetime]
+    effective_until: Optional[datetime]
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -53,7 +79,8 @@ class PushProductMeta(BaseModel):
 class AppliedMarkupRule(BaseModel):
     id: UUID
     scope: str
-    markup_pct: float
+    markup_pct: Optional[float]
+    markup_amount: Optional[float]
     priority: int
 
 

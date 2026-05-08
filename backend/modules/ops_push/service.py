@@ -16,6 +16,7 @@ from modules.suppliers.models import Supplier
 from modules.decorations.models import CustomerProductDecoration
 from modules.push_mappings.models import PushMapping
 from modules.push_log.models import ProductPushLog
+from modules.catalog.models import CustomerProductSelection
 from .merge import merge_product_with_decorations
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,32 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
                 "client_secret": (customer.ops_auth_config or {}).get("client_secret")
             }
         })
+
+        # 8. Phase 6 — mark the customer-catalog selection as pushed (optimistic).
+        # Stale detection later runs in import_jobs._finalize_job: it flips
+        # 'pushed' → 'stale' when product.last_synced > selection.pushed_at.
+        # Auto-creates a selection in 'pushed' status if the push happened
+        # without one (back-compat for admins who push directly from the
+        # products page without first selecting).
+        sel = (await db.execute(
+            select(CustomerProductSelection).where(
+                CustomerProductSelection.customer_id == customer_id,
+                CustomerProductSelection.product_id == product_id,
+            )
+        )).scalar_one_or_none()
+        now = datetime.now(timezone.utc)
+        if sel is not None:
+            sel.status = "pushed"
+            sel.pushed_at = now
+        else:
+            db.add(CustomerProductSelection(
+                customer_id=customer_id,
+                product_id=product_id,
+                status="pushed",
+                added_at=now,
+                pushed_at=now,
+            ))
+        await db.commit()
 
         return {
             "status": "pending",

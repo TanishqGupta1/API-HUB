@@ -1,16 +1,54 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { CheckCircle2, Plus, CheckSquare } from "lucide-react";
+import { toast } from "sonner";
 import type { ProductListItem } from "@/lib/types";
+import { api } from "@/lib/api";
+import { log } from "@/lib/log";
+import { useSelectedCustomer } from "@/lib/customer-context";
 import { PushRowAction } from "@/components/products/push-row-action";
 
 interface ProductCardProps {
   product: ProductListItem;
+  isSelected?: boolean;
+  onToggleSelection?: (id: string) => void;
   onArchive?: (product: ProductListItem) => void;
 }
 
-export function ProductCard({ product, onArchive }: ProductCardProps) {
+export function ProductCard({ product, isSelected, onToggleSelection, onArchive }: ProductCardProps) {
   const router = useRouter();
+  const { selectedCustomerId } = useSelectedCustomer();
+  const [adding, setAdding] = useState(false);
+  const [addedThisSession, setAddedThisSession] = useState(false);
+
+  function handleSelect(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (onToggleSelection) {
+      onToggleSelection(product.id);
+    }
+  }
+
+  async function handleAddToCustomer(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!selectedCustomerId || adding) return;
+    setAdding(true);
+    try {
+      await api(
+        `/api/customers/${selectedCustomerId}/selections/${product.id}`,
+        { method: "POST" },
+      );
+      setAddedThisSession(true);
+      toast.success("Added to customer catalog");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to add";
+      log.error("add-to-customer failed", err);
+      toast.error(msg);
+    } finally {
+      setAdding(false);
+    }
+  }
 
   const badge =
     product.supplier_name?.split(" ")[0].toUpperCase() ||
@@ -44,16 +82,29 @@ export function ProductCard({ product, onArchive }: ProductCardProps) {
             </span>
           </div>
         )}
-        {/* Origin tag - top-left: distinguishes supplier-sourced vs VG-owned products */}
+
+        {/* Selection Checkbox Overlay */}
+        <div 
+          onClick={handleSelect}
+          className={`absolute top-3 left-3 w-6 h-6 rounded-lg border-2 z-20 flex items-center justify-center transition-all cursor-pointer ${
+            isSelected 
+              ? "bg-[#1e4d92] border-[#1e4d92] shadow-lg shadow-blue-900/20" 
+              : "bg-white/80 backdrop-blur-sm border-white/50 opacity-0 group-hover:opacity-100"
+          }`}
+        >
+          {isSelected && <CheckSquare className="w-4 h-4 text-white" />}
+        </div>
+
+        {/* Origin tag - top-right (shifted from top-left) */}
         <div
-          className={`absolute top-3 left-3 px-[10px] py-[4px] rounded font-mono text-[10px] font-bold shadow-sm z-10 ${
+          className={`absolute top-3 right-3 px-[10px] py-[4px] rounded font-mono text-[10px] font-bold shadow-sm z-10 ${
             isVgProduct
               ? "bg-[#1e4d92] text-white border border-[#1e4d92]"
               : "bg-white/90 backdrop-blur-sm text-[#484852] border border-[#cfccc8]"
           }`}
           title={isVgProduct ? "Owned by Visual Graphics OPS" : `Sourced from ${product.supplier_name}`}
         >
-          {isVgProduct ? "★ VG PRODUCT" : "↓ SOURCE"}
+          {isVgProduct ? "★ VG" : "↓"}
         </div>
         {/* Supplier badge - bottom-right */}
         <div className="absolute bottom-3 right-3 px-[10px] py-[4px] bg-white/90 backdrop-blur-sm border border-[#cfccc8] rounded
@@ -128,9 +179,38 @@ export function ProductCard({ product, onArchive }: ProductCardProps) {
 
       {/* Action row */}
       <div
-        className="flex items-center justify-end px-5 py-3 bg-white border-t border-[#cfccc8]"
+        className="flex items-center justify-between gap-2 px-5 py-3 bg-white border-t border-[#cfccc8]"
         onClick={(e) => e.stopPropagation()}
       >
+        {selectedCustomerId ? (
+          <button
+            type="button"
+            onClick={handleAddToCustomer}
+            disabled={adding || addedThisSession}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wide transition-colors ${
+              addedThisSession
+                ? "bg-[#f0f9f4] border-[#247a52] text-[#247a52]"
+                : "bg-white border-[#cfccc8] text-[#1e4d92] hover:border-[#1e4d92] disabled:opacity-50"
+            }`}
+            title="Add to active customer's catalog"
+          >
+            {addedThisSession ? (
+              <>
+                <CheckCircle2 className="w-3 h-3" />
+                Added
+              </>
+            ) : (
+              <>
+                <Plus className="w-3 h-3" />
+                {adding ? "Adding…" : "Add to customer"}
+              </>
+            )}
+          </button>
+        ) : (
+          <span className="text-[10px] text-[#b4b4bc] italic">
+            Pick a customer in top bar to add
+          </span>
+        )}
         <PushRowAction productId={product.id} productName={product.product_name} />
       </div>
     </div>

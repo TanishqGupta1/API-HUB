@@ -14,6 +14,9 @@ import type {
 import { Button } from "@/components/ui/button";
 import { PublishButton } from "@/components/products/publish-button";
 import { PushHistory } from "@/components/products/push-history";
+import { useSelectedCustomer } from "@/lib/customer-context";
+import { CheckCircle2, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
 
@@ -40,6 +43,28 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [activeImageTab, setActiveImageTab] = useState<string>("front");
   const [pushStepsOpen, setPushStepsOpen] = useState(false);
+  const { selectedCustomerId } = useSelectedCustomer();
+  const [adding, setAdding] = useState(false);
+  const [addedThisSession, setAddedThisSession] = useState(false);
+
+  async function handleAddToCustomer() {
+    if (!selectedCustomerId || adding || !product) return;
+    setAdding(true);
+    try {
+      await api(
+        `/api/customers/${selectedCustomerId}/selections/${product.id}`,
+        { method: "POST" },
+      );
+      setAddedThisSession(true);
+      toast.success("Added to customer catalog");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to add";
+      log.error("add-to-customer failed", err);
+      toast.error(msg);
+    } finally {
+      setAdding(false);
+    }
+  }
 
   const fetchData = async () => {
     try {
@@ -150,6 +175,30 @@ export default function ProductDetailPage() {
           </div>
         </div>
         <div className="flex gap-3">
+          {selectedCustomerId && (
+            <button
+              type="button"
+              onClick={handleAddToCustomer}
+              disabled={adding || addedThisSession}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md border text-[13px] font-bold uppercase tracking-wide transition-all shadow-[0_3px_0_rgba(30,77,146,0.08)] ${
+                addedThisSession
+                  ? "bg-[#f0f9f4] border-[#247a52] text-[#247a52]"
+                  : "bg-white border-[#cfccc8] text-[#1e4d92] hover:border-[#1e4d92] disabled:opacity-50"
+              }`}
+            >
+              {addedThisSession ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  Added
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  {adding ? "Adding…" : "Add to Customer Catalog"}
+                </>
+              )}
+            </button>
+          )}
           {supplier?.protocol === "ops_graphql" && (
             <Link href={`/products/${product.id}/options`}>
               <Button variant="outline" className="border-[#1e4d92] text-[#1e4d92]">
