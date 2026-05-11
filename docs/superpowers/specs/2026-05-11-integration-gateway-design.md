@@ -2,10 +2,13 @@
 
 **Date:** 2026-05-11
 **Owner:** Tanishq (PM/Tech Lead)
-**Status:** Draft — pending team review
+**Status:** Draft Rev 1 — CCG critique applied; pending team re-review
 **Supersedes:** [`2026-05-08-sanmar-ops-staging-push-design.md`](2026-05-08-sanmar-ops-staging-push-design.md) (VPCE approach — could not run on current code state)
 **Research backing:** [`.omc/research/research-20260511-pushgateway-142234/report.md`](../../../.omc/research/research-20260511-pushgateway-142234/report.md)
 **Advisor input:** CCG (Codex + Gemini) artifacts under `.omc/artifacts/ask/`
+
+> ⚠️ **Read [Revision 1 patches](#revision-1--critical-fixes-applied) at the bottom of this doc before implementing.**
+> The body below is the original draft. The patches at the end override conflicting sections with the corrections from the Codex/Gemini critiques (6 CRITICAL fixes + multiple IMPORTANT items). Once team approves Revision 1, the patches will be merged inline and this notice removed.
 
 ---
 
@@ -565,3 +568,600 @@ Spec is implemented when:
 - Stage 4 (ProductIngest fit): `.omc/research/research-20260511-pushgateway-142234/stages/stage-4.md`
 - Superseded VPCE spec: `docs/superpowers/specs/2026-05-08-sanmar-ops-staging-push-design.md`
 - PR #104 (spike bugs 1+2 fix): https://github.com/VisualGraphxLLC/API-HUB/pull/104
+
+---
+
+# Revision 1 — Critical fixes applied
+
+> Generated 2026-05-11 from CCG critique (Codex + Gemini) and 4 parallel codex-team workers.
+> Each subsection patches specific line ranges of the body above. Where this section conflicts with the body, **Revision 1 wins.**
+>
+> Source drafts live in `.omc/drafts/spec-revisions/wN[0-3]-*.md`.
+
+---
+
+
+<!-- ===== from wN0-schema-and-ingest.md ===== -->
+
+# API-HUB Integration Gateway spec revision draft
+
+Applies to [`docs/superpowers/specs/2026-05-11-integration-gateway-design.md`](/Users/tanishq/Documents/project-files/api-hub/api-hub/docs/superpowers/specs/2026-05-11-integration-gateway-design.md).
+
+## Replace lines 41-45
+
+- **Approach** — Gateway endpoints (not Preview/Execute pair). `Idempotency-Key` is persisted separately from a server-generated `request_id`; replay semantics are keyed by `(key_id, idempotency_key, payload_hash)`, never by `request_id`.
+- **Auth** — Scoped API key per orchestrator (`X-Orchestrator-Key`) for beta; HMAC signature for V2. JWT cookie auth stays for admin UI only.
+- **Scope** — Backend owns OPS push directly. n8n no longer in the push path. `trigger_n8n_push()` + `N8N_PUSH_WEBHOOK_URL` deleted.
+- **Schema** — `ProductIngest` remains the canonical external contract for both ingest and push, but M0 MUST close the current DB persistence gaps so a `ProductIngest` persisted to catalog storage can be rehydrated back into the same contract without field loss. Until M0 lands, that claim is aspirational rather than true.
+
+## Insert after line 142
+
+### Idempotency semantics (locked)
+
+For V1, strict server-side idempotency applies to `POST /api/integrations/v1/push-requests`.
+
+- `request_id UUID` is a server-generated correlation id for tracing and retries. It is never populated from the `Idempotency-Key` header and it is never used as the replay key.
+- `idempotency_key VARCHAR(128)` stores the raw `Idempotency-Key` header exactly as received.
+- The replay ledger is scoped to `(key_id, idempotency_key)`, so two different orchestrator keys may reuse the same header value without colliding.
+- `payload_hash` is the lowercase hex SHA-256 of the canonical request JSON. Compute it exactly as follows:
+1. Parse the raw request body as JSON.
+2. Recursively remove object members whose value is `null`.
+3. Preserve array order exactly; do not remove array elements, including `null` elements.
+4. Serialize the resulting value using RFC 8785 JSON Canonicalization Scheme rules: UTF-8, lexicographically sorted object keys, RFC 8785 number formatting, and no insignificant whitespace.
+5. Compute SHA-256 over the UTF-8 bytes of that canonical serialization and encode the digest as lowercase hex.
+
+`POST /push-requests` behavior is locked:
+
+| Condition | Result |
+|---|---|
+| First-seen `(key_id, idempotency_key)` | Create a new `product_push_log` row and continue normal processing |
+| Same `(key_id, idempotency_key)` + same `payload_hash` | Return `200` with the existing `push_log_id`; do not enqueue OPS work again |
+| Same `(key_id, idempotency_key)` + different `payload_hash` | Return `409 IDEMPOTENCY_CONFLICT` |
+
+`product_push_log.id` remains the public `push_log_id`. `request_id` exists for tracing, retry linkage, and operator support only.
+
+## Replace lines 148-166
+
+#### Expand `product_push_log` (+12 columns, additive migration)
+
+```sql
+ALTER TABLE product_push_log
+    ADD COLUMN request_id UUID NOT NULL DEFAULT gen_random_uuid(),
+    ADD COLUMN key_id VARCHAR(64),
+    ADD COLUMN idempotency_key VARCHAR(128),
+    ADD COLUMN payload_hash CHAR(64),
+    ADD COLUMN supplier_slug VARCHAR(64),
+    ADD COLUMN supplier_sku VARCHAR(255),
+    ADD COLUMN callback_url TEXT,
+    ADD COLUMN callback_status VARCHAR(32) DEFAULT 'not_requested',
+    ADD COLUMN callback_attempts INT DEFAULT 0,
+    ADD COLUMN step_results JSONB,
+    ADD COLUMN cleanup_targets JSONB,
+    ADD COLUMN retry_of UUID;
+
+ALTER TABLE product_push_log
+    ALTER COLUMN status TYPE VARCHAR(32);
+
+ALTER TABLE product_push_log
+    ADD CONSTRAINT fk_product_push_log_key_id
+    FOREIGN KEY (key_id) REFERENCES integration_keys(id) ON DELETE SET NULL;
+
+CREATE UNIQUE INDEX uq_product_push_log_key_idempotency
+    ON product_push_log (key_id, idempotency_key)
+    WHERE key_id IS NOT NULL AND idempotency_key IS NOT NULL;
+
+CREATE INDEX ix_product_push_log_payload_hash
+    ON product_push_log (payload_hash);
+```
+
+`request_id` and `idempotency_key` are intentionally distinct. The header value must never be coerced into a UUID or stored in `request_id`.
+
+## Replace lines 191-205
+
+#### ProductIngest persistence closure (C3)
+
+Decision: choose **(a) expand persistence**, not **(b) cut the canonical-contract claim**.
+
+Rationale:
+- The gateway accepts either `product_ref` or inline `product`, so push preflight, payload building, and catalog re-use are materially simpler if they operate on one contract shape.
+- The missing fields are fixable with additive columns plus a small persistence rewrite; weakening the claim would create a second DTO and duplicate validation logic.
+
+Current `ProductIngest` fields or behaviors that do **not** round-trip back from DB today:
+- `ProductIngest.category_external_id` — no product-level storage; `category_id` alone cannot reliably reproduce the supplier-facing value.
+- `ProductIngest.category_name` — stored as `products.category`, but current read shape exposes `category`, not `category_name`.
+- `ProductIngest.raw_payload` — no column.
+- `VariantIngest.part_id` — required in schema, but no DB column; `/inventory` and `/pricing` currently overload `sku` as the lookup key.
+- `VariantIngest.sort_order` — proposed by this spec, but not persisted anywhere today.
+- `ProductSizeIngest.ops_size_id` — no column.
+- `ProductSizeIngest.size_title` — no column.
+- `PrintDetailsIngest.ops_product_id_int` — no column.
+- `PrintDetailsIngest.default_category_id` — no column.
+- `PrintDetailsIngest.external_catalogue` — no column.
+- `ImageIngest.supplier_image_url` — inserted on create, but not refreshed on conflict update.
+- Snapshot semantics gap — `persist_product()` preserves omitted `variants`, `images`, and `options`, so re-ingesting a `ProductIngest` is merge-upsert, not exact contract replacement.
+
+M0 schema additions required to make the canonical-contract claim true:
+- `products.category_external_id VARCHAR(255) NULL`
+- `products.raw_payload JSONB NULL`
+- `product_variants.part_id VARCHAR(255) NULL` with backfill from existing `sku`
+- `product_variants.sort_order INTEGER NOT NULL DEFAULT 0`
+- `product_sizes.ops_size_id INTEGER NULL`
+- `product_sizes.size_title VARCHAR(100) NULL`
+- `print_details.ops_product_id_int INTEGER NULL`
+- `print_details.default_category_id INTEGER NULL`
+- `print_details.external_catalogue INTEGER NULL`
+
+M0 persistence and hydrator fixes required in the same milestone:
+- Write and read `product_variants.part_id` as the canonical supplier part identifier; keep `sku` as a separate optional field.
+- Map `products.category` back to `ProductIngest.category_name` and `products.category_external_id` back to `ProductIngest.category_external_id` in the DB-to-contract hydrator.
+- Persist `products.raw_payload`.
+- Persist and read `VariantIngest.sort_order`, `ProductSizeIngest.ops_size_id`, `ProductSizeIngest.size_title`, and the three print-detail metadata fields.
+- Update `ProductImage` upsert so `supplier_image_url` is included in the conflict-update set.
+- Change `persist_product()` to snapshot semantics for `variants`, `images`, `options`, and `sizes`: missing child rows are deleted in the same transaction before reinsertion/upsert.
+- Update `/api/ingest/{supplier_id}/inventory` and `/api/ingest/{supplier_id}/pricing` to target variants by `(product_id, part_id)`, not `(product_id, sku)`.
+
+Alembic sketch for the new canonical-contract columns:
+
+```python
+op.add_column("products", sa.Column("category_external_id", sa.String(255), nullable=True))
+op.add_column("products", sa.Column("raw_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True))
+op.add_column("product_variants", sa.Column("part_id", sa.String(255), nullable=True))
+op.add_column("product_variants", sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"))
+op.execute("UPDATE product_variants SET part_id = sku WHERE part_id IS NULL")
+op.create_unique_constraint("uq_product_variants_product_part_id", "product_variants", ["product_id", "part_id"])
+op.add_column("product_sizes", sa.Column("ops_size_id", sa.Integer(), nullable=True))
+op.add_column("product_sizes", sa.Column("size_title", sa.String(100), nullable=True))
+op.add_column("print_details", sa.Column("ops_product_id_int", sa.Integer(), nullable=True))
+op.add_column("print_details", sa.Column("default_category_id", sa.Integer(), nullable=True))
+op.add_column("print_details", sa.Column("external_catalogue", sa.Integer(), nullable=True))
+```
+
+## Replace line 451
+
+| **M0** | Additive Alembic migration: create `integration_keys`; expand `product_push_log` with distinct `request_id` and `idempotency_key` ledger fields; expand `products`, `product_variants`, `product_sizes`, and `print_details` so `ProductIngest` can round-trip losslessly; update catalog persistence to snapshot semantics; add contract tests for idempotent replay and DB rehydration fidelity. | YES (additive only) |
+
+## Replace lines 529 and 534-537
+
+- [ ] M0 migration applied: `integration_keys` exists; `product_push_log` has `request_id`, `idempotency_key`, `payload_hash`, and unique `(key_id, idempotency_key)` replay protection; `products`, `product_variants`, `product_sizes`, and `print_details` carry the canonical-contract gap-closure columns.
+- [ ] Round-trip contract tests pass: persist `ProductIngest` -> read from DB -> rehydrate `ProductIngest` with no loss of `category_external_id`, `category_name`, `raw_payload`, `part_id`, `sort_order`, size metadata, or print metadata.
+- [ ] Contract tests pass for the locked idempotency cases: first send -> `202`; same `X-Orchestrator-Key` + same `Idempotency-Key` + canonically equivalent body -> `200` with the same `push_log_id`; same `X-Orchestrator-Key` + same `Idempotency-Key` + canonically different body -> `409 IDEMPOTENCY_CONFLICT`.
+
+
+---
+
+<!-- ===== from wN1-ops-auth-and-mutations.md ===== -->
+
+## OPS auth flow and outbound mutation contract
+
+_Replace spec lines 84-90, 109-142, and 509 with this section. This also narrows line 35's "Forward SanMar image URLs as-is" promise to one primary product image in beta until a product-gallery write contract is verified._
+
+Grounding:
+- `Customer` already stores `ops_base_url`, `ops_token_url`, and `ops_client_id` as top-level columns; only `client_secret` lives in `ops_auth_config` (`backend/modules/customers/models.py:10-19`, `backend/modules/customers/routes.py:137-147`).
+- `OPSClient` accepts a bearer token, not raw OAuth client credentials (`backend/modules/ops_inbound/ops_client.py:15-42`).
+- The existing spike script already exercises the intended OAuth2 `client_credentials` grant and prints preview `setProduct` and `setProductPrice` calls (`backend/scripts/sanmar_ops_spike.py:163-259`).
+- Current OPS wrappers in-repo expose `setProduct`, `setProductSize`, `setProductPrice`, `setAssignOptions`, `setAdditionalOption`, `setAdditionalOptionAttributes`, `setProductsAttributePrice`, and `updateProductStock`; the documented image mutations are order-product image mutations, not a verified catalog-product gallery mutation (`n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:965-992, 1305-1313, 1488-1561, 6584-6892`, `n8n-nodes-onprintshop/OPS-NODE-GAP-ANALYSIS.md:65-68,105-124`).
+- `OPSProductInput` already admits both `products_id` and `products_image`, so "create" vs "update" must be modeled as one `setProduct` mutation with different inputs, not as fictional `createProduct` and `updateProduct` mutation names (`n8n-nodes-onprintshop/nodes/OnPrintShop/types.ts:1-9`).
+- API-HUB already has a product-scoped option projection with source trace fields for OPS mapping recovery (`backend/modules/markup/routes.py:81-154`, `backend/tests/test_ops_options_endpoint.py:30-128`).
+
+### OPS credential resolution and token cache
+
+1. Load the target customer row and read:
+   - `customers.ops_base_url`
+   - `customers.ops_token_url`
+   - `customers.ops_client_id`
+   - `customers.ops_auth_config.client_secret`
+2. If any field is missing, fail preflight with `PREFLIGHT_BLOCKER`; do not start any OPS mutation.
+3. Mint a bearer token with `POST {ops_token_url}` using OAuth2 `client_credentials`, `application/x-www-form-urlencoded`, and the stored `client_id` plus `client_secret`.
+4. Cache the minted token only in process memory, keyed by `(customer_id, ops_base_url, ops_client_id)`, with `expires_at = now + expires_in - 60s`. If `expires_in` is absent, default TTL is 300 seconds.
+5. Instantiate `OPSClient(base_url=customer.ops_base_url, auth_token=<cached bearer>)` only after the cache returns a live token.
+6. On a GraphQL `401` or `403`, evict the cached token, mint once more, and retry the failed mutation exactly once. A second auth failure is terminal: `OPS_AUTH_FAILED`.
+7. Do not store minted bearer tokens in Postgres, `product_push_log`, `push_mappings`, or the `customers` row. Do not introduce Redis for beta.
+
+Rationale:
+- In-memory cache is enough for beta because a single push attempt targets one customer and the token can always be reminted from durable customer credentials.
+- Redis adds new infrastructure for a short-lived secret.
+- Postgres should not become a bearer-token store; it increases secret exposure and still does not help a resumed worker more than reminting does.
+
+### PC61 outbound mutation sequence
+
+#### Preflight gates
+
+- Every pushed variant must have `sku`, a computed final price, and non-null inventory; otherwise return `422 PREFLIGHT_BLOCKER` before the first OPS write.
+- The push mode must be chosen once per customer:
+  - `master_option_attach`: all enabled options map to existing OPS master options and use `setAssignOptions`.
+  - `product_local_option_create`: the customer explicitly accepts the beta additional-option mutations and uses `setAdditionalOption` plus children.
+- Mixed option strategies inside one push request are forbidden.
+
+#### Mutation order
+
+1. Resolve create vs update mode.
+   - If `push_mappings.target_ops_product_id` already exists for `(customer_id, source_product_id)`, run in update mode and include `products_id=<existing OPS product id>` in `setProduct`.
+   - Otherwise run in create mode and omit `products_id` or send `0`.
+2. Call `setProduct` first.
+   - Required fields: customer-prefixed title, internal title/source SKU, category, visibility, description when present.
+   - If a product image exists, send only the primary front image URL as `products_image`.
+   - Capture returned `products_id` immediately and persist it before moving to child mutations.
+3. Call `setProductSize` once per variant, in deterministic order `sort(color, size, sku)`.
+   - Input must carry `products_id`, `size_name`, `color_name`, `products_sku`, and `product_size_id` when retrying or updating.
+   - Persist each returned `product_size_id` in `step_results`.
+4. Call `setProductPrice` after the size for that variant exists.
+   - Beta contract: one visible price row per variant, `qty=1`, `qty_to=999999`.
+   - `vendor_price` is the normalized source cost.
+   - `price` is the marked-up customer sell price from API-HUB pricing.
+   - `size_id` must be the `product_size_id` returned by the preceding size step.
+5. Attach options after all sizes exist.
+   - `master_option_attach` mode:
+     - Call `setAssignOptions` once per enabled product option.
+     - Input includes `products_id`, `master_option_id`, enabled `attribute_ids`, and any option-level setup cost.
+   - `product_local_option_create` mode:
+     - Call `setAdditionalOption` once per enabled product option.
+     - Then call `setAdditionalOptionAttributes` once per enabled attribute for that option.
+     - Then call `setProductsAttributePrice` for each created attribute that carries a non-zero option price.
+   - In both modes, preserve API-HUB option order and attribute order from the product-scoped option payload; never rely on Python dict iteration order.
+6. Call inventory last with `updateProductStock`.
+   - Use `action=Reset`, not additive math, because API-HUB owns the absolute inventory number for the variant.
+   - Prefer `product_sku=<variant sku>` as the stable identifier; include `stock_id` only when a prior successful response already recorded it.
+   - `input.stock_quantity` is the exact supplier-derived on-hand quantity.
+
+#### Image handling in beta
+
+- Beta supports only the single primary product image carried on `setProduct.products_image`.
+- Do not call `setOrderProductImage` for catalog pushes; the documented contract is for order products, not catalog products.
+- Do not promise multi-image gallery sync until a product-scoped OPS image mutation is live-tested and added to this spec.
+
+### Step-level recovery and partial-write contract
+
+- `step_results` is append-only JSONB. Each successful step records:
+  - `step`
+  - `source_key` (`supplier_sku`, `variant sku`, `option_key`, `attribute_key`)
+  - `mutation`
+  - `request_fingerprint`
+  - `ops_ids`
+  - `attempted_at`
+- `cleanup_targets` records every upstream identifier that may require manual cleanup:
+  - `ops_product_id`
+  - `product_size_ids[]`
+  - `option_ids[]`
+  - `attribute_ids[]`
+  - `inventory_keys[]`
+- Immediately after `setProduct` succeeds, upsert `push_mappings` with `status='partial'` and `target_ops_product_id=<products_id>`. Do not wait until the whole push is done, or retries will create duplicate products.
+- As soon as option or attribute target IDs are known, upsert `push_mapping_options` rows using the existing `source_master_*`, `source_option_key`, and `source_attribute_key` fields.
+- Size IDs have no dedicated mapping table today, so they must live in `step_results` until a separate variant-mapping table exists.
+- Retry behavior:
+  - If `ops_product_id` already exists, rerun `setProduct` in update mode instead of creating a second product.
+  - If a prior `product_size_id` exists in `step_results`, pass it back into `setProductSize`.
+  - `setProductPrice` and `updateProductStock` are overwrite steps and may be replayed safely.
+  - Option and attribute create steps must never be repeated when a target ID is already recorded.
+- Failure before the first successful OPS mutation sets `status=failed`.
+- Failure after the first successful OPS mutation sets `status=partial_failure`, preserves `step_results` plus `cleanup_targets`, and requires manual operator review. Beta does not auto-delete partially created OPS records.
+
+
+---
+
+<!-- ===== from wN2-durable-execution.md ===== -->
+
+## Durable execution revision for Integration Gateway
+
+_Replace spec lines 79-105, 148-189, 350-362, 415, and 440 in `docs/superpowers/specs/2026-05-11-integration-gateway-design.md` with this section._
+
+### Decision
+
+Pick **Option (a): `product_push_log` as the durable queue, executed by a separate ECS Fargate worker service that polls Postgres and claims work with `FOR UPDATE SKIP LOCKED` plus a lease.**
+
+Why this option:
+
+| Option | Verdict | Reason |
+|---|---|---|
+| `(a)` Postgres queue + ECS worker | **Pick for beta** | No new managed AWS primitive beyond ECS + RDS already in use. Durable accepted state lives in Postgres. Keeps long OPS calls off the FastAPI request worker pool. |
+| `(b)` SQS + ECS worker | Defer to V2 | Strong long-term shape, but adds queue/DLQ/IAM/alarms/message-contract work that is not justified for beta single-customer rollout. |
+| `(c)` Sync-only beta | Reject | Simplest on paper, but a real OPS push for a single product can still be long-running and will tie up FastAPI workers and client/ALB timeouts. It removes lost-202 risk by removing 202, but does not fit the existing `>20 variants` contract well. |
+
+Decision rationale by required axis:
+
+- **Operational simplicity:** Option `(a)` avoids SQS/DLQ and reuses `product_push_log` as the durable source of truth. The only new runtime shape is a second ECS Fargate service/command for workers.
+- **Recovery semantics:** Option `(a)` gives durable `queued` rows, worker lease expiry, and explicit reclaim. A process crash can no longer silently lose an accepted push or callback retry.
+- **Latency:** Sync remains allowed only for small pushes. `>20 variants` no longer block FastAPI workers while OPS calls run.
+- **Beta scope alignment:** Beta is still a single-product rollout, so Postgres-backed durable execution is enough. SQS is unnecessary, but sync-only is too fragile for long-running catalog writes.
+
+### Replace the current request flow and async-path table with
+
+`BackgroundTask(execute_push)` is forbidden for real pushes and callback retries.
+
+New execution split:
+
+| Variant count | Mode |
+|---|---|
+| `<= 20` | Synchronous request/response inside the POST. Row is inserted as `status='processing'`, then `execute_push()` runs inline. |
+| `> 20` | Durable async. Row is inserted as `status='queued'`, POST returns `202`, and a separate ECS Fargate worker executes it later. |
+
+Request contract:
+
+1. Auth, idempotency lookup, catalog lookup, and preflight all run **before** the row is inserted.
+2. If preflight fails, return `422 PREFLIGHT_BLOCKER`; do not create a queued row.
+3. If the push is sync-sized, insert `product_push_log` with `status='processing'`. If the in-flight uniqueness constraint rejects the insert, return `409 IN_FLIGHT`.
+4. If the push is async-sized, insert `product_push_log` with `status='queued'`, `callback_status='pending'` when `callback.url` is present, and return `202`.
+5. The `202` response body should now return `"status": "queued"` instead of `"accepted"`. `accepted` remains an HTTP-level concept, not a persisted `product_push_log.status`.
+
+Revised 202 example:
+
+```json
+{
+  "push_log_id": "uuid",
+  "status": "queued",
+  "customer_id": "uuid",
+  "supplier_slug": "sanmar",
+  "supplier_sku": "PC61",
+  "ops_product_id": null,
+  "dry_run": false,
+  "callback_status": "pending",
+  "created_at": "2026-05-11T10:00:00Z",
+  "links": {
+    "self": "/api/integrations/v1/push-requests/{push_log_id}"
+  }
+}
+```
+
+### Replace the `product_push_log` additive migration and status vocab with
+
+```sql
+ALTER TABLE product_push_log
+    ADD COLUMN request_id UUID UNIQUE,
+    ADD COLUMN key_id VARCHAR(64),
+    ADD COLUMN payload_hash VARCHAR(64),
+    ADD COLUMN supplier_slug VARCHAR(64),
+    ADD COLUMN supplier_sku VARCHAR(255),
+    ADD COLUMN callback_url TEXT,
+    ADD COLUMN callback_status VARCHAR(32) DEFAULT 'not_requested',
+    ADD COLUMN callback_attempts INT NOT NULL DEFAULT 0,
+    ADD COLUMN callback_next_attempt_at TIMESTAMPTZ,
+    ADD COLUMN step_results JSONB,
+    ADD COLUMN cleanup_targets JSONB,
+    ADD COLUMN retry_of UUID,
+    ADD COLUMN worker_id VARCHAR(128),
+    ADD COLUMN lease_until TIMESTAMPTZ;
+
+ALTER TABLE product_push_log
+    ALTER COLUMN status TYPE VARCHAR(32);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_in_flight
+  ON product_push_log (customer_id, product_id)
+  WHERE status IN ('queued', 'processing');
+```
+
+Persisted `product_push_log.status` values:
+
+| Value | Meaning |
+|---|---|
+| `queued` | Preflight passed; durable async row awaiting worker claim |
+| `processing` | Push is actively executing, either inline or in worker |
+| `pushed` | OPS confirmed product created/updated; mappings written |
+| `failed` | Hard failure before any OPS writes; nothing to clean up |
+| `partial_failure` | Some OPS steps succeeded; `cleanup_targets` populated |
+| `rejected` | Preflight blocker or policy rejection; no OPS writes |
+| `canceled` | Operator canceled before terminal state |
+| `dry_run_pushed` | `dry_run=true` ran cleanly through `FakeOpsClient` |
+
+`product_push_log.callback_status` values:
+
+| Value | Meaning |
+|---|---|
+| `not_requested` | `callback.url` was null |
+| `pending` | callback delivery is due now or scheduled for retry at `callback_next_attempt_at` |
+| `sent` | callback returned `2xx` |
+| `failed` | callback exhausted retries or violated callback policy |
+
+### Worker lease, heartbeat, and reclaim contract
+
+Worker deployment:
+
+- Run a separate ECS Fargate service, e.g. `integration-gateway-worker`.
+- Poll interval: **5 seconds**.
+- Claim batch size: start with **1** for beta; raise later only after step-level idempotency is proven.
+
+Claim algorithm for push execution:
+
+```sql
+WITH candidate AS (
+    SELECT id
+    FROM product_push_log
+    WHERE status = 'queued'
+      AND (lease_until IS NULL OR lease_until < NOW())
+    ORDER BY pushed_at ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT 1
+)
+UPDATE product_push_log p
+SET status = 'processing',
+    worker_id = :worker_id,
+    lease_until = NOW() + INTERVAL '90 seconds'
+FROM candidate
+WHERE p.id = candidate.id
+RETURNING p.*;
+```
+
+Lease rules:
+
+- Heartbeat interval: **30 seconds**.
+- Each heartbeat sets `lease_until = NOW() + INTERVAL '90 seconds'` for the same `worker_id`.
+- On terminal push status (`pushed`, `failed`, `partial_failure`, `rejected`, `canceled`), clear `worker_id` and `lease_until`.
+- A row with `lease_until < NOW()` is reclaimable by another worker.
+
+Resume rules after crash or scale-in:
+
+1. Execution is **at-least-once**, not exactly-once.
+2. After every successful upstream OPS mutation, the worker must durably write the returned IDs into `step_results`, `cleanup_targets`, and `push_mappings` **before** issuing the next mutation.
+3. On lease reclaim, the new worker reloads `step_results`, `cleanup_targets`, `ops_product_id`, and any `push_mappings`, then resumes from the last durably recorded completed step.
+4. If the last in-flight OPS call has an ambiguous outcome because the worker died after sending the request but before durably recording the result, the worker must do a read-after-write reconciliation when a safe lookup exists; otherwise mark `partial_failure` and stop for operator review. It must never silently drop the row.
+
+Callback retries use the same durable worker model:
+
+1. After a push reaches a terminal status, if `callback_status='pending'`, set `callback_next_attempt_at = NOW()`.
+2. Workers also poll terminal rows where `callback_status='pending'` and `callback_next_attempt_at <= NOW()`.
+3. Callback delivery is lease-protected with the same `worker_id` / `lease_until` contract; do not use in-process timers.
+4. On non-`2xx`, increment `callback_attempts`, compute exponential backoff, and set `callback_next_attempt_at`.
+5. After **5** failed attempts, set `callback_status='failed'`.
+
+### Replace `IN_FLIGHT` semantics with
+
+Use the **partial unique index**, not a row-level lock at insert time.
+
+Why:
+
+- The push must stay single-flight for the full lifetime of a queued or processing row, not just during the request transaction.
+- A row-level lock released at commit cannot protect the later ECS worker execution window.
+- The partial unique index gives one durable source of truth for both the synchronous and async paths.
+
+`IN_FLIGHT` should now read:
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `IN_FLIGHT` | 409 | Another push for the same `(customer_id, product_id)` is already `queued` or `processing` |
+
+
+---
+
+<!-- ===== from wN3-security-rollout-dx.md ===== -->
+
+## Security, Rollout, and Operator DX Amendments
+
+This section replaces the current text at spec lines 43, 55, 59-60, 92-94, 109-142, 146-166, 393-443, 451-455, 470-474, 489-494, and 547-553 in `docs/superpowers/specs/2026-05-11-integration-gateway-design.md`.
+
+### Auth, callback safety, rotation, and enforced rate limiting
+
+Replace the beta auth table at lines 113-127 and the V2 note at lines 137-142 with:
+
+```sql
+CREATE TABLE integration_keys (
+    id VARCHAR(64) PRIMARY KEY,                 -- human-readable: "n8n-vidhi-staging"
+    primary_key_hash VARCHAR(128) NOT NULL,    -- SHA-256(raw key); raw key shown once
+    secondary_key_hash VARCHAR(128),           -- optional overlap key for zero-downtime rotation
+    name VARCHAR(255) NOT NULL,
+    allowed_customer_ids UUID[],               -- null = all
+    allowed_supplier_slugs VARCHAR[],          -- null = all
+    allowed_callback_hosts TEXT[] NOT NULL DEFAULT '{}',
+    rate_limit_per_minute INT NOT NULL DEFAULT 60,
+    signing_secret VARCHAR(128),               -- optional HMAC v2 upgrade
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    revoked_at TIMESTAMPTZ,
+    CHECK (secondary_key_hash IS NULL OR secondary_key_hash <> primary_key_hash)
+);
+
+CREATE TABLE integration_key_request_counters (
+    key_id VARCHAR(64) NOT NULL REFERENCES integration_keys(id) ON DELETE CASCADE,
+    window_start TIMESTAMPTZ NOT NULL,         -- UTC minute bucket
+    request_count INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (key_id, window_start)
+);
+```
+
+Auth and rotation rules:
+
+- `BAD_SIGNATURE` means either the raw `X-Orchestrator-Key` matched neither active hash or the optional HMAC v2 check failed.
+- Raw key lookup MUST accept `primary_key_hash` and `secondary_key_hash`. This gives each key id two active secrets during rotation with no downtime.
+- Rotation flow is fixed: generate secondary key, update the orchestrator, verify traffic on the secondary key, then promote secondary to primary and null the secondary slot.
+- `trigger_n8n_push()` is not deleted during beta rollout; it remains the legacy execution target for customers outside the cutover flag described below.
+
+Callback SSRF rules, replacing lines 59-60, 92-94, 228-238, and 494:
+
+- `callback.url` remains optional, but callbacks are default-deny per key. If `allowed_callback_hosts` is empty, any non-null `callback.url` is rejected.
+- `callback.url` MUST use `https`.
+- Host matching allows exact entries such as `hooks.n8n.example.com` and single-label wildcards such as `*.ops.example.com`.
+- Raw IP literals, `localhost`, username/password URL components, and non-default ports are rejected.
+- API-HUB resolves DNS on every callback delivery attempt. Any loopback, link-local, RFC1918, RFC4193, or other non-public result is rejected even if the hostname matched the allowlist.
+- Request-time callback validation failure returns `422 CALLBACK_HOST_NOT_ALLOWED`.
+- Delivery-time policy failure is terminal for the callback only: set `callback_status='failed'`, append a callback step result, and do not retry.
+
+Rate limiting is enforced, not logged. Replace open question 5 at lines 553 and the current risk row at lines 492-494 with:
+
+1. During auth, compute `window_start = date_trunc('minute', now() at time zone 'utc')`.
+2. Run one atomic upsert on `integration_key_request_counters`:
+
+```sql
+INSERT INTO integration_key_request_counters (key_id, window_start, request_count)
+VALUES (:key_id, :window_start, 1)
+ON CONFLICT (key_id, window_start)
+DO UPDATE SET request_count = integration_key_request_counters.request_count + 1
+RETURNING request_count;
+```
+
+3. If `request_count > rate_limit_per_minute`, reject before any catalog lookup or push side effect with `429 RATE_LIMITED`, a `Retry-After` header, and `retry_after_seconds` in the error body.
+4. A lightweight cleanup job may delete counter rows older than 2 hours; rate-limit correctness does not depend on the cleanup cadence.
+
+### Schema discovery and error DX
+
+Replace the `/schema` placeholder at lines 55 and 348-443 with:
+
+- `GET /api/integrations/v1/suppliers/{supplier_slug}/schema` returns a JSON Schema Draft 2020-12 document, not a custom wrapper.
+- The schema root is the current `ProductIngest` contract already implemented in `backend/modules/catalog/schemas.py`.
+- `VariantIngest`, `ImageIngest`, `OptionIngest`, `ProductSizeIngest`, and related types are emitted under `$defs`.
+- The same document is used in two places:
+- `POST /suppliers/{supplier_slug}/products` validates each `items[]` entry against the schema root.
+- `POST /push-requests` validates `product` against the same schema root when inline product data is supplied.
+- Response headers: `Content-Type: application/schema+json`, `ETag`, and `Cache-Control: private, max-age=300`.
+
+Replace the error envelope at lines 417-443 with:
+
+```json
+{
+  "status": "error",
+  "code": "PREFLIGHT_BLOCKER",
+  "retryable": false,
+  "message": "Payload missing mandatory OPS mapping for 'Laminate'.",
+  "details": {
+    "field": "product.options[1].master_attribute_id",
+    "suggestion": "Run /api/push-mappings/resolve to find the missing ID."
+  },
+  "trace_id": "push_log_uuid",
+  "retry_after_seconds": null
+}
+```
+
+Retry semantics are part of the contract:
+
+| Code | HTTP | Retryable | Caller action |
+|---|---|---:|---|
+| `BAD_SIGNATURE` | 401 | false | Fix key or HMAC config |
+| `KEY_NOT_ALLOWED` | 403 | false | Fix customer/supplier scope |
+| `KEY_REVOKED` | 403 | false | Rotate to an active key |
+| `UNKNOWN_REF` | 404 | false | Fix customer or product reference |
+| `IDEMPOTENCY_CONFLICT` | 409 | false | Use a new idempotency key for a changed payload |
+| `IN_FLIGHT` | 409 | true | Wait, then retry with the same logical request |
+| `PREFLIGHT_BLOCKER` | 422 | false | Fix payload or missing mappings |
+| `CALLBACK_HOST_NOT_ALLOWED` | 422 | false | Fix `callback.url` or key allowlist |
+| `RATE_LIMITED` | 429 | true | Sleep until `Retry-After`, then retry |
+| `OPS_UPSTREAM_ERROR` | 502 | true | Retry with backoff |
+
+### Shadow-mode rollout and n8n coexistence
+
+Replace the scope claim at line 43, migration phases at lines 451-455, and the n8n notes at lines 470-474 with:
+
+- Backend-owned contract lands in M2, but direct OPS execution is cut over per customer instead of all at once.
+- Add Phase **M2.5 Shadow Mode** between M2 and M3.
+- New environment variable: `GATEWAY_ENABLED_CUSTOMERS`, encoded as a JSON array of customer UUID strings. Example: `["11111111-1111-1111-1111-111111111111"]`.
+- Both the admin push button route and `POST /api/integrations/v1/push-requests` MUST call the same dispatcher so cutover behavior is identical across UI and orchestrator traffic.
+
+Dispatch contract:
+
+- `dry_run=true` always uses the new gateway planning path and never calls OPS or n8n.
+- `dry_run=false` for a customer inside `GATEWAY_ENABLED_CUSTOMERS` uses `prepare_push_intent()` plus direct `execute_push()`.
+- `dry_run=false` for a customer outside `GATEWAY_ENABLED_CUSTOMERS` uses the legacy `trigger_n8n_push()` handoff after the new auth, idempotency, and preflight checks pass.
+- `step_results[0]` MUST record the dispatch mode as `gateway`, `legacy_n8n`, or `dry_run` so operators can see which path ran.
+
+Migration order becomes:
+
+| Phase | Action | Admin route safe? |
+|---|---|---|
+| **M2** | Ship gateway endpoints, auth, idempotency, callback validation, and the new error contract. | YES |
+| **M2.5** | Add the shared dispatcher plus `GATEWAY_ENABLED_CUSTOMERS`. Default is empty array, so all real pushes still hand off to n8n. | YES |
+| **M3** | Turn on `GATEWAY_ENABLED_CUSTOMERS` for one customer at a time after dry-run and smoke-test proof. | YES |
+| **M4** | Delete `trigger_n8n_push()`, `N8N_PUSH_WEBHOOK_URL`, and the legacy workflow path only after every active OPS customer has been on the gateway path without blocker regressions for a full soak window. | YES |
+
+Operational consequence:
+
+- The existing `vg-ops-push-001` workflow is not obsolete at M2. It remains the execution backend for customers not yet in the cutover flag.
+- The new example orchestrator workflow can be published in parallel during M2.5 so operators can move customer by customer instead of doing a big-bang cutover.
+
+
+---
