@@ -158,6 +158,7 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS max_price NUMERIC(10,2)",
     # Allow markup_pct to be NULL (rules may use markup_amount instead)
     "ALTER TABLE markup_rules ALTER COLUMN markup_pct DROP NOT NULL",
+    "ALTER TABLE customers ADD COLUMN IF NOT EXISTS logo_url TEXT",
 ]
 
 
@@ -210,7 +211,7 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127
 app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
 
 _IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
-_CORS_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+_CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 _CORS_HEADERS = ["Authorization", "Content-Type", "X-Ingest-Secret"]
 
 _cors_kwargs: dict = dict(

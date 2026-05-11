@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { PublishButton } from "@/components/products/publish-button";
 import { PushHistory } from "@/components/products/push-history";
 import { useSelectedCustomer } from "@/lib/customer-context";
+import { BrandingPanel } from "@/components/products/BrandingPanel";
+import type { Customer as CustomerType } from "@/lib/types";
 import { CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -46,6 +48,17 @@ export default function ProductDetailPage() {
   const { selectedCustomerId } = useSelectedCustomer();
   const [adding, setAdding] = useState(false);
   const [addedThisSession, setAddedThisSession] = useState(false);
+  const [customer, setCustomer] = useState<CustomerType | null>(null);
+
+  useEffect(() => {
+    if (selectedCustomerId) {
+      api<CustomerType>(`/api/customers/${selectedCustomerId}`)
+        .then(setCustomer)
+        .catch(log.error);
+    } else {
+      setCustomer(null);
+    }
+  }, [selectedCustomerId]);
 
   async function handleAddToCustomer() {
     if (!selectedCustomerId || adding || !product) return;
@@ -198,13 +211,6 @@ export default function ProductDetailPage() {
                 </>
               )}
             </button>
-          )}
-          {supplier?.protocol === "ops_graphql" && (
-            <Link href={`/products/${product.id}/options`}>
-              <Button variant="outline" className="border-[#1e4d92] text-[#1e4d92]">
-                Configure Options
-              </Button>
-            </Link>
           )}
           <PublishButton
             productId={id}
@@ -360,6 +366,16 @@ export default function ProductDetailPage() {
           </div>
         </div>
       </div>
+
+      
+      {/* ── Phase 8: Branding & Decorations ────────────────── */}
+      {customer && (
+        <BrandingPanel 
+          product={product} 
+          customer={customer} 
+          onUpdate={fetchData}
+        />
+      )}
 
       {/* ── Variants table ─────────────────────────────── */}
       <div className="bg-white border border-[#cfccc8] rounded-lg shadow-[4px_6px_0_rgba(30,77,146,0.08)] overflow-hidden mb-8">

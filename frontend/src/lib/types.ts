@@ -242,6 +242,7 @@ export interface Customer {
   ops_token_url: string;
   ops_client_id: string;
   is_active: boolean;
+  logo_url: string | null;
   created_at: string;
   products_pushed: number;
   markup_rules_count: number;
@@ -409,4 +410,23 @@ export interface OptionConfigItem {
   master_option_tag: string | null;
   enabled: boolean;
   attributes: AttributeConfigItem[];
+}
+
+/* ─── Phase 8 — Decorations & Branding ───────────────────────────────────── */
+export interface DecorationOption {
+  type: "logo" | "text";
+  url?: string;
+  text?: string;
+  position_x: number;  // 0-100 percentage
+  position_y: number;  // 0-100 percentage
+  scale: number;       // 0.1 - 2.0
+  rotation: number;    // 0-360
+  layer: number;
+}
+
+export interface ProductDecoration {
+  customer_id: string;
+  product_id: string;
+  decoration_options: DecorationOption[];
+  updated_at: string;
 }

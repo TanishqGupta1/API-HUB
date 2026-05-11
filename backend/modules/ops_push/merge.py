@@ -1,13 +1,8 @@
 from typing import Any
 
-def merge_product_with_decorations(product: Any, decorations: list[dict] | None) -> dict:
+def merge_product_with_decorations(product: Any, customer_id: Any, decorations: list[dict] | None) -> dict:
     """
     Merges base product data with decoration overlays for the OPS push payload.
-    
-    Rules:
-    - Preserve base variants (color, size, SKU)
-    - Add decoration areas (front, back, sleeve) and print methods (DTG, embroidery, etc)
-    - Pricing: base price + decoration cost
     """
     
     # Extract base variants
@@ -38,17 +33,17 @@ def merge_product_with_decorations(product: Any, decorations: list[dict] | None)
                 "price": final_price,
                 "decorations": dec_areas
             })
-    elif decorations:
-        # Fallback for products without variants but with decorations
-        variants.append({
-            "sku": product.supplier_sku,
-            "color": "Default",
-            "size": "OS",
-            "inventory": 0,
-            "price": dec_cost,
-            "decorations": dec_areas
-        })
             
+    # Decide which image to push
+    # If we have decorations, we push the "Branded Mockup" from our engine
+    import os
+    api_url = os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")
+    
+    if decorations:
+        image_url = f"{api_url}/api/customers/{customer_id}/products/{product.id}/decorations/preview.png"
+    else:
+        image_url = product.image_url
+
     payload = {
         "external_id": product.supplier_sku,
         "name": product.product_name,
@@ -56,6 +51,7 @@ def merge_product_with_decorations(product: Any, decorations: list[dict] | None)
         "brand": product.brand,
         "categories": [product.category] if product.category else [],
         "type": product.product_type,
+        "image_url": image_url,
         "variants": variants
     }
     

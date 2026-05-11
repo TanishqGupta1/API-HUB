@@ -75,7 +75,7 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
     dec_options = decoration.decoration_options if decoration else []
     
     # 3. Route (ready vs decorated) & merge
-    payload = merge_product_with_decorations(product, dec_options)
+    payload = merge_product_with_decorations(product, customer_id, dec_options)
     
     # 4. Handle name conflict (Internal logic for now)
     desired_name = payload["name"]

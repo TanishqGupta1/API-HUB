@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -367,6 +367,17 @@ async def update_media_only(
                 },
             )
             await db.execute(stmt)
+
+            # --- Primary Image Fix ---
+            # Also update the Product.image_url if the media item is a 'primary' or 'front' view
+            # to ensure the UI preview strip actually shows the image.
+            for row in batch:
+                if row["image_type"] in ["primary", "front"]:
+                    await db.execute(
+                        update(Product)
+                        .where(Product.id == row["product_id"])
+                        .values(image_url=row["url"])
+                    )
         await db.commit()
     
     return len(image_rows)
