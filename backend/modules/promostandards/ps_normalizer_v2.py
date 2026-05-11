@@ -163,6 +163,23 @@ def merge_pricing(ingest: ProductIngest, pricing_xml: bytes) -> ProductIngest:
                 quantity_min=int(qmin) if qmin else 1,
                 price=Decimal(value),
             ))
+
+    # Bug 1 fix: backfill VariantIngest.base_price from the lowest Net-tier price
+    # when the SOAP `getProductPricing` payload provides tiers but no flat base.
+    # Without this, downstream push paths see base_price=None and abort preflight
+    # (or, worse, ship null prices to OPS). See sciomc research stage-2 finding F2.1.
+    for variant in ingest.variants:
+        if variant.base_price is not None or not variant.prices:
+            continue
+        net_tiers = [
+            p for p in variant.prices
+            if p.price_type and p.price_type.strip().lower() in ("net", "net price")
+        ]
+        if not net_tiers:
+            continue
+        cheapest = min(net_tiers, key=lambda p: (p.quantity_min, p.price))
+        variant.base_price = cheapest.price
+
     return ingest
 
 def merge_media(ingest: ProductIngest, media_xml: bytes) -> ProductIngest:
