@@ -2,13 +2,12 @@
 
 **Date:** 2026-05-11
 **Owner:** Tanishq (PM/Tech Lead)
-**Status:** Draft Rev 1 — CCG critique applied; pending team re-review
+**Status:** Draft Rev 3 — Codex review rejected 2 of 5 Rev 2 fixes (P1.3, P2.4) and flagged 3 nits; Rev 3 corrects all five; pending team review
 **Supersedes:** [`2026-05-08-sanmar-ops-staging-push-design.md`](2026-05-08-sanmar-ops-staging-push-design.md) (VPCE approach — could not run on current code state)
 **Research backing:** [`.omc/research/research-20260511-pushgateway-142234/report.md`](../../../.omc/research/research-20260511-pushgateway-142234/report.md)
 **Advisor input:** CCG (Codex + Gemini) artifacts under `.omc/artifacts/ask/`
 
-> ⚠️ **Read [Revision 1 patches](#revision-1--critical-fixes-applied) at the bottom of this doc before implementing.**
-> The body below is the original draft. The patches at the end override conflicting sections with the corrections from the Codex/Gemini critiques (6 CRITICAL fixes + multiple IMPORTANT items). Once team approves Revision 1, the patches will be merged inline and this notice removed.
+> ⚠️ **Read order is bottom-up.** Start with [Revision 3 — Codex corrections](#revision-3--codex-corrections) FIRST (it overrides Rev 2 on P1.3 + P2.4 and adds nits for P1.1/P1.2/P2.5). Then [Revision 2 — P2 fixes + DX](#revision-2--p2-fixes--dx-cross-check). Then [Revision 1 — CCG critical fixes](#revision-1--critical-fixes-applied). Body below is the original Rev 0 draft. Once team approves Rev 3, all three revision appendices will be merged inline and this notice removed.
 
 ---
 
@@ -1165,3 +1164,496 @@ Operational consequence:
 
 
 ---
+
+---
+
+## Revision 2 — P2 fixes + DX cross-check
+
+_Gemini draft of P2.4 idempotency reservation, P2.5 sort_order, plus DX cross-check. **Rev 3 supersedes P2.4 only.** Other items still apply._
+
+# Revision 2 — P2 Fixes & DX Cross-Check
+
+This document addresses P2 findings (P2.4, P2.5) and conducts a DX cross-check for the Integration Gateway spec at `docs/superpowers/specs/2026-05-11-integration-gateway-design.md`.
+
+---
+
+## P2.4 — Idempotency key not reserved before preflight 422
+
+**Problem Recap:**
+Spec Rev 1 (specifically `wN2-durable-execution.md` lines 879-880) runs preflight validation *before* inserting the `product_push_log` row. If preflight fails (422), no ledger row is created. A caller can then send a modified payload with the same `Idempotency-Key`, which API-HUB would treat as a fresh request instead of raising a `409 IDEMPOTENCY_CONFLICT`. This violates the strict replay contract where a key is bound to a specific payload for its entire lifecycle.
+
+**Patch (Logic Update):**
+Replace lines 879-880 in `docs/superpowers/specs/2026-05-11-integration-gateway-design.md` (within the "Request contract" section) with:
+
+```markdown
+1. Auth and Idempotency lookup (check `key_id` + `Idempotency-Key` + `payload_hash`) run first.
+   - Match found + same hash -> Return existing status/result (200/202).
+   - Match found + different hash -> Return `409 IDEMPOTENCY_CONFLICT`.
+2. If first-seen: **Immediately insert** `product_push_log` row with `status='accepted'`, recording the `idempotency_key` and `payload_hash`.
+3. Resolve catalog product (or upsert inline `product`).
+4. Run Preflight validation.
+   - If Preflight fails: Update row to `status='rejected'`, return `422 PREFLIGHT_BLOCKER`.
+   - If Preflight passes: Proceed to execution.
+```
+
+**State Machine Correction:**
+The `rejected` status is now a terminal state that *must* be persisted to protect the idempotency key.
+
+**Corrected Sequence Diagram (Logic):**
+```mermaid
+sequenceDiagram
+    participant O as Orchestrator
+    participant G as Gateway
+    participant DB as Postgres (Ledger)
+
+    O->>G: POST /push-requests (Key: K, Hash: H1)
+    G->>DB: Check (Key: K)
+    DB-->>G: Not found
+    G->>DB: INSERT product_push_log (Key: K, Hash: H1, status: 'accepted')
+    Note over G: Preflight Validation
+    G-->>G: Validation Fails (e.g. missing mapping)
+    G->>DB: UPDATE product_push_log (status: 'rejected')
+    G-->>O: 422 PREFLIGHT_BLOCKER
+
+    Note over O,G: Subsequent request with same key but different payload
+    O->>G: POST /push-requests (Key: K, Hash: H2)
+    G->>DB: Check (Key: K)
+    DB-->>G: Found (Hash: H1)
+    G-->>O: 409 IDEMPOTENCY_CONFLICT
+```
+
+---
+
+## P2.5 — VariantIngest.sort_order unused on OPS size create
+
+**Problem Recap:**
+The mutation sequence in Rev 1 (line 784) uses a lexical sort `(color, size, sku)` when calling `setProductSize`. This ignores the `sort_order` field added to `VariantIngest` in M0, resulting in jumbled size lists (e.g., L, M, S, XL) in the OPS configurator, as OPS uses the creation order for display.
+
+**Patch (Mutation Sequence):**
+Replace line 784 in `docs/superpowers/specs/2026-05-11-integration-gateway-design.md` with:
+
+```markdown
+3. Call `setProductSize` once per variant, in deterministic order sorted by `sort_order` (ascending).
+   - If `sort_order` is equal, fall back to lexical `(color, size, sku)` to ensure stability.
+   - Input must carry `products_id`, `size_name`, `color_name`, `products_sku`, and `product_size_id` when retrying or updating.
+   - Persist each returned `product_size_id` in `step_results`.
+```
+
+**Python Pseudocode for Sort Step:**
+```python
+# M1 Implementation Detail: Preserve supplier size ordering
+def prepare_variants_for_ops(product: ProductIngest) -> List[VariantIngest]:
+    # Sort by sort_order (0-indexed hint from supplier), fallback to lexical for stability
+    return sorted(
+        product.variants,
+        key=lambda v: (v.sort_order, v.color or "", v.size or "", v.sku or "")
+    )
+
+# Execution loop
+for variant in prepare_variants_for_ops(product):
+    ops_client.set_product_size(product_id=ops_id, variant=variant)
+```
+
+---
+
+## DX Cross-Check Punch List
+
+Re-evaluation of Rev 1 "Security, Rollout, and Operator DX" (`wN3`) and "Error envelope" sections:
+
+| Feature | Spec Status | DX Verdict |
+|---|---|---|
+| **Retryability** | `retryable: boolean` included in error envelope (line 1060). | **PASS**. Table clearly maps HTTP codes to retry behavior. |
+| **Key Rotation** | 2-active-hashes (`primary` + `secondary`) documented (lines 988-999). | **PASS**. Supports zero-downtime rotation. |
+| **Rate Limiting** | Postgres-based bucketed counters (lines 1014-1033). | **PASS**. Atomic upsert avoids race conditions and is suitable for beta. |
+| **SSRF Protection** | `allowed_callback_hosts` + Private IP block (lines 1001-1012). | **PASS**. Clear constraints for orchestrator authors. |
+| **Error Codes** | Enumerated table with HTTP and Caller action (lines 1073-1084). | **PASS**. High signal for automation. |
+
+**Identified DX Gaps & Minor Tweaks:**
+
+1. **`X-Orchestrator-Key` Hinting:** When a key is rejected with 401/403, the error `details` should not expose why (e.g., "hash mismatch") but the `suggestion` should point the user to the `/integrations/keys` admin UI for verification.
+2. **`accepted` vs `queued` Status:** wN2 (line 911) changes the 202 response status to `queued`. This is correct for async, but if a sync push is small (<= 20 variants), the status is `processing`. The 202/200 response should always reflect the *live* status.
+3. **Traceability:** Ensure `trace_id` in the error envelope is always the `push_log_id` (UUID) to allow operators to find the logs immediately. This is already mentioned (line 1065) but should be emphasized in the developer onboarding docs.
+
+---
+
+---
+
+## Revision 3 — Codex corrections
+
+_Codex review of Rev 2 rejected P1.3 (in-request heartbeat dies with FastAPI process) and P2.4 (insert-before-product-resolution impossible due to NOT NULL product_id/customer_id). Rev 3 redoes both, plus nits for P1.1/P1.2/P2.5. **Read this first.**_
+
+# Revision 3 — Codex Corrections for Integration Gateway Spec
+
+Applies to [`docs/superpowers/specs/2026-05-11-integration-gateway-design.md`](/Users/tanishq/Documents/project-files/api-hub/api-hub/docs/superpowers/specs/2026-05-11-integration-gateway-design.md).
+
+## P1.1
+
+**Problem recap**
+
+Rev 2 picked the right shape for `persist_product(..., snapshot: bool = False)`, but it patched the wrong anchor and still left Rev 1 overclaiming global snapshot/canonical persistence. In the current repo, the only real `persist_product` call site is the ingest route, and that route explicitly preserves omitted variants during partial syncs, so the spec must narrow this to a gateway-only snapshot path instead of rewriting default ingest semantics.
+
+**Decision**
+
+Keep `persist_product(..., snapshot: bool = False)`. The Integration Gateway inline `product` path uses `snapshot=True`; existing supplier ingest keeps the current merge-upsert default. This matches the current contract in `backend/modules/catalog/ingest.py` and fixes the bad Rev 2 `line 733` anchor by moving the snapshot call to the actual gateway product-resolution path.
+
+### Spec patch
+
+Replace lines `77-79` with:
+
+```markdown
+                ├─ Resolve product:
+                │   ├─ product_ref → load from catalog
+                │   └─ product → validate against `ProductIngest`, then upsert into catalog via `persist_product(..., snapshot=True)` before push
+```
+
+Replace line `595` with:
+
+```markdown
+- **Schema** — `ProductIngest` remains the canonical external contract for both ingest and push, but M0 MUST close the current DB persistence gaps so a `ProductIngest` persisted through the gateway snapshot path can be rehydrated back into the same contract without field loss. Default supplier ingest remains merge-upsert unless an explicit replace path is requested.
+```
+
+Replace line `700` with:
+
+```markdown
+- Add gateway snapshot mode to `persist_product(..., snapshot: bool = False)`: when `snapshot=True`, missing `variants`, `images`, `options`, and `sizes` are deleted in the same transaction before reinsertion/upsert; default merge-upsert behavior remains unchanged for existing ingest routes.
+```
+
+Replace line `721` with:
+
+```markdown
+| **M0** | Additive Alembic migration: create `integration_keys`; expand `product_push_log` with distinct `request_id` and `idempotency_key` ledger fields; expand `products`, `product_variants`, `product_sizes`, and `print_details` so `ProductIngest` can round-trip losslessly in gateway snapshot mode; update catalog persistence with `persist_product(..., snapshot: bool = False)`; add contract tests for idempotent replay and DB rehydration fidelity. | YES (additive only) |
+```
+
+Replace lines `725-726` with:
+
+```markdown
+- [ ] M0 migration applied: `integration_keys` exists; `product_push_log` has `request_id`, `idempotency_key`, `payload_hash`, and unique `(key_id, idempotency_key)` replay protection; `products`, `product_variants`, `product_sizes`, and `print_details` carry the fields required for gateway snapshot-mode round-trip.
+- [ ] Gateway snapshot-mode contract tests pass: persist `ProductIngest` with `snapshot=True` -> read from DB -> rehydrate `ProductIngest` with no loss of `category_external_id`, `category_name`, `raw_payload`, `part_id`, `sort_order`, size metadata, or print metadata.
+```
+
+### Code-side implication
+
+- [`backend/modules/catalog/persistence.py:31`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/persistence.py:31) currently defines `persist_product(db, supplier_id, item, category_id=None)` with no `snapshot` flag.
+- [`backend/modules/catalog/persistence.py:114`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/persistence.py:114) already does delete-and-reinsert for `ProductSize`, but [`backend/modules/catalog/persistence.py:126`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/persistence.py:126) through [`backend/modules/catalog/persistence.py:188`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/persistence.py:188) remain merge-upsert for variants, images, and options.
+- [`backend/modules/catalog/ingest.py:257`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/ingest.py:257) through [`backend/modules/catalog/ingest.py:282`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/ingest.py:282) explicitly document and use merge-upsert ingest semantics today, so defaulting `snapshot=False` is required to avoid breaking existing supplier sync flows.
+
+## P1.2
+
+**Problem recap**
+
+Rev 2 correctly restored replay protection, but it used the wrong spec anchor, widened `idempotency_key` to `VARCHAR(255)`, and understated the ORM work. The authoritative durable-execution migration block is the later `wN2` block at lines `904-929`, and the current SQLAlchemy model does not contain `key_id`, `idempotency_key`, or `payload_hash` at all.
+
+**Decision**
+
+Restore the missing replay key in the authoritative `wN2` migration block with `VARCHAR(128)`, and restore the named replay-protection key so the request path can perform an atomic reserve-or-replay insert. Mirror that in the ORM by adding all three fields, not just `idempotency_key`.
+
+### Spec patch
+
+Replace lines `904-929` with:
+
+```sql
+ALTER TABLE product_push_log
+    ADD COLUMN request_id UUID NOT NULL DEFAULT gen_random_uuid(),
+    ADD COLUMN key_id VARCHAR(64),
+    ADD COLUMN idempotency_key VARCHAR(128),
+    ADD COLUMN payload_hash CHAR(64),
+    ADD COLUMN supplier_slug VARCHAR(64),
+    ADD COLUMN supplier_sku VARCHAR(255),
+    ADD COLUMN callback_url TEXT,
+    ADD COLUMN callback_status VARCHAR(32) DEFAULT 'not_requested',
+    ADD COLUMN callback_attempts INT NOT NULL DEFAULT 0,
+    ADD COLUMN callback_next_attempt_at TIMESTAMPTZ,
+    ADD COLUMN step_results JSONB,
+    ADD COLUMN cleanup_targets JSONB,
+    ADD COLUMN retry_of UUID,
+    ADD COLUMN worker_id VARCHAR(128),
+    ADD COLUMN lease_until TIMESTAMPTZ;
+
+ALTER TABLE product_push_log
+    ALTER COLUMN status TYPE VARCHAR(32);
+
+ALTER TABLE product_push_log
+    ADD CONSTRAINT fk_product_push_log_key_id
+    FOREIGN KEY (key_id) REFERENCES integration_keys(id) ON DELETE SET NULL;
+
+ALTER TABLE product_push_log
+    ADD CONSTRAINT ux_push_log_idem_key
+    UNIQUE (key_id, idempotency_key);
+
+CREATE INDEX IF NOT EXISTS ix_push_log_payload_hash
+    ON product_push_log (payload_hash);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_in_flight
+    ON product_push_log (customer_id, product_id)
+    WHERE status IN ('queued', 'processing');
+```
+
+### Code-side implication
+
+At minimum, add the missing replay fields in [`backend/modules/push_log/models.py:11`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/push_log/models.py:11) through [`backend/modules/push_log/models.py:22`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/push_log/models.py:22):
+
+```python
+key_id: Mapped[Optional[str]] = mapped_column(
+    ForeignKey("integration_keys.id", ondelete="SET NULL"),
+    String(64),
+    nullable=True,
+)
+idempotency_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+payload_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+```
+
+- [`backend/modules/push_log/models.py:14`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/push_log/models.py:14) through [`backend/modules/push_log/models.py:22`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/push_log/models.py:22) currently expose only `id`, `product_id`, `customer_id`, `ops_product_id`, `status`, `error`, and `pushed_at`, so Rev 2’s “just add one field” note was incomplete.
+
+## P1.3
+
+**Problem recap**
+
+Rev 2’s inline-heartbeat fix was rejected because it created two executor classes for the same row and relied on an in-request timer that dies with the request/process. Rev 1 already says real execution belongs to the ECS worker at lines `868` and `957-960`; the fix is to remove inline execution entirely and keep one lease owner.
+
+**Decision**
+
+Pick Option A. Every real push inserts `status='queued'`; the ECS worker is the only executor and the only lease/heartbeat owner. For sync-sized requests (`<= 20` variants), the API uses the long-poll pattern against `product_push_log` for up to `8s`, returning `200` on a terminal row and `202` if the row is still `queued` or `processing`. This is simpler than dual execution, matches Rev 1’s worker-owned durability claim, and costs almost nothing to implement.
+
+### Spec patch
+
+Replace lines `866-876` with:
+
+```markdown
+### Replace the current request flow and async-path table with
+
+`BackgroundTask(execute_push)` is forbidden for real pushes and callback retries.
+
+Single execution model:
+
+| Variant count | Execution owner | API behavior |
+|---|---|---|
+| `<= 20` | ECS worker only | Insert `status='queued'`, then poll `product_push_log` for up to `8 seconds`; return `200` if terminal, else `202` |
+| `> 20` | ECS worker only | Insert `status='queued'`, return `202` immediately |
+```
+
+Insert after line `883`:
+
+````markdown
+Synchronous response behavior for sync-sized requests (`<= 20` variants):
+
+```python
+deadline = monotonic() + 8.0
+row = None
+while monotonic() < deadline:
+    row = load_push_log(push_log_id)
+    if row.status in {"pushed", "failed", "partial_failure", "rejected", "canceled", "dry_run_pushed"}:
+        return 200, serialize_push_status(row)
+    sleep(0.25)
+return 202, serialize_push_status(row or load_push_log(push_log_id))
+```
+````
+
+Replace lines `935-936` with:
+
+```markdown
+| `queued` | Durable row reserved and waiting for worker claim; the API may still be polling this row for a sync-sized request |
+| `processing` | The ECS worker that owns `worker_id` + `lease_until` is actively issuing OPS mutations |
+```
+
+Replace lines `955-994` with:
+
+````markdown
+Worker deployment:
+
+- Run a separate ECS Fargate service, e.g. `integration-gateway-worker`.
+- Reclaim cadence: **15 seconds**.
+- Claim batch size: start with **1** for beta; raise later only after step-level idempotency is proven.
+- Worker lease duration: **60 seconds**.
+
+Claim algorithm for push execution and reclaim:
+
+```sql
+WITH candidate AS (
+    SELECT id
+    FROM product_push_log
+    WHERE status IN ('queued', 'processing')
+      AND (lease_until IS NULL OR lease_until < NOW())
+    ORDER BY pushed_at ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT 1
+)
+UPDATE product_push_log p
+SET status = 'processing',
+    worker_id = :worker_id,
+    lease_until = NOW() + INTERVAL '60 seconds'
+FROM candidate
+WHERE p.id = candidate.id
+RETURNING p.*;
+```
+
+Lease rules:
+
+- Worker heartbeat cadence: **15 seconds**.
+- Each heartbeat sets `lease_until = NOW() + INTERVAL '60 seconds'` for the same `worker_id`.
+- On terminal push status (`pushed`, `failed`, `partial_failure`, `rejected`, `canceled`), clear `worker_id` and `lease_until`.
+- A row in `status IN ('queued', 'processing')` with `lease_until < NOW()` is reclaimable by another worker.
+
+Resume rules after crash or scale-in:
+
+1. Execution is **at-least-once**, but there is only one executor class: the ECS worker.
+2. After every successful upstream OPS mutation, the worker must durably write the returned IDs into `step_results`, `cleanup_targets`, and `push_mappings` **before** issuing the next mutation.
+3. On lease reclaim, the new worker reloads `step_results`, `cleanup_targets`, `ops_product_id`, and any `push_mappings`, then resumes from the last durably recorded completed step.
+4. If the worker died after an ambiguous upstream mutation and safe read-after-write reconciliation cannot prove the outcome, set `status='partial_failure'`, preserve `cleanup_targets`, and stop for operator review. Beta does not auto-delete partially created OPS records.
+````
+
+### Code-side implication
+
+- [`backend/modules/ops_push/service.py:39`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/ops_push/service.py:39) through [`backend/modules/ops_push/service.py:155`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/ops_push/service.py:155) are the only current push-service lines in tree, and they still commit a `pending` log row then trigger n8n inline. Rev 3 replaces that shape with a worker-owned queue; it should not add heartbeat logic around the current request thread.
+- [`backend/modules/push_log/models.py:14`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/push_log/models.py:14) through [`backend/modules/push_log/models.py:22`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/push_log/models.py:22) do not yet include `worker_id` or `lease_until`; those land via the durable-execution migration above.
+- [`backend/alembic/versions/0001_baseline.py:238`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/alembic/versions/0001_baseline.py:238) through [`backend/alembic/versions/0001_baseline.py:246`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/alembic/versions/0001_baseline.py:246) show that `product_push_log` is still a minimal ledger today, so all queue/lease behavior is future-state spec work rather than a hook into an existing gateway module.
+
+## P2.4
+
+**Problem recap**
+
+Rev 2 fixed the right bug but inserted the ledger row too early and reintroduced `status='accepted'`. In the current schema, `product_push_log.product_id` and `customer_id` are non-null, so the replay reservation must happen after auth plus product resolution, but before preflight. It also needs to be one atomic insert so concurrent same-key requests do not race between lookup and insert.
+
+**Decision**
+
+Reserve idempotency after auth and product resolution, before preflight. Insert the row directly as `status='queued'`, then update to `rejected` if preflight fails. This keeps the replay key bound to the first payload, avoids the invalid “insert before product_id exists” path, and stays consistent with Rev 1’s removal of persisted `accepted`.
+
+### Spec patch
+
+Replace lines `67-101` with:
+
+```mermaid
+sequenceDiagram
+    participant O as Orchestrator
+    participant G as Gateway API
+    participant C as Catalog
+    participant DB as Postgres
+    participant W as ECS worker
+    participant OPS as OPS
+
+    O->>G: POST /api/integrations/v1/push-requests
+    G->>G: Authenticate X-Orchestrator-Key
+    G->>C: Resolve product_ref or upsert inline product
+    C-->>G: product_id, supplier_sku
+    G->>DB: INSERT product_push_log (..., key_id, idempotency_key, payload_hash, status='queued', ...)
+    alt first writer wins
+        DB-->>G: push_log_id
+        G->>G: Run preflight
+        alt preflight fails
+            G->>DB: UPDATE status='rejected'
+            G-->>O: 422 PREFLIGHT_BLOCKER
+        else preflight passes
+            alt worker finishes before 8s poll deadline
+                G->>DB: Poll product_push_log
+                W->>DB: Claim queued row and set lease
+                W->>OPS: Execute push
+                W->>DB: Write terminal status
+                G-->>O: 200 terminal push status
+            else still queued or processing at deadline
+                G-->>O: 202 {status: queued|processing}
+                W->>DB: Claim queued row and set lease
+                W->>OPS: Execute push
+                W->>DB: Write terminal status
+            end
+        end
+    else conflicting replay key
+        DB-->>G: no row returned
+        G->>DB: SELECT existing row by (key_id, idempotency_key)
+        alt same payload_hash
+            G-->>O: 200 or 202 replay of existing request
+        else different payload_hash
+            G-->>O: 409 IDEMPOTENCY_CONFLICT
+        end
+    end
+```
+
+Replace lines `877-883` with:
+
+````markdown
+Request contract:
+
+1. Auth runs first.
+2. Resolve customer, supplier, and catalog product (or inline `product` upsert) before idempotency reservation so `product_push_log.customer_id`, `product_push_log.product_id`, `supplier_slug`, and `supplier_sku` are known.
+3. Reserve the replay key before preflight with one atomic insert:
+
+```sql
+INSERT INTO product_push_log (
+    product_id,
+    customer_id,
+    request_id,
+    key_id,
+    idempotency_key,
+    payload_hash,
+    supplier_slug,
+    supplier_sku,
+    status,
+    callback_url,
+    callback_status
+)
+VALUES (
+    :product_id,
+    :customer_id,
+    gen_random_uuid(),
+    :key_id,
+    :idempotency_key,
+    :payload_hash,
+    :supplier_slug,
+    :supplier_sku,
+    'queued',
+    :callback_url,
+    CASE WHEN :callback_url IS NULL THEN 'not_requested' ELSE 'pending' END
+)
+ON CONFLICT ON CONSTRAINT ux_push_log_idem_key DO NOTHING
+RETURNING id;
+```
+
+4. If `RETURNING` is empty, re-select the existing row by `(key_id, idempotency_key)` and apply replay logic:
+   - same `payload_hash` -> return the existing request result (`200` if terminal, `202` if still `queued` or `processing`)
+   - different `payload_hash` -> return `409 IDEMPOTENCY_CONFLICT`
+5. Run preflight only after the reservation row exists. If preflight fails, `UPDATE product_push_log SET status='rejected', error=:reason WHERE id=:push_log_id` and return `422 PREFLIGHT_BLOCKER`.
+6. After preflight passes, leave the row in `status='queued'` for worker claim. No persisted `accepted` state exists.
+````
+
+Insert after line `952`:
+
+```markdown
+State transitions are locked:
+
+- `queued -> rejected` on preflight failure
+- `queued -> processing` on worker claim
+- `processing -> pushed | failed | partial_failure` on execution outcome
+```
+
+### Code-side implication
+
+- [`backend/modules/push_log/models.py:15`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/push_log/models.py:15) through [`backend/modules/push_log/models.py:16`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/push_log/models.py:16) make `product_id` and `customer_id` non-null today, which is why product resolution has to happen before the replay reservation insert.
+- [`backend/alembic/versions/0001_baseline.py:238`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/alembic/versions/0001_baseline.py:238) through [`backend/alembic/versions/0001_baseline.py:246`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/alembic/versions/0001_baseline.py:246) show the same non-null table shape in the baseline migration.
+- [`backend/modules/catalog/persistence.py:31`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/persistence.py:31) through [`backend/modules/catalog/persistence.py:190`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/persistence.py:190) are the existing persistence entrypoint for the inline `product` branch, so `product_push_log.product_id` can be populated before idempotency reservation once that branch resolves/upserts the catalog product.
+
+## P2.5
+
+**Problem recap**
+
+Rev 2 correctly switched OPS size creation to use `sort_order`, but it treated that as an isolated M1 patch. In the current code, `VariantIngest` does not yet have a `sort_order` field, `ProductVariant` does not persist one, and the catalog read model does not expose one back out, so the gateway would lose ordering immediately after the first catalog sync unless M0 lands first.
+
+**Decision**
+
+Keep the `sort_order` fix for `setProductSize`, but make the dependency explicit: M0 must add `VariantIngest.sort_order`, persist it, and rehydrate it before M1 relies on it for outbound OPS ordering. Tie-break lexically only to keep equal `sort_order` values stable.
+
+### Spec patch
+
+Replace lines `784-786` with:
+
+```markdown
+3. Call `setProductSize` once per variant, in deterministic order sorted by `sort_order` ascending, then lexical `(color, size, sku)` as a stable tiebreaker.
+   - This patch requires M0 to land `VariantIngest.sort_order` in `backend/modules/catalog/schemas.py` first.
+   - The persistence side must store and rehydrate `product_variants.sort_order`; otherwise the gateway loses the supplier's intended size ordering after the first sync.
+   - Input must carry `products_id`, `size_name`, `color_name`, `products_sku`, and `product_size_id` when retrying or updating.
+   - Persist each returned `product_size_id` in `step_results`.
+```
+
+### Code-side implication
+
+- [`backend/modules/catalog/schemas.py:172`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/schemas.py:172) through [`backend/modules/catalog/schemas.py:180`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/schemas.py:180) define `VariantIngest` today, and it has `part_id`, `color`, `size`, `sku`, `base_price`, `inventory`, `warehouse`, and `prices`, but no `sort_order`.
+- [`backend/modules/catalog/models.py:79`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/models.py:79) through [`backend/modules/catalog/models.py:95`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/models.py:95) define `ProductVariant` with no persisted `sort_order` column.
+- [`backend/modules/catalog/persistence.py:126`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/persistence.py:126) through [`backend/modules/catalog/persistence.py:149`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/persistence.py:149) upsert variants without writing `sort_order`.
+- [`backend/modules/catalog/schemas.py:9`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/schemas.py:9) through [`backend/modules/catalog/schemas.py:18`](/Users/tanishq/Documents/project-files/api-hub/api-hub/backend/modules/catalog/schemas.py:18) define `VariantRead` with no `part_id` or `sort_order`, so the current DB read path cannot rehydrate supplier ordering even if M1 starts using it outbound.
