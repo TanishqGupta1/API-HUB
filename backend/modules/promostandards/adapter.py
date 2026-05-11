@@ -149,7 +149,26 @@ class PromoStandardsAdapter(BaseAdapter):
             ingest = merge_media(ingest, media_xml)
         except Exception as exc:
             log.warning("Media fetch failed for %s: %s", ref.supplier_sku, exc)
-            
+
+        # Bug 2 fix: Inventory v200 was never called on the V2 adapter path.
+        # client.get_inventory() returns parsed PSInventoryLevel rows; map them
+        # back onto each variant by part_id. INVENTORY WSDL must exist in the
+        # supplier's endpoint cache; if not, swallow and continue (existing
+        # downstream code already treats variant.inventory=None as "unknown").
+        try:
+            inv_client = self._get_client("INVENTORY")
+            inv_levels = await inv_client.get_inventory([ref.supplier_sku])
+            inv_by_part = {level.part_id: level for level in inv_levels}
+            for variant in ingest.variants:
+                level = inv_by_part.get(variant.part_id)
+                if level is None:
+                    continue
+                variant.inventory = level.quantity_available
+                if level.warehouse_code and not variant.warehouse:
+                    variant.warehouse = level.warehouse_code
+        except Exception as exc:
+            log.warning("Inventory fetch failed for %s: %s", ref.supplier_sku, exc)
+
         return ingest
 
     async def discover_changed(self, since: datetime) -> list[ProductRef]:
