@@ -1,8 +1,12 @@
 name: Deploy to ECS (staging)
 
+# AUTO-DEPLOY DISABLED. Trigger only via manual run:
+#   GitHub Actions tab → 'Deploy to ECS (staging)' → 'Run workflow' button.
+# To re-enable auto-deploy on push, uncomment the `push` block below.
 on:
-  push:
-    branches: [main]
+  # push:
+  #   branches: [dev]
+  workflow_dispatch:
 
 permissions:
   id-token: write   # for OIDC AWS auth

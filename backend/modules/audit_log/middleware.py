@@ -29,10 +29,16 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
 
         user_email: str | None = None
         user_id: str | None = None
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
+        # Cookie is the primary auth path (Phase 14c). Bearer kept as a
+        # fallback for any service-to-service caller that may still use it.
+        token = request.cookies.get("auth_token")
+        if not token:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:]
+        if token:
             try:
-                payload = decode_token(auth_header[7:])
+                payload = decode_token(token)
                 user_email = payload.get("email")   # email claim added in _token_payload
                 user_id = payload.get("sub")         # sub is the user UUID
             except Exception:

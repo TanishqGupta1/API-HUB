@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from modules.auth.dependencies import CurrentUser
+from modules.auth.dependencies import CurrentUser, VGAdmin
 from modules.markup.models import MarkupRule
 from modules.push_log.models import ProductPushLog
 
@@ -48,7 +48,7 @@ async def list_customers(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", response_model=CustomerRead, status_code=201)
-async def create_customer(body: CustomerCreate, db: AsyncSession = Depends(get_db)):
+async def create_customer(body: CustomerCreate, _: VGAdmin, db: AsyncSession = Depends(get_db)):
     customer = Customer(
         name=body.name,
         ops_base_url=body.ops_base_url,
@@ -89,7 +89,15 @@ async def update_customer(
     if current_user.role == "customer_admin":
         if str(current_user.customer_id) != str(customer_id):
             raise HTTPException(403, "Cannot edit a different customer")
-        if "ops_client_secret" in body and body["ops_client_secret"]:
+        # Reject (don't silently drop) any field other than ops_client_secret.
+        forbidden = set(body.keys()) - {"ops_client_secret"}
+        if forbidden:
+            raise HTTPException(
+                403,
+                f"customer_admin cannot modify: {sorted(forbidden)}. "
+                "Only ops_client_secret is allowed.",
+            )
+        if body.get("ops_client_secret"):
             existing = customer.ops_auth_config or {}
             customer.ops_auth_config = {**existing, "client_secret": body["ops_client_secret"]}
         await db.commit()
@@ -109,7 +117,7 @@ async def update_customer(
 
 
 @router.delete("/{customer_id}")
-async def delete_customer(customer_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_customer(customer_id: UUID, _: VGAdmin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Customer).where(Customer.id == customer_id))
     customer = result.scalar_one_or_none()
     if not customer:
@@ -120,7 +128,7 @@ async def delete_customer(customer_id: UUID, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/{customer_id}/test")
-async def test_customer(customer_id: UUID, db: AsyncSession = Depends(get_db)):
+async def test_customer(customer_id: UUID, _: VGAdmin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Customer).where(Customer.id == customer_id))
     customer = result.scalar_one_or_none()
     if not customer:
