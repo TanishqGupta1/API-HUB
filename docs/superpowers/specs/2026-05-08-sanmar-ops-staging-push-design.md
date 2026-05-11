@@ -1,5 +1,22 @@
 # SanMar → OPS Staging Push (Beta) — Design Spec
 
+> ⚠️ **SUPERSEDED — 2026-05-11**
+>
+> This spec assumed `base_price`, inventory v200, and markup engine were wired
+> into the push path. The sciomc research run on 2026-05-11 confirmed via
+> `backend/scripts/sanmar_ops_spike.py` that none of those preconditions hold.
+> VPCE preview/execute on top of broken inputs would have produced a working
+> API surface that ships broken OPS records.
+>
+> **Replacement spec:** [`2026-05-11-integration-gateway-design.md`](2026-05-11-integration-gateway-design.md)
+> — orchestrator-agnostic Integration Gateway with explicit M0 prerequisite
+> fixes (PR #104 covers spike bugs 1+2; bug 3 absorbed by M1's `build_push_payload()`).
+>
+> The structural ideas below (halt-no-rollback, per-step OPS IDs, high operator
+> visibility, no bulk push for beta) carry forward into the replacement. The
+> Preview/Execute endpoint pair does not — Idempotency-Key + payload hash
+> replaces `preview_id` + `confirm_token`.
+
 **Date:** 2026-05-08
 **Owner:** Tanishq (PM/Tech Lead)
 **Phase mapping:** Slice of Phase 8 (Push Polish) from `2026-04-30-post-mvp-roadmap.md`. Beta-only deviation: removes n8n from push path.
