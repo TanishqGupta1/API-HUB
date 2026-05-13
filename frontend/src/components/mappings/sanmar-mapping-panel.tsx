@@ -16,11 +16,19 @@ interface Props {
 }
 
 /** SanMar-specific mapping panel — category default + image opts + sync status. */
+const DEFAULT_IMPORT_LIMIT = 50;
+const MIN_IMPORT_LIMIT = 1;
+const MAX_IMPORT_LIMIT = 500;
+
 export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete }: Props) {
   const [categories, setCategories] = useState<SupplierCategoryBrowse[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [activeJob, setActiveJob] = useState<SyncJob | null>(null);
+  const [importLimit, setImportLimit] = useState<number>(DEFAULT_IMPORT_LIMIT);
+  // Track which category was just imported so the completion toast can name it.
+  // (SyncJob row doesn't carry the category name, so we keep it client-side.)
+  const lastImportedCategoryRef = useRef<string | null>(null);
 
   // 1. Initial Load
   useEffect(() => {
@@ -51,8 +59,25 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
         const updated = await api<SyncJob>(`/api/sync-jobs/${activeJob.id}`);
         pollFailures.current = 0;
         setActiveJob(updated);
-        if ((updated.status === "completed" || updated.status === "failed") && onSyncComplete) {
-          onSyncComplete();
+        if (updated.status === "completed" || updated.status === "failed") {
+          // Fire completion toast with real counts (uses backend
+          // records_processed — the source of truth).
+          const cat = lastImportedCategoryRef.current ?? "category";
+          if (updated.status === "completed") {
+            const count = updated.records_processed ?? 0;
+            toast.success(
+              count > 0
+                ? `Imported ${count} product${count === 1 ? "" : "s"} from ${cat}`
+                : `Import finished for ${cat} — 0 new products (the catalog returned no rows)`,
+            );
+          } else {
+            toast.error(
+              updated.error_log
+                ? `Import failed for ${cat}: ${updated.error_log.slice(0, 120)}`
+                : `Import failed for ${cat}`,
+            );
+          }
+          if (onSyncComplete) onSyncComplete();
         }
       } catch (e: any) {
         pollFailures.current += 1;
@@ -75,13 +100,20 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
       toast.error("Please select a category first");
       return;
     }
+    // Clamp limit defensively — backend also validates (1..500) but a clear
+    // client-side error is friendlier than a 422.
+    const limit = Math.max(
+      MIN_IMPORT_LIMIT,
+      Math.min(MAX_IMPORT_LIMIT, Math.floor(importLimit) || DEFAULT_IMPORT_LIMIT),
+    );
     setImporting(true);
+    lastImportedCategoryRef.current = defaultCategory;
     try {
       const res = await api<ImportCategoryResponse>(`/api/suppliers/${supplierId}/import-category`, {
         method: "POST",
         body: JSON.stringify({
           category_name: defaultCategory,
-          limit: 10,
+          limit,
           fetch_images: includeImages,
         }),
       });
@@ -103,7 +135,9 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
         error_log: null,
       });
 
-      toast.success(`Import started for ${defaultCategory}`);
+      toast.success(
+        `Import started — fetching up to ${limit} products from ${defaultCategory}`,
+      );
     } catch (e) {
       toast.error(`Failed to start import for ${defaultCategory}`);
     } finally {
@@ -146,6 +180,22 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
                 </option>
               ))}
             </select>
+            <div className="flex flex-col">
+              <input
+                type="number"
+                value={importLimit}
+                onChange={(e) => setImportLimit(Number(e.target.value))}
+                min={MIN_IMPORT_LIMIT}
+                max={MAX_IMPORT_LIMIT}
+                step={10}
+                disabled={importing || (activeJob?.status === "running")}
+                title={`How many products to import (max ${MAX_IMPORT_LIMIT}). SanMar returns the first N items of the category — no pagination yet.`}
+                className="w-24 h-11 px-3 text-sm font-bold text-center border border-[#f2f0ed] rounded-xl bg-[#f9f7f4]/30 outline-none focus:border-[#1e4d92] focus:ring-4 focus:ring-blue-50 transition-all disabled:opacity-50"
+              />
+              <span className="text-[9px] font-bold uppercase tracking-widest text-[#888894] text-center mt-1">
+                limit
+              </span>
+            </div>
             <Button
               onClick={handleImportCategory}
               disabled={importing || !defaultCategory || (activeJob?.status === "running")}
@@ -159,6 +209,11 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
               Initialize Import
             </Button>
           </div>
+          <p className="text-[11px] text-[#888894] mt-2">
+            SanMar returns the first <span className="font-mono font-bold">N</span> products of the chosen category.
+            Re-importing the same category fetches the same N rows again (no pagination yet) —
+            increase <span className="font-mono font-bold">limit</span> here to pull more in one go (max {MAX_IMPORT_LIMIT}).
+          </p>
         </div>
 
         {activeJob && (

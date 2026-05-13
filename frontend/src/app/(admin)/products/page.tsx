@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type { ProductListItem, Supplier } from "@/lib/types";
 import { ProductCard } from "@/components/products/product-card";
+import { SelectionBar } from "@/components/products/selection-bar";
+import { CheckSquare, Square } from "lucide-react";
 
 interface Category { id: string; name: string; }
 
@@ -22,6 +24,26 @@ export default function ProductsPage() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Bulk Selection State
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleToggleSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === displayedProducts.length && displayedProducts.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(displayedProducts.map((p) => p.id)));
+    }
+  };
 
   useEffect(() => {
     api<Supplier[]>("/api/suppliers").then(setSuppliers).catch(log.error);
@@ -97,12 +119,30 @@ export default function ProductsPage() {
             32.4k products indexed across 4 normalized schemas
           </div>
         </div>
-        <Link
-          href="/products/archived"
-          className="text-[12px] font-semibold text-[#1e4d92] hover:underline"
-        >
-          View archived →
-        </Link>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleSelectAll}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all shadow-sm ${
+              selectedIds.size > 0 
+                ? "bg-[#1e4d92] border-[#1e4d92] text-white" 
+                : "bg-white border-[#cfccc8] text-[#888894] hover:border-[#1e4d92] hover:text-[#1e4d92]"
+            }`}
+          >
+            {selectedIds.size === displayedProducts.length && displayedProducts.length > 0 ? (
+              <CheckSquare className="w-4 h-4" />
+            ) : (
+              <Square className="w-4 h-4" />
+            )}
+            {selectedIds.size === displayedProducts.length && displayedProducts.length > 0 ? "Deselect All" : "Select All Visible"}
+          </button>
+          <div className="w-[1px] h-8 bg-[#f2f0ed] mx-2" />
+          <Link
+            href="/products/archived"
+            className="text-[12px] font-bold text-[#1e4d92] hover:underline whitespace-nowrap"
+          >
+            View archived →
+          </Link>
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -251,10 +291,26 @@ export default function ProductsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {displayedProducts.map((p) => (
-            <ProductCard key={p.id} product={p} onArchive={() => handleArchive(p)} />
+            <ProductCard 
+              key={p.id} 
+              product={p} 
+              isSelected={selectedIds.has(p.id)}
+              onToggleSelection={handleToggleSelection}
+              onArchive={() => handleArchive(p)} 
+            />
           ))}
         </div>
       )}
+
+      {/* Floating Selection Bar */}
+      <SelectionBar 
+        selectedIds={Array.from(selectedIds)} 
+        onClear={() => setSelectedIds(new Set())}
+        onSuccess={() => {
+          setSelectedIds(new Set());
+          // The catalog page and context will handle toast/refresh
+        }}
+      />
 
       {/* Pagination (placeholder) */}
       {!loading && displayedProducts.length > 0 && (

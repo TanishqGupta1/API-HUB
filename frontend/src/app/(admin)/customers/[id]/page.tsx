@@ -24,11 +24,16 @@ import { toast } from "sonner";
 export default function CustomerSettingsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  
+  // Guard against placeholder URLs or invalid UUIDs
+  const isInvalidId = !id || id.includes("[") || id.includes("{") || id.length < 32;
+
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isInvalidId);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (isInvalidId) return;
     async function load() {
       try {
         const data = await api<Customer>(`/api/customers/${id}`);
@@ -68,7 +73,29 @@ export default function CustomerSettingsPage() {
     );
   }
 
-  if (!customer) return <div>Customer not found</div>;
+  if (isInvalidId || !customer) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center px-6">
+        <div className="w-16 h-16 bg-[#fdf2f2] rounded-2xl flex items-center justify-center mb-6 border border-[#f5c6cb]">
+          <Database className="w-8 h-8 text-[#b93232]" />
+        </div>
+        <h2 className="text-xl font-black text-[#1e1e24] mb-2">Invalid Customer ID</h2>
+        <p className="text-sm text-[#888894] max-w-xs mb-8 leading-relaxed">
+          The ID <code className="bg-[#f9f7f4] px-1.5 py-0.5 rounded font-mono text-[#b93232]">{id}</code> is not a valid identifier. Please pick a customer from the list.
+        </p>
+        <Button 
+          onClick={() => router.push("/customers")}
+          className="bg-[#1e4d92] text-white font-bold text-[10px] uppercase tracking-widest h-10 px-6"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Customers
+        </Button>
+      </div>
+    );
+  }
+
+  // TypeScript now knows customer is non-null
+  const currentCustomer = customer;
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -118,17 +145,17 @@ export default function CustomerSettingsPage() {
                   <label className="text-[10px] font-black uppercase tracking-widest text-[#888894]">Storefront Name</label>
                   <input 
                     type="text" 
-                    value={customer.name}
-                    onChange={(e) => setCustomer({...customer, name: e.target.value})}
+                    value={currentCustomer.name}
+                    onChange={(e) => setCustomer(prev => prev ? {...prev, name: e.target.value} : null)}
                     className="w-full h-12 px-4 rounded-xl border border-[#cfccc8] text-sm font-bold focus:border-[#1e4d92] focus:ring-4 focus:ring-blue-50 outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-[#888894]">Instance Status</label>
                   <div className="flex items-center gap-3 h-12 px-4 rounded-xl border border-[#cfccc8] bg-[#f9f7f4]">
-                    <div className={`w-2.5 h-2.5 rounded-full ${customer.is_active ? 'bg-emerald-500' : 'bg-[#cfccc8]'}`} />
+                    <div className={`w-2.5 h-2.5 rounded-full ${currentCustomer.is_active ? 'bg-emerald-500' : 'bg-[#cfccc8]'}`} />
                     <span className="text-xs font-black uppercase tracking-widest text-[#1e1e24]">
-                      {customer.is_active ? 'Active' : 'Offline'}
+                      {currentCustomer.is_active ? 'Active' : 'Offline'}
                     </span>
                   </div>
                 </div>
@@ -140,8 +167,8 @@ export default function CustomerSettingsPage() {
                   <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888894]" />
                   <input 
                     type="text" 
-                    value={customer.ops_base_url}
-                    onChange={(e) => setCustomer({...customer, ops_base_url: e.target.value})}
+                    value={currentCustomer.ops_base_url}
+                    onChange={(e) => setCustomer(prev => prev ? {...prev, ops_base_url: e.target.value} : null)}
                     className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#cfccc8] text-sm font-bold font-mono text-[#1e4d92] focus:border-[#1e4d92] outline-none transition-all"
                   />
                 </div>
@@ -163,8 +190,8 @@ export default function CustomerSettingsPage() {
                   <Database className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888894]" />
                   <input 
                     type="text" 
-                    value={customer.ops_client_id}
-                    onChange={(e) => setCustomer({...customer, ops_client_id: e.target.value})}
+                    value={currentCustomer.ops_client_id}
+                    onChange={(e) => setCustomer(prev => prev ? {...prev, ops_client_id: e.target.value} : null)}
                     className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#cfccc8] text-sm font-bold font-mono focus:border-[#1e4d92] outline-none transition-all"
                   />
                 </div>
@@ -176,8 +203,8 @@ export default function CustomerSettingsPage() {
                   <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888894]" />
                   <input 
                     type="text" 
-                    value={customer.ops_token_url}
-                    onChange={(e) => setCustomer({...customer, ops_token_url: e.target.value})}
+                    value={currentCustomer.ops_token_url}
+                    onChange={(e) => setCustomer(prev => prev ? {...prev, ops_token_url: e.target.value} : null)}
                     className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#cfccc8] text-sm font-bold font-mono focus:border-[#1e4d92] outline-none transition-all"
                   />
                 </div>
@@ -196,11 +223,11 @@ export default function CustomerSettingsPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">SKUs Pushed</span>
-                <span className="text-lg font-black">{customer.products_pushed?.toLocaleString() || 0}</span>
+                <span className="text-lg font-black">{currentCustomer.products_pushed?.toLocaleString() || 0}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Pricing Rules</span>
-                <span className="text-lg font-black">{customer.markup_rules_count || 0}</span>
+                <span className="text-lg font-black">{currentCustomer.markup_rules_count || 0}</span>
               </div>
               <div className="pt-4 border-t border-white/10 mt-4 space-y-2">
                 <Link
@@ -211,7 +238,7 @@ export default function CustomerSettingsPage() {
                   <LayoutGrid className="w-4 h-4" />
                 </Link>
                 <a
-                  href={customer.ops_base_url}
+                  href={currentCustomer.ops_base_url}
                   target="_blank"
                   className="flex items-center justify-between p-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-xs font-bold"
                 >

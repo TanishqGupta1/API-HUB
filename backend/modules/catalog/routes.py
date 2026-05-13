@@ -104,7 +104,7 @@ async def list_products(
                 Product.brand.ilike(f"%{search}%"),
             )
         )
-    query = query.offset(skip).limit(limit).order_by(Product.product_name)
+    query = query.offset(skip).limit(limit).order_by(Product.last_synced.desc(), Product.product_name)
 
     rows = (await db.execute(query)).all()
     products = [row[0] for row in rows]
