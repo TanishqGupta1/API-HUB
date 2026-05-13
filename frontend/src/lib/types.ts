@@ -242,6 +242,7 @@ export interface Customer {
   ops_token_url: string;
   ops_client_id: string;
   is_active: boolean;
+  logo_url: string | null;
   created_at: string;
   products_pushed: number;
   markup_rules_count: number;
@@ -252,20 +253,32 @@ export interface MarkupRule {
   id: string;
   customer_id: string;
   scope: string;
-  markup_pct: number;
+  markup_pct: number | null;
+  markup_amount: number | null;
   min_margin: number | null;
+  min_price: number | null;
+  max_price: number | null;
   rounding: string;
   priority: number;
+  is_active: boolean;
+  effective_from: string | null;
+  effective_until: string | null;
   created_at: string;
 }
 
 export interface MarkupRuleCreate {
   customer_id: string;
   scope: string;
-  markup_pct: number;
+  markup_pct?: number | null;
+  markup_amount?: number | null;
   min_margin?: number | null;
+  min_price?: number | null;
+  max_price?: number | null;
   rounding: string;
   priority: number;
+  is_active?: boolean;
+  effective_from?: string | null;
+  effective_until?: string | null;
 }
 
 /* ─── Sync Jobs ──────────────────────────────────────────────────────────── */
@@ -357,6 +370,37 @@ export interface AttributeConfigItem {
   sort_order: number;
 }
 
+/* Phase 6 — customer-curated catalog selections */
+export type SelectionStatus = "selected" | "pushed" | "stale" | "failed";
+
+export interface CustomerProductSelection {
+  id: string;
+  customer_id: string;
+  product_id: string;
+  status: SelectionStatus;
+  added_at: string;
+  pushed_at: string | null;
+
+  // Embedded product fields (saves an extra fetch on the catalog page)
+  supplier_id: string;
+  supplier_sku: string;
+  product_name: string;
+  product_type: string;
+  image_url: string | null;
+  ops_product_id: string | null;
+  last_synced: string | null;
+
+  // Decoration visibility
+  supplier_has_decoration_overlay: boolean;
+  decoration_ready: boolean;
+}
+
+export interface SelectionBulkResponse {
+  added: number;
+  already_selected: number;
+  not_found: number;
+}
+
 export interface OptionConfigItem {
   master_option_id: string;
   ops_master_option_id: number;
@@ -366,4 +410,23 @@ export interface OptionConfigItem {
   master_option_tag: string | null;
   enabled: boolean;
   attributes: AttributeConfigItem[];
+}
+
+/* ─── Phase 8 — Decorations & Branding ───────────────────────────────────── */
+export interface DecorationOption {
+  type: "logo" | "text";
+  url?: string;
+  text?: string;
+  position_x: number;  // 0-100 percentage
+  position_y: number;  // 0-100 percentage
+  scale: number;       // 0.1 - 2.0
+  rotation: number;    // 0-360
+  layer: number;
+}
+
+export interface ProductDecoration {
+  customer_id: string;
+  product_id: string;
+  decoration_options: DecorationOption[];
+  updated_at: string;
 }

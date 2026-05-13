@@ -174,21 +174,42 @@ async def _run_category_import(
                 await session.commit()
                 await session.refresh(job)
 
-            # 2. Enrich images in background if requested
+            # 2. Enrich images if requested.
+            #
+            # PERF: `PromoStandardsClient.get_media` already has an internal
+            # semaphore that runs up to 5 SOAP calls in parallel. The old
+            # code called it once per product in a serial for-loop, which
+            # collapsed the concurrency down to 1 (each call had a
+            # single-element list, so there was only one task to schedule).
+            # For 21 products at ~10s/call, that was ~210s — most of the
+            # 7-minute import. Batching all product_ids into one call lets
+            # the semaphore actually parallelize: ~ceil(N/5) × per-call
+            # latency, so 21 products drops to ~5 rounds ≈ 50s.
             if fetch_images and wsdl_media and products:
                 media_client = PromoStandardsClient(wsdl_media, auth_config)
-                for i, p in enumerate(products):
-                    try:
-                        # Update progress in error_log for visibility
-                        if job:
-                            job.error_log = f"Enriching media for {p.product_id} ({i+1}/{len(products)})..."
-                            await session.commit()
-                        
-                        media_items = await media_client.get_media([p.product_id])
-                        if media_items:
-                            await update_media_only(session, supplier_id, media_items)
-                    except Exception as e:
-                        import_log.warning("Media enrichment failed for %s: %s", p.product_id, e)
+                all_pids = [p.product_id for p in products]
+                if job:
+                    job.error_log = (
+                        f"Enriching media for {len(all_pids)} products "
+                        f"(up to 5 in parallel)..."
+                    )
+                    await session.commit()
+                try:
+                    media_items = await media_client.get_media(all_pids)
+                    if media_items:
+                        await update_media_only(session, supplier_id, media_items)
+                except Exception as e:  # noqa: BLE001
+                    import_log.warning(
+                        "Batch media enrichment failed for %d products: %s",
+                        len(all_pids), e,
+                    )
+                finally:
+                    # Clear the in-flight status so the next status check
+                    # (and the final UI render) doesn't keep showing
+                    # "Enriching media..." after this phase completes.
+                    if job:
+                        job.error_log = None
+                        await session.commit()
 
             # Upsert a Category row for this category_name so the sidebar shows it
             if products:

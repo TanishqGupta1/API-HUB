@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { fetchUser, logout, type AuthUser } from "@/lib/auth";
+import { useSelectedCustomer } from "@/lib/customer-context";
+import { LayoutGrid } from "lucide-react";
 
 const NAV_ITEMS = [
   {
@@ -199,6 +201,7 @@ export default function SidebarNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const { selectedCustomerId, selectedCustomerName } = useSelectedCustomer();
 
   useEffect(() => {
     fetchUser().then(setUser);
@@ -263,6 +266,25 @@ export default function SidebarNav() {
               </span>
             </Link>
           ))}
+          {/* Dynamic Customer Catalog Link */}
+          {group.section === "Products" && selectedCustomerId && (
+            <Link
+              href={`/customers/${selectedCustomerId}/catalog`}
+              className={`nav-item${isActive(`/customers/${selectedCustomerId}/catalog`) ? " active" : ""}`}
+              style={{ 
+                borderLeft: '2px solid var(--blue)', 
+                background: isActive(`/customers/${selectedCustomerId}/catalog`) ? 'var(--blue-faint)' : 'transparent',
+                marginTop: '4px'
+              }}
+            >
+              <LayoutGrid className="nav-icon" style={{ color: 'var(--blue)' }} />
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <span style={{ color: 'var(--blue)', fontWeight: 700 }}>
+                  {selectedCustomerName}&apos;s Catalog
+                </span>
+              </span>
+            </Link>
+          )}
         </div>
       ))}
 
