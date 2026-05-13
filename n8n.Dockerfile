@@ -18,5 +18,9 @@ RUN mkdir -p /opt/custom-nodes/n8n-nodes-onprintshop \
  && chown -R node:node /opt/custom-nodes
 COPY --from=node-build --chown=node:node /build/dist /opt/custom-nodes/n8n-nodes-onprintshop/dist
 COPY --from=node-build --chown=node:node /build/package.json /opt/custom-nodes/n8n-nodes-onprintshop/package.json
+# node_modules is required so peer dependencies (n8n-workflow, etc.) resolve
+# at runtime — without it n8n fails to load the node and silently reports
+# "Unrecognized node type".
+COPY --from=node-build --chown=node:node /build/node_modules /opt/custom-nodes/n8n-nodes-onprintshop/node_modules
 USER node
 ENV N8N_CUSTOM_EXTENSIONS=/opt/custom-nodes

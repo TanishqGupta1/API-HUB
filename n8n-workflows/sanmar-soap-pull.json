@@ -8,7 +8,10 @@
       "name": "When clicking 'Execute workflow'",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [240, 200]
+      "position": [
+        240,
+        200
+      ]
     },
     {
       "parameters": {
@@ -25,18 +28,33 @@
       "name": "Schedule Trigger (3am Daily)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
-      "position": [240, 400]
+      "position": [
+        240,
+        400
+      ]
     },
     {
       "parameters": {
         "url": "={{ $env.API_BASE_URL }}/api/suppliers",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
+        }
       },
       "id": "get-suppliers",
       "name": "Get Suppliers",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -46,7 +64,10 @@
       "name": "Resolve SanMar SID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -61,13 +82,25 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
+        }
       },
       "id": "trigger-sync",
       "name": "Trigger Sync",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -78,19 +111,34 @@
       "name": "Wait",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
-      "position": [1120, 300],
+      "position": [
+        1120,
+        300
+      ],
       "webhookId": "cb4ef5b4-d5f0-4663-8a39-3ebcd48d88e0"
     },
     {
       "parameters": {
         "url": "={{ $env.API_BASE_URL }}/api/sync/{{ $('Resolve SanMar SID').item.json.sid }}/status",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
+        }
       },
       "id": "poll-status",
       "name": "Poll Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 300]
+      "position": [
+        1340,
+        300
+      ]
     },
     {
       "parameters": {
@@ -107,7 +155,10 @@
       "name": "Is Done?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1560, 300]
+      "position": [
+        1560,
+        300
+      ]
     },
     {
       "parameters": {
@@ -124,7 +175,10 @@
       "name": "Is Failed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1560, 500]
+      "position": [
+        1560,
+        500
+      ]
     }
   ],
   "connections": {

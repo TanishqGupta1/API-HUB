@@ -26,7 +26,16 @@
     {
       "parameters": {
         "url": "={{ $env.API_BASE_URL }}/api/suppliers",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
+        }
       },
       "id": "csw-0002",
       "name": "Get Active Suppliers",
@@ -63,7 +72,16 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
+        }
       },
       "id": "csw-0004",
       "name": "Trigger Full Import",
@@ -91,7 +109,16 @@
     {
       "parameters": {
         "url": "={{ $env.API_BASE_URL }}/api/sync-jobs/{{$json.sync_job_id}}",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
+        }
       },
       "id": "csw-0006",
       "name": "Poll Job Status",

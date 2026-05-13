@@ -17,7 +17,16 @@
     {
       "parameters": {
         "url": "={{ $env.API_BASE_URL }}/api/suppliers",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
+        }
       },
       "id": "9a1b1111-0002-0000-0000-000000000002",
       "name": "Get Suppliers",

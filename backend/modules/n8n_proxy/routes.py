@@ -161,9 +161,22 @@ async def trigger_workflow_by_id(workflow_id: str, params: dict | None = None) -
 
     trigger_url = f"{_base()}/webhook/{webhook_path}"
     async with httpx.AsyncClient(timeout=10.0) as hc:
-        tr = await hc.post(trigger_url, json=params)
-        tr.raise_for_status()
-        return {"triggered": True, "url": trigger_url, "response": tr.json()}
+        try:
+            tr = await hc.post(trigger_url, json=params)
+            tr.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # n8n returned 4xx/5xx — surface a clean HTTPException so FastAPI
+            # produces a JSON response that CORSMiddleware can decorate (avoids
+            # opaque "blocked by CORS policy" errors in the browser).
+            detail = e.response.text or f"n8n webhook returned {e.response.status_code}"
+            raise HTTPException(status_code=502, detail=f"n8n webhook error: {detail[:300]}")
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            raise HTTPException(status_code=503, detail=f"n8n unreachable: {e}")
+        try:
+            body = tr.json()
+        except ValueError:
+            body = {"raw": tr.text}
+        return {"triggered": True, "url": trigger_url, "response": body}
 
 
 @router.post("/workflows/{workflow_id}/trigger")
