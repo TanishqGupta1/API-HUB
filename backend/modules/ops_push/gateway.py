@@ -176,6 +176,7 @@ async def prepare_push_intent(
     req: PushRequest,
     key: IntegrationKey,
     db: AsyncSession,
+    idempotency_key: Optional[str] = None,
 ) -> PushRequestAccepted:
     """Stage 1: validate, idempotency check, preflight, insert push_log row.
 
@@ -222,9 +223,9 @@ async def prepare_push_intent(
     existing = (await db.execute(
         select(ProductPushLog).where(
             ProductPushLog.key_id == key.id,
-            ProductPushLog.idempotency_key == req.product_ref.supplier_sku,
+            ProductPushLog.idempotency_key == idempotency_key,
         )
-    )).scalar_one_or_none()
+    )).scalar_one_or_none() if idempotency_key else None
 
     if existing:
         if existing.payload_hash == payload_hash:
@@ -278,7 +279,7 @@ async def prepare_push_intent(
         status="accepted",
         pushed_at=now,
         key_id=key.id,
-        idempotency_key=supplier_sku,
+        idempotency_key=idempotency_key,
         payload_hash=payload_hash,
         supplier_slug=supplier_slug,
         supplier_sku=supplier_sku,

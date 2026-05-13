@@ -4,7 +4,7 @@ import secrets
 import uuid as uuid_mod
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,10 +43,11 @@ async def create_push_request(
     background_tasks: BackgroundTasks,
     key: OrchestratorKey,
     db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     check_key_scope(key, str(req.target.customer_id), req.source.supplier_slug)
 
-    accepted = await prepare_push_intent(req, key, db)
+    accepted = await prepare_push_intent(req, key, db, idempotency_key=idempotency_key)
 
     # If idempotent replay — already terminal, no execute needed
     if accepted.status not in ("accepted", "queued"):
