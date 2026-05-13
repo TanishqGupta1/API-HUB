@@ -23,6 +23,10 @@ export default function ProductsPage() {
   const [supplierSearch, setSupplierSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const PAGE_SIZE = 50;
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Bulk Selection State
@@ -52,19 +56,44 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setLoading(true);
+    setOffset(0);
+    setHasMore(true);
     const timeout = setTimeout(() => {
-      const params = new URLSearchParams({ limit: "50" });
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), skip: "0" });
       if (search) params.set("search", search);
       if (categoryId) params.set("category_id", categoryId);
       if (supplierFilter !== "all") params.set("supplier_id", supplierFilter);
-      
+
       api<ProductListItem[]>(`/api/products?${params.toString()}`)
-        .then(setProducts)
+        .then((data) => {
+          setProducts(data);
+          setHasMore(data.length === PAGE_SIZE);
+        })
         .catch(log.error)
         .finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(timeout);
   }, [search, categoryId, supplierFilter]);
+
+  async function handleLoadMore() {
+    const nextOffset = offset + PAGE_SIZE;
+    setLoadingMore(true);
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), skip: String(nextOffset) });
+    if (search) params.set("search", search);
+    if (categoryId) params.set("category_id", categoryId);
+    if (supplierFilter !== "all") params.set("supplier_id", supplierFilter);
+
+    try {
+      const data = await api<ProductListItem[]>(`/api/products?${params.toString()}`);
+      setProducts((prev) => [...prev, ...data]);
+      setOffset(nextOffset);
+      setHasMore(data.length === PAGE_SIZE);
+    } catch (e) {
+      log.error(e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -312,11 +341,14 @@ export default function ProductsPage() {
         }}
       />
 
-      {/* Pagination (placeholder) */}
-      {!loading && displayedProducts.length > 0 && (
+      {!loading && hasMore && (
         <div className="mt-12 flex justify-center">
-          <button className="px-6 py-2.5 bg-white border border-[#cfccc8] rounded-full text-[12px] font-bold text-[#1e1e24] hover:bg-[#fcfbf9] transition-colors">
-            Load More Products
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="px-6 py-2.5 bg-white border border-[#cfccc8] rounded-full text-[12px] font-bold text-[#1e1e24] hover:bg-[#fcfbf9] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingMore ? "Loading..." : "Load More Products"}
           </button>
         </div>
       )}

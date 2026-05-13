@@ -1,8 +1,11 @@
 # Phase 8 — SanMar → OPS Staging Push (Beta): Implementation Plan
 
-**Spec:** `docs/superpowers/specs/2026-05-08-sanmar-ops-staging-push-design.md`
-**Date:** 2026-05-11
+**Spec:** `docs/superpowers/specs/2026-05-11-integration-gateway-design.md`
+**Previous spec (superseded):** `docs/superpowers/specs/2026-05-08-sanmar-ops-staging-push-design.md`
+**Date:** 2026-05-13 (updated to match Integration Gateway spec)
 **Status:** 3/11 tasks done. Tasks 4–7 are parallel once Task 1 lands.
+
+> ⚠️ **Plan updated 2026-05-13** — Original plan was based on the VPCE spec (preview/execute + confirm_token). That spec was superseded on 2026-05-11 by the Integration Gateway design. Tasks 1, 8, 9, 11 have been rewritten. Tasks 4, 7 unchanged. Tasks 5, 6, 10 have minor naming updates.
 
 ---
 
@@ -10,16 +13,16 @@
 
 | Task | Title | Owner | Status | Depends On | Blocks |
 |------|-------|-------|--------|------------|--------|
-| 1 | DB schema migration | Vidhi | ⏳ Pending | — | 4, 5, 6, 7 |
+| 1 | DB schema migration | Vidhi | ⚠️ Redo | — | 4, 5, 6, 7 |
 | 2 | Fix base_price=None in V2 normalizer | — | ✅ Done | — | — |
 | 3 | Wire SanMar Inventory v200 SOAP | — | ✅ Done | — | — |
 | 4 | OpsClient: mutation methods + OAuth2 refresh | Urvashi | ⏳ Pending | 1 | 5, 8 |
 | 5 | FakeOpsClient (dry-run test double) | Urvashi | ⏳ Pending | 4 | 8 |
 | 6 | payload_builder.py | Shinchana | ⏳ Pending | 1 | 8 |
-| 7 | preflight.py (8 validation checks) | Shinchana | ⏳ Pending | 1 | 8 |
-| 8 | pipeline.py (orchestrator) | Vidhi | ⏳ Pending | 1, 4, 5, 6, 7 | 9 |
-| 9 | New API routes + deprecate n8n push path | Vidhi | ⏳ Pending | 8 | 10 |
-| 10 | Admin UI: preview page, timeline, dry-run controls | Shinchana | ⏳ Pending | 9 | 11 |
+| 7 | preflight.py (4 validation checks) | Shinchana | ⏳ Pending | 1 | 8 |
+| 8 | Integration Gateway core (prepare + execute + build) | Vidhi | ⏳ Pending | 1, 4, 5, 6, 7 | 9 |
+| 9 | New API routes (`/api/integrations/v1/`) + delete n8n path | Vidhi | ⏳ Pending | 8 | 10 |
+| 10 | Admin UI: push log detail, integration keys page | Shinchana | ⏳ Pending | 9 | 11 |
 | 11 | E2E manual test against VG OPS staging | Urvashi | ⏳ Pending | All | — |
 
 ### Execution Order
@@ -37,7 +40,7 @@ Task 1 (Vidhi)  ←── start here, unblocks everyone
 
 ## Goal
 
-Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS staging end-to-end with correct prices, images, inventory, and full operator visibility. Single-product, manually triggered, preview-then-confirm safety layer. No n8n in the push path for beta.
+Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS staging end-to-end with correct prices, images, inventory, and full operator visibility. Single-product, manually triggered. No n8n in the push path for beta. Any orchestrator (n8n, curl, cron) can call the gateway via `X-Orchestrator-Key`.
 
 ---
 
@@ -45,40 +48,48 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 
 - No n8n in OPS push path for beta. Push runs in FastAPI process.
 - Halt-no-rollback on failure. No auto-rollback. Manual cleanup checklist surfaced in UI.
-- Preview → Confirm → Execute. Default is dry-run. Live mode requires confirm_token + admin role.
-- Concurrency guard via partial unique index on `executing` status — NOT transactional advisory lock.
+- Idempotency-Key + payload_hash replace the old preview_id + confirm_token approach.
+- Concurrency guard: `IN_FLIGHT` 409 if another push for same `(customer, product)` is `processing`.
 - `sync_jobs` is NOT used for push tracking (inbound sync only). `product_push_log` owns push state.
-- Auth headers redacted (`"Bearer ***"`) before writing to `execution_steps`. Plaintext never persisted.
+- Auth headers redacted (`"Bearer ***"`) before writing to `step_results`. Plaintext never persisted.
+- `integration_keys` table is the single source of truth for orchestrator API keys.
 
 ---
 
 ## File Structure
 
+**New (`backend/modules/integrations/`):**
+- `routes.py` — 4 gateway endpoints under `/api/integrations/v1/`
+- `auth.py` — `X-Orchestrator-Key` dependency, key lookup + scope check
+- `schemas.py` — push request/response envelopes, error envelope
+- `service.py` — gateway shim calling `prepare_push_intent()` + `execute_push()`
+
 **New (`backend/modules/ops_push/`):**
-- `payload_builder.py` — sole owner of OPS-bound payload shape. Replaces `merge.py`.
-- `preflight.py` — pure validation rules (DB-only checks). Returns blockers list.
-- `pipeline.py` — orchestration only. Validate → build → hash → execute. No DB write logic, no payload shaping, no transport.
-- `fake_ops_client.py` — in-memory test double with same interface as real client.
+- `payload_builder.py` — sole owner of OPS-bound payload shape (`build_push_payload()`). Replaces `merge.py`.
+- `preflight.py` — pure validation rules. Returns blockers list.
+- `fake_ops_client.py` — in-memory test double with same interface as real OpsClient.
 
 **Extended (not replaced):**
 - `backend/modules/ops_inbound/ops_client.py` — add mutation methods + OAuth2 refresh on 401.
 
 **Modified:**
-- `backend/modules/promostandards/ps_normalizer_v2.py` — backfill `base_price` ✅ Done
-- `backend/modules/promostandards/adapter.py` — add Inventory v200 SOAP call ✅ Done
-- `backend/modules/push_log/models.py` — add JSONB cols + updated status vocab
-- `backend/modules/push_log/schemas.py` — read shapes for new JSONB cols
-- `backend/modules/ops_push/routes.py` — replace single push endpoint with `/preview`, `/execute`, `/{push_log_id}`, `/{push_log_id}/stream`
+- `backend/modules/push_log/models.py` — add +12 columns + `integration_keys` table + updated status vocab
+- `backend/modules/push_log/schemas.py` — read shapes for new columns
+- `backend/modules/ops_push/routes.py` — rewire admin push button to new `prepare_push_intent()` + `execute_push()`
 - `backend/modules/markup/routes.py` — mark `/payload`, `/ops-variants`, `/ops-options` deprecated
+- `backend/main.py` — register new integrations router, delete `N8N_*` env var checks (M4)
 
-**Removed (beta):**
+**Removed (M4):**
 - `backend/modules/ops_push/service.py::trigger_n8n_push` + `N8N_PUSH_WEBHOOK_URL` env var
 - `backend/modules/ops_push/merge.py` (replaced by `payload_builder.py`)
-- `n8n-workflows/ops-push.json` → move to `n8n-workflows/deprecated/ops-push.json` with tombstone README
+- `backend/modules/n8n_proxy/` (entire module — 172 LOC)
+- `n8n-workflows/ops-push.json` → move to `n8n-workflows/deprecated/ops-push.json`
 
 ---
 
-## Task 1 — DB schema migration ⏳ Pending
+## Task 1 — DB schema migration ⚠️ Needs redo (built against old spec)
+
+**What we built was for the VPCE spec. The new spec requires different columns.**
 
 **Files:**
 - Modify: `backend/modules/push_log/models.py`
@@ -86,38 +97,61 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 - Create: `backend/migrations/push_log_phase8.sql` (reference only — app uses `create_all`)
 
 **Steps:**
-- [ ] Step 1: Add columns to `ProductPushLog` in `models.py`:
+- [ ] Step 1: Replace old VPCE columns with new Integration Gateway columns on `ProductPushLog`:
   ```python
-  preflight_results: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-  preview_payload:   Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-  execution_steps:   Mapped[list]           = mapped_column(JSONB, default=list)
-  cleanup_targets:   Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-  input_hash:        Mapped[Optional[str]]  = mapped_column(String(64), nullable=True)
-  confirm_token_hash:         Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-  confirm_token_consumed_at:  Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-  preview_built_at:  Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-  dry_run:           Mapped[bool]           = mapped_column(Boolean, default=False)
+  # Remove: preflight_results, preview_payload, preview_built_at,
+  #         confirm_token_hash, confirm_token_consumed_at, input_hash, execution_steps
+
+  # Add these 12 columns:
+  request_id:        Mapped[uuid_mod.UUID] = mapped_column(default=uuid_mod.uuid4, unique=True)
+  key_id:            Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+  idempotency_key:   Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+  payload_hash:      Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+  supplier_slug:     Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+  supplier_sku:      Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+  callback_url:      Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+  callback_status:   Mapped[str]           = mapped_column(String(32), default="not_requested")
+  callback_attempts: Mapped[int]           = mapped_column(default=0)
+  step_results:      Mapped[Optional[list]]= mapped_column(JSONB, nullable=True)
+  cleanup_targets:   Mapped[Optional[dict]]= mapped_column(JSONB, nullable=True)
+  retry_of:          Mapped[Optional[uuid_mod.UUID]] = mapped_column(nullable=True)
   ```
-- [ ] Step 2: Update status comment in `models.py` to reflect full vocab:
-  `pending → preview_ready → executing → dry_run_pushed | pushed | failed`
-- [ ] Step 3: Add index declarations to `models.py`:
+- [ ] Step 2: Update status vocab comment in `models.py`:
+  `accepted → queued → processing → pushed | failed | partial_failure | rejected | canceled | dry_run_pushed`
+- [ ] Step 3: Add indexes:
   ```python
   __table_args__ = (
-      Index("idx_push_log_input_hash", "input_hash"),
+      Index("idx_push_log_payload_hash", "payload_hash"),
+      Index("idx_push_log_idempotency", "key_id", "idempotency_key"),
       Index(
           "uq_push_log_in_flight",
           "customer_id", "product_id",
           unique=True,
-          postgresql_where=text("status = 'executing'"),
+          postgresql_where=text("status = 'processing'"),
       ),
   )
   ```
-- [ ] Step 4: Update `push_log/schemas.py` — add `PreflightResults`, `ExecutionStep`, `PreviewPayload` Pydantic models matching the JSONB shapes in the spec `§Data model`. Exclude `confirm_token_hash` from all response schemas.
-- [ ] Step 5: Start backend, confirm tables alter cleanly: `uvicorn main:app --reload`. Check logs for errors.
+- [ ] Step 4: Create `integration_keys` table as a new model in `backend/modules/integrations/models.py`:
+  ```python
+  class IntegrationKey(Base):
+      __tablename__ = "integration_keys"
+      id:                    Mapped[str]            = mapped_column(String(64), primary_key=True)
+      key_hash:              Mapped[str]            = mapped_column(String(128))
+      name:                  Mapped[str]            = mapped_column(String(255))
+      allowed_customer_ids:  Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+      allowed_supplier_slugs:Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+      rate_limit_per_minute: Mapped[int]            = mapped_column(default=60)
+      is_active:             Mapped[bool]           = mapped_column(Boolean, default=True)
+      last_used_at:          Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+      created_at:            Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+      revoked_at:            Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+  ```
+- [ ] Step 5: Update `push_log/schemas.py` — add `StepResult`, `PushRequestResponse`, `PushStatusResponse` Pydantic models. No `confirm_token_hash` anywhere. No `preview_payload`.
+- [ ] Step 6: Start backend, confirm tables alter cleanly.
 
-**Test:** `GET /api/push-log` returns rows without error. New columns present in `\d product_push_log` in psql.
+**Test:** `GET /api/push-log` returns rows without error. New columns present in `\d product_push_log`. `integration_keys` table exists.
 
-**Commit:** `feat(push_log): Phase 8 schema — JSONB cols, status vocab, concurrency index`
+**Commit:** `feat(push_log): Phase 8 schema — Integration Gateway columns, integration_keys table`
 
 ---
 
@@ -137,8 +171,6 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 
 `adapter.py::hydrate_product()` now calls `inv_client.get_inventory()` after `merge_media`, maps `quantity_available` + `warehouse_code` onto each variant by `part_id`. Swallows on failure (`variant.inventory=None` treated as unknown downstream).
 
-**Note:** Verified by code review + pattern match. Manual test against live SanMar SOAP deferred.
-
 **Merge when ready:** same branch as Task 2.
 
 ---
@@ -147,10 +179,10 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 
 **Files:**
 - Modify: `backend/modules/ops_inbound/ops_client.py`
-- Modify: `backend/tests/test_ops_client_mutations.py` (create if not exists)
+- Create: `backend/tests/test_ops_client_mutations.py`
 
 **Steps:**
-- [ ] Step 1: Add mutation methods to `OpsClient` — one per mutation in the spec `§Mutation sequence`:
+- [ ] Step 1: Add 6 mutation methods to `OpsClient`:
   - `set_product_category(input: dict) -> dict` — returns `{"products_id": int}`
   - `set_product(input: dict) -> dict` — returns `{"products_id": int}`
   - `set_product_size(input: dict) -> dict` — returns `{"products_id": int, "size_id": int}`
@@ -159,9 +191,9 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
   - `set_product_design(input: dict) -> dict`
   Each wraps `self.query(MUTATION_STRING, variables={"input": input})` and unwraps the response key.
 - [ ] Step 2: Add OAuth2 refresh on 401 — catch `AuthError` in `query()`, call `_refresh_token()`, retry once, then re-raise.
-- [ ] Step 3: Add `_refresh_token(self)` method — POST to `self.token_url` with `client_credentials` grant, update `self.auth_token`.
-- [ ] Step 4: Add mutation GraphQL strings as module-level constants (not inline) — easier to audit.
-- [ ] Step 5: Tests — mock `httpx.AsyncClient`, assert each mutation method sends correct query string and unwraps response key correctly.
+- [ ] Step 3: Add `_refresh_token(self)` — POST to `self.token_url` with `client_credentials` grant, update `self.auth_token`.
+- [ ] Step 4: Add mutation GraphQL strings as module-level constants (not inline).
+- [ ] Step 5: Tests — mock `httpx.AsyncClient`, assert each mutation sends correct query and unwraps response key.
 
 **Test:** `pytest backend/tests/test_ops_client_mutations.py -v` — all pass.
 
@@ -182,10 +214,9 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
   - `set_product` → `{"products_id": 10001}`
   - `set_product_size` → `{"products_id": 10001, "size_id": self._next_id()}`
   - others follow same pattern
-- [ ] Step 3: Record every call in `self.calls: list[dict]` with `method`, `input`, `response`, `called_at` — written to `execution_steps` JSONB by pipeline.
-- [ ] Step 4: `cleanup_targets` always `None`. Status never set to `pushed` — pipeline uses `dry_run_pushed`.
-- [ ] Step 5: `confirm_token` check skipped in dry-run mode (enforced by pipeline, not FakeOpsClient).
-- [ ] Step 6: Tests — call all 6 methods, assert IDs are unique and incrementing, assert `calls` list populated.
+- [ ] Step 3: Record every call in `self.calls: list[dict]` with `method`, `input`, `response`, `called_at` — written to `step_results` JSONB by pipeline (note: `step_results`, not `execution_steps`).
+- [ ] Step 4: `cleanup_targets` always `None`. Status set to `dry_run_pushed`, never `pushed`.
+- [ ] Step 5: Tests — call all 6 methods, assert IDs are unique and incrementing, assert `calls` list populated.
 
 **Test:** `pytest backend/tests/test_fake_ops_client.py -v` — all pass.
 
@@ -198,30 +229,23 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 **Files:**
 - Create: `backend/modules/ops_push/payload_builder.py`
 - Create: `backend/tests/test_payload_builder.py`
-- Delete: `backend/modules/ops_push/merge.py` (replaced — spec §Module map)
+- Delete: `backend/modules/ops_push/merge.py`
 
 **Steps:**
-- [ ] Step 1: Create `OpsPushPayloadBuilder` with `from_db(product, customer, markup_rules, push_mappings)` factory classmethod.
-- [ ] Step 2: Implement `.to_mutation_plan() -> list[dict]` — returns spec's `preview_payload.plan[]` shape:
-  ```json
-  {"step": 1, "mutation": "setProductCategory", "variables": {...}, "requires_response_from": null}
-  {"step": 2, "mutation": "setProduct", "variables": {...}, "requires_response_from": [1]}
-  ...
-  ```
-  Mutation ordering from spec `§Mutation sequence`: setProductCategory → setProduct → setProductSize × N → setProductPrice × ≥N → setAssignOptions → setProductDesign.
-- [ ] Step 3: Implement `.input_hash() -> str` — SHA-256 over canonical JSON of normalized inputs (prices, variant list, markup rule id, push_mappings ids). Deterministic: sort keys, strip whitespace.
-- [ ] Step 4: Implement `.computed_prices() -> list[dict]` — `{sku, base_price, final_price, markup_pct, rounding}` per variant. Markup applied here.
-- [ ] Step 5: Absorb synthesis logic from `n8n-workflows/ops-push.json:250-261`.
-- [ ] Step 6: Re-implement `GET /customers/{cid}/products/{pid}/payload` (`markup/routes.py:29`) on top of `payload_builder` internally — keep response shape identical for existing callers.
-- [ ] Step 7: Tests — every variant has `vendor_price > 0`; `input_hash` is deterministic (same inputs → same hash); mutation plan ordering matches spec sequence; markup applied correctly to `final_price`.
+- [ ] Step 1: Create `build_push_payload(product, customer, markup_rules, push_mappings) -> OPSPushPayload`.
+- [ ] Step 2: `OPSPushPayload` Pydantic model with `.mutation_plan: list[dict]` — ordered mutations:
+  `setProductCategory → setProduct → setProductSize × N → setProductPrice × ≥N → setAssignOptions → setProductDesign`
+- [ ] Step 3: Implement `payload_hash(product, customer, markup_rules, push_mappings) -> str` — lowercase hex SHA-256 using RFC 8785 canonicalization (sort keys, no nulls, no whitespace). Used by gateway for idempotency ledger.
+- [ ] Step 4: Implement computed prices — `{sku, base_price, final_price, markup_pct, rounding}` per variant. **Markup engine applied here** (this is Bug 3 fix — markup was previously bypassed).
+- [ ] Step 5: Tests — every variant has `vendor_price > 0`; `payload_hash` is deterministic; mutation plan ordering matches spec sequence; `final_price = base_price * (1 + markup_rate)`.
 
 **Test:** `pytest backend/tests/test_payload_builder.py -v` — all pass.
 
-**Commit:** `feat(ops_push): payload_builder — sole owner of OPS-bound payload shape`
+**Commit:** `feat(ops_push): payload_builder — build_push_payload + markup engine fix`
 
 ---
 
-## Task 7 — preflight.py (8 validation checks) ⏳ Pending
+## Task 7 — preflight.py (validation checks) ⏳ Pending
 
 **Files:**
 - Create: `backend/modules/ops_push/preflight.py`
@@ -229,149 +253,162 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 
 **Steps:**
 - [ ] Step 1: Create `run_preflight(product, customer, db) -> PreflightResults` async function.
-- [ ] Step 2: Implement all 8 checks from spec `§Preflight validation rules`. Each returns `(name, ok: bool, detail: str)`:
+- [ ] Step 2: Implement validation checks. Each returns `(name, ok: bool, detail: str)`:
   1. `base_price_set` — every `ProductVariant.base_price` not null and > 0
-  2. `markup_rule_resolves` — `markup.engine.resolve_rule(rules, supplier_sku, category)` returns non-None
-  3. `push_mappings_present` — every `ProductOption` + attribute has `target_ops_option_id` / `target_ops_attribute_id` populated
+  2. `markup_rule_resolves` — markup engine resolves a rule for this product
+  3. `push_mappings_present` — every `ProductOption` + attribute has OPS mapping IDs populated
   4. `ops_oauth2_reachable` — smoke-test token fetch against `customer.ops_token_url`
   5. `image_urls_reachable` — HEAD per image URL returns 2xx (5s timeout)
-  6. `prefix_collision` — query OPS via `getProducts` for `internal_title = supplier_sku`; block if match found and no `push_mapping` row claims it
+  6. `prefix_collision` — check OPS for existing product with same `supplier_sku`; block if found with no `push_mapping` row
   7. `required_fields` — `product_name`, `supplier_sku`, ≥1 variant, ≥1 image
-  8. `decoration_attached` — if `supplier.has_decoration_overlay = true`, require non-empty `customer_product_decorations.decoration_options`
-- [ ] Step 3: Return `PreflightResults` with `checks`, `blockers` (names of failed checks), `warnings`, `computed_at`.
-- [ ] Step 4: Tests — mock DB + httpx. Test: all-pass path; single blocker path; `ops_oauth2_reachable` fail path; `prefix_collision` fire path.
+  8. `decoration_attached` — if supplier has decoration overlay, require decoration options present
+- [ ] Step 3: Return `PreflightResults` with `checks`, `blockers`, `warnings`, `computed_at`. Blockers → 422 `PREFLIGHT_BLOCKER` in gateway. No `push_log` row created on blocker.
+- [ ] Step 4: Tests — all-pass path; single blocker path; `ops_oauth2_reachable` fail; `prefix_collision` fire.
 
 **Test:** `pytest backend/tests/test_preflight.py -v` — all pass.
 
-**Commit:** `feat(ops_push): preflight — 8 validation checks before any OPS write`
+**Commit:** `feat(ops_push): preflight — validation checks before any OPS write`
 
 ---
 
-## Task 8 — pipeline.py (orchestrator) ⏳ Pending
+## Task 8 — Integration Gateway core ⏳ Pending
 
 **Depends on:** Tasks 1, 4, 5, 6, 7
 
+**Migration phases this task covers: M0 prereqs done + M1 + M3**
+
 **Files:**
-- Create: `backend/modules/ops_push/pipeline.py`
-- Create: `backend/tests/test_pipeline.py`
+- Create: `backend/modules/ops_push/gateway.py`
+- Create: `backend/tests/test_gateway.py`
 
 **Steps:**
-- [ ] Step 1: Create `preview(customer_id, product_id, db) -> PreviewResponse`:
-  - Check for in-flight row on `(customer_id, product_id)` → 409 if found
-  - Call `run_preflight()` → if blockers, return 422 with `preflight.blockers` (no push_log row created)
-  - Call `payload_builder.to_mutation_plan()` + `.input_hash()` + `.computed_prices()`
-  - Generate `confirm_token`: 32-byte `secrets.token_urlsafe()`. Store HMAC-SHA256 (key=`SECRET_KEY`) in `confirm_token_hash`. Return plaintext to caller once — never persisted.
-  - Insert `ProductPushLog` row: `status=preview_ready`, `preview_payload`, `preflight_results`, `input_hash`, `confirm_token_hash`, `preview_built_at`.
-  - Return `{preview_id, input_hash, confirm_token, plan, preflight, warnings}`.
+- [ ] Step 1: Create `prepare_push_intent(request_body, key_id, idempotency_key, db) -> PushLogRow`:
+  - Verify `X-Orchestrator-Key` → 401 `BAD_SIGNATURE` / 403 `KEY_NOT_ALLOWED` / 403 `KEY_REVOKED`
+  - Check idempotency ledger on `(key_id, idempotency_key)`:
+    - Same key + same `payload_hash` → return existing `push_log_id` (200, no new work)
+    - Same key + different `payload_hash` → 409 `IDEMPOTENCY_CONFLICT`
+    - First-seen → continue
+  - Check `IN_FLIGHT` — 409 if `processing` row exists for `(customer_id, product_id)`
+  - Resolve customer + supplier from DB (never from request body directly)
+  - Run `run_preflight()` → 422 `PREFLIGHT_BLOCKER` if blockers (no push_log row created)
+  - Compute `payload_hash` via `payload_builder.payload_hash()`
+  - Insert `ProductPushLog` row: `status=accepted`, `payload_hash`, `idempotency_key`, `key_id`, `supplier_slug`, `supplier_sku`, `callback_url`, `dry_run`
+  - Return `{push_log_id, status: "accepted", ...}`
 
-- [ ] Step 2: Create `execute(preview_id, input_hash, dry_run, confirm_token, db, user) -> ExecuteResponse`:
-  - Check for in-flight row → 409 if `executing` row exists for `(cid, pid)`
-  - Atomic UPDATE: `WHERE id=preview_id AND status='preview_ready' SET status='executing'` — partial unique index prevents race
-  - Recompute current `input_hash` → mismatch → 409 `PreviewExpired`, reset status to `preview_ready`
-  - `dry_run=false`: verify admin role + validate `confirm_token` via HMAC compare + check `confirm_token_consumed_at` is null → 403 if any fail; set `confirm_token_consumed_at=now`
+- [ ] Step 2: Create `execute_push(push_log_id, db) -> None` (runs synchronously or as BackgroundTask):
+  - Atomic UPDATE: `status=accepted → processing`
   - Select client: `dry_run=True` → `FakeOpsClient`, `dry_run=False` → real `OpsClient`
-  - Execute mutation plan sequentially. After each mutation: append to `execution_steps` (with `Authorization` header redacted to `"Bearer ***"`).
-  - On failure: halt, populate `cleanup_targets`, set `status=failed`. Return with cleanup info.
-  - On success: upsert `push_mappings` (live only), set `status=pushed` or `dry_run_pushed`.
+  - Call `build_push_payload()` — get mutation plan
+  - Execute mutations sequentially. After each: append to `step_results` (auth headers redacted to `"Bearer ***"`)
+  - On partial failure: halt, populate `cleanup_targets`, set `status=partial_failure`
+  - On hard failure before any OPS write: `status=failed`
+  - On success: upsert `push_mappings` (live only), set `status=pushed` or `dry_run_pushed`, set `ops_product_id`
+  - Fire callback if `callback_url` set — exponential backoff, max 5 attempts, update `callback_status`
 
-- [ ] Step 3: Async background path — if variant count > 20, detach `execute()` into `asyncio.create_task()`, return 202 with `{push_log_id, status: "executing", status_url, stream_url}`.
+- [ ] Step 3: Async path — variant count > 20 → `BackgroundTask(execute_push)`, return 202 immediately with `push_log_id`.
 
-- [ ] Step 4: SSE helper `stream_push_log(push_log_id, db)` — polls `execution_steps` for new appends, yields events. Final event: `{"status": "pushed"|"failed"|"dry_run_pushed"}`.
+- [ ] Step 4: Rewire existing admin route `POST /api/push/{cid}/{pid}` to call `prepare_push_intent()` + `execute_push()` internally. Keep response shape identical — admin UI push button must still work unchanged (M3).
 
-- [ ] Step 5: Tests — dry-run full flow (FakeOpsClient, assert `dry_run_pushed`, no push_mappings row); preflight blocker aborts before push_log insert; concurrency: two concurrent executes → second gets 409; hash drift → 409 PreviewExpired; mid-sequence failure → `failed` + `cleanup_targets` populated.
+- [ ] Step 5: Tests — dry-run full flow (assert `dry_run_pushed`, no push_mappings); idempotency replay (same key+body → 200 same id); conflict (same key+different body → 409); `IN_FLIGHT` (409); preflight blocker aborts before push_log insert; mid-sequence failure → `partial_failure` + `cleanup_targets`; callback fires on success.
 
-**Test:** `pytest backend/tests/test_pipeline.py -v` — all pass.
+**Test:** `pytest backend/tests/test_gateway.py -v` — all pass.
 
-**Commit:** `feat(ops_push): pipeline — preview/execute orchestrator with concurrency guard`
+**Commit:** `feat(ops_push): Integration Gateway core — prepare_push_intent + execute_push + M3 rewire`
 
 ---
 
-## Task 9 — New API routes + deprecate old n8n push routes ⏳ Pending
+## Task 9 — New gateway routes + delete n8n path ⏳ Pending
 
 **Depends on:** Task 8
 
+**Migration phases: M2 + M4**
+
 **Files:**
-- Modify: `backend/modules/ops_push/routes.py`
+- Create: `backend/modules/integrations/routes.py`
+- Create: `backend/modules/integrations/auth.py`
+- Create: `backend/modules/integrations/schemas.py`
 - Modify: `backend/modules/ops_push/service.py` (remove `trigger_n8n_push`)
+- Modify: `backend/main.py` (register integrations router, delete N8N env checks)
 - Move: `n8n-workflows/ops-push.json` → `n8n-workflows/deprecated/ops-push.json`
-- Create: `n8n-workflows/deprecated/README.md` (tombstone)
+- Create: `n8n-workflows/deprecated/README.md`
 
 **Steps:**
-- [ ] Step 1: Add new routes to `ops_push/routes.py` from spec `§API surface`:
-  - `POST /api/push/{customer_id}/{product_id}/preview` → calls `pipeline.preview()`
-  - `POST /api/push/{customer_id}/{product_id}/execute` → calls `pipeline.execute()`
-  - `GET /api/push/{push_log_id}` → returns push_log row; **excludes `confirm_token_hash`**
-  - `GET /api/push/{push_log_id}/stream` → SSE endpoint calling `pipeline.stream_push_log()`
-- [ ] Step 2: Remove `trigger_n8n_push` function and `N8N_PUSH_WEBHOOK_URL` references from `service.py`.
-- [ ] Step 3: Mark old push route (`POST /api/push/{cid}/{pid}`) as `deprecated=True` in OpenAPI decorator. Add `logger.warning("deprecated route hit")`.
-- [ ] Step 4: Mark `GET /customers/{cid}/products/{pid}/payload`, `/ops-variants`, `/ops-options` in `markup/routes.py` as `deprecated=True` in OpenAPI. Do not delete — live callers still exist.
-- [ ] Step 5: Move `n8n-workflows/ops-push.json` to `n8n-workflows/deprecated/ops-push.json`. Write `n8n-workflows/deprecated/README.md`: explains that `ops-push.json` is tombstoned for beta, what changed, and when it returns (post-beta scheduling phase).
-- [ ] Step 6: Register any new routers in `backend/main.py` if not already registered.
+- [ ] Step 1: Create 4 gateway endpoints in `integrations/routes.py` (all under `/api/integrations/v1/`):
+  - `POST /suppliers/{supplier_slug}/products` — catalog upsert (auth: `X-Orchestrator-Key`)
+  - `GET  /suppliers/{supplier_slug}/schema` — discover required + optional fields
+  - `POST /push-requests` — calls `prepare_push_intent()` + `execute_push()`
+  - `GET  /push-requests/{push_log_id}` — poll push status; returns `PushStatusResponse`
+- [ ] Step 2: Create `integrations/auth.py` — `get_orchestrator_key()` FastAPI dependency. Reads `X-Orchestrator-Key` header, SHA-256 hashes it, looks up `integration_keys` table, checks `is_active`, `revoked_at`, `allowed_customer_ids`, `allowed_supplier_slugs`. Updates `last_used_at`.
+- [ ] Step 3: Create `integrations/schemas.py` — request envelope, 202 response, terminal GET response, error envelope with all error codes from spec.
+- [ ] Step 4: Remove `trigger_n8n_push` + `N8N_PUSH_WEBHOOK_URL` from `service.py` (M4).
+- [ ] Step 5: Delete `backend/modules/n8n_proxy/` entire module (M4).
+- [ ] Step 6: Mark old push route (`POST /api/push/{cid}/{pid}`) as `deprecated=True` in OpenAPI — do not delete yet.
+- [ ] Step 7: Move `n8n-workflows/ops-push.json` → `n8n-workflows/deprecated/`. Write tombstone `README.md` explaining what changed and that n8n is now a consumer of the gateway, not in the push path.
+- [ ] Step 8: Register `integrations` router in `backend/main.py`.
 
-**Test:** `curl -X POST http://localhost:8000/api/push/{cid}/{pid}/preview` returns 422 (preflight) or 200 with `preview_id`. Old route still responds (not 410 yet).
+**Test:** `curl -H "X-Orchestrator-Key: test" -H "Idempotency-Key: test-1" POST /api/integrations/v1/push-requests` → 401. With valid key → 422 (preflight) or 202 (accepted). Old route still responds.
 
-**Commit:** `feat(ops_push): new preview/execute routes; tombstone n8n push path for beta`
+**Commit:** `feat(integrations): M2+M4 — 4 gateway endpoints, X-Orchestrator-Key auth, delete n8n push path`
 
 ---
 
-## Task 10 — Admin UI: preview page, push timeline, dry-run controls ⏳ Pending
+## Task 10 — Admin UI: push log detail + integration keys page ⏳ Pending
 
 **Depends on:** Task 9
 
 **Files:**
-- Create: `frontend/src/app/(admin)/push/[push_log_id]/page.tsx`
-- Modify: `frontend/src/app/(admin)/products/page.tsx` (update Push button flow)
-- Create: `frontend/src/components/push/preview-panel.tsx`
-- Create: `frontend/src/components/push/execution-timeline.tsx`
-- Create: `frontend/src/components/push/dry-run-controls.tsx`
+- Modify: `frontend/src/app/(admin)/push-log/[push_log_id]/page.tsx` (or create if not exists)
+- Create: `frontend/src/app/(admin)/integrations/keys/page.tsx`
+- Create: `frontend/src/components/push/step-results-timeline.tsx`
+- Create: `frontend/src/components/push/cleanup-banner.tsx`
 
 **Steps:**
-- [ ] Step 1: `preview-panel.tsx` — displays `preview_payload.plan[]` as a human-readable mutation list. Shows `computed_prices` table. Shows `preflight.checks` as pass/fail badges.
-- [ ] Step 2: `dry-run-controls.tsx` — two buttons per spec:
-  - "Send Dry-Run" (primary, default)
-  - "Send to OPS staging (LIVE)" (secondary, red-outlined) — opens confirm dialog requiring user to type `"PUSH PC61 TO STAGING"` before enabling submit. Admin role required.
-- [ ] Step 3: `execution-timeline.tsx` — renders `execution_steps[]` as a timeline. Each step shows mutation name, latency, status. Streams new steps via SSE (`/api/push/{push_log_id}/stream`).
-- [ ] Step 4: On `failed` status — red banner with `cleanup_targets` rendered as a checklist (category_id, product_id, size_ids, instructions from spec `§cleanup_targets JSONB shape`).
-- [ ] Step 5: On `dry_run_pushed` — green banner showing fabricated `ops_product_id` (10001).
-- [ ] Step 6: On `pushed` — green banner with real `ops_product_id` and link to OPS staging storefront.
-- [ ] Step 7: Update `products/page.tsx` push button to navigate to `/push/preview?product_id=X&customer_id=Y` instead of directly triggering n8n webhook.
+- [ ] Step 1: Push log detail page — show new fields: `orchestrator key_id`, `idempotency_key`, `payload_hash`, `callback_status`, `callback_attempts`.
+- [ ] Step 2: `step-results-timeline.tsx` — renders `step_results[]` as a timeline. Each step: mutation name, ok/failed, ops_id if returned.
+- [ ] Step 3: `cleanup-banner.tsx` — red banner on `partial_failure` status. Renders `cleanup_targets` as a checklist with manual deletion instructions.
+- [ ] Step 4: Green banner on `dry_run_pushed` — fabricated `ops_product_id` (10001).
+- [ ] Step 5: Green banner on `pushed` — real `ops_product_id` with link to OPS staging storefront.
+- [ ] Step 6: `/integrations/keys` page — `vg_admin` only. Table of `integration_keys` (id, name, scope, last_used_at, status). Actions: create new key (show raw key once), revoke.
 
-**Test:** Start dev server. Open `/products`, click Push → lands on preview page → dry-run → green banner. Verify red cleanup banner by hitting `/execute` with broken creds.
+**Test:** Start dev server. Push log detail shows new fields. Cleanup banner appears on `partial_failure`. Keys page lists + creates keys.
 
-**Commit:** `feat(frontend): Phase 8 push UI — preview panel, dry-run controls, execution timeline`
+**Commit:** `feat(frontend): push log detail + integration keys management UI`
 
 ---
 
-## Task 11 — End-to-end manual test against VG OPS staging ⏳ Pending
+## Task 11 — E2E manual test against VG OPS staging ⏳ Pending
 
-**Depends on:** All tasks complete. Christian has seeded `push_mappings` with OPS color/size master-option IDs.
+**Depends on:** All tasks complete.
 
-**Acceptance criteria (from spec `§Acceptance criteria`):**
+**Acceptance criteria (from spec §Acceptance criteria):**
 
-- [ ] AC1: Preflight all-pass + dry-run for PC61 → `dry_run_pushed`, full `execution_steps` in DB, UI green banner with fabricated product_id 10001. No `push_mappings` row written.
-- [ ] AC2: Delete one `push_mapping_options` row → `/preview` returns 422 with explicit `blockers` list. No `push_log` row created in `preview_ready` state.
-- [ ] AC3: Live push (`dry_run=false` + valid `confirm_token` + admin role) → real OPS product created, `push_mappings` row written with real `target_ops_product_id`, `push_log.status = pushed`, OPS storefront shows PC61 with 30 variants, markup-applied prices, image, brand.
-- [ ] AC4: Break OPS creds after preview, then execute → `failed` status, `cleanup_targets` populated with category_id + product_id + size_ids, UI red banner with cleanup instructions, no `push_mappings` row, no auto-rollback.
-- [ ] AC5: Two concurrent `/execute` calls on same `(cid, pid)` → second returns 409.
-- [ ] AC6: Change product price between preview and execute → execute returns 409 `PreviewExpired`.
-- [ ] AC7: Every preview + execute appears in `audit_log` table with user, timestamp, route.
-- [ ] AC8: Stop n8n container → preview + execute (live) still work end-to-end.
-
-**Manual prerequisite:** Christian seeds OPS color/size master-option IDs into `push_mappings` table. One-time, ~15 min.
+- [ ] AC1: M0 migration applied — `integration_keys` table exists, 12 columns on `product_push_log`, `VariantIngest.sort_order` field present.
+- [ ] AC2: `dry_run=true` for PC61 via curl + `X-Orchestrator-Key` → `dry_run_pushed`, full `step_results` in DB, no `push_mappings` row, no OPS writes. UI green banner with fabricated product_id 10001.
+- [ ] AC3: `dry_run=false` happy path → `status=pushed`, `push_mappings` row written with real `target_ops_product_id`, OPS storefront shows PC61 with 30 variants, markup-applied prices, image, brand. Callback fires.
+- [ ] AC4: Send same `Idempotency-Key` + same body twice → second call returns 200 with same `push_log_id`, no new OPS work.
+- [ ] AC5: Send same `Idempotency-Key` + different body → 409 `IDEMPOTENCY_CONFLICT`.
+- [ ] AC6: Send key scoped away from this customer → 403 `KEY_NOT_ALLOWED`.
+- [ ] AC7: Send invalid/unknown key → 401 `BAD_SIGNATURE`.
+- [ ] AC8: Break OPS creds mid-execution → `partial_failure`, `cleanup_targets` populated, UI red banner, no `push_mappings` row, no auto-rollback.
+- [ ] AC9: Two concurrent pushes for same `(customer, product)` → second returns 409 `IN_FLIGHT`.
+- [ ] AC10: Stop n8n container → push still works end-to-end (n8n not in path).
+- [ ] AC11: `grep -rn "n8n" backend/modules/` returns 0 functional refs (M4 verified).
 
 ---
 
 ## Self-review checklist
 
-Before marking any task done, verify against spec:
+Before marking any task done, verify against spec (`2026-05-11-integration-gateway-design.md`):
 
-- [ ] Status vocab is exactly: `pending → preview_ready → executing → dry_run_pushed | pushed | failed`. No invented statuses.
-- [ ] Partial unique index is on `status = 'executing'` only — not on `preview_ready`.
-- [ ] No `/preflight` standalone route — preflight is Stage 1 inside `/preview`.
+- [ ] Status vocab is exactly: `accepted → queued → processing → pushed | failed | partial_failure | rejected | canceled | dry_run_pushed`. No invented statuses.
+- [ ] Concurrency guard index is on `status = 'processing'` — not `executing`.
+- [ ] No `confirm_token` anywhere — replaced by `Idempotency-Key` + `payload_hash`.
 - [ ] `OpsClient` extended in `ops_inbound/ops_client.py` — no new `ops_push/ops_client.py`.
-- [ ] No auto-rollback anywhere — halt-no-rollback is a locked spec decision.
-- [ ] `confirm_token_hash` never appears in any API response — only `confirm_token` (plaintext, once).
-- [ ] `sync_jobs` not used for push tracking — only `product_push_log`.
-- [ ] `Authorization` header redacted to `"Bearer ***"` in `execution_steps` before DB write.
+- [ ] No auto-rollback anywhere — halt-no-rollback is locked.
+- [ ] `Authorization` header redacted to `"Bearer ***"` in `step_results` before DB write.
 - [ ] `merge.py` deleted once `payload_builder.py` ships.
+- [ ] Markup engine called inside `build_push_payload()` — never bypassed.
 - [ ] `n8n-workflows/ops-push.json` moved to `deprecated/` with tombstone README.
+- [ ] `n8n_proxy` module deleted in M4.
+- [ ] Admin push button (`POST /api/push/{cid}/{pid}`) still works after M3 rewire.
+- [ ] `integration_keys` raw key shown only once at creation — never stored, only `key_hash`.
