@@ -7,46 +7,13 @@ from pydantic import BaseModel, ConfigDict
 
 # --- JSONB sub-shapes ---
 
-class PreflightCheck(BaseModel):
-    name: str
+class StepResult(BaseModel):
+    step: str
     ok: bool
-    detail: str
-
-
-class PreflightResults(BaseModel):
-    checks: list[PreflightCheck]
-    blockers: list[str]        # names of failed checks
-    warnings: list[str]
-    computed_at: datetime
-
-
-class ExecutionStep(BaseModel):
-    step: int
-    mutation: str
-    status: str                # "ok" | "failed"
+    ops_id: Optional[str] = None
+    error: Optional[str] = None
     latency_ms: Optional[int] = None
-    response: Optional[dict[str, Any]] = None
-    called_at: datetime
-
-
-class MutationPlanStep(BaseModel):
-    step: int
-    mutation: str
-    variables: dict[str, Any]
-    requires_response_from: Optional[list[int]] = None
-
-
-class ComputedPrice(BaseModel):
-    sku: str
-    base_price: float
-    final_price: float
-    markup_pct: float
-    rounding: str
-
-
-class PreviewPayload(BaseModel):
-    plan: list[MutationPlanStep]
-    computed_prices: list[ComputedPrice]
+    called_at: Optional[datetime] = None
 
 
 # --- Top-level request/response models ---
@@ -71,15 +38,50 @@ class PushLogRead(BaseModel):
     error: Optional[str]
     pushed_at: datetime
 
-    # Phase 8 fields (confirm_token_hash excluded — never exposed)
-    preflight_results: Optional[PreflightResults] = None
-    preview_payload: Optional[PreviewPayload] = None
-    preview_built_at: Optional[datetime] = None
-    execution_steps: list[ExecutionStep] = []
+    # Integration Gateway fields
+    request_id: Optional[UUID] = None
+    key_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    payload_hash: Optional[str] = None
+    supplier_slug: Optional[str] = None
+    supplier_sku: Optional[str] = None
+    callback_url: Optional[str] = None
+    callback_status: str = "not_requested"
+    callback_attempts: int = 0
+    step_results: Optional[list[StepResult]] = None
     cleanup_targets: Optional[dict[str, Any]] = None
-    input_hash: Optional[str] = None
     dry_run: bool = False
-    confirm_token_consumed_at: Optional[datetime] = None
+    retry_of: Optional[UUID] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PushRequestResponse(BaseModel):
+    push_log_id: UUID
+    status: str
+    customer_id: UUID
+    supplier_slug: Optional[str] = None
+    supplier_sku: Optional[str] = None
+    ops_product_id: Optional[str] = None
+    dry_run: bool = False
+    callback_status: str = "not_requested"
+    created_at: datetime
+    links: dict[str, str] = {}
+
+
+class PushStatusResponse(BaseModel):
+    push_log_id: UUID
+    status: str
+    customer_id: UUID
+    supplier_slug: Optional[str] = None
+    supplier_sku: Optional[str] = None
+    ops_product_id: Optional[str] = None
+    error: Optional[str] = None
+    step_results: Optional[list[StepResult]] = None
+    cleanup_targets: Optional[dict[str, Any]] = None
+    callback_status: str = "not_requested"
+    callback_attempts: int = 0
+    finished_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
