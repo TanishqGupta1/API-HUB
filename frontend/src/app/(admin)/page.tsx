@@ -21,6 +21,8 @@ type Stats = {
   suppliers: number;
   products: number;
   variants: number;
+  health: number;
+  total_processed: number;
 };
 
 type SyncJob = {
@@ -65,7 +67,13 @@ function timeAgo(iso: string): string {
 }
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<Stats>({ suppliers: 0, products: 0, variants: 0 });
+  const [stats, setStats] = useState<Stats>({ 
+    suppliers: 0, 
+    products: 0, 
+    variants: 0, 
+    health: 100, 
+    total_processed: 0 
+  });
   const [recentJobs, setRecentJobs] = useState<SyncJob[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,14 +143,14 @@ export default function AdminDashboard() {
           value={stats.products.toLocaleString()} 
           icon={<Package className="w-5 h-5 text-indigo-600" />} 
           color="indigo"
-          subText="Synced from 4 sources"
+          subText={`${stats.total_processed.toLocaleString()} items processed (24h)`}
         />
         <StatCard 
           title="Sync Health" 
-          value="98.2%" 
+          value={`${stats.health}%`} 
           icon={<Activity className="w-5 h-5 text-emerald-600" />} 
           color="emerald"
-          subText="Last 24 hours"
+          subText="Success rate (24h)"
         />
       </div>
 

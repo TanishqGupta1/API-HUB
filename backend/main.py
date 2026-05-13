@@ -21,6 +21,8 @@ import modules.ops_config.models  # noqa: F401
 import modules.decorations.models  # noqa: F401
 import modules.auth.models  # noqa: F401
 import modules.audit_log.models  # noqa: F401
+# customer_catalog re-exports CustomerProductSelection from catalog.models
+# so no separate import is needed here.
 
 from modules.suppliers.models import Supplier
 from modules.catalog.models import Product, ProductVariant
@@ -45,6 +47,7 @@ from modules.auth.routes import router as auth_router
 from modules.auth.dependencies import get_current_user
 from modules.audit_log.routes import router as audit_log_router
 from modules.audit_log.middleware import AuditLogMiddleware
+from modules.customer_catalog.routes import router as customer_catalog_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -146,6 +149,16 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_image_fetch_attempt_at TIMESTAMP WITH TIME ZONE NULL",
     # Fix ProductImage upsert key (Moderate 7)
     "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_images_supplier_url') THEN ALTER TABLE product_images ADD CONSTRAINT uq_product_images_supplier_url UNIQUE (product_id, supplier_image_url); END IF; END $$",
+    # Pricing Rules Tier-1 enhancements
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE",
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS effective_from TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS effective_until TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS markup_amount NUMERIC(10,2)",
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS min_price NUMERIC(10,2)",
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS max_price NUMERIC(10,2)",
+    # Allow markup_pct to be NULL (rules may use markup_amount instead)
+    "ALTER TABLE markup_rules ALTER COLUMN markup_pct DROP NOT NULL",
+    "ALTER TABLE customers ADD COLUMN IF NOT EXISTS logo_url TEXT",
 ]
 
 
@@ -198,7 +211,7 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127
 app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
 
 _IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
-_CORS_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+_CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 _CORS_HEADERS = ["Authorization", "Content-Type", "X-Ingest-Secret"]
 
 _cors_kwargs: dict = dict(
@@ -244,6 +257,7 @@ app.include_router(pricing_router, dependencies=_auth)
 app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
+app.include_router(customer_catalog_router, dependencies=_auth)
 
 
 @app.get("/health")
@@ -254,11 +268,36 @@ async def health():
 @app.get("/api/stats")
 async def get_stats(db: AsyncSession = Depends(get_db)):
     suppliers = (await db.execute(select(func.count()).select_from(Supplier))).scalar()
-    products = (await db.execute(select(func.count()).select_from(Product))).scalar()
+    # Dashboard "total catalog" should reflect live products only — archived
+    # rows would inflate the counter and confuse admins about why category
+    # imports don't seem to grow it. Total-including-archived is still
+    # available via the /products list with explicit filter.
+    products = (await db.execute(
+        select(func.count())
+        .select_from(Product)
+        .where(Product.archived_at.is_(None))
+    )).scalar()
     variants = (await db.execute(select(func.count()).select_from(ProductVariant))).scalar()
+    
+    # Calculate health (success rate of jobs in last 24h)
+    from datetime import datetime, timedelta, timezone
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    
+    from modules.sync_jobs.models import SyncJob
+    jobs_24h = (await db.execute(
+        select(SyncJob).where(SyncJob.started_at >= yesterday)
+    )).scalars().all()
+    
+    total_jobs = len(jobs_24h)
+    success_jobs = len([j for j in jobs_24h if j.status == "success"])
+    health = (success_jobs / total_jobs * 100) if total_jobs > 0 else 100.0
+    
+    total_processed = sum(j.records_processed for j in jobs_24h)
     
     return {
         "suppliers": suppliers,
         "products": products,
         "variants": variants,
+        "health": round(health, 1),
+        "total_processed": total_processed,
     }

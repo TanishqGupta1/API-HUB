@@ -10,17 +10,37 @@ import { StorefrontProductCard } from "@/components/storefront/storefront-produc
 import { ProductTypeFilter } from "@/components/storefront/product-type-filter";
 
 
+// Backend caps `/api/products?limit` at 1000 (see catalog/routes.py:53).
+// Use that max so the storefront shows as many products as the API allows
+// in a single fetch. If the live catalog grows past 1000 we'll need real
+// pagination — but the dashboard count below will surface that gap loudly
+// in the meantime (the label shows fetched-vs-real and warns when capped).
+const FETCH_LIMIT = 1000;
+
+interface StatsResponse {
+  products: number;       // live (non-archived) count
+  variants?: number;
+  suppliers?: number;
+}
+
 export default function VGStorefrontPage() {
   const { filters } = useSearch();
   const [products, setProducts] = useState<ProductListItem[]>([]);
+  const [totalInDb, setTotalInDb] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [productType, setProductType] = useState<ProductType | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const rows = await api<ProductListItem[]>("/api/products?limit=500");
+        // Fire both requests in parallel — the stats call is cheap (one COUNT)
+        // and lets us show the *real* product count even when fetch is capped.
+        const [rows, stats] = await Promise.all([
+          api<ProductListItem[]>(`/api/products?limit=${FETCH_LIMIT}`),
+          api<StatsResponse>("/api/stats").catch(() => null),
+        ]);
         setProducts(rows);
+        if (stats?.products != null) setTotalInDb(stats.products);
       } finally {
         setLoading(false);
       }
@@ -86,7 +106,14 @@ export default function VGStorefrontPage() {
     <div className="flex-1 flex flex-col p-5 gap-5 overflow-hidden">
       <div className="flex items-center justify-between">
         <div className="text-[13px] text-[#888894] font-mono">
-          {loading ? "Loading…" : `${visible.length} / ${products.length} products`}
+          {loading
+            ? "Loading…"
+            : totalInDb != null && totalInDb > products.length
+              ? // True total is larger than what we fetched (hit the cap).
+                // Be honest about it so admins know more imports exist.
+                `${visible.length} of ${products.length} shown · ${totalInDb} total in catalog (showing first ${FETCH_LIMIT})`
+              : // Fetched everything — simple denominator.
+                `${visible.length} / ${products.length} products`}
         </div>
         <FilterButton />
       </div>
