@@ -388,11 +388,135 @@ Revisit only if a P0 blocker forces it.
 
 ## References
 
-- Integration Gateway design spec Rev 3: `docs/superpowers/specs/2026-05-11-integration-gateway-design.md`
-- M0 implementation plan: `.omc/plans/2026-05-12-m0-integration-gateway-foundation.md`
-- Push research stage 4: `.omc/research/research-20260511-pushgateway-142234/stages/stage-4.md`
-- Codex audit artifacts under `.omc/artifacts/ask/`:
-  - `codex-audit-the-ops-payload-contract-2026-05-13T15-39-22.md`
-  - `codex-design-a-centralized-fastapi-owned-ops-push-ingest-layer-2026-05-13T17-09-21.md`
-  - `codex-act-as-a-senior-software-architect-2026-05-13T14-13-01.md`
-- Gemini UX audit: `codex-three-pre-flight-verifications-2026-05-13T10-04-17.md`, `gemini-deep-ux-product-flow-review-2026-05-13T13-52-36.md`
+### Companion specs (tracked in git)
+
+| File | Purpose |
+|------|---------|
+| `docs/superpowers/specs/2026-05-11-integration-gateway-design.md` | Rev 3 architecture — auth, idempotency, status vocab, 4-endpoint base |
+| `docs/superpowers/specs/2026-05-08-sanmar-ops-staging-push-design.md` | Superseded VPCE spec (banner at top explains why) |
+
+### Plans (tracked in git under `.omc/`)
+
+| File | Purpose |
+|------|---------|
+| `.omc/plans/2026-05-12-m0-integration-gateway-foundation.md` | M0 impl plan — additive DB + persistence snapshot + contract tests |
+
+### Research (tracked in git under `.omc/`)
+
+| File | Content |
+|------|---------|
+| `.omc/research/research-20260511-pushgateway-142234/report.md` | Top-level research findings |
+| `.omc/research/research-20260511-pushgateway-142234/stages/stage-1.md` | Preconditions audit |
+| `.omc/research/research-20260511-pushgateway-142234/stages/stage-2.md` | Spike bug confirmation (Bugs 1+2+3) |
+| `.omc/research/research-20260511-pushgateway-142234/stages/stage-3.md` | Auth/secret patterns |
+| `.omc/research/research-20260511-pushgateway-142234/stages/stage-4.md` | `ProductIngest` validated against PC61/K500/Decals #131 |
+
+### CCG advisor artifacts (runtime-only, NOT in git — `.omc/artifacts/ask/`)
+
+These are paper-trail evidence for design decisions. Future agents can re-run CCG; humans can read these to understand why a choice was made.
+
+| Artifact | Source for |
+|----------|-----------|
+| `codex-act-as-a-senior-software-architect-2026-05-13T14-13-01.md` | Supplier readiness table, P0/P1/P2 action plan, 7 onboarding gaps |
+| `codex-audit-the-ops-payload-contract-2026-05-13T15-39-22.md` | Field-name mismatches, ID threading gaps, master options storage |
+| `codex-design-a-centralized-fastapi-owned-2026-05-13T17-09-21.md` | This spec's source — endpoint surface, field mapping, Python contracts |
+| `codex-three-pre-flight-verifications-2026-05-13T10-04-17.md` | persist_product snapshot scope, 16 hardcoded frontend status sites, file:line spot-check |
+| `gemini-deep-ux-product-flow-review-2026-05-13T13-52-36.md` | Full UX journey audit (T1-T5), top-5 UX gaps with fix priority |
+| `codex-review-the-old-push-implementation-2026-05-13T09-38-25.md` | Old n8n-coupled push call graph, what to preserve/delete in M4 |
+| `gemini-review-the-frontend-push-related-surface-2026-05-13T09-37-58.md` | Frontend touchpoint inventory, status-vocab gap, M2 integration_keys UI requirements |
+
+### Backend code anchors
+
+| Path | Why it matters for M1 |
+|------|----------------------|
+| `backend/modules/ops_push/service.py` | Old push path (M1 replaces); `trigger_n8n_push` deleted in M1.5 |
+| `backend/modules/ops_push/merge.py` | Hub-domain merge (M1 shrinks; OPS field mapping moves to ops_client) |
+| `backend/modules/ops_push/routes.py:48-65` | Admin push route (M1.3 rewires internally; response shape preserved) |
+| `backend/modules/markup/engine.py:173` | Markup payload contract (`base_price`/`final_price` → OPS `vendor_price`/`price`) |
+| `backend/modules/markup/routes.py:32-90` | 3 endpoints M1 collapses into one |
+| `backend/modules/ops_inbound/ops_client.py` | Existing GraphQL client (M1 `ops_client` extends this pattern) |
+| `backend/modules/ops_inbound/ops_adapter.py:42-84` | Inbound queries reference |
+| `backend/modules/master_options/models.py:15,38` | DB tables (stay; M1 changes ingest path only) |
+| `backend/modules/master_options/routes.py:124` | `/sync` n8n trigger (M1 replaces with direct FastAPI ingest) |
+| `backend/modules/master_options/ingest.py:18` | Existing ingest endpoint (stays; gateway proxies to it) |
+| `backend/modules/push_log/models.py:11-22` | Push log model (M0 expands +11 cols; M1 writes step_results/cleanup_targets) |
+| `backend/modules/push_mappings/models.py:13-70` | Mapping table (M1 writes inline during `execute_push()`) |
+| `backend/modules/push_mappings/routes.py:15-22` | Current ingest-secret upsert route |
+| `backend/modules/auth/dependencies.py` | `X-Ingest-Secret` (existing); `X-Orchestrator-Key` will follow same pattern |
+| `backend/modules/suppliers/routes.py:166-196` | Fake test-connection — pre-M1 cleanup item |
+| `backend/modules/catalog/schemas.py:252` | `ProductIngest` canonical contract |
+| `backend/modules/catalog/ingest.py:57-61` | `require_ingest_secret()` — collapse to `hmac.compare_digest` (pre-M1 security fix) |
+| `backend/modules/import_jobs/registry.py:1-44` | Adapter registry (boot-time; stays as-is for M1) |
+| `backend/modules/promostandards/adapter.py:129-172` | SanMar `hydrate_product` (Bugs 1+2 fixed in PR #104) |
+| `backend/database.py:70-117` | `EncryptedJSON` Fernet (used for OPS creds) |
+| `backend/main.py:80-85,247` | Adapter imports + router includes |
+
+### Frontend code anchors
+
+| Path | Why it matters for M1 |
+|------|----------------------|
+| `frontend/src/components/products/push-row-action.tsx:53-56` | Current "Push to OPS" button → bypasses backend; M1.4 repoints to `/api/integrations/v1/push-requests` |
+| `frontend/src/app/(admin)/push-log/page.tsx:21,26,31` | Hardcoded statuses (`pushed`/`pending`/`failed`) — broadens to 9-value vocab |
+| `frontend/src/app/(admin)/customers/[id]/catalog/page.tsx:24-345` | 9 hardcoded status sites (selected/pushed/stale/failed) — refactor via central status-map |
+| `frontend/src/components/SelectionBadge.tsx:14-32` | 4 hardcoded badge entries — broaden to 9 |
+| `frontend/src/components/products/push-history.tsx:55-63` | Hardcoded `pushed`/`failed` checks — broaden |
+| `frontend/src/lib/types.ts:374` | `SelectionStatus` union — broaden to 9 values |
+| `frontend/src/app/(admin)/suppliers/new/page.tsx:34-180` | Protocol enum + credential field mismatches (P0 fixes from senior review) |
+| `frontend/src/app/(admin)/suppliers/[id]/page.tsx:217-231` | Supplier detail — needs Refresh Endpoints button |
+| `frontend/src/app/(admin)/suppliers/[id]/import/page.tsx:49-94` | Orphan import page — needs entry point from detail |
+| `frontend/src/app/(admin)/mappings/[supplierId]/page.tsx:41-45` | Mapping save wrapper bug |
+
+### n8n custom node anchors (CANONICAL OPS GraphQL contract)
+
+The custom node is the **source of truth** for OPS field names + mutation shapes. M1's `ops_client/mutations.py` must match these.
+
+| Path | Defines |
+|------|---------|
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:823+` | Full mutation operations list |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:971` | `setProduct` input default (`category_id`, `visible`, `products_title`, `products_internal_title`) |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:981` | `setProductSize` input (`product_size_id`, `products_id`, `size_name`, `color_name`, `products_sku`, `visible`) |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:991` | `setProductPrice` input (`product_price_id`, `products_id`, `qty`, `qty_to`, `price`, `vendor_price`, `size_id`, `visible`) |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:1000` | `setProductCategory` input (`category_id`, `category_name`, `parent_id`, `visible`) |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:1494` | `setAdditionalOption` (beta) input (`prod_add_opt_id`, `products_id`, `title`, `options_type`, `status`, `delete`) |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:1503` | `setAdditionalOptionAttributes` (beta) input (`attribute_id`, `prod_add_opt_id`, `label`, `status`, `delete`) |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:1512` | `setProductsAttributePrice` (beta) input (`attribute_id`, `size_from`, `size_to`, `attributes_price`, `vendor_price`, `site_admin_markup`, `delete`) |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:6856` | `setAdditionalOption` mutation string + response shape (`prod_add_opt_id`) |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:6863` | `setAdditionalOptionAttributes` mutation string + response shape (`attribute_id`) |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:6870` | `setProductsAttributePrice` mutation string |
+| `n8n-nodes-onprintshop/nodes/OnPrintShop.node.ts:7959` | GraphQL endpoint (n8n uses `${baseUrl}/api/`; backend `ops_inbound/ops_client.py:48` uses `/graphql` — verify which OPS accepts during M1.1) |
+
+### n8n workflow anchors
+
+| Path | M1 disposition |
+|------|----------------|
+| `n8n-workflows/ops-push.json:23` | Webhook reads query params (cause of trigger mismatch); DELETE in M1.5 |
+| `n8n-workflows/ops-push.json:108` | Builds setProductCategory_input + setProduct_input + setProductPrice_template; DELETE |
+| `n8n-workflows/ops-push.json:178,213` | `setProductSize` loop + single `setProductPrice` with `size_id: 0`; DELETE |
+| `n8n-workflows/ops-push.json:289-312` | "Stub Apply Options" — never calls real `setAdditionalOption`; DELETE |
+| `n8n-workflows/ops-master-options-pull.json:30,77` | `getManyMasterOptions` + POST to `/api/ingest/master-options`; DELETE (replaced by direct FastAPI call) |
+| `n8n-workflows/sanmar-soap-pull.json` | KEEP (inbound supplier sync) |
+| `n8n-workflows/sanmar-sftp-pull.json` | KEEP |
+| `n8n-workflows/inventory-sync-hourly.json` | KEEP |
+| `n8n-workflows/pricing-sync-daily.json` | KEEP |
+| `n8n-workflows/catalog-sync-weekly.json` | KEEP |
+| `n8n-workflows/closeouts-monthly.json` | KEEP |
+| `n8n-workflows/vg-ops-pull.json` | KEEP (VG self-pull from OPS) |
+
+### Recent merged PRs (context)
+
+| # | Commit | Adds |
+|---|--------|------|
+| #103 | `8598137` | Phase 6+7 customer catalog selection + dashboard metrics |
+| #104 | `0997937` | Spike bug fixes (Bug 1 `base_price`, Bug 2 Inventory v200) — preconditions for M1 |
+| #105 | `5991f63` | Integration Gateway design spec Rev 3 |
+| #106 | `cc91a35` | `X-Ingest-Secret` scope narrowing (timing-safe + path allow-list + `ingest_service` role) |
+
+### Project conventions (CLAUDE.md highlights)
+
+- **Modular monolith**, not microservices
+- **Suppliers = DB config**, not per-supplier code (protocol adapter pattern)
+- **VARCHAR for type columns**, not PG ENUMs
+- **EncryptedJSON** for `suppliers.auth_config` + `customers.ops_auth_config`
+- **PostgreSQL upserts** — `ON CONFLICT DO UPDATE`
+- **Never add Co-Authored-By** lines to commits
+- **shadcn/ui + Tailwind**, Blueprint design system (Outfit + Fira Code, paper #f2f0ed, blueprint blue #1e4d92)
