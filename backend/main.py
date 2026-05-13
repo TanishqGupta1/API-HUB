@@ -268,7 +268,15 @@ async def health():
 @app.get("/api/stats")
 async def get_stats(db: AsyncSession = Depends(get_db)):
     suppliers = (await db.execute(select(func.count()).select_from(Supplier))).scalar()
-    products = (await db.execute(select(func.count()).select_from(Product))).scalar()
+    # Dashboard "total catalog" should reflect live products only — archived
+    # rows would inflate the counter and confuse admins about why category
+    # imports don't seem to grow it. Total-including-archived is still
+    # available via the /products list with explicit filter.
+    products = (await db.execute(
+        select(func.count())
+        .select_from(Product)
+        .where(Product.archived_at.is_(None))
+    )).scalar()
     variants = (await db.execute(select(func.count()).select_from(ProductVariant))).scalar()
     
     # Calculate health (success rate of jobs in last 24h)

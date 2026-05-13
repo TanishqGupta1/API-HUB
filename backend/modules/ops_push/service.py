@@ -7,7 +7,7 @@ from typing import Any, Optional
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from database import async_session
 
 from modules.catalog.models import Product
@@ -17,6 +17,7 @@ from modules.decorations.models import CustomerProductDecoration
 from modules.push_mappings.models import PushMapping
 from modules.push_log.models import ProductPushLog
 from modules.catalog.models import CustomerProductSelection
+from modules.markup.engine import calculate_price
 from .merge import merge_product_with_decorations
 
 logger = logging.getLogger(__name__)
@@ -43,24 +44,29 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
     Push a product to OPS (Create or Update).
     Handles both ready products and decorated products.
     """
-    # 1. Load product + supplier
+    # 1. Load product (with variants + images for full payload — Phase 8 Bug 3
+    #    needs images[]; selectinload avoids the cartesian-product joinedload
+    #    pitfall with two collections).
     product = (await db.execute(
         select(Product)
-        .options(joinedload(Product.variants))
+        .options(
+            selectinload(Product.variants),
+            selectinload(Product.images),
+        )
         .where(Product.id == product_id)
-    )).unique().scalar_one_or_none()
-    
+    )).scalar_one_or_none()
+
     if not product:
         raise ValueError(f"Product {product_id} not found")
-        
+
     supplier = (await db.execute(
         select(Supplier).where(Supplier.id == product.supplier_id)
     )).scalar_one_or_none()
-    
+
     customer = (await db.execute(
         select(Customer).where(Customer.id == customer_id)
     )).scalar_one_or_none()
-    
+
     if not customer:
         raise ValueError(f"Customer {customer_id} not found")
 
@@ -71,13 +77,24 @@ async def push_product(db: AsyncSession, customer_id: uuid.UUID, product_id: uui
             CustomerProductDecoration.product_id == product_id
         )
     )).scalar_one_or_none()
-    
+
     dec_options = decoration.decoration_options if decoration else []
-    
-    # 3. Route (ready vs decorated) & merge
-    payload = merge_product_with_decorations(product, customer_id, dec_options)
-    
-    # 4. Handle name conflict (Internal logic for now)
+
+    # 3. Compute customer-specific pricing via the markup engine (Phase 8 Bug 2
+    #    fix). Without this, the push silently bypassed every markup rule and
+    #    OPS received the supplier wholesale price as the customer-facing price.
+    priced = await calculate_price(db, customer_id, product_id)
+
+    # 4. Route (ready vs decorated) & merge — pass the priced variants so the
+    #    merge step uses markup-applied prices, not raw base_price.
+    payload = merge_product_with_decorations(
+        product, customer_id, dec_options, priced_variants=priced["variants"]
+    )
+    # Forward markup_rule context for downstream visibility (push_log, OPS
+    # observability surfaces).
+    payload["markup_rule"] = priced.get("markup_rule")
+
+    # 5. Handle name conflict (Internal logic for now)
     desired_name = payload["name"]
     # Use supplier.push_name_prefix or fall back to slug-derived prefix
     prefix = supplier.push_name_prefix or f"{supplier.slug[:2].upper()}-"
