@@ -1,53 +1,63 @@
 # Phase 8 — Task 1: DB Schema Migration
 
 **Owner:** Vidhi
-**Status:** Done
-**Date completed:** 2026-05-13
+**Status:** Done (redone 2026-05-13 — original built against superseded spec)
+**Spec:** `docs/superpowers/specs/2026-05-11-integration-gateway-design.md`
+**Commit:** `f91c83a`
+
+---
+
+## What happened
+
+This task was done twice. The first attempt was built against the old VPCE spec (`2026-05-08`), which was superseded on 2026-05-11 by the Integration Gateway spec. After pulling latest from main and comparing the spec files, we redid the task from scratch to match the correct spec.
 
 ---
 
 ## What is this task?
 
-Task 1 upgrades the `product_push_log` database table to support the new **Preview → Confirm → Execute** push flow introduced in Phase 8.
+Task 1 upgrades the `product_push_log` database table and creates the new `integration_keys` table to support the **Integration Gateway** introduced in Phase 8.
 
-Before this task, the table was a simple log — it recorded whether a product push succeeded or failed, nothing more. Phase 8 turns the push into a multi-stage process with validation, mutation planning, step-by-step execution tracking, and safety guards. All of that state needs to live in the database.
+Before this task, `product_push_log` was a simple log — it recorded whether a product push succeeded or failed, nothing more. Phase 8 turns the push into an orchestrator-agnostic gateway where any system (n8n, curl, cron) can push products to OPS using an API key. The table now needs to track idempotency, orchestrator identity, callback state, step-by-step execution, and cleanup instructions.
 
 ---
 
 ## Why is it important?
 
-### 1. It unblocks everyone else
+### 1. It unblocks all parallel tasks
 
-This is the foundational task of Phase 8. All four parallel tasks (4, 5, 6, 7) depend on the new columns and Pydantic shapes defined here:
+This is the foundational task of Phase 8. All four parallel tasks depend on the new columns and Pydantic shapes defined here:
 
-- **Urvashi (Task 4)** — `OpsClient` mutations write into `execution_steps`
-- **Urvashi (Task 5)** — `FakeOpsClient` also appends to `execution_steps`
-- **Shinchana (Task 6)** — `payload_builder` produces the `preview_payload` shape
-- **Shinchana (Task 7)** — `preflight` produces the `preflight_results` shape
-- **Vidhi (Task 8)** — `pipeline.py` reads and writes every new column
-
-Nothing in Phase 8 can be built until this lands.
+- **Urvashi (Task 4)** — `OpsClient` mutations write into `step_results`
+- **Urvashi (Task 5)** — `FakeOpsClient` appends to `step_results`
+- **Shinchana (Task 6)** — `payload_builder` computes `payload_hash` stored in this table
+- **Shinchana (Task 7)** — `preflight` checks guard the `accepted` → `processing` transition
+- **Vidhi (Task 8)** — `gateway.py` reads and writes every new column
 
 ### 2. It enables the safety layer
 
-The entire point of Phase 8 is that a push to OPS staging is **irreversible** — once a product is created in OPS, you can't auto-rollback. The new schema enforces:
+Pushes to OPS are irreversible. The new schema enforces:
 
-- **Preview before push** — a push_log row in `preview_ready` state must exist before execute is allowed
-- **Concurrency guard** — the partial unique index prevents two people from pushing the same product simultaneously (DB-enforced, not application-enforced)
-- **Input drift detection** — `input_hash` lets the pipeline reject an execute if prices or variants changed after preview was generated
-- **Token security** — `confirm_token_hash` stores only the HMAC, never the plaintext token. Live pushes require this token.
+- **Idempotency** — `(key_id, idempotency_key)` index prevents the same orchestrator from accidentally triggering two identical pushes
+- **Payload drift detection** — `payload_hash` is recomputed at execute time; mismatch → `IDEMPOTENCY_CONFLICT`
+- **Concurrency guard** — partial unique index on `status = 'processing'` prevents two simultaneous pushes for the same `(customer, product)` at DB level
+- **Cleanup visibility** — `cleanup_targets` JSONB records exactly what was created in OPS mid-push so operators can manually clean up on failure
 
 ### 3. It upgrades the status vocabulary
 
-The old table had three statuses: `pushed`, `failed`, `skipped`. Phase 8 introduces a proper lifecycle:
+Old table had three statuses: `pushed`, `failed`, `skipped`. Phase 8 introduces a full lifecycle:
 
 ```
-pending → preview_ready → executing → dry_run_pushed
-                                    → pushed
-                                    → failed
+accepted → queued → processing → pushed
+                               → failed
+                               → partial_failure
+                               → rejected
+                               → canceled
+                               → dry_run_pushed
 ```
 
-This gives the frontend and operators full visibility into where a push is in the pipeline at any moment.
+### 4. It creates the orchestrator key registry
+
+The new `integration_keys` table is the single source of truth for `X-Orchestrator-Key` API keys. Each key has a scope (`allowed_customer_ids`, `allowed_supplier_slugs`), rate limit, and revocation support. Raw key shown once at creation — only the SHA-256 hash is stored.
 
 ---
 
@@ -57,49 +67,63 @@ This gives the frontend and operators full visibility into where a push is in th
 
 #### `backend/modules/push_log/models.py`
 
-Added 9 new columns to `ProductPushLog`:
+Removed old VPCE columns (`preflight_results`, `preview_payload`, `preview_built_at`, `execution_steps`, `input_hash`, `confirm_token_hash`, `confirm_token_consumed_at`).
+
+Added 12 new Integration Gateway columns:
 
 | Column | Type | Purpose |
 |--------|------|---------|
-| `preflight_results` | JSONB | Results of 8 validation checks (prices set? mappings ready? OPS reachable?) |
-| `preview_payload` | JSONB | Full mutation plan — ordered list of OPS mutations with their variables |
-| `preview_built_at` | TIMESTAMPTZ | When the preview was generated |
-| `execution_steps` | JSONB (default `[]`) | Append-only log of each mutation as it executes. Auth headers redacted to `"Bearer ***"` before write. |
-| `cleanup_targets` | JSONB | If push fails mid-way: what to manually delete in OPS (category_id, product_id, size_ids) |
-| `dry_run` | BOOLEAN | Whether this was a dry-run (FakeOpsClient) or a live push |
-| `input_hash` | VARCHAR(64) | SHA-256 of inputs at preview time. Recomputed at execute — mismatch → 409 PreviewExpired |
-| `confirm_token_hash` | VARCHAR(64) | HMAC-SHA256 of the confirm token. Never returned in any API response. |
-| `confirm_token_consumed_at` | TIMESTAMPTZ | Timestamp of token use — prevents reuse |
+| `request_id` | UUID UNIQUE | Server-generated correlation ID for tracing and retry linkage |
+| `key_id` | VARCHAR(64) | Which `integration_keys` row authorized this push |
+| `idempotency_key` | VARCHAR(128) | Raw `Idempotency-Key` header from orchestrator |
+| `payload_hash` | VARCHAR(64) | SHA-256 of canonical request JSON — replay detection |
+| `supplier_slug` | VARCHAR(64) | Supplier context (e.g. `sanmar`) |
+| `supplier_sku` | VARCHAR(255) | Product SKU being pushed (e.g. `PC61`) |
+| `callback_url` | TEXT | Orchestrator-provided webhook URL for push completion events |
+| `callback_status` | VARCHAR(32) | `not_requested` / `pending` / `sent` / `failed` |
+| `callback_attempts` | INT | Number of callback delivery attempts made |
+| `step_results` | JSONB | Step-by-step execution log. Auth headers redacted to `"Bearer ***"` |
+| `cleanup_targets` | JSONB | OPS IDs created before a partial failure — for manual cleanup |
+| `retry_of` | UUID | Links a retry push to its original `product_push_log.id` |
 
-Added 2 indexes:
+Added 3 indexes:
 
 | Index | Type | Purpose |
 |-------|------|---------|
-| `idx_push_log_input_hash` | Standard | Fast lookup when checking for input drift |
-| `uq_push_log_in_flight` | Partial unique on `status = 'executing'` | Concurrency guard — DB rejects a second concurrent push for the same `(customer_id, product_id)` |
+| `idx_push_log_payload_hash` | Standard | Fast lookup for idempotency checks |
+| `idx_push_log_idempotency` | Composite on `(key_id, idempotency_key)` | Replay detection |
+| `uq_push_log_in_flight` | Partial unique on `status = 'processing'` | Concurrency guard |
 
-Updated the status comment to the full Phase 8 vocabulary.
+Updated status vocab comment to full Integration Gateway lifecycle.
 
 #### `backend/modules/push_log/schemas.py`
 
-Added 6 new Pydantic models representing the JSONB shapes:
+Removed all VPCE models (`PreflightResults`, `PreviewPayload`, `ExecutionStep`, `MutationPlanStep`, `ComputedPrice`).
 
-| Model | Maps to | Purpose |
-|-------|---------|---------|
-| `PreflightCheck` | One entry in `preflight_results.checks[]` | Name, ok/fail, detail message |
-| `PreflightResults` | `preflight_results` column | Full preflight outcome — checks, blockers list, warnings, timestamp |
-| `ExecutionStep` | One entry in `execution_steps[]` | Mutation name, status, latency, response, timestamp |
-| `MutationPlanStep` | One entry in `preview_payload.plan[]` | Step number, mutation name, variables, response dependencies |
-| `ComputedPrice` | One entry in `preview_payload.computed_prices[]` | Per-variant markup-applied pricing |
-| `PreviewPayload` | `preview_payload` column | Full preview — mutation plan + computed prices |
+Added new models:
 
-Extended `PushLogRead` with all Phase 8 fields. `confirm_token_hash` is intentionally excluded — it never appears in any API response.
+| Model | Purpose |
+|-------|---------|
+| `StepResult` | Shape for one entry in `step_results[]` — step name, ok/fail, ops_id, latency |
+| `PushRequestResponse` | 202 response from `POST /api/integrations/v1/push-requests` |
+| `PushStatusResponse` | Response from `GET /api/integrations/v1/push-requests/{id}` |
+
+Extended `PushLogRead` with all 12 new columns. No `confirm_token_hash` anywhere — that concept is gone.
 
 ### Files created
 
+#### `backend/modules/integrations/__init__.py` + `models.py`
+
+New `integrations` module with `IntegrationKey` SQLAlchemy model. Registered in `main.py` so `Base.metadata.create_all` picks it up.
+
 #### `backend/migrations/push_log_phase8.sql`
 
-Reference SQL for the migration. The app applies it automatically via `Base.metadata.create_all` on startup, but this file documents exactly what changes for manual use or auditing.
+Reference SQL covering:
+- DROP old VPCE columns
+- DROP old VPCE indexes
+- ADD 12 new columns
+- CREATE new indexes
+- CREATE `integration_keys` table
 
 ---
 
@@ -107,10 +131,15 @@ Reference SQL for the migration. The app applies it automatically via `Base.meta
 
 ```bash
 # Import check
-python -c "from modules.push_log.models import ProductPushLog; from modules.push_log.schemas import PushLogRead, PreflightResults, ExecutionStep, PreviewPayload; print('OK')"
+python -c "
+from modules.push_log.models import ProductPushLog
+from modules.push_log.schemas import PushLogRead, PushRequestResponse, PushStatusResponse, StepResult
+from modules.integrations.models import IntegrationKey
+print('imports OK')
+"
 # → imports OK
 
-# Column + index reflection
+# Column + index check
 python -c "
 from modules.push_log.models import ProductPushLog
 cols = [c.key for c in ProductPushLog.__mapper__.columns]
@@ -118,16 +147,20 @@ indexes = [i.name for i in ProductPushLog.__table__.indexes]
 print(cols)
 print(indexes)
 "
-# → 16 columns, 2 indexes registered correctly
-```
+# → 20 columns, 3 indexes
 
-New columns apply to the live DB automatically on next `uvicorn main:app --reload`.
+# Live DB check
+# Columns: 20 correct columns present
+# Indexes: product_push_log_pkey, product_push_log_request_id_key,
+#          idx_push_log_payload_hash, idx_push_log_idempotency, uq_push_log_in_flight
+# integration_keys table: exists
+```
 
 ---
 
 ## What's next
 
-Task 1 is the gate. With this merged, the parallel tasks can start:
+Task 1 is done and pushed to `origin/Vidhi`. Parallel tasks can now start:
 
 | Task | Owner | Can start now |
 |------|-------|--------------|
@@ -135,4 +168,4 @@ Task 1 is the gate. With this merged, the parallel tasks can start:
 | Task 5 — FakeOpsClient | Urvashi | After Task 4 |
 | Task 6 — payload_builder.py | Shinchana | Yes |
 | Task 7 — preflight.py | Shinchana | Yes |
-| Task 8 — pipeline.py | Vidhi | After Tasks 4, 5, 6, 7 |
+| Task 8 — Integration Gateway core | Vidhi | After Tasks 4, 5, 6, 7 |
