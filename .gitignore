@@ -14,3 +14,6 @@ Screenshot 2026-04-14 at 6.44.44 PM.png
 # Large supplier dumps (>100MB GitHub limit)
 sanmar/Catalog.txt
 sanmar/sanmar_shopify.csv
+
+# OMC (oh-my-claudecode) runtime + planning artifacts — per-user, not shared
+.omc/
