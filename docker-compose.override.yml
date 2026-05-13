@@ -30,3 +30,11 @@ services:
       - dev
     environment:
       - NODE_ENV=development
+
+  # When backend runs on the host (uvicorn outside Docker) instead of in the
+  # `api` container, n8n must reach it via host.docker.internal — `api:8000`
+  # only resolves inside the compose network.
+  n8n:
+    environment:
+      - API_BASE_URL=http://host.docker.internal:8000
+      - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET}

@@ -23,7 +23,6 @@ from .merge import merge_product_with_decorations
 logger = logging.getLogger(__name__)
 
 
-
 async def trigger_n8n_push(payload: dict[str, Any]) -> None:
     """POST payload to N8N_PUSH_WEBHOOK_URL.
 
