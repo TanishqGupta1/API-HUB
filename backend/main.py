@@ -31,6 +31,7 @@ from modules.customers.routes import router as customers_router
 from modules.markup.routes import router as markup_router, push_router as markup_push_router
 from modules.push_log.routes import router as push_log_router, push_status_router
 from modules.integrations.models import IntegrationKey  # noqa: F401 — registers table with Base
+from modules.integrations.routes import router as integrations_router, admin_router as integrations_admin_router
 from modules.catalog.routes import router as catalog_router, categories_router
 from modules.catalog.ingest import router as catalog_ingest_router
 from modules.master_options.ingest import router as master_options_ingest_router
@@ -259,6 +260,9 @@ app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
+# Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
+app.include_router(integrations_router)
+app.include_router(integrations_admin_router, dependencies=_auth)
 
 
 @app.get("/health")
