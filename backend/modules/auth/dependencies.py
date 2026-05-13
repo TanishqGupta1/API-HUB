@@ -1,3 +1,4 @@
+import hmac
 import os
 import uuid as uuid_mod
 from typing import Annotated
@@ -32,7 +33,9 @@ def _service_account_user() -> User:
 
 def _ingest_secret_matches(provided: str | None) -> bool:
     expected = os.getenv("INGEST_SHARED_SECRET", "").strip()
-    return bool(expected) and provided == expected
+    if not expected or provided is None:
+        return False
+    return hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8"))
 
 
 async def get_current_user(
