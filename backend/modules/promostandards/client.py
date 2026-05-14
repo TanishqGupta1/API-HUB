@@ -487,6 +487,10 @@ class PromoStandardsClient:
     def _sanmar_products_by_category(
         self, svc: Any, category_name: str, limit: int
     ) -> list[PSProductData]:
+        # WSDL requires arg0=productCategory, arg1=webServiceUser. SanMar
+        # accepts the webServiceUser with just 3 creds (id, password,
+        # customer_number); senderId defaults to 0 and senderPassword to ""
+        # and SanMar tolerates that for most category calls.
         try:
             response = svc.getProductInfoByCategory(
                 arg0={"category": category_name},

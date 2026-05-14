@@ -1,6 +1,7 @@
 """Seed demo supplier and product data for local development."""
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -8,18 +9,145 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+from decimal import Decimal
 from sqlalchemy import delete, select
 
 from database import Base, async_session, engine
-from modules.catalog.models import Category, Product, ProductVariant
+from modules.catalog.models import (
+    Category,
+    Product,
+    ProductOption,
+    ProductOptionAttribute,
+    ProductSize,
+    ProductVariant,
+)
 from modules.customers.models import Customer
+from modules.master_options.models import MasterOption, MasterOptionAttribute
 from modules.push_log.models import ProductPushLog
 from modules.suppliers.models import Supplier
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+DEMO_CUSTOMER_NAME = "Demo Showcase Customer"
+
+
+def _load_fixture(filename: str) -> list[dict]:
+    """Load a fixture JSON file's `products` array. Returns [] if missing/empty."""
+    path = FIXTURES_DIR / filename
+    if not path.exists():
+        print(f"  [skip] Fixture not found: {filename}")
+        return []
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError as e:
+        print(f"  [warn] Fixture {filename} invalid JSON: {e}")
+        return []
+    products = data.get("products", []) if isinstance(data, dict) else []
+    print(f"  [load] {filename}: {len(products)} product(s)")
+    return products
+
+
+def _load_master_options() -> list[dict]:
+    """Load `fixtures/master_options.json` → list of master option dicts."""
+    path = FIXTURES_DIR / "master_options.json"
+    if not path.exists():
+        print("  [skip] Fixture not found: master_options.json")
+        return []
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError as e:
+        print(f"  [warn] master_options.json invalid JSON: {e}")
+        return []
+    opts = data.get("master_options", []) if isinstance(data, dict) else []
+    print(f"  [load] master_options.json: {len(opts)} master option(s)")
+    return opts
+
+
+def _to_decimal(value) -> Decimal | None:
+    """Best-effort Decimal coercion; None on failure or empty."""
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
+
+
+async def _seed_master_options(db) -> int:
+    """Upsert MasterOption + MasterOptionAttribute from fixture. Returns count seeded/updated."""
+    fixture = _load_master_options()
+    if not fixture:
+        return 0
+    upserted = 0
+    for mo in fixture:
+        ops_id = mo.get("master_option_id")
+        if ops_id is None:
+            continue
+        existing = (await db.execute(
+            select(MasterOption).where(MasterOption.ops_master_option_id == ops_id)
+        )).scalar_one_or_none()
+
+        pricing = mo.get("pricing_method")
+        pricing_str = None if pricing is None else str(pricing)
+
+        if existing:
+            existing.title = mo.get("title") or existing.title
+            existing.option_key = mo.get("option_key") or existing.option_key
+            existing.options_type = mo.get("options_type") or existing.options_type
+            existing.pricing_method = pricing_str
+            existing.status = int(mo.get("status", existing.status))
+            existing.sort_order = int(mo.get("sort_order", existing.sort_order))
+            existing.description = mo.get("description") or existing.description
+            existing.raw_json = mo
+            existing.synced_at = datetime.now(timezone.utc)
+            master = existing
+        else:
+            master = MasterOption(
+                ops_master_option_id=ops_id,
+                title=mo.get("title") or mo.get("option_key") or f"option_{ops_id}",
+                option_key=mo.get("option_key"),
+                options_type=mo.get("options_type"),
+                pricing_method=pricing_str,
+                status=int(mo.get("status", 1)),
+                sort_order=int(mo.get("sort_order", 0)),
+                description=mo.get("description"),
+                raw_json=mo,
+                synced_at=datetime.now(timezone.utc),
+            )
+            db.add(master)
+            await db.flush()
+
+        existing_attr_ids = {a.ops_attribute_id for a in (
+            (await db.execute(
+                select(MasterOptionAttribute).where(
+                    MasterOptionAttribute.master_option_id == master.id
+                )
+            )).scalars().all()
+        )}
+        for attr in mo.get("attributes", []):
+            ops_attr_id = attr.get("master_attribute_id")
+            if ops_attr_id is None or ops_attr_id in existing_attr_ids:
+                continue
+            db.add(MasterOptionAttribute(
+                master_option_id=master.id,
+                ops_attribute_id=ops_attr_id,
+                title=attr.get("label") or attr.get("attribute_key") or f"attr_{ops_attr_id}",
+                sort_order=int(attr.get("sort_order", 0)),
+                default_price=_to_decimal(attr.get("setup_cost")),
+                raw_json=attr,
+            ))
+        upserted += 1
+    await db.commit()
+    return upserted
 
 # Import all models so create_all registers them
 import modules.suppliers.models  # noqa: F401
 import modules.catalog.models  # noqa: F401
 
+# Active configured suppliers. Credentials are intentionally blank — the UI
+# form is schema-driven (renders one input per auth_config key) so we seed
+# the *keys* with empty strings so the operator can fill them in. Never seed
+# real credentials here. PromoStandards-compatible suppliers beyond these
+# two appear in the PromoStandards directory (modules/ps_directory).
 SUPPLIERS = [
     {
         "name": "SanMar Corporation",
@@ -27,43 +155,21 @@ SUPPLIERS = [
         "protocol": "soap",
         "promostandards_code": "SANMAR",
         "base_url": "https://ws.sanmar.com:8080/SanMarWebService/SanMarWebServicePort",
-        "auth_config": {"username": "demo_user", "password": "demo_pass"},
-    },
-    {
-        "name": "S&S Activewear",
-        "slug": "ss-activewear",
-        "protocol": "rest",
-        "promostandards_code": "SSACT",
-        "base_url": "https://api.ssactivewear.com/v2",
-        "auth_config": {"account_number": "demo_acct", "api_key": "demo_key"},
-    },
-    {
-        "name": "Alphabroder",
-        "slug": "alphabroder",
-        "protocol": "soap",
-        "promostandards_code": "ALPHA",
-        "base_url": "https://pstandards.alphabroder.com/inventory/v1",
-        "auth_config": {"id": "PLACEHOLDER_USER", "password": "PLACEHOLDER_PASS"},
-        "is_active": False,  # flip to True when Christian provides real creds
-    },
-    {
-        "name": "4Over",
-        "slug": "4over",
-        "protocol": "rest",
-        "promostandards_code": None,
-        "base_url": "https://api.4over.com",
-        "auth_config": {"api_key": "demo_4over_key"},
+        "auth_config": {"id": "", "password": "", "customer_number": ""},
+        "is_active": False,
     },
     {
         "name": "Visual Graphics OPS",
         "slug": "vg-ops",
         "protocol": "ops_graphql",
-        "base_url": "https://vg.onprintshop.com",
+        "base_url": "",
         "auth_config": {
-            "n8n_credential_id": "PLACEHOLDER_CREDENTIAL_ID",
-            "store_url": "https://vg.onprintshop.com",
+            "store_url": "",
+            "client_id": "",
+            "client_secret": "",
+            "token_url": "",
         },
-        "is_active": False,  # flip to True once Christian provides real OPS OAuth creds
+        "is_active": False,
     },
 ]
 
@@ -95,20 +201,6 @@ DEMO_PRODUCTS = [
             {"color": "Black", "size": "S", "sku": "K500-BLK-S", "base_price": "12.99", "inventory": 100},
             {"color": "Black", "size": "M", "sku": "K500-BLK-M", "base_price": "12.99", "inventory": 200},
             {"color": "Black", "size": "L", "sku": "K500-BLK-L", "base_price": "12.99", "inventory": 180},
-        ],
-    },
-    {
-        "supplier_slug": "ss-activewear",
-        "supplier_sku": "AA1070",
-        "product_name": "Alternative Eco-Jersey Crew",
-        "brand": "Alternative Apparel",
-        "description": "Sustainably made eco-jersey tee, super soft and great for print.",
-        "product_type": "apparel",
-        "image_url": None,
-        "variants": [
-            {"color": "Smoke", "size": "XS", "sku": "AA1070-SMK-XS", "base_price": "8.50", "inventory": 75},
-            {"color": "Smoke", "size": "S",  "sku": "AA1070-SMK-S",  "base_price": "8.50", "inventory": 150},
-            {"color": "Smoke", "size": "M",  "sku": "AA1070-SMK-M",  "base_price": "8.50", "inventory": 200},
         ],
     },
     {
@@ -144,7 +236,29 @@ async def seed():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Merge fixture-file products into DEMO_PRODUCTS so client-demo data
+    # can be edited without touching this script. Fixtures upsert on
+    # (supplier_slug, supplier_sku) — see Product unique constraint.
+    extra_products: list[dict] = []
+    extra_products.extend(_load_fixture("sanmar_hero_products.json"))
+    extra_products.extend(_load_fixture("ops_demo_products.json"))
+    for p in extra_products:
+        p.setdefault("supplier_slug", "vg-ops")
+        p.setdefault("brand", None)
+        p.setdefault("description", None)
+        p.setdefault("product_type", "apparel")
+        p.setdefault("image_url", None)
+        p.setdefault("category", None)
+        p.setdefault("variants", [])
+    DEMO_PRODUCTS.extend(extra_products)
+
     async with async_session() as db:
+        # Master options come first — per-product options may reference them
+        # via master_option_id / master_attribute_id integer fields.
+        mo_count = await _seed_master_options(db)
+        if mo_count:
+            print(f"  [add]  Master options seeded/updated: {mo_count}")
+
         # Build slug -> supplier map
         slug_to_supplier: dict[str, Supplier] = {}
 
@@ -230,8 +344,7 @@ async def seed():
 
         # Seed products
         seeded_products = []
-        from decimal import Decimal
-        
+
         # Product to category mapping for VG
         vg_prod_cats = {
             "VG-101": "cat_3", # Polos
@@ -279,21 +392,73 @@ async def seed():
                 product_type=p_data["product_type"],
                 image_url=p_data["image_url"],
                 category_id=category_id,
-                category=category_name,
+                category=category_name or p_data.get("category"),
+                ops_product_id=p_data.get("ops_product_id"),
+                external_catalogue=p_data.get("external_catalogue"),
+                last_synced=datetime.now(timezone.utc),
             )
             db.add(product)
             await db.flush()
 
-            for v in p_data["variants"]:
+            for v in p_data.get("variants", []):
                 variant = ProductVariant(
                     product_id=product.id,
-                    color=v["color"],
-                    size=v["size"],
-                    sku=v["sku"],
-                    base_price=Decimal(v["base_price"]),
-                    inventory=v["inventory"],
+                    color=v.get("color"),
+                    size=v.get("size"),
+                    sku=v.get("sku"),
+                    base_price=_to_decimal(v.get("base_price")),
+                    inventory=v.get("inventory"),
                 )
                 db.add(variant)
+
+            for sz in p_data.get("sizes", []):
+                w = _to_decimal(sz.get("width"))
+                h = _to_decimal(sz.get("height"))
+                if w is None or h is None:
+                    continue
+                db.add(ProductSize(
+                    product_id=product.id,
+                    width=w,
+                    height=h,
+                    unit=sz.get("unit", "in"),
+                    label=sz.get("label"),
+                ))
+
+            for opt in p_data.get("options", []):
+                option = ProductOption(
+                    product_id=product.id,
+                    ops_option_id=opt.get("ops_option_id"),
+                    master_option_id=opt.get("master_option_id"),
+                    option_key=opt.get("option_key") or f"opt_{opt.get('master_option_id', 'x')}",
+                    title=opt.get("title") or opt.get("option_key") or "Option",
+                    options_type=opt.get("options_type"),
+                    sort_order=int(opt.get("sort_order", 0)),
+                    required=bool(opt.get("required", False)),
+                    status=int(opt.get("status", 1)),
+                    enabled=bool(opt.get("enabled", True)),
+                )
+                db.add(option)
+                await db.flush()
+                seen_titles: set[str] = set()
+                for attr in opt.get("attributes", []):
+                    title = attr.get("title") or attr.get("attribute_key") or f"attr_{attr.get('ops_attribute_id', 'x')}"
+                    if title in seen_titles:
+                        continue
+                    seen_titles.add(title)
+                    db.add(ProductOptionAttribute(
+                        product_option_id=option.id,
+                        ops_attribute_id=attr.get("ops_attribute_id"),
+                        master_attribute_id=attr.get("master_attribute_id"),
+                        attribute_key=attr.get("attribute_key"),
+                        title=title,
+                        sort_order=int(attr.get("sort_order", 0)),
+                        status=int(attr.get("status", 1)),
+                        enabled=bool(attr.get("enabled", True)),
+                        price=_to_decimal(attr.get("price")),
+                        setup_cost=_to_decimal(attr.get("setup_cost")),
+                        multiplier=_to_decimal(attr.get("multiplier")),
+                        numeric_value=_to_decimal(attr.get("numeric_value")),
+                    ))
 
             print(f"  [add]  Product: {p_data['product_name']}")
             seeded_products.append(product)
@@ -304,9 +469,6 @@ async def seed():
         await db.execute(delete(ProductPushLog))
         LOG_SPECS = [
             {"supp": "sanmar", "op": "inventory_sync_v2", "st": "complete", "rec": "12,450"},
-            {"supp": "ss-activewear", "op": "pricing_update", "st": "complete", "rec": "8,201"},
-            {"supp": "alphabroder", "op": "delta_product_ingest", "st": "complete", "rec": "11,800"},
-            {"supp": "4over", "op": "full_catalog_push", "st": "error", "rec": "0"},
         ]
 
         for spec in LOG_SPECS:
@@ -325,6 +487,47 @@ async def seed():
         
         await db.commit()
         print(f"  [add]  Seeded {len(LOG_SPECS)} activity logs.")
+
+        # Demo Showcase Customer — links to every seeded product via push_log
+        # so the customer catalog page (/customers/{id}) shows the full demo
+        # catalog. Until real OPS push lands, this is how we surface the
+        # "what the customer sees" view to clients.
+        demo_customer = (await db.execute(
+            select(Customer).where(Customer.name == DEMO_CUSTOMER_NAME)
+        )).scalar_one_or_none()
+        if not demo_customer:
+            demo_customer = Customer(
+                name=DEMO_CUSTOMER_NAME,
+                ops_base_url="https://demo.onprintshop.com",
+                ops_token_url="https://demo.onprintshop.com/oauth/token",
+                ops_client_id="demo-showcase",
+                ops_auth_config={"client_secret": "demo-showcase-secret"},
+            )
+            db.add(demo_customer)
+            await db.flush()
+            print(f"  [add]  Customer: {DEMO_CUSTOMER_NAME}")
+
+        existing_links = set(
+            (await db.execute(
+                select(ProductPushLog.product_id).where(
+                    ProductPushLog.customer_id == demo_customer.id
+                )
+            )).scalars().all()
+        )
+        new_links = 0
+        for prod in seeded_products:
+            if prod.id in existing_links:
+                continue
+            db.add(ProductPushLog(
+                product_id=prod.id,
+                customer_id=demo_customer.id,
+                status="pushed",
+                ops_product_id=f"demo-{prod.supplier_sku}",
+                pushed_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+            ))
+            new_links += 1
+        await db.commit()
+        print(f"  [add]  Linked {new_links} product(s) to {DEMO_CUSTOMER_NAME} via push_log")
 
     print("\nSeed complete!")
     await engine.dispose()

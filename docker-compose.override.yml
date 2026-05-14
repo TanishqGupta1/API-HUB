@@ -9,16 +9,11 @@
 
 services:
   api:
-    # uvicorn auto-reload watches the bind-mounted ./backend so edits land
-    # without a restart. CMD here overrides the production CMD in the image.
-    command:
-      - uvicorn
-      - main:app
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8000"
-      - --reload
+    # Dev override: bootstrap.sh seeds demo data + ensures admin user,
+    # then exec's uvicorn (with --reload when UVICORN_RELOAD=1).
+    command: ["sh", "/app/bootstrap.sh"]
+    environment:
+      - UVICORN_RELOAD=1
 
   frontend:
     build:
