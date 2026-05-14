@@ -48,6 +48,7 @@ async def list_products(
     customer_id: Optional[UUID] = None,
     brand: Optional[str] = None,
     search: Optional[str] = None,
+    product_type: Optional[str] = None,
     archived: bool = False,
     skip: int = 0,
     limit: int = Query(default=50, le=1000),
@@ -93,6 +94,8 @@ async def list_products(
             )
         ).scalars().all()
         query = query.where(Product.id.in_(pushed_ids))
+    if product_type:
+        query = query.where(Product.product_type == product_type)
     if brand:
         query = query.where(Product.brand == brand)
     if search:
