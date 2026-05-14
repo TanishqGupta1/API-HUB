@@ -33,7 +33,7 @@ function ShellInner({
   );
 
   return (
-    <div className="h-screen flex flex-col bg-[#f2f0ed] text-[#1e1e24] overflow-hidden">
+    <div className="h-screen flex flex-col bg-[#f2f0ed] text-[#1e1e24] overflow-hidden relative z-[1]">
       <TopBar categories={data.categories} />
       <BreadcrumbBar segments={segments} />
       <div className="flex flex-1 min-h-0">

@@ -13,6 +13,11 @@ export function PriceTierTable({ tiers }: Props) {
   const sorted = [...tiers].sort((a, b) => a.qty_min - b.qty_min);
 
   return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#484852]">Volume Pricing</span>
+        <span className="text-[10px] text-[#888894]">— price drops as qty increases</span>
+      </div>
     <div className="rounded-md border border-[#cfccc8] overflow-hidden">
       <table className="w-full text-[12px]">
         <thead className="bg-[#f2f0ed] text-[10px] font-bold uppercase tracking-[0.1em] text-[#484852]">
@@ -34,6 +39,7 @@ export function PriceTierTable({ tiers }: Props) {
           ))}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }
