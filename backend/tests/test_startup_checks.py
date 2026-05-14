@@ -36,7 +36,10 @@ async def test_production_mode_passes_when_all_vars_set(clean_env, monkeypatch):
     from main import _require_prod_env
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("SECRET_KEY", "k" * 44)
+    monkeypatch.setenv("JWT_SECRET_KEY", "j" * 44)
     monkeypatch.setenv("INGEST_SHARED_SECRET", "x")
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.example.com")
     monkeypatch.setenv("POSTGRES_URL", "postgresql+asyncpg://u:p@h/d")
+    monkeypatch.setenv("N8N_WEBHOOK_BASE_URL", "http://n8n.local:5678")
+    monkeypatch.setenv("API_BASE_URL", "http://backend.local:8000")
     _require_prod_env()  # no exception

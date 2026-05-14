@@ -39,9 +39,15 @@ def _rule(scope="all", markup_pct=30.0, priority=0, min_margin=None, rounding="n
     return SimpleNamespace(
         scope=scope,
         markup_pct=markup_pct,
+        markup_amount=None,
         priority=priority,
         min_margin=min_margin,
         rounding=rounding,
+        is_active=True,
+        effective_from=None,
+        effective_until=None,
+        min_price=None,
+        max_price=None,
     )
 
 

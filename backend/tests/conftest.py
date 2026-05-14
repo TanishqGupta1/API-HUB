@@ -34,6 +34,21 @@ database.engine = engine
 database.async_session = async_session
 from main import app  # noqa: E402
 
+# Inject a vg_admin mock for all JWT-protected routes so the test suite
+# doesn't need real credentials. Ingest-secret routes are unaffected.
+import uuid as _uuid_mod
+from modules.auth.dependencies import get_current_user as _get_current_user
+from modules.auth.models import User as _AuthUser
+
+_TEST_ADMIN = _AuthUser(
+    id=_uuid_mod.uuid4(),
+    email="test-admin@vg.test",
+    hashed_password="x",
+    role="vg_admin",
+    is_active=True,
+)
+app.dependency_overrides[_get_current_user] = lambda: _TEST_ADMIN
+
 TEST_SUPPLIER_SLUGS = ("vg-ops-test", "vg-ops-inactive")
 TEST_CUSTOMER_OPS_URLS = (
     "https://test.ops.com",
@@ -73,9 +88,9 @@ async def _cleanup_test_customers() -> None:
 
 async def _cleanup_test_suppliers() -> None:
     from modules.catalog.models import (
-        Category, 
-        Product, 
-        ProductImage, 
+        Category,
+        Product,
+        ProductImage,
         ProductVariant,
         CustomerProductSelection
     )
@@ -83,9 +98,14 @@ async def _cleanup_test_suppliers() -> None:
     from modules.sync_jobs.models import SyncJob
 
     async with async_session() as s:
+        # Also sweep slugs from test_customer_catalog (cps-test-*) which
+        # builds throwaway suppliers per-test but doesn't clean them up.
         supplier_ids = (
             await s.execute(
-                select(Supplier.id).where(Supplier.slug.in_(TEST_SUPPLIER_SLUGS))
+                select(Supplier.id).where(
+                    Supplier.slug.in_(TEST_SUPPLIER_SLUGS)
+                    | Supplier.slug.like("cps-test-%")
+                )
             )
         ).scalars().all()
         if not supplier_ids:

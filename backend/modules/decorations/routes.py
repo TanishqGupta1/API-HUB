@@ -37,7 +37,7 @@ async def upsert_decoration(
         raise HTTPException(404, f"Product {product_id} not found")
 
     now = datetime.now(timezone.utc)
-    options_json = [opt.model_dump() for opt in body.decoration_options]
+    options_json = list(body.decoration_options)
 
     stmt = (
         pg_insert(CustomerProductDecoration)
