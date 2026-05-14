@@ -200,3 +200,106 @@ async def revoke_key(
     key.is_active = False
     await db.commit()
     return {"status": "revoked", "key_id": key_id}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Admin proxy — JWT-authenticated push (for the in-app admin UI to call
+# the gateway without the operator copy-pasting an orchestrator key).
+#
+# The proxy uses a synthetic, never-expiring integration key row called
+# "_admin_ui_proxy" so prepare_push_intent's `key_id` foreign-key still
+# resolves cleanly and push_log rows stay distinguishable in audit views
+# (key_id="_admin_ui_proxy" → "this push was triggered from the admin UI").
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ADMIN_PROXY_KEY_ID = "_admin_ui_proxy"
+
+
+async def _get_or_create_admin_proxy_key(db: AsyncSession) -> IntegrationKey:
+    """Idempotent singleton — ensures the synthetic admin-proxy key exists."""
+    key = await db.get(IntegrationKey, ADMIN_PROXY_KEY_ID)
+    if key:
+        return key
+    # The raw key is never exposed — admin proxy uses JWT, not header.
+    # The hash is a sentinel value that cannot match any real X-Orchestrator-Key
+    # because token_urlsafe() never produces this exact string.
+    sentinel_hash = hashlib.sha256(b"__admin_ui_proxy_never_exposed__").hexdigest()
+    key = IntegrationKey(
+        id=ADMIN_PROXY_KEY_ID,
+        key_hash=sentinel_hash,
+        name="Admin UI proxy (JWT-authenticated)",
+        allowed_customer_ids=None,   # null = all customers
+        allowed_supplier_slugs=None,  # null = all suppliers
+        rate_limit_per_minute=600,    # admin gets a higher ceiling than orchestrators
+    )
+    db.add(key)
+    await db.commit()
+    await db.refresh(key)
+    return key
+
+
+@admin_router.get(
+    "/admin/push-requests/{push_log_id}",
+    response_model=PushStatusOut,
+    summary="Admin-only status poll (JWT auth) — mirrors /v1/push-requests/{id}",
+)
+async def admin_push_status(
+    push_log_id: uuid_mod.UUID,
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+):
+    """Identical response shape to the orchestrator GET, just admin JWT-auth.
+    Lets the admin UI poll push status without an X-Orchestrator-Key."""
+    push_log = await db.get(ProductPushLog, push_log_id)
+    if not push_log:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF", "message": "Push request not found"
+        })
+    terminal = push_log.status in (
+        "pushed", "failed", "partial_failure", "rejected", "dry_run_pushed", "canceled"
+    )
+    return PushStatusOut(
+        push_log_id=push_log.id,
+        status=push_log.status,
+        customer_id=push_log.customer_id,
+        supplier_slug=push_log.supplier_slug,
+        supplier_sku=push_log.supplier_sku,
+        ops_product_id=push_log.ops_product_id,
+        error=push_log.error,
+        step_results=[StepResultOut(**s) for s in (push_log.step_results or [])],
+        cleanup_targets=push_log.cleanup_targets,
+        callback_status=push_log.callback_status,
+        callback_attempts=push_log.callback_attempts,
+        finished_at=push_log.pushed_at if terminal else None,
+        links=PushRequestLinks(self=f"/api/integrations/admin/push-requests/{push_log_id}"),
+    )
+
+
+@admin_router.post(
+    "/admin/push-requests",
+    status_code=202,
+    response_model=PushRequestAccepted,
+    summary="Admin-only push proxy (JWT auth, no X-Orchestrator-Key required)",
+)
+async def admin_push_request(
+    req: PushRequest,
+    background_tasks: BackgroundTasks,
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+):
+    """Same pipeline as the orchestrator gateway, just authed with admin JWT.
+
+    Internally calls `prepare_push_intent + execute_push` so the live behavior
+    (preflight, RFC 8785 idempotency, halt-no-rollback) is identical.
+    The operator does NOT need to create or paste an integration key —
+    the admin UI's existing session cookie is sufficient.
+    """
+    proxy_key = await _get_or_create_admin_proxy_key(db)
+    # No scope check — admin JWT already gates this route.
+    accepted = await prepare_push_intent(req, proxy_key, db, idempotency_key=idempotency_key)
+    # Skip background execution if idempotent replay returned a terminal row
+    if accepted.status not in ("accepted", "queued"):
+        return accepted
+    background_tasks.add_task(execute_push, accepted.push_log_id)
+    return accepted

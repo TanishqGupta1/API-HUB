@@ -1,10 +1,10 @@
 """Integration Gateway core — prepare_push_intent() + execute_push().
 
-Stub swap guide (replace when parallel tasks merge):
-  Task 6 → replace _stub_build_push_payload with: from .payload_builder import build_push_payload
-  Task 7 → replace _stub_run_preflight with:       from .preflight import run_preflight
-  Task 4 → replace _stub_ops_client with real OPSClient mutation methods
-  Task 5 → replace _stub_fake_ops_client with:     from .fake_ops_client import FakeOpsClient
+Stub swap guide:
+  Task 6 (payload_builder)  ✅ wired — see imports below
+  Task 7 (preflight)        ✅ wired — see imports below
+  Task 4 (real OpsClient)   ⏸ still stubbed — Urvashi
+  Task 5 (FakeOpsClient)    ⏸ still stubbed — Urvashi (dry-run path works via _StubFakeOpsClient)
 """
 from __future__ import annotations
 
@@ -28,6 +28,8 @@ from modules.customers.models import Customer
 from modules.integrations.models import IntegrationKey
 from modules.integrations.schemas import PushRequest, PushRequestAccepted, PushRequestLinks
 from modules.markup.engine import calculate_price
+from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
+from modules.ops_push.preflight import run_preflight
 from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
 from modules.suppliers.models import Supplier
@@ -215,9 +217,9 @@ async def prepare_push_intent(
             "code": "UNKNOWN_REF", "message": f"Product '{supplier_sku}' not found in catalog"
         })
 
-    # ── Build payload + compute hash ──
-    builder = _stub_build_push_payload(product, customer, [], [])
-    payload_hash = builder.payload_hash()
+    # ── Compute payload hash over the canonical request body (Rev 1, RFC 8785) ──
+    # Task 6: real RFC 8785 JCS hash over the inbound request, NOT a stub on (product_id, customer_id).
+    payload_hash = compute_payload_hash(req.model_dump(mode="json"))
 
     # ── Idempotency check ──
     existing = (await db.execute(
@@ -262,14 +264,12 @@ async def prepare_push_intent(
             "message": "Another push for this product is currently processing"
         })
 
-    # ── Preflight ──
-    preflight = await _stub_run_preflight(product, customer, db)
-    if preflight.blockers:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
-            "code": "PREFLIGHT_BLOCKER",
-            "message": f"Preflight failed: {', '.join(preflight.blockers)}",
-            "details": {"blockers": preflight.blockers, "warnings": preflight.warnings},
-        })
+    # ── Preflight (Task 7: 8 real checks + token cache) ──
+    preflight = await run_preflight(db, customer_id, product.id)
+    if not preflight.ok:
+        # Use Task 7's spec-shaped error envelope (status/code/message/details/trace_id).
+        envelope = preflight.to_error_envelope()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=envelope)
 
     # ── Insert push_log row ──
     now = datetime.now(timezone.utc)
@@ -338,9 +338,9 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
         # ── Select client ──
         client = _StubFakeOpsClient() if push_log.dry_run else _StubOpsClient()
 
-        # ── Build mutation plan ──
-        builder = _stub_build_push_payload(product, customer, [], [])
-        plan = builder.mutation_plan()
+        # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
+        payload = await build_push_payload(db, push_log.customer_id, push_log.product_id)
+        plan = [step.model_dump(mode="json") for step in payload.plan]
 
         step_results: list[dict] = []
         ops_product_id: Optional[str] = None

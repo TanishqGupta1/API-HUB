@@ -430,3 +430,254 @@ export interface ProductDecoration {
   decoration_options: DecorationOption[];
   updated_at: string;
 }
+
+/* ─── Phase 8 — SanMar → OPS Staging Push (Beta) ───────────────────────────
+ * Types mirror the spec at
+ * `docs/superpowers/specs/2026-05-08-sanmar-ops-staging-push-design.md`.
+ * Locked status vocab + JSONB shapes — UI must match exactly so the
+ * admin/operator views stay consistent with backend payloads.
+ */
+
+/* ─────────────────────────────────────────────────────────────────────────── *
+ *  Integration Gateway (M0–M5)                                               *
+ *                                                                            *
+ *  Mirrors `docs/superpowers/specs/2026-05-11-integration-gateway-design.md` *
+ *  Rev 1+2+3. Replaces the prior VPCE preview/execute pair with a single    *
+ *  POST /api/integrations/v1/push-requests + Idempotency-Key + payload_hash.*
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/** Persisted product_push_log.status (spec §"Status vocabulary"). */
+export type PushStatus =
+  | "queued"            // durable row reserved; awaiting worker claim
+  | "processing"        // worker actively calling OPS
+  | "pushed"            // OPS confirmed; push_mappings written
+  | "failed"            // hard failure before any OPS writes
+  | "partial_failure"   // some OPS steps succeeded; cleanup_targets populated
+  | "rejected"          // preflight blocker or policy rejection
+  | "canceled"          // operator-initiated cancel
+  | "dry_run_pushed";   // dry_run=true ran cleanly through FakeOpsClient
+
+/** product_push_log.callback_status (spec §"Status vocabulary"). */
+export type CallbackStatus =
+  | "not_requested"
+  | "pending"
+  | "sent"
+  | "failed";
+
+/** Option-attach strategy chosen once per customer (spec §"Preflight gates"). */
+export type OptionStrategy = "master_option_attach" | "product_local_option_create";
+
+export interface PreflightCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+  /** Field path to fix; populated only when ok=false. */
+  field?: string | null;
+  /** One-line operator hint; populated only when ok=false. */
+  suggestion?: string | null;
+}
+
+export interface PreflightResult {
+  checks: PreflightCheck[];
+  blockers: string[];
+  warnings: PreflightCheck[];
+  computed_at: string;
+}
+
+/** Gateway error envelope (spec §"Error envelope"). */
+export interface GatewayErrorEnvelope {
+  status: "error";
+  code:
+    | "BAD_SIGNATURE"
+    | "KEY_NOT_ALLOWED"
+    | "KEY_REVOKED"
+    | "UNKNOWN_REF"
+    | "IDEMPOTENCY_CONFLICT"
+    | "IN_FLIGHT"
+    | "PREFLIGHT_BLOCKER"
+    | "RATE_LIMITED"
+    | "OPS_UPSTREAM_ERROR"
+    | "CALLBACK_HOST_NOT_ALLOWED";
+  message: string;
+  details: Record<string, unknown> & {
+    field?: string;
+    suggestion?: string;
+    blockers?: string[];
+  };
+  trace_id: string | null;
+}
+
+/** One OPS mutation in the push plan (spec §"OPS auth flow and outbound mutation contract"). */
+export interface OPSMutationStep {
+  step: number;
+  mutation: string;
+  /** Stable lookup key for step_results recovery */
+  source_key: string;
+  variables: Record<string, unknown>;
+  requires_response_from: number[];
+}
+
+export interface OPSComputedPrice {
+  variant_sku: string;
+  color: string | null;
+  size: string | null;
+  sort_order: number;
+  base_price: number;
+  final_price: number;
+  markup_pct: number | null;
+  markup_amount: number | null;
+  rounding: string;
+}
+
+/** Returned from POST /push-requests when dry_run=true and surfaced in the UI dry-run preview panel. */
+export interface OPSPushPayload {
+  customer_id: string;
+  product_id: string;
+  supplier_slug: string;
+  supplier_sku: string;
+  push_mode: "create" | "update";
+  option_strategy: OptionStrategy;
+  existing_ops_product_id: number | null;
+  computed_prices: OPSComputedPrice[];
+  markup_rule_id: string | null;
+  plan: OPSMutationStep[];
+  primary_image_url: string | null;
+  image_warnings: string[];
+  estimated_mutations: number;
+  built_at: string;
+  ops_target: {
+    base_url?: string;
+    client_id_last4?: string;
+  };
+}
+
+/** Append-only entry written by the worker to product_push_log.step_results JSONB. */
+export interface OPSStepResult {
+  step: number;
+  source_key: string;
+  mutation: string;
+  request_fingerprint: string;
+  ops_ids: Record<string, unknown>;
+  attempted_at: string;
+  /** Synthetic field added by the UI when rendering — not on the wire. */
+  status?: "ok" | "failed";
+}
+
+/** Opaque JSONB shape; spec leaves the contents flexible. */
+export interface CleanupTargets {
+  ops_product_id?: number | null;
+  product_size_ids?: number[];
+  option_ids?: number[];
+  attribute_ids?: number[];
+  inventory_keys?: string[];
+  /** Legacy shape — older fixtures may still set these. */
+  category_ids?: number[];
+  size_ids?: number[];
+  price_ids?: number[];
+  product_id?: number | null;
+  instructions?: string;
+  [extra: string]: unknown;
+}
+
+/**
+ * product_push_log row (spec §"Expand product_push_log" — 15 columns added in M0).
+ *
+ * `id` is the public `push_log_id`. `request_id` is a server-generated UUID
+ * for tracing; never confused with `idempotency_key` which comes from the
+ * caller's header.
+ */
+export interface PushLog {
+  id: string;
+  request_id: string;
+  customer_id: string;
+  product_id: string;
+  /** FK to integration_keys.id when push came via the gateway. */
+  key_id: string | null;
+  idempotency_key: string | null;
+  payload_hash: string | null;
+  supplier_slug: string | null;
+  supplier_sku: string | null;
+  status: PushStatus;
+  dry_run: boolean;
+  ops_product_id: number | null;
+  error: string | null;
+  step_results: OPSStepResult[];
+  cleanup_targets: CleanupTargets | null;
+  /** Worker lease metadata (spec §"Worker lease, heartbeat, and reclaim"). */
+  worker_id: string | null;
+  lease_until: string | null;
+  /** Callback (webhook) tracking. */
+  callback_url: string | null;
+  callback_status: CallbackStatus;
+  callback_attempts: number;
+  callback_next_attempt_at: string | null;
+  /** Retry chain — if this push is a retry of another, points at the prior id. */
+  retry_of: string | null;
+  created_at: string;
+  /** Optional finished_at for terminal-state rendering. */
+  finished_at?: string | null;
+}
+
+/**
+ * Request body for POST /api/integrations/v1/push-requests
+ * (spec §"Push request envelope").
+ */
+export interface PushRequestBody {
+  target: { system: "ops"; customer_id: string };
+  source: { supplier_slug: string };
+  /** Either product_ref OR product inline; never both. */
+  product_ref?: { supplier_sku: string };
+  product?: Record<string, unknown>; // ProductIngest shape
+  decorations?: Array<{
+    placement: string;
+    method: string;
+    price_addition: string;
+  }>;
+  dry_run: boolean;
+  callback?: {
+    url: string;
+    secret?: string;
+  };
+}
+
+/** Response (sync-sized push that finished within long-poll window). */
+export interface PushTerminalResponse {
+  push_log_id: string;
+  status: PushStatus;
+  customer_id: string;
+  supplier_slug: string;
+  supplier_sku: string;
+  ops_product_id: number | null;
+  mapping_id: string | null;
+  error: string | null;
+  step_results: OPSStepResult[];
+  cleanup_targets: CleanupTargets | null;
+  callback_status: CallbackStatus;
+  callback_attempts: number;
+  finished_at: string | null;
+  /** When dry_run=true, the dry-run plan that ran through FakeOpsClient. */
+  plan?: OPSPushPayload;
+}
+
+/** Response (202 — async or long-poll deadline elapsed). */
+export interface PushAcceptedResponse {
+  push_log_id: string;
+  status: "queued" | "processing";
+  customer_id: string;
+  supplier_slug: string;
+  supplier_sku: string;
+  ops_product_id: null;
+  dry_run: boolean;
+  callback_status: CallbackStatus;
+  created_at: string;
+  links: {
+    self: string;
+  };
+}
+
+export type PushRequestResponse = PushTerminalResponse | PushAcceptedResponse;
+
+// `IntegrationKey` and related types intentionally live in Vidhi's
+// `frontend/src/app/(admin)/integrations/page.tsx` (the canonical admin
+// UI for integration-key CRUD). Duplicate types were removed when the
+// duplicate `/integrations/keys/page.tsx` page was deleted.
