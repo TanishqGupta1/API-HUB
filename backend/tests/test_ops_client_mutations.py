@@ -13,12 +13,16 @@ import httpx
 import pytest
 
 from modules.ops_inbound.ops_client import (
+    MUTATION_SET_ADDITIONAL_OPTION,
+    MUTATION_SET_ADDITIONAL_OPTION_ATTRIBUTES,
     MUTATION_SET_ASSIGN_OPTIONS,
     MUTATION_SET_PRODUCT,
     MUTATION_SET_PRODUCT_CATEGORY,
     MUTATION_SET_PRODUCT_DESIGN,
     MUTATION_SET_PRODUCT_PRICE,
     MUTATION_SET_PRODUCT_SIZE,
+    MUTATION_SET_PRODUCTS_ATTRIBUTE_PRICE,
+    MUTATION_UPDATE_PRODUCT_STOCK,
     OPSClient,
 )
 from modules.import_jobs.base import AuthError, SupplierError
@@ -276,3 +280,107 @@ async def test_refresh_raises_when_token_response_missing_access_token():
     with pytest.raises(AuthError) as exc:
         await client.set_product({"products_title": "X"})
     assert "missing access_token" in str(exc.value).lower()
+
+
+# ---------------------------------------------------------------------------
+# Rev 3 (2026-05-11 spec) mutations:
+# product_local_option_create push mode + inventory.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_set_additional_option_sends_canonical_mutation_and_unwraps():
+    http = _mock_http(
+        _response(200, {"data": {"setAdditionalOption": {
+            "result": "ok", "message": "", "prod_add_opt_id": 314,
+        }}}),
+    )
+    client = _client(http)
+    result = await client.set_additional_option({
+        "products_id": 10001, "title": "Imprint Color", "options_type": "radio",
+        "status": "active", "delete": 0,
+    })
+    assert result["prod_add_opt_id"] == 314
+    body = http.post.call_args.kwargs["json"]
+    assert body["query"] == MUTATION_SET_ADDITIONAL_OPTION
+    assert body["variables"]["input"]["title"] == "Imprint Color"
+
+
+@pytest.mark.asyncio
+async def test_set_additional_option_attributes_sends_canonical_mutation_and_unwraps():
+    http = _mock_http(
+        _response(200, {"data": {"setAdditionalOptionAttributes": {
+            "result": "ok", "message": "", "attribute_id": 901,
+        }}}),
+    )
+    client = _client(http)
+    result = await client.set_additional_option_attributes({
+        "prod_add_opt_id": 314, "label": "Red", "status": "active", "delete": 0,
+    })
+    assert result["attribute_id"] == 901
+    assert http.post.call_args.kwargs["json"]["query"] == MUTATION_SET_ADDITIONAL_OPTION_ATTRIBUTES
+
+
+@pytest.mark.asyncio
+async def test_set_products_attribute_price_sends_canonical_mutation_and_unwraps():
+    http = _mock_http(
+        _response(200, {"data": {"setProductsAttributePrice": {
+            "result": "ok", "message": "", "attribute_id": 901,
+        }}}),
+    )
+    client = _client(http)
+    result = await client.set_products_attribute_price({
+        "attribute_id": 901, "size_from": None, "size_to": None,
+        "attributes_price": 2.50, "vendor_price": 1.10,
+        "site_admin_markup": None, "delete": 0,
+    })
+    assert result["attribute_id"] == 901
+    assert http.post.call_args.kwargs["json"]["query"] == MUTATION_SET_PRODUCTS_ATTRIBUTE_PRICE
+
+
+@pytest.mark.asyncio
+async def test_update_product_stock_uses_flat_args_with_action_enum():
+    """updateProductStock takes 4 separate variables: stock_id, product_sku,
+    action (enum), input. Not a single Input wrapper."""
+    http = _mock_http(
+        _response(200, {"data": {"updateProductStock": {
+            "result": "ok", "message": "",
+            "stock_id": 7777, "stock_quantity": 250,
+        }}}),
+    )
+    client = _client(http)
+    result = await client.update_product_stock(
+        action="SET",
+        input={"stock_quantity": 250, "warehouse_code": "TX"},
+        product_sku="PC61-BLACK-M",
+    )
+    assert result["stock_id"] == 7777
+    assert result["stock_quantity"] == 250
+
+    body = http.post.call_args.kwargs["json"]
+    assert body["query"] == MUTATION_UPDATE_PRODUCT_STOCK
+    # Flat variables — action and input are siblings, not nested.
+    assert body["variables"]["action"] == "SET"
+    assert body["variables"]["product_sku"] == "PC61-BLACK-M"
+    assert body["variables"]["input"] == {"stock_quantity": 250, "warehouse_code": "TX"}
+    # stock_id was not provided => not present in variables.
+    assert "stock_id" not in body["variables"]
+
+
+@pytest.mark.asyncio
+async def test_update_product_stock_with_stock_id_omits_product_sku():
+    """Retry path: when stock_id is known, product_sku may be omitted."""
+    http = _mock_http(
+        _response(200, {"data": {"updateProductStock": {
+            "result": "ok", "message": "",
+            "stock_id": 7777, "stock_quantity": 99,
+        }}}),
+    )
+    client = _client(http)
+    await client.update_product_stock(
+        action="SET",
+        input={"stock_quantity": 99},
+        stock_id=7777,
+    )
+    variables = http.post.call_args.kwargs["json"]["variables"]
+    assert variables["stock_id"] == 7777
+    assert "product_sku" not in variables
