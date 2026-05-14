@@ -105,13 +105,17 @@ export default function CustomerCatalogPage() {
   }, [selections, search, statusFilter]);
 
   const counts = useMemo(() => {
-    const c: Record<SelectionStatus, number> = {
+    // Partial map — only the 4 originally-displayed buckets here. T22 will
+    // surface the 7 Phase-8 gateway statuses in this header row.
+    const c: Partial<Record<SelectionStatus, number>> = {
       selected: 0,
       pushed: 0,
       stale: 0,
       failed: 0,
     };
-    for (const s of selections) c[s.status]++;
+    for (const s of selections) {
+      if (c[s.status] !== undefined) c[s.status]! += 1;
+    }
     return c;
   }, [selections]);
 
@@ -194,7 +198,9 @@ export default function CustomerCatalogPage() {
         {STATUS_FILTER_OPTIONS.map((opt) => {
           const isActive = statusFilter === opt.value;
           const count =
-            opt.value === "all" ? selections.length : counts[opt.value as SelectionStatus];
+            opt.value === "all"
+              ? selections.length
+              : (counts[opt.value as SelectionStatus] ?? 0);
           return (
             <button
               key={opt.value}

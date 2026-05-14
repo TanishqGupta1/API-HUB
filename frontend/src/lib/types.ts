@@ -370,8 +370,24 @@ export interface AttributeConfigItem {
   sort_order: number;
 }
 
-/* Phase 6 — customer-curated catalog selections */
-export type SelectionStatus = "selected" | "pushed" | "stale" | "failed";
+/* Phase 6 — customer-curated catalog selections.
+ *
+ * Status vocabulary widened from the original 4 values (Phase 6 selection
+ * UI) to the 11-value gateway vocab so the same field can carry Phase 8
+ * push states. Canonical metadata + lookup helpers live in
+ * `frontend/src/lib/push-status.ts` (T4). */
+export type SelectionStatus =
+  | "selected"
+  | "accepted"
+  | "queued"
+  | "processing"
+  | "pushed"
+  | "failed"
+  | "partial_failure"
+  | "rejected"
+  | "canceled"
+  | "dry_run_pushed"
+  | "stale";
 
 export interface CustomerProductSelection {
   id: string;
