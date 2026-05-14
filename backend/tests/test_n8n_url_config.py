@@ -6,7 +6,8 @@ def clean_env(monkeypatch):
     for key in (
         "ENVIRONMENT", "N8N_WEBHOOK_BASE_URL", "N8N_API_BASE_URL",
         "API_BASE_URL", "N8N_PUSH_WEBHOOK_URL",
-        "SECRET_KEY", "INGEST_SHARED_SECRET", "ALLOWED_ORIGINS", "POSTGRES_URL",
+        "SECRET_KEY", "JWT_SECRET_KEY", "INGEST_SHARED_SECRET",
+        "ALLOWED_ORIGINS", "POSTGRES_URL",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -48,6 +49,7 @@ def test_production_mode_passes_when_all_set(clean_env, monkeypatch):
     from main import _require_prod_env
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("SECRET_KEY", "k" * 44)
+    monkeypatch.setenv("JWT_SECRET_KEY", "j" * 44)
     monkeypatch.setenv("INGEST_SHARED_SECRET", "x")
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.example.com")
     monkeypatch.setenv("POSTGRES_URL", "postgresql+asyncpg://u:p@h/d")
