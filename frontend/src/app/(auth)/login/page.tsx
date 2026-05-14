@@ -1,12 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { setSession, type AuthUser } from "@/lib/auth";
+import { clearCachedUser } from "@/lib/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -23,6 +31,7 @@ export default function LoginPage() {
       const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
 
@@ -31,15 +40,9 @@ export default function LoginPage() {
         throw new Error(json?.detail ?? "Invalid credentials");
       }
 
-      const { access_token, refresh_token } = await res.json();
-
-      // Fetch user profile
-      const meRes = await fetch(`${API_BASE}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${access_token}` },
-      });
-      const user: AuthUser = await meRes.json();
-
-      setSession(access_token, refresh_token, user);
+      // Cookie is set by the backend; just clear the cached user so the next
+      // fetchUser() pulls fresh data.
+      clearCachedUser();
 
       const next = searchParams.get("next") ?? "/";
       router.push(next);

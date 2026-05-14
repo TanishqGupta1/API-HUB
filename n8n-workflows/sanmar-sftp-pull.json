@@ -1,6 +1,6 @@
 {
   "id": "sanmar-sftp-pull-001",
-  "name": "SanMar SFTP → Hub (Catalog)",
+  "name": "SanMar SFTP \u2192 Hub (Catalog)",
   "active": false,
   "nodes": [
     {
@@ -9,7 +9,10 @@
       "name": "When clicking 'Execute workflow'",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [240, 220]
+      "position": [
+        240,
+        220
+      ]
     },
     {
       "parameters": {
@@ -26,18 +29,33 @@
       "name": "Schedule Trigger (3am Daily)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
-      "position": [240, 420]
+      "position": [
+        240,
+        420
+      ]
     },
     {
       "parameters": {
         "url": "={{ $env.API_BASE_URL }}/api/suppliers",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
+        }
       },
       "id": "http-001",
       "name": "Get Suppliers",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 320]
+      "position": [
+        460,
+        320
+      ]
     },
     {
       "parameters": {
@@ -47,7 +65,10 @@
       "name": "Resolve SanMar SID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 320]
+      "position": [
+        680,
+        320
+      ]
     },
     {
       "parameters": {
@@ -59,9 +80,12 @@
       },
       "id": "sftp-001",
       "name": "SFTP: List Files",
-      "type": "n8n-nodes-base.sftp",
+      "type": "n8n-nodes-base.ftp",
       "typeVersion": 1,
-      "position": [900, 320],
+      "position": [
+        900,
+        320
+      ],
       "credentials": {
         "sftp": {
           "id": "sanmar-sftp-creds",
@@ -77,9 +101,12 @@
       },
       "id": "sftp-002",
       "name": "SFTP: Download File",
-      "type": "n8n-nodes-base.sftp",
+      "type": "n8n-nodes-base.ftp",
       "typeVersion": 1,
-      "position": [1120, 320],
+      "position": [
+        1120,
+        320
+      ],
       "credentials": {
         "sftp": {
           "id": "sanmar-sftp-creds",
@@ -95,7 +122,10 @@
       "name": "Spreadsheet: Parse CSV",
       "type": "n8n-nodes-base.spreadsheetFile",
       "typeVersion": 2,
-      "position": [1340, 320]
+      "position": [
+        1340,
+        320
+      ]
     },
     {
       "parameters": {
@@ -105,7 +135,10 @@
       "name": "Limit to 100 Products",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1450, 320]
+      "position": [
+        1450,
+        320
+      ]
     },
     {
       "parameters": {
@@ -116,7 +149,10 @@
       "name": "Loop: 500 rows",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [1560, 320]
+      "position": [
+        1560,
+        320
+      ]
     },
     {
       "parameters": {
@@ -126,7 +162,10 @@
       "name": "Shape Products",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1780, 320]
+      "position": [
+        1780,
+        320
+      ]
     },
     {
       "parameters": {
@@ -155,14 +194,20 @@
       "name": "POST /ingest/products",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 320]
+      "position": [
+        2000,
+        320
+      ]
     },
     {
       "id": "code-error-001",
       "name": "Format Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1400, 400],
+      "position": [
+        1400,
+        400
+      ],
       "parameters": {
         "jsCode": "const err = $input.first().json;\nreturn [{ json: {\n  event: 'sanmar_ingest_error',\n  batch_error: err.message || JSON.stringify(err),\n  timestamp: new Date().toISOString()\n}}];"
       }
@@ -172,7 +217,10 @@
       "name": "Log Error",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1600, 400],
+      "position": [
+        1600,
+        400
+      ],
       "parameters": {
         "method": "POST",
         "url": "={{ $env.API_BASE_URL }}/api/push-log",
@@ -182,6 +230,10 @@
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
             }
           ]
         },

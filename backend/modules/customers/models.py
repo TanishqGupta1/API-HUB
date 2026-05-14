@@ -16,6 +16,7 @@ class Customer(Base):
     ops_token_url: Mapped[str] = mapped_column(Text)
     ops_client_id: Mapped[str] = mapped_column(String(255))
     ops_auth_config: Mapped[dict] = mapped_column(EncryptedJSON, default=dict)
+    logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # ops_auth_config stores: { "client_secret": "..." }
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(

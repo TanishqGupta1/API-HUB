@@ -1,11 +1,11 @@
 {
   "id": "ops-push-001",
-  "name": "Hub → OPS Push (Products + Price + Push Log)",
+  "name": "Hub \u2192 OPS Push (Products + Price + Push Log)",
   "active": false,
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "GET",
+        "httpMethod": "POST",
         "path": "ops-push",
         "responseMode": "responseNode",
         "options": {}
@@ -14,7 +14,10 @@
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -24,7 +27,10 @@
       "name": "Parse Params",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -35,7 +41,10 @@
       "name": "Get Products",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -45,7 +54,10 @@
       "name": "Explode Products",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -58,13 +70,25 @@
               "value": "={{$env.INGEST_SHARED_SECRET}}"
             }
           ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
         }
       },
       "id": "a1111111-0005-0000-0000-000000000005",
       "name": "Get Push Payload",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
     },
     {
       "parameters": {
@@ -74,7 +98,10 @@
       "name": "Merge IDs + Payload",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 2,
-      "position": [1340, 300]
+      "position": [
+        1340,
+        300
+      ]
     },
     {
       "parameters": {
@@ -84,7 +111,10 @@
       "name": "Build OPS Inputs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 300]
+      "position": [
+        1560,
+        300
+      ]
     },
     {
       "parameters": {
@@ -96,7 +126,10 @@
       "name": "OPS: Set Product Category",
       "type": "n8n-nodes-onprintshop.onPrintShop",
       "typeVersion": 1,
-      "position": [1780, 300],
+      "position": [
+        1780,
+        300
+      ],
       "onError": "continueErrorOutput",
       "credentials": {
         "onPrintShopApi": {
@@ -113,7 +146,10 @@
       "name": "Attach Category ID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2000, 300]
+      "position": [
+        2000,
+        300
+      ]
     },
     {
       "parameters": {
@@ -125,7 +161,10 @@
       "name": "OPS: Set Product",
       "type": "n8n-nodes-onprintshop.onPrintShop",
       "typeVersion": 1,
-      "position": [2220, 300],
+      "position": [
+        2220,
+        300
+      ],
       "onError": "continueErrorOutput",
       "credentials": {
         "onPrintShopApi": {
@@ -142,7 +181,10 @@
       "name": "Build Size Inputs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2220, 520]
+      "position": [
+        2220,
+        520
+      ]
     },
     {
       "parameters": {
@@ -154,7 +196,10 @@
       "name": "OPS: Set Product Size",
       "type": "n8n-nodes-onprintshop.onPrintShop",
       "typeVersion": 1,
-      "position": [2440, 520],
+      "position": [
+        2440,
+        520
+      ],
       "onError": "continueErrorOutput",
       "credentials": {
         "onPrintShopApi": {
@@ -171,7 +216,10 @@
       "name": "Build Price Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2440, 300]
+      "position": [
+        2440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -183,7 +231,10 @@
       "name": "OPS: Set Product Price",
       "type": "n8n-nodes-onprintshop.onPrintShop",
       "typeVersion": 1,
-      "position": [2660, 300],
+      "position": [
+        2660,
+        300
+      ],
       "onError": "continueErrorOutput",
       "credentials": {
         "onPrintShopApi": {
@@ -198,13 +249,25 @@
         "method": "POST",
         "jsonParameters": true,
         "options": {},
-        "bodyParametersJson": "={\n  \"product_id\": \"{{$node['Build Price Input'].json.product_id}}\",\n  \"customer_id\": \"{{$node['Build Price Input'].json.customer_id}}\",\n  \"ops_product_id\": \"{{$node['Build Price Input'].json.ops_product_id}}\",\n  \"status\": \"pushed\",\n  \"error\": null\n}"
+        "bodyParametersJson": "={\n  \"product_id\": \"{{$node['Build Price Input'].json.product_id}}\",\n  \"customer_id\": \"{{$node['Build Price Input'].json.customer_id}}\",\n  \"ops_product_id\": \"{{$node['Build Price Input'].json.ops_product_id}}\",\n  \"status\": \"pushed\",\n  \"error\": null\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
+        }
       },
       "id": "a1111111-0011-0000-0000-000000000011",
       "name": "POST Push Log",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3980, 300]
+      "position": [
+        3980,
+        300
+      ]
     },
     {
       "parameters": {
@@ -215,7 +278,10 @@
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [4200, 300]
+      "position": [
+        4200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -224,7 +290,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-Ingest-Secret", "value": "={{ $env.INGEST_SHARED_SECRET }}" }
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
           ]
         },
         "options": {}
@@ -233,7 +302,10 @@
       "name": "Get /ops-options",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3100, 300]
+      "position": [
+        3100,
+        300
+      ]
     },
     {
       "parameters": {
@@ -243,7 +315,10 @@
       "name": "Stub Apply Options",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3320, 300]
+      "position": [
+        3320,
+        300
+      ]
     },
     {
       "parameters": {
@@ -253,7 +328,10 @@
       "name": "Build Push Mapping",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3540, 300]
+      "position": [
+        3540,
+        300
+      ]
     },
     {
       "parameters": {
@@ -262,8 +340,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-Ingest-Secret", "value": "={{ $env.INGEST_SHARED_SECRET }}" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -275,7 +359,10 @@
       "name": "POST /push-mappings",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3760, 300]
+      "position": [
+        3760,
+        300
+      ]
     },
     {
       "parameters": {
@@ -285,7 +372,10 @@
       "name": "Error Handler",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2440, 740]
+      "position": [
+        2440,
+        740
+      ]
     },
     {
       "parameters": {
@@ -293,13 +383,25 @@
         "method": "POST",
         "jsonParameters": true,
         "options": {},
-        "bodyParametersJson": "={\n  \"product_id\": \"{{$json.product_id}}\",\n  \"customer_id\": \"{{$json.customer_id}}\",\n  \"ops_product_id\": {{$json.ops_product_id ? `\"${$json.ops_product_id}\"` : 'null'}},\n  \"status\": \"failed\",\n  \"error\": \"{{$json.error_message}}\"\n}"
+        "bodyParametersJson": "={\n  \"product_id\": \"{{$json.product_id}}\",\n  \"customer_id\": \"{{$json.customer_id}}\",\n  \"ops_product_id\": {{$json.ops_product_id ? `\"${$json.ops_product_id}\"` : 'null'}},\n  \"status\": \"failed\",\n  \"error\": \"{{$json.error_message}}\"\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
+          ]
+        }
       },
       "id": "a1111111-0019-0000-0000-000000000019",
       "name": "POST Push Log Error",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2660, 740]
+      "position": [
+        2660,
+        740
+      ]
     },
     {
       "parameters": {
@@ -308,7 +410,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-Ingest-Secret", "value": "={{ $env.INGEST_SHARED_SECRET }}" }
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            }
           ]
         },
         "options": {}
@@ -317,17 +422,23 @@
       "name": "Get /ops-options",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2880, 460]
+      "position": [
+        2880,
+        460
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// STUB: OPS beta mutations (setAdditionalOption, setAdditionalOptionAttributes,\n// setProductsAttributePrice) are not yet shipped.\n// When they ship, replace this Code node with:\n//   1. Split In Batches over options\n//   2. OPS: setAdditionalOption (per option) → captures target_ops_option_id\n//   3. Split In Batches over attributes\n//   4. OPS: setAdditionalOptionAttributes → captures target_ops_attribute_id\n//   5. OPS: setProductsAttributePrice → applies price\n// For now: annotate each attribute with null target IDs and pass through.\nconst options = $input.all().map(i => i.json);\nconsole.log('[STUB] ops-push options payload:', JSON.stringify(options));\nreturn options.map(opt => ({\n  json: {\n    ...opt,\n    _stub: true,\n    target_ops_option_id: null,\n    attributes: (opt.attributes || []).map(a => ({\n      ...a,\n      target_ops_attribute_id: null,\n    })),\n  }\n}));"
+        "jsCode": "// STUB: OPS beta mutations (setAdditionalOption, setAdditionalOptionAttributes,\n// setProductsAttributePrice) are not yet shipped.\n// When they ship, replace this Code node with:\n//   1. Split In Batches over options\n//   2. OPS: setAdditionalOption (per option) \u2192 captures target_ops_option_id\n//   3. Split In Batches over attributes\n//   4. OPS: setAdditionalOptionAttributes \u2192 captures target_ops_attribute_id\n//   5. OPS: setProductsAttributePrice \u2192 applies price\n// For now: annotate each attribute with null target IDs and pass through.\nconst options = $input.all().map(i => i.json);\nconsole.log('[STUB] ops-push options payload:', JSON.stringify(options));\nreturn options.map(opt => ({\n  json: {\n    ...opt,\n    _stub: true,\n    target_ops_option_id: null,\n    attributes: (opt.attributes || []).map(a => ({\n      ...a,\n      target_ops_attribute_id: null,\n    })),\n  }\n}));"
       },
       "id": "a1111111-0021-0000-0000-000000000021",
       "name": "Stub Apply Options",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3100, 460]
+      "position": [
+        3100,
+        460
+      ]
     },
     {
       "parameters": {
@@ -337,7 +448,10 @@
       "name": "Build Push Mapping",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3320, 460]
+      "position": [
+        3320,
+        460
+      ]
     },
     {
       "parameters": {
@@ -346,8 +460,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-Ingest-Secret", "value": "={{ $env.INGEST_SHARED_SECRET }}" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "X-Ingest-Secret",
+              "value": "={{ $env.INGEST_SHARED_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -359,118 +479,263 @@
       "name": "POST /push-mappings",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3540, 460]
+      "position": [
+        3540,
+        460
+      ]
     }
   ],
   "connections": {
     "Webhook Trigger": {
       "main": [
-        [{"node": "Parse Params", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Parse Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Parse Params": {
       "main": [
-        [{"node": "Get Products", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Get Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Get Products": {
       "main": [
-        [{"node": "Explode Products", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Explode Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Explode Products": {
       "main": [
         [
-          {"node": "Get Push Payload", "type": "main", "index": 0},
-          {"node": "Merge IDs + Payload", "type": "main", "index": 0}
+          {
+            "node": "Get Push Payload",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge IDs + Payload",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Get Push Payload": {
       "main": [
-        [{"node": "Merge IDs + Payload", "type": "main", "index": 1}]
+        [
+          {
+            "node": "Merge IDs + Payload",
+            "type": "main",
+            "index": 1
+          }
+        ]
       ]
     },
     "Merge IDs + Payload": {
       "main": [
-        [{"node": "Build OPS Inputs", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Build OPS Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build OPS Inputs": {
       "main": [
-        [{"node": "OPS: Set Product Category", "type": "main", "index": 0}]
+        [
+          {
+            "node": "OPS: Set Product Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "OPS: Set Product Category": {
       "main": [
-        [{"node": "Attach Category ID", "type": "main", "index": 0}],
-        [{"node": "Error Handler", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Attach Category ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Attach Category ID": {
       "main": [
-        [{"node": "OPS: Set Product", "type": "main", "index": 0}]
+        [
+          {
+            "node": "OPS: Set Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "OPS: Set Product": {
       "main": [
         [
-          {"node": "Build Price Input", "type": "main", "index": 0},
-          {"node": "Build Size Inputs", "type": "main", "index": 0}
+          {
+            "node": "Build Price Input",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Size Inputs",
+            "type": "main",
+            "index": 0
+          }
         ],
-        [{"node": "Error Handler", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Size Inputs": {
       "main": [
-        [{"node": "OPS: Set Product Size", "type": "main", "index": 0}]
+        [
+          {
+            "node": "OPS: Set Product Size",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "OPS: Set Product Size": {
       "main": [
         [],
-        [{"node": "Error Handler", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Price Input": {
       "main": [
-        [{"node": "OPS: Set Product Price", "type": "main", "index": 0}]
+        [
+          {
+            "node": "OPS: Set Product Price",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "OPS: Set Product Price": {
       "main": [
-        [{"node": "Get /ops-options", "type": "main", "index": 0}],
-        [{"node": "Error Handler", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Get /ops-options",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Get /ops-options": {
       "main": [
-        [{"node": "Stub Apply Options", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Stub Apply Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Stub Apply Options": {
       "main": [
-        [{"node": "Build Push Mapping", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Build Push Mapping",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Push Mapping": {
       "main": [
-        [{"node": "POST /push-mappings", "type": "main", "index": 0}]
+        [
+          {
+            "node": "POST /push-mappings",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "POST /push-mappings": {
       "main": [
-        [{"node": "POST Push Log", "type": "main", "index": 0}]
+        [
+          {
+            "node": "POST Push Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "POST Push Log": {
       "main": [
-        [{"node": "Respond to Webhook", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Error Handler": {
       "main": [
-        [{"node": "POST Push Log Error", "type": "main", "index": 0}]
+        [
+          {
+            "node": "POST Push Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },

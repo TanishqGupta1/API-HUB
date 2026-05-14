@@ -1,6 +1,6 @@
-const TOKEN_KEY = "auth_token";
-const REFRESH_KEY = "auth_refresh";
-const USER_KEY = "auth_user";
+// Cookie-based session. The `auth_token` cookie is HttpOnly + Secure, set by
+// the backend on /api/auth/login. The client cannot read or write it.
+// User info comes from /api/auth/me.
 
 export interface AuthUser {
   id: string;
@@ -9,46 +9,46 @@ export interface AuthUser {
   customer_id: string | null;
 }
 
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
-}
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export function getRefreshToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(REFRESH_KEY);
-}
+let cachedUser: AuthUser | null | undefined = undefined;
 
-export function getUser(): AuthUser | null {
-  if (typeof window === "undefined") return null;
+export async function fetchUser(): Promise<AuthUser | null> {
+  if (cachedUser !== undefined) return cachedUser;
   try {
-    const raw = localStorage.getItem(USER_KEY);
-    return raw ? (JSON.parse(raw) as AuthUser) : null;
+    const res = await fetch(`${API_BASE}/api/auth/me`, { credentials: "include" });
+    if (!res.ok) {
+      cachedUser = null;
+      return null;
+    }
+    cachedUser = (await res.json()) as AuthUser;
+    return cachedUser;
   } catch {
+    cachedUser = null;
     return null;
   }
 }
 
-export function setSession(
-  accessToken: string,
-  refreshToken: string,
-  user: AuthUser
-): void {
-  localStorage.setItem(TOKEN_KEY, accessToken);
-  localStorage.setItem(REFRESH_KEY, refreshToken);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-  // Cookie for Next.js middleware to check (not httpOnly — client sets it)
-  const maxAge = 8 * 3600;
-  document.cookie = `auth_token=${accessToken}; path=/; max-age=${maxAge}; SameSite=Lax`;
+export function clearCachedUser(): void {
+  cachedUser = undefined;
 }
 
-export function clearSession(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_KEY);
-  localStorage.removeItem(USER_KEY);
-  document.cookie = "auth_token=; path=/; max-age=0";
+export function getCachedUser(): AuthUser | null {
+  return cachedUser ?? null;
 }
 
-export function isVGAdmin(): boolean {
-  return getUser()?.role === "vg_admin";
+export async function isVGAdmin(): Promise<boolean> {
+  const u = await fetchUser();
+  return u?.role === "vg_admin";
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } finally {
+    clearCachedUser();
+  }
 }

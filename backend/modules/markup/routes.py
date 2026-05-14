@@ -16,6 +16,7 @@ from .models import MarkupRule
 from .schemas import (
     MarkupRuleCreate,
     MarkupRuleRead,
+    MarkupRuleUpdate,
     PushPayload,
     OPSProductSizeInput,
     OPSProductPriceEntry,
@@ -168,6 +169,21 @@ async def list_markup_rules(customer_id: UUID, db: AsyncSession = Depends(get_db
 async def create_markup_rule(body: MarkupRuleCreate, db: AsyncSession = Depends(get_db)):
     rule = MarkupRule(**body.model_dump())
     db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    return rule
+
+
+@router.patch("/{rule_id}", response_model=MarkupRuleRead)
+async def update_markup_rule(rule_id: UUID, body: MarkupRuleUpdate, db: AsyncSession = Depends(get_db)):
+    """Partial update of a markup rule. Only fields present in the body are updated."""
+    result = await db.execute(select(MarkupRule).where(MarkupRule.id == rule_id))
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(404, "Markup rule not found")
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(rule, field, value)
     await db.commit()
     await db.refresh(rule)
     return rule

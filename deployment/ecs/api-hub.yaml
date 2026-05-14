@@ -1,0 +1,720 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  API-HUB stack — ECS Fargate (backend + frontend + n8n) + RDS PostgreSQL +
+  EFS + ALB + Cloud Map + Secrets Manager.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    AllowedValues: [staging, production]
+
+  DomainName:
+    Type: String
+    Description: Base domain (e.g., staging.example.com)
+
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+
+  AcmCertificateArn:
+    Type: String
+    Description: ARN of an ACM cert covering api., app., n8n. subdomains
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+  PublicSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+
+  BackendImageUri:
+    Type: String
+    Description: ECR image URI for the FastAPI backend
+
+  FrontendImageUri:
+    Type: String
+    Description: ECR image URI for the Next.js frontend
+
+  N8nImageUri:
+    Type: String
+    Description: ECR image URI for the custom n8n image (Phase 14b)
+
+  DbInstanceClass:
+    Type: String
+    Default: db.t4g.small
+    AllowedValues: [db.t4g.small, db.t4g.medium, db.t4g.large]
+
+  DbAllocatedStorage:
+    Type: Number
+    Default: 20
+    MinValue: 20
+
+Conditions:
+  IsProduction: !Equals [!Ref EnvironmentName, production]
+
+Resources:
+
+  # ── Cloud Map (private DNS for inter-service) ─────────────────────────────
+
+  ServiceDiscoveryNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: api-hub.local
+      Vpc: !Ref VpcId
+
+  # ── Secrets Manager ──────────────────────────────────────────────────────
+
+  SecretKey:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub api-hub/${EnvironmentName}/SECRET_KEY
+      Description: Fernet key for EncryptedJSON columns
+      GenerateSecretString:
+        PasswordLength: 44
+        ExcludePunctuation: false
+
+  JwtSecretKey:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub api-hub/${EnvironmentName}/JWT_SECRET_KEY
+      Description: HMAC key for JWT signing (rotate independently of SECRET_KEY)
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+
+  IngestSharedSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub api-hub/${EnvironmentName}/INGEST_SHARED_SECRET
+      Description: Shared secret for n8n → FastAPI ingest
+      GenerateSecretString:
+        PasswordLength: 48
+        ExcludePunctuation: true
+
+  N8nBasicAuthPassword:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub api-hub/${EnvironmentName}/N8N_BASIC_AUTH_PASSWORD
+      GenerateSecretString:
+        PasswordLength: 32
+        ExcludePunctuation: false
+
+  DbPassword:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub api-hub/${EnvironmentName}/DB_PASSWORD
+      GenerateSecretString:
+        PasswordLength: 24
+        ExcludeCharacters: '"@/\\'
+
+  # ── RDS PostgreSQL ───────────────────────────────────────────────────────
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: api-hub RDS subnets
+      SubnetIds: !Ref PrivateSubnetIds
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: api-hub RDS - allow Postgres from backend tasks
+      VpcId: !Ref VpcId
+
+  PostgresDb:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub api-hub-${EnvironmentName}
+      Engine: postgres
+      EngineVersion: '16.6'
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: !Ref DbAllocatedStorage
+      StorageType: gp3
+      DBName: vg_hub
+      MasterUsername: vg_user
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DbPassword}}}'
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups: [!Ref DbSecurityGroup]
+      MultiAZ: !If [IsProduction, true, false]
+      PubliclyAccessible: false
+      BackupRetentionPeriod: !If [IsProduction, 14, 7]
+      StorageEncrypted: true
+      DeletionProtection: !If [IsProduction, true, false]
+
+  PostgresUrlSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub api-hub/${EnvironmentName}/POSTGRES_URL
+      SecretString: !Sub
+        - 'postgresql+asyncpg://vg_user:${Password}@${Endpoint}:5432/vg_hub'
+        - Password: !Sub '{{resolve:secretsmanager:${DbPassword}}}'
+          Endpoint: !GetAtt PostgresDb.Endpoint.Address
+
+  # ── EFS for n8n state ────────────────────────────────────────────────────
+
+  N8nEfs:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+
+  N8nEfsAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref N8nEfs
+      PosixUser:
+        Uid: 1000
+        Gid: 1000
+      RootDirectory:
+        Path: /n8n
+        CreationInfo:
+          OwnerUid: 1000
+          OwnerGid: 1000
+          Permissions: '0755'
+
+  # ── IAM ──────────────────────────────────────────────────────────────────
+
+  EcsTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SecretsRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref SecretKey
+                  - !Ref JwtSecretKey
+                  - !Ref IngestSharedSecret
+                  - !Ref N8nBasicAuthPassword
+                  - !Ref PostgresUrlSecret
+
+  BackendTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      # No additional permissions yet — backend talks to RDS via security group, n8n via Cloud Map.
+
+  N8nTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: EfsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - elasticfilesystem:ClientMount
+                  - elasticfilesystem:ClientWrite
+                Resource: !GetAtt N8nEfs.Arn
+
+  # ── Security groups ──────────────────────────────────────────────────────
+
+  AlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: api-hub ALB
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  TaskSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: api-hub ECS tasks
+      VpcId: !Ref VpcId
+
+  TaskSgIngressFromAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref TaskSg
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref AlbSg
+
+  TaskSgIngressInternal:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref TaskSg
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref TaskSg
+
+  DbSgIngressFromTasks:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref TaskSg
+
+  EfsSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: api-hub n8n EFS
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref TaskSg
+
+  N8nEfsMountTargetA:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref N8nEfs
+      SubnetId: !Select [0, !Ref PrivateSubnetIds]
+      SecurityGroups: [!Ref EfsSg]
+
+  N8nEfsMountTargetB:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref N8nEfs
+      SubnetId: !Select [1, !Ref PrivateSubnetIds]
+      SecurityGroups: [!Ref EfsSg]
+
+  # ── ALB ──────────────────────────────────────────────────────────────────
+
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets: !Ref PublicSubnetIds
+      SecurityGroups: [!Ref AlbSg]
+      Type: application
+
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref AcmCertificateArn
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig: { StatusCode: 404, ContentType: text/plain, MessageBody: not-found }
+
+  HttpRedirectListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: 443
+            StatusCode: HTTP_301
+
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 8000
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 15
+
+  FrontendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 3000
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 15
+
+  N8nTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 5678
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /healthz
+      HealthCheckIntervalSeconds: 15
+
+  ApiListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 10
+      Conditions:
+        - Field: host-header
+          Values: [!Sub 'api.${DomainName}']
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+
+  AppListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 20
+      Conditions:
+        - Field: host-header
+          Values: [!Sub 'app.${DomainName}']
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref FrontendTargetGroup
+
+  N8nListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 30
+      Conditions:
+        - Field: host-header
+          Values: [!Sub 'n8n.${DomainName}']
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref N8nTargetGroup
+
+  ApiDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub 'api.${DomainName}'
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Alb.DNSName
+        HostedZoneId: !GetAtt Alb.CanonicalHostedZoneID
+
+  AppDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub 'app.${DomainName}'
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Alb.DNSName
+        HostedZoneId: !GetAtt Alb.CanonicalHostedZoneID
+
+  N8nDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub 'n8n.${DomainName}'
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Alb.DNSName
+        HostedZoneId: !GetAtt Alb.CanonicalHostedZoneID
+
+  # ── ECS Cluster ──────────────────────────────────────────────────────────
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub api-hub-${EnvironmentName}
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/api-hub-backend-${EnvironmentName}
+      RetentionInDays: 30
+
+  FrontendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/api-hub-frontend-${EnvironmentName}
+      RetentionInDays: 30
+
+  N8nLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/api-hub-n8n-${EnvironmentName}
+      RetentionInDays: 30
+
+  # ── Backend task + service ───────────────────────────────────────────────
+
+  BackendTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub api-hub-backend-${EnvironmentName}
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      TaskRoleArn: !GetAtt BackendTaskRole.Arn
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: backend
+          Image: !Ref BackendImageUri
+          PortMappings:
+            - ContainerPort: 8000
+          Environment:
+            - Name: ENVIRONMENT
+              Value: production
+            - Name: ALLOWED_ORIGINS
+              Value: !Sub 'https://app.${DomainName}'
+            - Name: N8N_API_BASE_URL
+              Value: 'http://n8n.api-hub.local:5678'
+            - Name: N8N_WEBHOOK_BASE_URL
+              Value: 'http://n8n.api-hub.local:5678'
+            - Name: N8N_PUSH_WEBHOOK_URL
+              Value: 'http://n8n.api-hub.local:5678/webhook/vg-ops-push-001'
+            - Name: API_BASE_URL
+              Value: 'http://backend.api-hub.local:8000'
+          Secrets:
+            - Name: SECRET_KEY
+              ValueFrom: !Ref SecretKey
+            - Name: JWT_SECRET_KEY
+              ValueFrom: !Ref JwtSecretKey
+            - Name: INGEST_SHARED_SECRET
+              ValueFrom: !Ref IngestSharedSecret
+            - Name: POSTGRES_URL
+              ValueFrom: !Ref PostgresUrlSecret
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref BackendLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: backend
+
+  BackendServiceDiscovery:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: backend
+      DnsConfig:
+        DnsRecords: [{ Type: A, TTL: 10 }]
+        NamespaceId: !GetAtt ServiceDiscoveryNamespace.Id
+        RoutingPolicy: MULTIVALUE
+
+  BackendService:
+    Type: AWS::ECS::Service
+    DependsOn: ApiListenerRule
+    Properties:
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref BackendTaskDef
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups: [!Ref TaskSg]
+          Subnets: !Ref PrivateSubnetIds
+      LoadBalancers:
+        - ContainerName: backend
+          ContainerPort: 8000
+          TargetGroupArn: !Ref BackendTargetGroup
+      ServiceRegistries:
+        - RegistryArn: !GetAtt BackendServiceDiscovery.Arn
+
+  BackendScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 5
+      MinCapacity: 1
+      ResourceId: !Sub service/${Cluster}/${BackendService.Name}
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
+
+  BackendCpuScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: backend-cpu-target
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref BackendScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+
+  # ── Frontend task + service ──────────────────────────────────────────────
+
+  FrontendTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub api-hub-frontend-${EnvironmentName}
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: frontend
+          Image: !Ref FrontendImageUri
+          PortMappings:
+            - ContainerPort: 3000
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref FrontendLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: frontend
+
+  FrontendServiceDiscovery:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: frontend
+      DnsConfig:
+        DnsRecords: [{ Type: A, TTL: 10 }]
+        NamespaceId: !GetAtt ServiceDiscoveryNamespace.Id
+
+  FrontendService:
+    Type: AWS::ECS::Service
+    DependsOn: AppListenerRule
+    Properties:
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref FrontendTaskDef
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups: [!Ref TaskSg]
+          Subnets: !Ref PrivateSubnetIds
+      LoadBalancers:
+        - ContainerName: frontend
+          ContainerPort: 3000
+          TargetGroupArn: !Ref FrontendTargetGroup
+      ServiceRegistries:
+        - RegistryArn: !GetAtt FrontendServiceDiscovery.Arn
+
+  # ── n8n task + service ───────────────────────────────────────────────────
+
+  N8nTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub api-hub-n8n-${EnvironmentName}
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      TaskRoleArn: !GetAtt N8nTaskRole.Arn
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      Volumes:
+        - Name: n8n-data
+          EFSVolumeConfiguration:
+            FilesystemId: !Ref N8nEfs
+            TransitEncryption: ENABLED
+            AuthorizationConfig:
+              AccessPointId: !Ref N8nEfsAccessPoint
+              IAM: ENABLED
+      ContainerDefinitions:
+        - Name: n8n
+          Image: !Ref N8nImageUri
+          PortMappings:
+            - ContainerPort: 5678
+          MountPoints:
+            - SourceVolume: n8n-data
+              ContainerPath: /home/node/.n8n
+          Environment:
+            - Name: N8N_HOST
+              Value: '0.0.0.0'
+            - Name: N8N_PORT
+              Value: '5678'
+            - Name: N8N_PROTOCOL
+              Value: https
+            - Name: N8N_EDITOR_BASE_URL
+              Value: !Sub 'https://n8n.${DomainName}'
+            - Name: N8N_BASIC_AUTH_ACTIVE
+              Value: 'true'
+            - Name: N8N_BASIC_AUTH_USER
+              Value: admin
+            - Name: API_BASE_URL
+              Value: 'http://backend.api-hub.local:8000'
+          Secrets:
+            - Name: N8N_BASIC_AUTH_PASSWORD
+              ValueFrom: !Ref N8nBasicAuthPassword
+            - Name: INGEST_SHARED_SECRET
+              ValueFrom: !Ref IngestSharedSecret
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref N8nLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: n8n
+
+  N8nServiceDiscovery:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: n8n
+      DnsConfig:
+        DnsRecords: [{ Type: A, TTL: 10 }]
+        NamespaceId: !GetAtt ServiceDiscoveryNamespace.Id
+
+  N8nService:
+    Type: AWS::ECS::Service
+    DependsOn: [N8nListenerRule, N8nEfsMountTargetA, N8nEfsMountTargetB]
+    Properties:
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MaximumPercent: 100   # single-task — cannot run two during deploy (EFS single-writer)
+        MinimumHealthyPercent: 0
+      TaskDefinition: !Ref N8nTaskDef
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups: [!Ref TaskSg]
+          Subnets: !Ref PrivateSubnetIds
+      LoadBalancers:
+        - ContainerName: n8n
+          ContainerPort: 5678
+          TargetGroupArn: !Ref N8nTargetGroup
+      ServiceRegistries:
+        - RegistryArn: !GetAtt N8nServiceDiscovery.Arn
+
+Outputs:
+  ApiUrl:
+    Value: !Sub 'https://api.${DomainName}'
+  AppUrl:
+    Value: !Sub 'https://app.${DomainName}'
+  N8nUrl:
+    Value: !Sub 'https://n8n.${DomainName}'
+  ClusterName:
+    Value: !Ref Cluster
+  BackendServiceName:
+    Value: !GetAtt BackendService.Name
+  FrontendServiceName:
+    Value: !GetAtt FrontendService.Name
+  N8nServiceName:
+    Value: !GetAtt N8nService.Name

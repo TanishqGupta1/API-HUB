@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -192,7 +192,7 @@ async def upsert_products(
             for image_batch in _chunks(image_rows, _BATCH_SIZE):
                 img_stmt = pg_insert(ProductImage).values(list(image_batch))
                 img_stmt = img_stmt.on_conflict_do_update(
-                    constraint="uq_product_image_url",
+                    constraint="uq_product_images_supplier_url",
                     set_={
                         "image_type": img_stmt.excluded.image_type,
                         "color": img_stmt.excluded.color,
@@ -310,3 +310,74 @@ async def update_pricing_only(
             total += 1
         await db.commit()
     return total
+
+
+async def update_media_only(
+    db: AsyncSession,
+    supplier_id: UUID,
+    media: list[PSMediaItem],
+) -> int:
+    """Update ``product_images`` for existing products."""
+    if not media:
+        return 0
+
+    # Build SKU -> ID map
+    skus = list({m.product_id for m in media})
+    sku_rows = await db.execute(
+        select(Product.id, Product.supplier_sku).where(
+            Product.supplier_id == supplier_id,
+            Product.supplier_sku.in_(skus),
+        )
+    )
+    sku_to_id = {sku: pid for pid, sku in sku_rows.all()}
+    if not sku_to_id:
+        return 0
+
+    image_rows: list[dict] = []
+    for m in media:
+        pid_db = sku_to_id.get(m.product_id)
+        if not pid_db:
+            continue
+        image_rows.append({
+            "product_id": pid_db,
+            "url": m.url,
+            "supplier_image_url": m.url,
+            "image_type": m.media_type or "front",
+            "color": m.color_name,
+            "sort_order": 0,
+        })
+
+    if image_rows:
+        # Deduplicate
+        seen = set()
+        deduped = []
+        for r in image_rows:
+            if r["url"] not in seen:
+                seen.add(r["url"])
+                deduped.append(r)
+        
+        for batch in _chunks(deduped, _BATCH_SIZE):
+            stmt = pg_insert(ProductImage).values(batch)
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_product_images_supplier_url",
+                set_={
+                    "image_type": stmt.excluded.image_type,
+                    "color": stmt.excluded.color,
+                    "supplier_image_url": stmt.excluded.supplier_image_url,
+                },
+            )
+            await db.execute(stmt)
+
+            # --- Primary Image Fix ---
+            # Also update the Product.image_url if the media item is a 'primary' or 'front' view
+            # to ensure the UI preview strip actually shows the image.
+            for row in batch:
+                if row["image_type"] in ["primary", "front"]:
+                    await db.execute(
+                        update(Product)
+                        .where(Product.id == row["product_id"])
+                        .values(image_url=row["url"])
+                    )
+        await db.commit()
+    
+    return len(image_rows)

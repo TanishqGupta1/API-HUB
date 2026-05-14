@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { getUser, isVGAdmin } from "@/lib/auth";
+import { fetchUser, type AuthUser } from "@/lib/auth";
 
 interface Customer {
   id: string;
@@ -22,8 +22,26 @@ interface UserRecord {
 }
 
 export default function SettingsPage() {
-  const user = getUser();
-  const isAdmin = isVGAdmin();
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetchUser().then((u) => {
+      setUser(u);
+      setLoaded(true);
+    });
+  }, []);
+
+  if (!loaded) {
+    return (
+      <div className="page-container">
+        <div className="page-header"><h1 className="page-title">Settings</h1></div>
+        <div style={{ color: "var(--ink-muted)", fontSize: 13 }}>Loading…</div>
+      </div>
+    );
+  }
+
+  const isAdmin = user?.role === "vg_admin";
 
   return (
     <div className="page-container">
@@ -33,7 +51,7 @@ export default function SettingsPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
         {isAdmin ? <UserManagement /> : <OPSSettings customerId={user?.customer_id ?? null} />}
-        {isAdmin && <SystemUsers />}
+        {isAdmin && <SystemUsers user={user} />}
       </div>
     </div>
   );
@@ -215,10 +233,9 @@ function UserManagement() {
   );
 }
 
-function SystemUsers() {
+function SystemUsers({ user: me }: { user: AuthUser | null }) {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const me = getUser();
 
   useEffect(() => {
     api<UserRecord[]>("/api/auth/users")

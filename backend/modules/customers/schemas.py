@@ -10,6 +10,7 @@ class CustomerCreate(BaseModel):
     ops_token_url: str
     ops_client_id: str
     ops_client_secret: str  # stored encrypted in ops_auth_config
+    logo_url: str | None = None
 
 
 class CustomerRead(BaseModel):
@@ -19,6 +20,7 @@ class CustomerRead(BaseModel):
     ops_token_url: str
     ops_client_id: str
     is_active: bool
+    logo_url: str | None = None
     created_at: datetime
     products_pushed: int = 0
     markup_rules_count: int = 0

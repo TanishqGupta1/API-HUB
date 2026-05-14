@@ -32,10 +32,24 @@ export function PriceBlock({ variant, fallback = [], adjustment = 0 }: PriceBloc
           </div>
         )}
         {variant.inventory !== null && (
-          <div className="text-[12px] text-[#484852] font-medium">
-            {variant.inventory > 0
-              ? `${variant.inventory} in stock${variant.warehouse ? ` · ${variant.warehouse}` : ""}`
-              : "Out of stock"}
+          <div className="flex items-center gap-2 mt-0.5">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold
+                ${variant.inventory > 0
+                  ? "bg-[#e8f5ec] text-[#1e7a3c] border border-[#a8d5b5]"
+                  : "bg-[#fdeded] text-[#b93232] border border-[#f0b8b8]"
+                }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${variant.inventory > 0 ? "bg-[#1e7a3c]" : "bg-[#b93232]"}`}
+              />
+              {variant.inventory > 0
+                ? `${variant.inventory.toLocaleString()} in stock`
+                : "Out of stock"}
+            </span>
+            {variant.warehouse && variant.inventory > 0 && (
+              <span className="text-[11px] font-mono text-[#888894]">{variant.warehouse}</span>
+            )}
           </div>
         )}
       </div>

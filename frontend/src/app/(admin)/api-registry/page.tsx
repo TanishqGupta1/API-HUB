@@ -13,9 +13,10 @@ function APIEntry({ method, path, desc, blueprint }: { method: string; path: str
   async function testEndpoint() {
     setLoading(true);
     setResponse(null);
+    // Declared at function scope so the catch block can reference it in
+    // the curl-suggestion error message.
+    let finalPath = path;
     try {
-      let finalPath = path;
-
       // --- Placeholder Resolution ---
       // If path has {supplier_id}, find the first supplier
       if (path.includes("{supplier_id}") || path.includes("{id}")) {
@@ -30,12 +31,30 @@ function APIEntry({ method, path, desc, blueprint }: { method: string; path: str
         }
       }
 
-      const data = await api<any>(finalPath, { method });
+      // skipAuthRedirect: the API Registry is a *test tool*. A 401 here
+      // means "this endpoint needs different auth (X-Ingest-Secret, etc.)"
+      // — it should render in the response panel, not bounce the user to
+      // /login like a real session-expired event would.
+      const data = await api<any>(finalPath, { method, skipAuthRedirect: true });
       setResponse(JSON.stringify(data, null, 2));
     } catch (err: any) {
       // If it's a 422 or other JSON error, try to stringify the body
       if (err.body) {
         setResponse(`Error ${err.status}:\n${JSON.stringify(err.body, null, 2)}`);
+      } else if (err.status === 401) {
+        const apiBase =
+          typeof window !== "undefined"
+            ? window.location.origin.replace(":3000", ":8000")
+            : "http://localhost:8000";
+        setResponse(
+          `Error 401: Unauthorized.\n\n` +
+          `This endpoint requires different credentials than your admin session.\n` +
+          `Likely cause: it expects the X-Ingest-Secret header (see the yellow notice above).\n\n` +
+          `Try this from the command line:\n` +
+          `  curl -X ${method} \\\n` +
+          `    -H "X-Ingest-Secret: <your-secret>" \\\n` +
+          `    ${apiBase}${finalPath}`
+        );
       } else {
         setResponse(`Error: ${err.message || String(err)}`);
       }

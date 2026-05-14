@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type { ProductListItem, Supplier } from "@/lib/types";
 import { ProductCard } from "@/components/products/product-card";
+import { SelectionBar } from "@/components/products/selection-bar";
+import { CheckSquare, Square } from "lucide-react";
 
 interface Category { id: string; name: string; }
 
@@ -17,10 +19,35 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter]     = useState<"all" | "vg" | "supplier">("all");
   const [supplierSearch, setSupplierSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const PAGE_SIZE = 50;
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Bulk Selection State
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleToggleSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === displayedProducts.length && displayedProducts.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(displayedProducts.map((p) => p.id)));
+    }
+  };
 
   useEffect(() => {
     api<Supplier[]>("/api/suppliers").then(setSuppliers).catch(log.error);
@@ -29,19 +56,44 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setLoading(true);
+    setOffset(0);
+    setHasMore(true);
     const timeout = setTimeout(() => {
-      const params = new URLSearchParams({ limit: "50" });
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), skip: "0" });
       if (search) params.set("search", search);
       if (categoryId) params.set("category_id", categoryId);
       if (supplierFilter !== "all") params.set("supplier_id", supplierFilter);
-      
+
       api<ProductListItem[]>(`/api/products?${params.toString()}`)
-        .then(setProducts)
+        .then((data) => {
+          setProducts(data);
+          setHasMore(data.length === PAGE_SIZE);
+        })
         .catch(log.error)
         .finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(timeout);
   }, [search, categoryId, supplierFilter]);
+
+  async function handleLoadMore() {
+    const nextOffset = offset + PAGE_SIZE;
+    setLoadingMore(true);
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), skip: String(nextOffset) });
+    if (search) params.set("search", search);
+    if (categoryId) params.set("category_id", categoryId);
+    if (supplierFilter !== "all") params.set("supplier_id", supplierFilter);
+
+    try {
+      const data = await api<ProductListItem[]>(`/api/products?${params.toString()}`);
+      setProducts((prev) => [...prev, ...data]);
+      setOffset(nextOffset);
+      setHasMore(data.length === PAGE_SIZE);
+    } catch (e) {
+      log.error(e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -71,7 +123,18 @@ export default function ProductsPage() {
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierFilter);
 
-  const displayedProducts = products; // Backend handles filtering now
+  // VG products come from suppliers using the ops_graphql protocol.
+  // Filter by supplier_id (stable) rather than supplier_name (brittle).
+  const vgSupplierIds = useMemo(
+    () => new Set(suppliers.filter((s) => s.protocol === "ops_graphql").map((s) => s.id)),
+    [suppliers],
+  );
+
+  const displayedProducts = products.filter((p) => {
+    if (sourceFilter === "vg") return vgSupplierIds.has(p.supplier_id);
+    if (sourceFilter === "supplier") return !vgSupplierIds.has(p.supplier_id);
+    return true;
+  });
 
   return (
     <div id="s-products">
@@ -85,26 +148,78 @@ export default function ProductsPage() {
             32.4k products indexed across 4 normalized schemas
           </div>
         </div>
-        <Link
-          href="/products/archived"
-          className="text-[12px] font-semibold text-[#1e4d92] hover:underline"
-        >
-          View archived →
-        </Link>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleSelectAll}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all shadow-sm ${
+              selectedIds.size > 0 
+                ? "bg-[#1e4d92] border-[#1e4d92] text-white" 
+                : "bg-white border-[#cfccc8] text-[#888894] hover:border-[#1e4d92] hover:text-[#1e4d92]"
+            }`}
+          >
+            {selectedIds.size === displayedProducts.length && displayedProducts.length > 0 ? (
+              <CheckSquare className="w-4 h-4" />
+            ) : (
+              <Square className="w-4 h-4" />
+            )}
+            {selectedIds.size === displayedProducts.length && displayedProducts.length > 0 ? "Deselect All" : "Select All Visible"}
+          </button>
+          <div className="w-[1px] h-8 bg-[#f2f0ed] mx-2" />
+          <Link
+            href="/products/archived"
+            className="text-[12px] font-bold text-[#1e4d92] hover:underline whitespace-nowrap"
+          >
+            View archived →
+          </Link>
+        </div>
       </div>
 
       {/* Filter bar */}
       <div className="flex items-center gap-2 mb-8">
         {/* All Products pill */}
         <button
-          onClick={() => { setSupplierFilter("all"); setSupplierSearch(""); setCategoryId(""); }}
+          onClick={() => { setSupplierFilter("all"); setSupplierSearch(""); setCategoryId(""); setSourceFilter("all"); }}
           className={`px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
-            ${supplierFilter === "all" && !categoryId
+            ${supplierFilter === "all" && !categoryId && sourceFilter === "all"
               ? "bg-[#1e1e24] text-white border-[#1e1e24]"
               : "bg-white text-[#484852] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
             }`}
         >
           All Products
+        </button>
+
+        {/* VG source pill */}
+        <button
+          onClick={() => {
+            setSourceFilter(sourceFilter === "vg" ? "all" : "vg");
+            setSupplierFilter("all");
+            setSupplierSearch("");
+            setCategoryId("");
+          }}
+          className={`px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
+            ${sourceFilter === "vg"
+              ? "bg-[#1e4d92] text-white border-[#1e4d92]"
+              : "bg-white text-[#484852] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
+            }`}
+        >
+          ★ VG Products
+        </button>
+
+        {/* Supplier source pill */}
+        <button
+          onClick={() => {
+            setSourceFilter(sourceFilter === "supplier" ? "all" : "supplier");
+            setSupplierFilter("all");
+            setSupplierSearch("");
+            setCategoryId("");
+          }}
+          className={`px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
+            ${sourceFilter === "supplier"
+              ? "bg-[#1e4d92] text-white border-[#1e4d92]"
+              : "bg-white text-[#484852] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
+            }`}
+        >
+          ↓ Supplier Products
         </button>
 
         {/* Supplier dropdown */}
@@ -205,16 +320,35 @@ export default function ProductsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {displayedProducts.map((p) => (
-            <ProductCard key={p.id} product={p} onArchive={() => handleArchive(p)} />
+            <ProductCard 
+              key={p.id} 
+              product={p} 
+              isSelected={selectedIds.has(p.id)}
+              onToggleSelection={handleToggleSelection}
+              onArchive={() => handleArchive(p)} 
+            />
           ))}
         </div>
       )}
 
-      {/* Pagination (placeholder) */}
-      {!loading && displayedProducts.length > 0 && (
+      {/* Floating Selection Bar */}
+      <SelectionBar 
+        selectedIds={Array.from(selectedIds)} 
+        onClear={() => setSelectedIds(new Set())}
+        onSuccess={() => {
+          setSelectedIds(new Set());
+          // The catalog page and context will handle toast/refresh
+        }}
+      />
+
+      {!loading && hasMore && (
         <div className="mt-12 flex justify-center">
-          <button className="px-6 py-2.5 bg-white border border-[#cfccc8] rounded-full text-[12px] font-bold text-[#1e1e24] hover:bg-[#fcfbf9] transition-colors">
-            Load More Products
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="px-6 py-2.5 bg-white border border-[#cfccc8] rounded-full text-[12px] font-bold text-[#1e1e24] hover:bg-[#fcfbf9] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingMore ? "Loading..." : "Load More Products"}
           </button>
         </div>
       )}

@@ -1,0 +1,28 @@
+{
+  "family": "api-hub-migrate",
+  "cpu": "256",
+  "memory": "512",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "executionRoleArn": "REPLACED_BY_CI",
+  "taskRoleArn": "REPLACED_BY_CI",
+  "containerDefinitions": [
+    {
+      "name": "migrate",
+      "image": "REPLACED_BY_CI",
+      "command": ["alembic", "upgrade", "head"],
+      "essential": true,
+      "secrets": [
+        {"name": "POSTGRES_URL", "valueFrom": "REPLACED_BY_CI"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/api-hub-migrate",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "migrate"
+        }
+      }
+    }
+  ]
+}

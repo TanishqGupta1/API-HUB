@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import type { Product, Variant } from "@/lib/types";
+import type { ReactNode } from "react";
 import { VariantPicker } from "@/components/storefront/variant-picker";
 import { PriceBlock } from "@/components/storefront/price-block";
 import { PriceTierTable } from "@/components/storefront/price-tier-table";
 
 interface Props {
   product: Product;
+  cta?: ReactNode;
+  onColorChange?: (color: string) => void;
 }
 
-export function ApparelDetailPanel({ product }: Props) {
+export function ApparelDetailPanel({ product, cta, onColorChange }: Props) {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
     product.variants[0]?.id ?? null,
   );
@@ -27,11 +30,19 @@ export function ApparelDetailPanel({ product }: Props) {
             variants={product.variants}
             selectedVariantId={selectedVariantId}
             onSelect={setSelectedVariantId}
+            onColorChange={onColorChange}
           />
         </div>
       )}
 
-      {selected ? <PriceTierTable tiers={selected.prices} /> : null}
+      {/* CTA slot — rendered right after variant selection */}
+      {cta}
+
+      {selected ? (
+        <div className="border-t border-dashed border-[#cfccc8] pt-5">
+          <PriceTierTable tiers={selected.prices} />
+        </div>
+      ) : null}
 
       {product.apparel_details ? (
         <ApparelMeta details={product.apparel_details} />

@@ -1,195 +1,93 @@
-# API-HUB — AWS Deployment
+# Deployment — AWS ECS Fargate
 
-App Runner (api + frontend) + ECS Fargate (n8n) + RDS PostgreSQL 16 + Secrets Manager.
+API-HUB runs on AWS ECS Fargate. Three services in one cluster behind
+a shared ALB:
 
-## Prerequisites
+| Subdomain                   | Service             | Container | Port |
+|-----------------------------|---------------------|-----------|------|
+| `api.<domain>`              | api-hub-backend     | FastAPI   | 8000 |
+| `app.<domain>`              | api-hub-frontend    | Next.js   | 3000 |
+| `n8n.<domain>`              | api-hub-n8n         | n8n + OnPrintShop | 5678 |
 
-- AWS CLI configured (`aws sts get-caller-identity` succeeds)
-- Docker installed + ECR login
-- VPC with at least 2 private subnets (RDS + ECS) and 2 public subnets (ALB)
-- Domain in Route 53 (or any DNS provider)
+Inter-service traffic uses Cloud Map private DNS (e.g.
+`backend.api-hub.local:8000`). RDS Postgres in private subnets, EFS
+for n8n state, all secrets in Secrets Manager.
 
----
+## One-time prerequisites
 
-## Step 1 — Build and push images to ECR
+1. **Route 53 hosted zone** for the chosen domain (e.g. `staging.example.com`)
+2. **ACM certificate** in the deploy region covering `*.<domain>`
+3. **VPC** with at least 2 public + 2 private subnets and a NAT gateway
+4. **GitHub OIDC role** in IAM trusting `repo:VisualGraphxLLC/API-HUB:ref:refs/heads/main`
+   with permissions: ECR push, CloudFormation deploy, ECS register/run-task,
+   PassRole on the task roles, Secrets Manager Read.
+5. **GitHub repo secret** `AWS_OIDC_ROLE_ARN` set to the role ARN above
 
-```bash
-REGION=us-east-1
-ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-SHA=$(git rev-parse --short HEAD)
+Update `deployment/ecs/parameters/staging.json` with the VPC ID, subnet
+IDs, hosted zone ID, ACM cert ARN, and domain.
 
-# Create repos (one-time)
-aws ecr create-repository --repository-name api-hub-api     --region $REGION
-aws ecr create-repository --repository-name api-hub-frontend --region $REGION
-
-# Login
-aws ecr get-login-password --region $REGION \
-  | docker login --username AWS --password-stdin $ACCOUNT.dkr.ecr.$REGION.amazonaws.com
-
-# Build + push backend
-docker build -t api-hub-api:$SHA ./backend
-docker tag api-hub-api:$SHA $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/api-hub-api:$SHA
-docker push $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/api-hub-api:$SHA
-
-# Build + push frontend (NEXT_PUBLIC_* baked at build time)
-docker build \
-  --build-arg NEXT_PUBLIC_API_URL=https://api.staging.example.com \
-  --build-arg NEXT_PUBLIC_N8N_URL=https://n8n.staging.example.com \
-  -t api-hub-frontend:$SHA ./frontend
-docker tag api-hub-frontend:$SHA $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/api-hub-frontend:$SHA
-docker push $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/api-hub-frontend:$SHA
-```
-
-## Step 2 — Deploy the CloudFormation stack
+## First deploy
 
 ```bash
-DOMAIN=staging.example.com     # change to your domain
-VPC_ID=vpc-xxxxxxxxxxxxxxxxx
-PRIVATE_SUBNETS=subnet-aaa,subnet-bbb
-PUBLIC_SUBNETS=subnet-ccc,subnet-ddd
-
+# Local one-shot, before CI is wired up:
 aws cloudformation deploy \
-  --template-file deployment/aws-app-runner.yaml \
+  --template-file deployment/ecs/api-hub.yaml \
   --stack-name api-hub-staging \
+  --region us-east-1 \
   --capabilities CAPABILITY_IAM \
-  --region $REGION \
   --parameter-overrides \
     EnvironmentName=staging \
-    ApiEcrImageUri=$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/api-hub-api:$SHA \
-    FrontendEcrImageUri=$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/api-hub-frontend:$SHA \
-    DomainName=$DOMAIN \
-    VpcId=$VPC_ID \
-    PrivateSubnetIds=$PRIVATE_SUBNETS \
-    PublicSubnetIds=$PUBLIC_SUBNETS \
-    DbPassword=$(openssl rand -base64 24)
+    DomainName=staging.example.com \
+    HostedZoneId=Z123 \
+    AcmCertificateArn=arn:aws:acm:us-east-1:...:certificate/... \
+    VpcId=vpc-... \
+    PublicSubnetIds=subnet-aaa,subnet-bbb \
+    PrivateSubnetIds=subnet-ccc,subnet-ddd \
+    BackendImageUri=... FrontendImageUri=... N8nImageUri=...
 ```
 
-## Environment variables reference
-
-| Variable | Service | Required | Description |
-|----------|---------|----------|-------------|
-| `POSTGRES_URL` | backend | Yes | Full asyncpg connection string |
-| `SECRET_KEY` | backend | Yes | Fernet key for encrypted DB columns |
-| `JWT_SECRET_KEY` | backend | Yes | HMAC key for JWT signing (rotate independently of SECRET_KEY) |
-| `INGEST_SHARED_SECRET` | backend | Yes | Auth header for n8n → FastAPI ingest |
-| `ALLOWED_ORIGINS` | backend | Yes | Comma-separated CORS origins |
-| `N8N_BASE_URL` | backend | Yes | URL of n8n instance |
-| `NEXT_PUBLIC_API_URL` | frontend | Yes | Backend URL visible to the browser |
-| `NEXT_PUBLIC_N8N_URL` | frontend | No | n8n URL for workflow trigger buttons |
-
-## Step 3 — Database setup (first deploy only)
-
-After the stack creates, run the Alembic baseline stamp on the newly-created RDS instance.
-
-Connect via SSM Session Manager or a temporary bastion:
+After the stack creates, run the Alembic migration as a one-off ECS task:
 
 ```bash
-# From a machine that can reach the RDS endpoint
-cd backend
-POSTGRES_URL="postgresql+asyncpg://<user>:<pass>@<rds-endpoint>:5432/vg_hub" \
-  alembic upgrade head
+aws ecs run-task \
+  --cluster api-hub-staging \
+  --launch-type FARGATE \
+  --task-definition api-hub-migrate
 ```
 
-If migrating from an existing database (pre-Alembic), stamp instead of upgrade:
+## Subsequent deploys
 
+Push to `main` → GitHub Actions:
+1. Builds backend, frontend, and n8n images, pushes to ECR with the SHA tag
+2. Deploys the CFN stack with new image URIs
+3. Runs `alembic upgrade head` as a one-off Fargate task
+
+Rollback: re-run the workflow with the previous SHA, or:
 ```bash
-POSTGRES_URL="..." alembic stamp 0001_baseline
-```
-
-## Step 4 — DNS
-
-Point your subdomains to the App Runner / ALB URLs from the stack outputs:
-
-| Subdomain | Target |
-|-----------|--------|
-| `api.staging.example.com` | App Runner `ApiServiceUrl` output (custom domain in App Runner console) |
-| `app.staging.example.com` | App Runner `FrontendServiceUrl` output |
-| `n8n.staging.example.com` | ALB in front of ECS Fargate n8n service |
-
-ACM cert: request a wildcard `*.staging.example.com` in us-east-1 and attach to App Runner custom domains.
-
-## Step 5 — Verify
-
-```bash
-# Backend health
-curl https://api.staging.example.com/health
-
-# Frontend
-curl -I https://app.staging.example.com
-```
-
----
-
-## Rollback
-
-Redeploy with the previous image SHA:
-
-```bash
-aws cloudformation deploy ... \
+aws cloudformation deploy \
   --parameter-overrides \
-    ApiEcrImageUri=$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/api-hub-api:<previous-sha> \
-    ...
+    BackendImageUri=<previous-sha-uri> \
+    ... # others unchanged
 ```
 
-## Production promotion
+## Cost (staging)
 
-Use `EnvironmentName=production` with:
-- `DbPassword` from a secrets vault (not CLI history)
-- MultiAZ enabled (automatic for `production` condition in template)
-- Longer backup retention (14 days, automatic)
-- Deletion protection on RDS (automatic)
+| Service | Configuration | Monthly |
+|---------|---------------|--------:|
+| ECS Fargate (3 services × 0.5 vCPU / 1 GB) | always-on | ~$50 |
+| ALB | always-on | ~$20 |
+| RDS db.t4g.small (Multi-AZ off in staging) | 20 GB gp3 | ~$25 |
+| EFS | 1 GB | ~$1 |
+| Secrets Manager (5 secrets) | — | ~$2 |
+| CloudWatch Logs (30-day retention) | low traffic | ~$5 |
+| Route 53 hosted zone | — | $0.50 |
+| **Total** | | **~$104/mo** |
 
-## Secret rotation
+Production with Multi-AZ RDS adds ~$40/mo.
 
-`SECRET_KEY` and `INGEST_SHARED_SECRET` are auto-generated by Secrets Manager on first deploy.
-To rotate manually:
+## DR / backups
 
-```bash
-aws secretsmanager rotate-secret \
-  --secret-id api-hub/staging/SECRET_KEY
-```
-
-After rotation, redeploy the App Runner service to pick up the new value.
-
-**Important:** rotating `SECRET_KEY` invalidates all existing `EncryptedJSON` values in the DB.
-Before rotating, set `ALLOW_UNENCRYPTED_LEGACY=1` temporarily and re-save all supplier/customer
-auth configs via the UI to re-encrypt with the new key. Then unset `ALLOW_UNENCRYPTED_LEGACY`.
-
-## Backup / DR
-
-| Target | Configuration |
-|--------|---------------|
-| RPO | 1 hour (RDS automated backups every hour with PITR) |
-| RTO | ~30 min (App Runner cold start + RDS restore) |
-| Backup retention | 7 days staging / 14 days production |
-| Snapshots | Pre-deploy manual snapshot before any CloudFormation update |
-| Cross-region | Not configured — add RDS cross-region read replica for production |
-
-Manual snapshot before a risky deploy:
-
-```bash
-aws rds create-db-snapshot \
-  --db-instance-identifier api-hub-staging \
-  --db-snapshot-identifier api-hub-staging-pre-deploy-$(date +%Y%m%d)
-```
-
-## CI/CD (future)
-
-Add `.github/workflows/deploy-staging.yml`:
-1. On merge to `main`: build + push images to ECR
-2. Call `aws cloudformation deploy` with new SHA
-3. Run `alembic upgrade head` via ECS one-off task
-
----
-
-## Cost estimate (staging)
-
-| Service | Size | Est. monthly |
-|---------|------|-------------|
-| App Runner (api) | 1 vCPU / 2 GB, ~5 req/s | ~$25 |
-| App Runner (frontend) | 1 vCPU / 2 GB | ~$15 |
-| RDS PostgreSQL | db.t4g.small, 20 GB gp3 | ~$25 |
-| ECS Fargate (n8n) | 1 vCPU / 2 GB | ~$35 |
-| EFS (n8n data) | 1 GB | ~$1 |
-| Secrets Manager | 3 secrets | ~$2 |
-| **Total** | | **~$103/mo** |
+- RDS automated backups: 7 days (staging) / 14 days (production)
+- RPO ~1 hour (PITR), RTO ~30 min (RDS restore + ECS service replace)
+- No cross-region replicas in V1 (per spec D14)
+- Pre-deploy snapshots (manual): `aws rds create-db-snapshot --db-instance-identifier api-hub-staging --db-snapshot-identifier api-hub-staging-pre-deploy-<date>`

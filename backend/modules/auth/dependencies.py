@@ -1,7 +1,9 @@
+import hmac
+import os
+import uuid as uuid_mod
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,24 +13,94 @@ from database import get_db
 from .models import User
 from .security import decode_token
 
-_bearer = HTTPBearer(auto_error=False)
+
+# A sentinel "service" user returned for trusted service-to-service calls
+# authenticated via X-Ingest-Secret (e.g. n8n → FastAPI). It is never persisted.
+_SERVICE_ACCOUNT_ID = uuid_mod.UUID("00000000-0000-0000-0000-000000000001")
+
+# X-Ingest-Secret only authorizes calls under these path prefixes. Anything
+# else (admin user management, audit logs, OPS-customer config, etc.) still
+# requires a JWT cookie. Narrows blast radius if the shared secret leaks.
+_INGEST_ALLOWED_PATH_PREFIXES: tuple[str, ...] = (
+    "/api/ingest",
+    "/api/sync-jobs",
+    "/api/suppliers",
+    "/api/push-log",
+    "/api/push-mappings",
+    "/api/push-candidates",
+    "/api/ops-options",
+    "/api/catalog",
+    "/api/products",
+    "/api/markup",
+    "/health",
+)
+
+
+def _service_account_user() -> User:
+    """Synthetic user for trusted n8n service calls.
+
+    Role is `ingest_service` (NOT `vg_admin`) so VGAdmin-gated routes —
+    user CRUD, audit log access, etc. — refuse this caller even if the
+    INGEST_SHARED_SECRET leaks.
+    """
+    user = User()
+    user.id = _SERVICE_ACCOUNT_ID
+    user.email = "n8n@service.local"
+    user.hashed_password = ""
+    user.role = "ingest_service"
+    user.customer_id = None
+    user.is_active = True
+    return user
+
+
+def _ingest_secret_matches(provided: str | None) -> bool:
+    expected = os.getenv("INGEST_SHARED_SECRET", "").strip()
+    if not expected or provided is None:
+        return False
+    return hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8"))
+
+
+def _path_allowed_for_service(path: str) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in _INGEST_ALLOWED_PATH_PREFIXES)
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    request: Request,
+    auth_token: Annotated[str | None, Cookie(alias="auth_token")] = None,
+    x_ingest_secret: Annotated[str | None, Header(alias="X-Ingest-Secret")] = None,
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if not credentials:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated", headers={"WWW-Authenticate": "Bearer"})
+    # Service-to-service path: trusted n8n container calls send X-Ingest-Secret.
+    # Accepted only on the ingest path allow-list; bypasses JWT for those routes.
+    if _ingest_secret_matches(x_ingest_secret):
+        if not _path_allowed_for_service(request.url.path):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Service token not authorized for this path",
+            )
+        return _service_account_user()
+
+    if not auth_token:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Not authenticated",
+            headers={"WWW-Authenticate": "Cookie"},
+        )
     try:
-        payload = decode_token(credentials.credentials)
+        payload = decode_token(auth_token)
         if payload.get("type") != "access":
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token type")
         user_id = payload.get("sub")
     except JWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Invalid or expired token",
+            headers={"WWW-Authenticate": "Cookie"},
+        )
 
-    result = await db.execute(select(User).where(User.id == user_id, User.is_active.is_(True)))
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.is_active.is_(True))
+    )
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")

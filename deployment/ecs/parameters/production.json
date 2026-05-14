@@ -1,0 +1,13 @@
+[
+  {"ParameterKey": "EnvironmentName", "ParameterValue": "production"},
+  {"ParameterKey": "DomainName", "ParameterValue": "example.com"},
+  {"ParameterKey": "HostedZoneId", "ParameterValue": "Z123456789ABCDEFGHIJK"},
+  {"ParameterKey": "AcmCertificateArn", "ParameterValue": "arn:aws:acm:us-east-1:123456789012:certificate/xxxxx"},
+  {"ParameterKey": "VpcId", "ParameterValue": "vpc-xxxxxxxxxxxxxxxxx"},
+  {"ParameterKey": "PublicSubnetIds", "ParameterValue": "subnet-aaa,subnet-bbb"},
+  {"ParameterKey": "PrivateSubnetIds", "ParameterValue": "subnet-ccc,subnet-ddd"},
+  {"ParameterKey": "BackendImageUri", "ParameterValue": "PLACEHOLDER_REPLACED_BY_CI"},
+  {"ParameterKey": "FrontendImageUri", "ParameterValue": "PLACEHOLDER_REPLACED_BY_CI"},
+  {"ParameterKey": "N8nImageUri", "ParameterValue": "PLACEHOLDER_REPLACED_BY_CI"},
+  {"ParameterKey": "DbInstanceClass", "ParameterValue": "db.t4g.medium"}
+]

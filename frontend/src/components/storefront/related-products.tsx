@@ -35,9 +35,9 @@ export function RelatedProducts({ supplierId, categoryId, excludeId }: Props) {
   return (
     <div>
       <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#484852] mb-3">{label}</div>
-      <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2">
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2">
         {items.map((p) => (
-          <div key={p.id} className="shrink-0 w-[180px]">
+          <div key={p.id} className="shrink-0 w-[150px]">
             <StorefrontProductCard product={p} />
           </div>
         ))}

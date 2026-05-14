@@ -8,27 +8,84 @@ import { Supplier } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Plus, 
-  Settings2, 
-  RefreshCcw, 
-  Globe, 
-  Database, 
-  ShieldCheck, 
+import {
+  Plus,
+  Settings2,
+  RefreshCcw,
+  Globe,
+  Database,
+  ShieldCheck,
   ChevronRight,
-  MoreVertical,
   Activity
 } from "lucide-react";
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface SupplierSyncHealth {
+  supplier_id: string;
+  supplier_name: string;
+  is_active: boolean;
+  last_full_sync: string | null;
+  last_delta_sync: string | null;
+  last_sync_status: string | null;
+  last_sync_completed_at: string | null;
+  recent_error_count: number;
+  consecutive_failures: number;
+}
+
+interface SyncHealthResponse {
+  suppliers: SupplierSyncHealth[];
+  generated_at: string;
+}
+
+// ── Badge helpers ─────────────────────────────────────────────────────────────
+
+type SyncBadge = "fresh" | "outdated" | "error" | "never";
+
+function getBadge(h: SupplierSyncHealth): SyncBadge {
+  if (!h.last_sync_status && !h.last_sync_completed_at) return "never";
+  if (h.last_sync_status === "failed" || h.consecutive_failures > 0) return "error";
+  if (!h.last_sync_completed_at) return "never";
+  const ageHrs = (Date.now() - new Date(h.last_sync_completed_at).getTime()) / 3_600_000;
+  if (ageHrs < 24) return "fresh";
+  return "outdated";
+}
+
+const BADGE_STYLE: Record<SyncBadge, { color: string; bg: string; label: string }> = {
+  fresh:    { color: "#247a52", bg: "rgba(36,122,82,0.1)",   label: "Fresh"       },
+  outdated: { color: "#b93232", bg: "rgba(185,50,50,0.1)",   label: "Outdated"    },
+  error:    { color: "#b93232", bg: "rgba(185,50,50,0.1)",   label: "Error"       },
+  never:    { color: "#888894", bg: "var(--paper-warm)",      label: "Never Synced"},
+};
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [suppliers, setSuppliers]   = useState<Supplier[]>([]);
+  const [healthMap, setHealthMap]   = useState<Record<string, SupplierSyncHealth>>({});
+  const [loading, setLoading]       = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const data = await api<Supplier[]>("/api/suppliers");
+        const [data, health] = await Promise.all([
+          api<Supplier[]>("/api/suppliers"),
+          api<SyncHealthResponse>("/api/sync-jobs/health").catch(() => ({ suppliers: [], generated_at: "" })),
+        ]);
         setSuppliers(data);
+        const map: Record<string, SupplierSyncHealth> = {};
+        for (const h of health.suppliers) map[h.supplier_id] = h;
+        setHealthMap(map);
       } catch (e) {
         log.error("Failed to load suppliers", e);
       } finally {
@@ -104,10 +161,14 @@ export default function SuppliersPage() {
 
       {/* Supplier Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {suppliers.map((s) => (
+        {suppliers.map((s) => {
+          const h      = healthMap[s.id];
+          const badge  = BADGE_STYLE[h ? getBadge(h) : "never"];
+          const syncAt = h?.last_sync_completed_at;
+          return (
           <Card key={s.id} className="border-[#cfccc8] overflow-hidden bg-white hover:border-[#1e4d92] transition-all hover:shadow-xl hover:shadow-blue-900/5 group">
             <div className="p-6 space-y-6">
-              
+
               {/* Top Row: Name & Protocol */}
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
@@ -124,7 +185,20 @@ export default function SuppliersPage() {
                     </div>
                   </div>
                 </div>
-                <div className={`w-2 h-2 rounded-full mt-2 ${s.is_active ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-[#cfccc8]'}`} />
+                {/* Sync health badge */}
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0"
+                  style={{ background: badge.bg, color: badge.color }}
+                  title={syncAt ? `Last sync: ${new Date(syncAt).toLocaleString()}` : "Never synced"}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: badge.color }} />
+                  {badge.label}
+                  {syncAt && (
+                    <span className="font-mono font-normal normal-case tracking-normal opacity-70">
+                      · {timeAgo(syncAt)}
+                    </span>
+                  )}
+                </span>
               </div>
 
               {/* Stats & Info Row */}
@@ -140,9 +214,9 @@ export default function SuppliersPage() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-[9px] font-black uppercase tracking-widest text-[#888894] mb-1">Auth Type</div>
-                  <div className="text-[10px] font-black uppercase tracking-tight text-[#1e1e24]">
-                    {s.protocol === 'soap' ? 'SOAP XML' : s.protocol === 'sftp' ? 'SSH Key' : 'REST API'}
+                  <div className="text-[9px] font-black uppercase tracking-widest text-[#888894] mb-1">Last Sync</div>
+                  <div className="text-[10px] font-black uppercase tracking-tight" style={{ color: badge.color }}>
+                    {syncAt ? timeAgo(syncAt) : "—"}
                   </div>
                 </div>
               </div>
@@ -172,7 +246,8 @@ export default function SuppliersPage() {
 
             </div>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {/* Empty State */}
