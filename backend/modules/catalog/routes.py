@@ -179,19 +179,22 @@ async def get_product(
     data = ProductRead.model_validate(product)
     data.supplier_name = supplier.name if supplier else None
     data.supplier_has_decoration_overlay = bool(supplier.has_decoration_overlay) if supplier else False
-    data.images = sorted(data.images, key=lambda i: i.sort_order)
+    # Lazy Pull: Gate behind env flag and 1h debounce
 
+    ENABLE_LAZY_IMAGES = os.getenv("ENABLE_LAZY_IMAGES", "false").lower() == "true"
+    
     if (
-        os.getenv("ENABLE_LAZY_IMAGES", "false").lower() == "true"
-        and not data.images
-        and supplier
+        ENABLE_LAZY_IMAGES 
+        and not data.images 
+        and supplier 
         and (supplier.promostandards_code or "").upper() == "SANMAR"
     ):
-        from datetime import timezone as _tz
-        one_hour_ago = datetime.now(_tz.utc) - timedelta(hours=1)
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
         if not product.last_image_fetch_attempt_at or product.last_image_fetch_attempt_at < one_hour_ago:
-            product.last_image_fetch_attempt_at = datetime.now(_tz.utc)
+            # Mark attempt immediately to debounce
+            product.last_image_fetch_attempt_at = datetime.now(timezone.utc)
             await db.commit()
+            
             from modules.images.service import trigger_lazy_image_fetch
             background_tasks.add_task(trigger_lazy_image_fetch, product.id, supplier.id)
 
