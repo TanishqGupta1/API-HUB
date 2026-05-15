@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { CheckCircle2, Clock, XCircle, RefreshCw } from "lucide-react";
+import { getStatusConfig } from "@/lib/push-status";
+import { AlertTriangle, CheckCircle2, Clock, Loader2, XCircle, RefreshCw } from "lucide-react";
 
 interface PushLogEntry {
   id: string;
@@ -17,37 +18,28 @@ interface PushLogEntry {
   pushed_at: string;
 }
 
-const STATUS_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-  pushed: {
-    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-    color: "#16a34a",
-    label: "Pushed",
-  },
-  pending: {
-    icon: <Clock className="w-3.5 h-3.5" />,
-    color: "#d97706",
-    label: "Pending",
-  },
-  failed: {
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    color: "#dc2626",
-    label: "Failed",
-  },
-  skipped: {
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    color: "#888894",
-    label: "Skipped",
-  },
+// Icon per status — colors/labels come from the central status-map.
+const STATUS_ICON: Record<string, React.ReactNode> = {
+  pushed: <CheckCircle2 className="w-3.5 h-3.5" />,
+  accepted: <Clock className="w-3.5 h-3.5" />,
+  processing: <Loader2 className="w-3.5 h-3.5 animate-spin" />,
+  pending: <Clock className="w-3.5 h-3.5" />,
+  failed: <XCircle className="w-3.5 h-3.5" />,
+  rejected: <XCircle className="w-3.5 h-3.5" />,
+  partial_failure: <AlertTriangle className="w-3.5 h-3.5" />,
+  stale: <AlertTriangle className="w-3.5 h-3.5" />,
+  dry_run_pushed: <CheckCircle2 className="w-3.5 h-3.5" />,
+  skipped: <XCircle className="w-3.5 h-3.5" />,
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] ?? { icon: null, color: "#888894", label: status };
+  const cfg = getStatusConfig(status);
   return (
     <span
       className="inline-flex items-center gap-1 font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded-full"
       style={{ color: cfg.color, background: `${cfg.color}18`, border: `1px solid ${cfg.color}40` }}
     >
-      {cfg.icon}
+      {STATUS_ICON[status]}
       {cfg.label}
     </span>
   );
