@@ -89,6 +89,16 @@ class PushPayload(BaseModel):
     variants: list[PushVariantPayload]
     images: list[PushImagePayload]
     markup_rule: Optional[AppliedMarkupRule]
+    # T20 collapse — fields previously served by separate /ops-variants and
+    # /ops-options routes are now part of the same /payload response.
+    # `ops_variants` mirrors the legacy /ops-variants shape (sizes + prices
+    # arrays aligned to the OPS setProductSize / setProductPrice loop).
+    # `options` mirrors the legacy /ops-options shape (product-scoped option
+    # bundle with master_option_id stripped from the core body).
+    ops_variants: "OPSVariantsBundle" = Field(
+        default_factory=lambda: OPSVariantsBundle(sizes=[], prices=[])
+    )
+    options: list["OPSProductOptionSchema"] = Field(default_factory=list)
 
 
 # -------- OPS variant bundle (n8n setProductSize + setProductPrice loop) --------
@@ -136,3 +146,9 @@ class OPSProductOptionSchema(BaseModel):
     options_type: Optional[str] = None
     attributes: list[OPSProductAttributeSchema] = Field(default_factory=list)
     source_master_option_id: Optional[int] = None
+
+
+# PushPayload forward-references OPSVariantsBundle + OPSProductOptionSchema
+# (declared after PushPayload to keep the legacy field order stable for
+# any callers that build dicts positionally). Resolve those references now.
+PushPayload.model_rebuild()
