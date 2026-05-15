@@ -101,13 +101,15 @@ async def test_ops_options_returns_product_scoped_shape():
         r = await c.put(f"/api/products/{pid}/options-config", json=cfg)
         assert r.status_code in (200, 204), r.text
 
+        # T20 — `/ops-options` collapsed into unified `/payload` endpoint.
+        # Same assertions apply, just under body["options"] now.
         r = await c.get(
-            f"/api/push/{cid}/product/{pid}/ops-options",
+            f"/api/push/{cid}/product/{pid}/payload",
             headers={"X-Ingest-Secret": secret},
         )
 
     assert r.status_code == 200, r.text
-    data = r.json()
+    data = r.json()["options"]
     assert len(data) == 1
     opt = data[0]
     assert opt["option_key"] == "inkFinish"
@@ -165,10 +167,11 @@ async def test_ops_options_empty_when_nothing_enabled():
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
+        # T20 — `/ops-options` collapsed into unified `/payload`.
         r = await c.get(
-            f"/api/push/{cid}/product/{pid}/ops-options",
+            f"/api/push/{cid}/product/{pid}/payload",
             headers={"X-Ingest-Secret": secret},
         )
 
     assert r.status_code == 200
-    assert r.json() == []
+    assert r.json()["options"] == []
