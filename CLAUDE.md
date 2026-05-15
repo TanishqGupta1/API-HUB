@@ -81,7 +81,7 @@ INGEST_SHARED_SECRET=<random-32>    # n8n → FastAPI ingest auth header
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
 
-- **n8n owns OPS push.** FastAPI prepares data + applies markup. n8n calls OPS via the OnPrintShop node.
+- **FastAPI owns OPS push (M1).** Integration Gateway in `modules/integrations/` + `modules/ops_push/` runs preflight + payload build + mutation plan, then executes via `modules/ops_client/` (OPS GraphQL with OAuth2). n8n triggers the gateway through webhooks but no longer calls OPS directly. The n8n OnPrintShop node + `n8n-nodes-onprintshop/` remain available for legacy flows.
 
 ## Plan & Progress
 
