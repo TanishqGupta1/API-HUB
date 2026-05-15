@@ -1,4 +1,6 @@
 import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -8,6 +10,23 @@ from modules.suppliers.models import Supplier
 from modules.decorations.models import CustomerProductDecoration
 from modules.push_mappings.models import PushMapping
 from modules.push_log.models import ProductPushLog
+
+
+@pytest.fixture(autouse=True)
+def _mock_gateway_deps():
+    """Mock preflight + build_push_payload so test products don't need markup
+    rules, images, or OAuth creds to reach execute_push."""
+    ok_preflight = MagicMock()
+    ok_preflight.ok = True
+
+    step = MagicMock()
+    step.model_dump.return_value = {"mutation": "setProduct", "variables": {}}
+    mock_payload = MagicMock()
+    mock_payload.plan = [step]
+
+    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=ok_preflight)):
+        with patch("modules.ops_push.gateway.build_push_payload", new=AsyncMock(return_value=mock_payload)):
+            yield
 
 @pytest.fixture
 async def setup_data(db):

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -19,6 +20,14 @@ from modules.catalog.models import Product, ProductVariant, CustomerProductSelec
 from modules.customers.models import Customer
 from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
+
+
+@pytest.fixture(autouse=True)
+def _mock_preflight_ok():
+    ok_result = MagicMock()
+    ok_result.ok = True
+    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=ok_result)):
+        yield
 
 
 @pytest_asyncio.fixture
@@ -123,21 +132,3 @@ async def test_admin_route_writes_gateway_native_push_log(client, admin_push_sca
         }, log.status
 
 
-@pytest.mark.asyncio
-async def test_admin_route_no_n8n_webhook_trigger(client, admin_push_scaffold, monkeypatch):
-    """Rewire goal: admin push must NOT touch the legacy n8n webhook helper.
-
-    If trigger_n8n_push gets called during the admin push, the rewire is
-    incomplete — the request would still be routed via the deprecated path."""
-    called = {"n": 0}
-
-    async def _spy(payload):
-        called["n"] += 1
-
-    monkeypatch.setattr("modules.ops_push.service.trigger_n8n_push", _spy)
-
-    cid = admin_push_scaffold["customer"].id
-    pid = admin_push_scaffold["product"].id
-    resp = await client.post(f"/api/push/{cid}/{pid}")
-    assert resp.status_code in (200, 202), resp.text
-    assert called["n"] == 0, "admin push should dispatch via gateway, not n8n webhook"

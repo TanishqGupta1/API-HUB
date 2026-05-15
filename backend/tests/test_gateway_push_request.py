@@ -1,13 +1,15 @@
 """T15: POST /api/integrations/v1/push-requests — flagship push endpoint.
 
 Covers: X-Orchestrator-Key auth, product resolution by product_id OR supplier_sku,
-inline dry_run execution, idempotent replay, in-flight concurrency guard, and
-preflight blockers.
+inline dry_run execution, idempotent replay, in-flight concurrency guard,
+preflight blockers, partial_failure cleanup_targets, and callback delivery.
 """
 from __future__ import annotations
 
 import hashlib
 import secrets
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -21,6 +23,21 @@ from modules.integrations.models import IntegrationKey
 from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
 from modules.suppliers.models import Supplier
+
+
+# ---------------------------------------------------------------------------
+# Module-level autouse: mock preflight to ok=True so tests aren't blocked
+# by missing markup rules / variants / images in the test product.
+# Tests that specifically test preflight behaviour apply their own inner
+# patch which overrides this one for the duration of that test.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _mock_preflight_ok():
+    ok_result = MagicMock()
+    ok_result.ok = True
+    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=ok_result)):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -270,3 +287,180 @@ async def test_push_idempotency_conflict_on_different_body(client, push_scaffold
     )
     assert r2.status_code == 409, r2.text
     assert "IDEMPOTENCY_CONFLICT" in r2.text
+
+
+# ---------------------------------------------------------------------------
+# IN_FLIGHT concurrency guard
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_push_in_flight_returns_409(client, push_scaffold, integration_key):
+    """A processing row for same (customer, product) → 409 IN_FLIGHT."""
+    async with async_session() as s:
+        log = ProductPushLog(
+            product_id=push_scaffold["product"].id,
+            customer_id=push_scaffold["customer"].id,
+            status="processing",
+            pushed_at=datetime.now(timezone.utc),
+            key_id=integration_key["key"].id,
+            supplier_slug=push_scaffold["supplier"].slug,
+            supplier_sku="PC61-T15",
+            callback_status="not_requested",
+        )
+        s.add(log)
+        await s.commit()
+        log_id = log.id
+
+    try:
+        resp = await client.post(
+            "/api/integrations/v1/push-requests",
+            json=_body(
+                push_scaffold["customer"].id,
+                push_scaffold["supplier"].slug,
+                supplier_sku="PC61-T15",
+                dry_run=True,
+            ),
+            headers={"X-Orchestrator-Key": integration_key["raw"]},
+        )
+        assert resp.status_code == 409, resp.text
+        assert "IN_FLIGHT" in resp.text
+    finally:
+        async with async_session() as s:
+            await s.execute(delete(ProductPushLog).where(ProductPushLog.id == log_id))
+            await s.commit()
+
+
+# ---------------------------------------------------------------------------
+# Preflight blocker
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_push_preflight_blocker_returns_422(client, push_scaffold, integration_key):
+    """Preflight blockers → 422 with code=PREFLIGHT_BLOCKER."""
+    mock_result = MagicMock()
+    mock_result.ok = False
+    mock_result.to_error_envelope.return_value = {
+        "status": "error",
+        "code": "PREFLIGHT_BLOCKER",
+        "message": "Preflight failed: no markup rule",
+        "details": [{"check": "check_prices_set", "reason": "no markup rule for customer"}],
+        "trace_id": "test-trace-001",
+    }
+    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=mock_result)):
+        resp = await client.post(
+            "/api/integrations/v1/push-requests",
+            json=_body(
+                push_scaffold["customer"].id,
+                push_scaffold["supplier"].slug,
+                supplier_sku="PC61-T15",
+            ),
+            headers={"X-Orchestrator-Key": integration_key["raw"]},
+        )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "PREFLIGHT_BLOCKER"
+
+
+# ---------------------------------------------------------------------------
+# execute_push — partial failure records cleanup_targets
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_execute_push_partial_failure_records_cleanup_targets(push_scaffold, integration_key):
+    """execute_push halts mid-plan and records cleanup_targets on step failure."""
+    from modules.ops_push.gateway import execute_push
+
+    async with async_session() as s:
+        log = ProductPushLog(
+            product_id=push_scaffold["product"].id,
+            customer_id=push_scaffold["customer"].id,
+            status="accepted",
+            pushed_at=datetime.now(timezone.utc),
+            key_id=integration_key["key"].id,
+            supplier_slug=push_scaffold["supplier"].slug,
+            supplier_sku="PC61-T15",
+            callback_status="not_requested",
+            dry_run=False,
+        )
+        s.add(log)
+        await s.commit()
+        log_id = log.id
+
+    step1 = MagicMock()
+    step1.model_dump.return_value = {"mutation": "setProduct", "variables": {}}
+    step2 = MagicMock()
+    step2.model_dump.return_value = {"mutation": "setProductSize", "variables": {}}
+    mock_payload = MagicMock()
+    mock_payload.plan = [step1, step2]
+
+    try:
+        with patch("modules.ops_push.gateway.build_push_payload", new=AsyncMock(return_value=mock_payload)):
+            with patch("modules.ops_push.gateway._StubOpsClient") as MockClient:
+                instance = AsyncMock()
+                instance.set_product.return_value = {"products_id": 99001}
+                instance.set_product_size.side_effect = RuntimeError("OPS network error")
+                MockClient.return_value = instance
+                await execute_push(log_id)
+
+        async with async_session() as s:
+            row = await s.get(ProductPushLog, log_id)
+            assert row.status == "partial_failure"
+            assert row.cleanup_targets is not None
+            assert row.cleanup_targets.get("ops_product_id") == "99001"
+    finally:
+        async with async_session() as s:
+            await s.execute(delete(ProductPushLog).where(ProductPushLog.id == log_id))
+            await s.commit()
+
+
+# ---------------------------------------------------------------------------
+# execute_push — callback fires on success
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_execute_push_fires_callback_on_success(push_scaffold, integration_key):
+    """execute_push POSTs to callback_url when push completes successfully."""
+    from modules.ops_push.gateway import execute_push
+
+    async with async_session() as s:
+        log = ProductPushLog(
+            product_id=push_scaffold["product"].id,
+            customer_id=push_scaffold["customer"].id,
+            status="accepted",
+            pushed_at=datetime.now(timezone.utc),
+            key_id=integration_key["key"].id,
+            supplier_slug=push_scaffold["supplier"].slug,
+            supplier_sku="PC61-T15",
+            callback_url="https://callback.example.com/webhook",
+            callback_status="pending",
+            dry_run=False,
+        )
+        s.add(log)
+        await s.commit()
+        log_id = log.id
+
+    step1 = MagicMock()
+    step1.model_dump.return_value = {"mutation": "setProduct", "variables": {}}
+    mock_payload = MagicMock()
+    mock_payload.plan = [step1]
+
+    try:
+        with patch("modules.ops_push.gateway.build_push_payload", new=AsyncMock(return_value=mock_payload)):
+            with patch("modules.ops_push.gateway._StubOpsClient") as MockClient:
+                instance = AsyncMock()
+                instance.set_product.return_value = {"products_id": 99001}
+                MockClient.return_value = instance
+                with patch(
+                    "modules.ops_push.gateway._fire_callback",
+                    new=AsyncMock(return_value=True),
+                ) as mock_cb:
+                    await execute_push(log_id)
+
+        async with async_session() as s:
+            row = await s.get(ProductPushLog, log_id)
+            assert row.status == "pushed"
+            assert row.callback_status == "sent"
+        assert mock_cb.called
+    finally:
+        async with async_session() as s:
+            await s.execute(delete(ProductPushLog).where(ProductPushLog.id == log_id))
+            await s.commit()

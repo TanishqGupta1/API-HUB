@@ -1,15 +1,7 @@
-"""Integration Gateway core — prepare_push_intent() + execute_push().
-
-Stub swap guide:
-  Task 6 (payload_builder)  ✅ wired — see imports below
-  Task 7 (preflight)        ✅ wired — see imports below
-  Task 4 (real OpsClient)   ⏸ still stubbed — Urvashi
-  Task 5 (FakeOpsClient)    ⏸ still stubbed — Urvashi (dry-run path works via _StubFakeOpsClient)
-"""
+"""Integration Gateway core — prepare_push_intent() + execute_push()."""
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import uuid as uuid_mod
@@ -38,41 +30,8 @@ logger = logging.getLogger(__name__)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Stubs — swap these out when parallel tasks merge
+# Stubs — Tasks 4 & 5 (Urvashi): swap with real OpsClient + FakeOpsClient
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-class _PreflightStub:
-    blockers: list[str] = []
-    warnings: list[str] = []
-
-
-async def _stub_run_preflight(product, customer, db) -> _PreflightStub:
-    """TODO Task 7: replace with → from .preflight import run_preflight"""
-    logger.warning("preflight stub active — Task 7 not yet merged")
-    return _PreflightStub()
-
-
-class _PushPayloadStub:
-    def __init__(self, product, customer, markup_rules, push_mappings):
-        self._product = product
-        self._customer = customer
-
-    def mutation_plan(self) -> list[dict]:
-        return [{"step": 1, "mutation": "setProduct", "variables": {"stub": True}}]
-
-    def payload_hash(self) -> str:
-        raw = json.dumps({
-            "product_id": str(self._product.id),
-            "customer_id": str(self._customer.id),
-        }, sort_keys=True)
-        return hashlib.sha256(raw.encode()).hexdigest()
-
-
-def _stub_build_push_payload(product, customer, markup_rules, push_mappings) -> _PushPayloadStub:
-    """TODO Task 6: replace with → from .payload_builder import build_push_payload"""
-    logger.warning("payload_builder stub active — Task 6 not yet merged")
-    return _PushPayloadStub(product, customer, markup_rules, push_mappings)
-
 
 class _StubOpsClient:
     """TODO Task 4: replace with real OPSClient mutation methods"""

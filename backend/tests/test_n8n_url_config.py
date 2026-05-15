@@ -19,27 +19,14 @@ def test_dev_mode_does_not_require_n8n_urls(clean_env, monkeypatch):
     _require_prod_env()  # no exception
 
 
-def test_production_mode_fails_when_n8n_webhook_base_url_missing(clean_env, monkeypatch):
-    from main import _require_prod_env
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("SECRET_KEY", "k" * 44)
-    monkeypatch.setenv("INGEST_SHARED_SECRET", "x")
-    monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.example.com")
-    monkeypatch.setenv("POSTGRES_URL", "postgresql+asyncpg://u:p@h/d")
-    monkeypatch.setenv("API_BASE_URL", "https://api.example.com")
-    # N8N_WEBHOOK_BASE_URL intentionally not set
-    with pytest.raises(RuntimeError, match="N8N_WEBHOOK_BASE_URL"):
-        _require_prod_env()
-
-
 def test_production_mode_fails_when_api_base_url_missing(clean_env, monkeypatch):
     from main import _require_prod_env
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("SECRET_KEY", "k" * 44)
+    monkeypatch.setenv("JWT_SECRET_KEY", "j" * 44)
     monkeypatch.setenv("INGEST_SHARED_SECRET", "x")
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.example.com")
     monkeypatch.setenv("POSTGRES_URL", "postgresql+asyncpg://u:p@h/d")
-    monkeypatch.setenv("N8N_WEBHOOK_BASE_URL", "http://n8n.api-hub.local:5678")
     # API_BASE_URL intentionally not set
     with pytest.raises(RuntimeError, match="API_BASE_URL"):
         _require_prod_env()
@@ -53,6 +40,5 @@ def test_production_mode_passes_when_all_set(clean_env, monkeypatch):
     monkeypatch.setenv("INGEST_SHARED_SECRET", "x")
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.example.com")
     monkeypatch.setenv("POSTGRES_URL", "postgresql+asyncpg://u:p@h/d")
-    monkeypatch.setenv("N8N_WEBHOOK_BASE_URL", "http://n8n.api-hub.local:5678")
     monkeypatch.setenv("API_BASE_URL", "http://backend.api-hub.local:8000")
     _require_prod_env()  # no exception
