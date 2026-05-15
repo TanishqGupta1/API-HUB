@@ -1,4 +1,4 @@
-"""Tests for OPS mutation wrappers (T6–T9).
+"""Tests for OPS mutation wrappers (T6–T11).
 
 Uses unittest.mock.AsyncMock so no HTTP calls are made.
 Verifies:
@@ -166,3 +166,143 @@ async def test_set_product_price_includes_qty_to_when_provided(fake_client):
     )
     _, kwargs = fake_client.execute.call_args
     assert kwargs["variables"]["input"]["qty_to"] == 11
+
+
+# ── set_assign_options ───────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_set_assign_options_sends_products_id_and_options(fake_client):
+    fake_client.execute.return_value = OpsResult(
+        ok=True, data={"setAssignOptions": {"products_id": 12345}}
+    )
+    result = await m.set_assign_options(client=fake_client, products_id=12345, options_id=[1, 2, 3])
+    assert result.ok
+    assert result.data["products_id"] == 12345
+    _, kwargs = fake_client.execute.call_args
+    v = kwargs["variables"]["input"]
+    assert v["products_id"] == 12345
+    assert v["options_id"] == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_set_assign_options_passes_through_error(fake_client):
+    fake_client.execute.return_value = OpsResult(
+        ok=False, ops_error_code="BAD_INPUT", ops_error_message="invalid options_id"
+    )
+    result = await m.set_assign_options(client=fake_client, products_id=1, options_id=[999])
+    assert not result.ok
+    assert result.ops_error_code == "BAD_INPUT"
+
+
+# ── set_additional_option ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_set_additional_option_sends_fields(fake_client):
+    fake_client.execute.return_value = OpsResult(
+        ok=True, data={"setAdditionalOption": {"options_id": 77}}
+    )
+    result = await m.set_additional_option(
+        client=fake_client, options_name="Color", options_type="dropdown", visible=1
+    )
+    assert result.ok
+    assert result.data["options_id"] == 77
+    _, kwargs = fake_client.execute.call_args
+    v = kwargs["variables"]["input"]
+    assert v["options_name"] == "Color"
+    assert v["options_type"] == "dropdown"
+
+
+# ── set_additional_option_attributes ─────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_set_additional_option_attributes_sends_fields(fake_client):
+    fake_client.execute.return_value = OpsResult(
+        ok=True, data={"setAdditionalOptionAttributes": {"options_values_id": 55}}
+    )
+    result = await m.set_additional_option_attributes(
+        client=fake_client, options_id=77, options_values_name="Navy", visible=1
+    )
+    assert result.ok
+    assert result.data["options_values_id"] == 55
+    _, kwargs = fake_client.execute.call_args
+    v = kwargs["variables"]["input"]
+    assert v["options_id"] == 77
+    assert v["options_values_name"] == "Navy"
+
+
+# ── set_products_attribute_price ─────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_set_products_attribute_price_sends_fields(fake_client):
+    fake_client.execute.return_value = OpsResult(
+        ok=True, data={"setProductsAttributePrice": {"products_attributes_id": 33}}
+    )
+    result = await m.set_products_attribute_price(
+        client=fake_client,
+        products_id=12345,
+        options_id=77,
+        options_values_id=55,
+        price="2.00",
+    )
+    assert result.ok
+    assert result.data["products_attributes_id"] == 33
+    _, kwargs = fake_client.execute.call_args
+    v = kwargs["variables"]["input"]
+    assert v["products_id"] == 12345
+    assert v["price"] == "2.00"
+
+
+# ── update_product_stock ─────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_update_product_stock_sends_fields(fake_client):
+    fake_client.execute.return_value = OpsResult(
+        ok=True, data={"updateProductStock": {"products_id": 12345}}
+    )
+    result = await m.update_product_stock(client=fake_client, products_id=12345, quantity=100, size_id=555)
+    assert result.ok
+    _, kwargs = fake_client.execute.call_args
+    v = kwargs["variables"]["input"]
+    assert v["products_id"] == 12345
+    assert v["quantity"] == 100
+    assert v["size_id"] == 555
+
+
+@pytest.mark.asyncio
+async def test_update_product_stock_omits_size_id_when_none(fake_client):
+    fake_client.execute.return_value = OpsResult(
+        ok=True, data={"updateProductStock": {"products_id": 12345}}
+    )
+    await m.update_product_stock(client=fake_client, products_id=12345, quantity=50)
+    _, kwargs = fake_client.execute.call_args
+    assert "size_id" not in kwargs["variables"]["input"]
+
+
+# ── set_product_design ───────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_set_product_design_sends_fields(fake_client):
+    fake_client.execute.return_value = OpsResult(
+        ok=True, data={"setProductDesign": {"products_id": 12345}}
+    )
+    result = await m.set_product_design(
+        client=fake_client, products_id=12345, design_url="https://cdn.example.com/design.png"
+    )
+    assert result.ok
+    _, kwargs = fake_client.execute.call_args
+    v = kwargs["variables"]["input"]
+    assert v["products_id"] == 12345
+    assert v["design_url"] == "https://cdn.example.com/design.png"
+    assert "design_type" not in v
+
+
+@pytest.mark.asyncio
+async def test_set_product_design_includes_design_type_when_provided(fake_client):
+    fake_client.execute.return_value = OpsResult(
+        ok=True, data={"setProductDesign": {"products_id": 12345}}
+    )
+    await m.set_product_design(
+        client=fake_client, products_id=12345, design_url="https://cdn.example.com/d.png", design_type="pdf"
+    )
+    _, kwargs = fake_client.execute.call_args
+    assert kwargs["variables"]["input"]["design_type"] == "pdf"
