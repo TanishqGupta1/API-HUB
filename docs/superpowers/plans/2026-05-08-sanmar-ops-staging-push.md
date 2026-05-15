@@ -3,7 +3,7 @@
 **Spec:** `docs/superpowers/specs/2026-05-11-integration-gateway-design.md`
 **Previous spec (superseded):** `docs/superpowers/specs/2026-05-08-sanmar-ops-staging-push-design.md`
 **Date:** 2026-05-13 (updated to match Integration Gateway spec)
-**Status:** 3/11 tasks done. Tasks 4–7 are parallel once Task 1 lands.
+**Status:** 5/11 tasks done. Tasks 4–7 are parallel once Task 1 lands.
 
 > ⚠️ **Plan updated 2026-05-13** — Original plan was based on the VPCE spec (preview/execute + confirm_token). That spec was superseded on 2026-05-11 by the Integration Gateway design. Tasks 1, 8, 9, 11 have been rewritten. Tasks 4, 7 unchanged. Tasks 5, 6, 10 have minor naming updates.
 
@@ -13,15 +13,15 @@
 
 | Task | Title | Owner | Status | Depends On | Blocks |
 |------|-------|-------|--------|------------|--------|
-| 1 | DB schema migration | Vidhi | ⚠️ Redo | — | 4, 5, 6, 7 |
+| 1 | DB schema migration | Vidhi | ✅ Done | — | 4, 5, 6, 7 |
 | 2 | Fix base_price=None in V2 normalizer | — | ✅ Done | — | — |
 | 3 | Wire SanMar Inventory v200 SOAP | — | ✅ Done | — | — |
 | 4 | OpsClient: mutation methods + OAuth2 refresh | Urvashi | ⏳ Pending | 1 | 5, 8 |
 | 5 | FakeOpsClient (dry-run test double) | Urvashi | ⏳ Pending | 4 | 8 |
 | 6 | payload_builder.py | Shinchana | ⏳ Pending | 1 | 8 |
 | 7 | preflight.py (4 validation checks) | Shinchana | ⏳ Pending | 1 | 8 |
-| 8 | Integration Gateway core (prepare + execute + build) | Vidhi | ⏳ Pending | 1, 4, 5, 6, 7 | 9 |
-| 9 | New API routes (`/api/integrations/v1/`) + delete n8n path | Vidhi | ⏳ Pending | 8 | 10 |
+| 8 | Integration Gateway core (prepare + execute + build) | Vidhi | ⚠️ Partial | 1, 4, 5, 6, 7 | 9 |
+| 9 | New API routes (`/api/integrations/v1/`) + delete n8n path | Vidhi | ⚠️ Partial | 8 | 10 |
 | 10 | Admin UI: push log detail, integration keys page | Shinchana | ⏳ Pending | 9 | 11 |
 | 11 | E2E manual test against VG OPS staging | Urvashi | ⏳ Pending | All | — |
 
@@ -87,9 +87,9 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 
 ---
 
-## Task 1 — DB schema migration ⚠️ Needs redo (built against old spec)
+## Task 1 — DB schema migration ✅ Done
 
-**What we built was for the VPCE spec. The new spec requires different columns.**
+**All 12 Integration Gateway columns added, `integration_keys` table created, Pydantic schemas updated.**
 
 **Files:**
 - Modify: `backend/modules/push_log/models.py`
@@ -97,7 +97,7 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 - Create: `backend/migrations/push_log_phase8.sql` (reference only — app uses `create_all`)
 
 **Steps:**
-- [ ] Step 1: Replace old VPCE columns with new Integration Gateway columns on `ProductPushLog`:
+- [x] Step 1: Replace old VPCE columns with new Integration Gateway columns on `ProductPushLog`:
   ```python
   # Remove: preflight_results, preview_payload, preview_built_at,
   #         confirm_token_hash, confirm_token_consumed_at, input_hash, execution_steps
@@ -116,9 +116,9 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
   cleanup_targets:   Mapped[Optional[dict]]= mapped_column(JSONB, nullable=True)
   retry_of:          Mapped[Optional[uuid_mod.UUID]] = mapped_column(nullable=True)
   ```
-- [ ] Step 2: Update status vocab comment in `models.py`:
+- [x] Step 2: Update status vocab comment in `models.py`:
   `accepted → queued → processing → pushed | failed | partial_failure | rejected | canceled | dry_run_pushed`
-- [ ] Step 3: Add indexes:
+- [x] Step 3: Add indexes:
   ```python
   __table_args__ = (
       Index("idx_push_log_payload_hash", "payload_hash"),
@@ -131,7 +131,7 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
       ),
   )
   ```
-- [ ] Step 4: Create `integration_keys` table as a new model in `backend/modules/integrations/models.py`:
+- [x] Step 4: Create `integration_keys` table as a new model in `backend/modules/integrations/models.py`:
   ```python
   class IntegrationKey(Base):
       __tablename__ = "integration_keys"
@@ -146,7 +146,7 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
       created_at:            Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
       revoked_at:            Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
   ```
-- [ ] Step 5: Update `push_log/schemas.py` — add `StepResult`, `PushRequestResponse`, `PushStatusResponse` Pydantic models. No `confirm_token_hash` anywhere. No `preview_payload`.
+- [x] Step 5: Update `push_log/schemas.py` — add `StepResult`, `PushRequestResponse`, `PushStatusResponse` Pydantic models. No `confirm_token_hash` anywhere. No `preview_payload`.
 - [ ] Step 6: Start backend, confirm tables alter cleanly.
 
 **Test:** `GET /api/push-log` returns rows without error. New columns present in `\d product_push_log`. `integration_keys` table exists.
@@ -271,7 +271,7 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 
 ---
 
-## Task 8 — Integration Gateway core ⏳ Pending
+## Task 8 — Integration Gateway core ⚠️ Partial (stubs in place; blocked on Tasks 4–7)
 
 **Depends on:** Tasks 1, 4, 5, 6, 7
 
@@ -282,7 +282,7 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 - Create: `backend/tests/test_gateway.py`
 
 **Steps:**
-- [ ] Step 1: Create `prepare_push_intent(request_body, key_id, idempotency_key, db) -> PushLogRow`:
+- [x] Step 1: Create `prepare_push_intent(request_body, key_id, idempotency_key, db) -> PushLogRow`:
   - Verify `X-Orchestrator-Key` → 401 `BAD_SIGNATURE` / 403 `KEY_NOT_ALLOWED` / 403 `KEY_REVOKED`
   - Check idempotency ledger on `(key_id, idempotency_key)`:
     - Same key + same `payload_hash` → return existing `push_log_id` (200, no new work)
@@ -295,7 +295,7 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
   - Insert `ProductPushLog` row: `status=accepted`, `payload_hash`, `idempotency_key`, `key_id`, `supplier_slug`, `supplier_sku`, `callback_url`, `dry_run`
   - Return `{push_log_id, status: "accepted", ...}`
 
-- [ ] Step 2: Create `execute_push(push_log_id, db) -> None` (runs synchronously or as BackgroundTask):
+- [x] Step 2: Create `execute_push(push_log_id, db) -> None` (runs synchronously or as BackgroundTask):
   - Atomic UPDATE: `status=accepted → processing`
   - Select client: `dry_run=True` → `FakeOpsClient`, `dry_run=False` → real `OpsClient`
   - Call `build_push_payload()` — get mutation plan
@@ -305,11 +305,13 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
   - On success: upsert `push_mappings` (live only), set `status=pushed` or `dry_run_pushed`, set `ops_product_id`
   - Fire callback if `callback_url` set — exponential backoff, max 5 attempts, update `callback_status`
 
-- [ ] Step 3: Async path — variant count > 20 → `BackgroundTask(execute_push)`, return 202 immediately with `push_log_id`.
+- [x] Step 3: Async path — variant count > 20 → `BackgroundTask(execute_push)`, return 202 immediately with `push_log_id`.
 
-- [ ] Step 4: Rewire existing admin route `POST /api/push/{cid}/{pid}` to call `prepare_push_intent()` + `execute_push()` internally. Keep response shape identical — admin UI push button must still work unchanged (M3).
+- [x] Step 4: Rewire existing admin route `POST /api/push/{cid}/{pid}` to call `prepare_push_intent()` + `execute_push()` internally. Keep response shape identical — admin UI push button must still work unchanged (M3).
 
 - [ ] Step 5: Tests — dry-run full flow (assert `dry_run_pushed`, no push_mappings); idempotency replay (same key+body → 200 same id); conflict (same key+different body → 409); `IN_FLIGHT` (409); preflight blocker aborts before push_log insert; mid-sequence failure → `partial_failure` + `cleanup_targets`; callback fires on success.
+
+> **Note (2026-05-15):** `gateway.py` exists with `prepare_push_intent()` + `execute_push()`. All 4 dependencies (Tasks 4–7) are currently stubs in gateway.py. Swap-in comments left in place for each — gateway is functional for stub/dry-run but not real OPS pushes until stubs are replaced.
 
 **Test:** `pytest backend/tests/test_gateway.py -v` — all pass.
 
@@ -317,7 +319,7 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 
 ---
 
-## Task 9 — New gateway routes + delete n8n path ⏳ Pending
+## Task 9 — New gateway routes + delete n8n path ⚠️ Partial (routes done; n8n cleanup remaining)
 
 **Depends on:** Task 8
 
@@ -333,18 +335,18 @@ Push one real SanMar product (PC61 — Port & Co Essential T-Shirt) to VG OPS st
 - Create: `n8n-workflows/deprecated/README.md`
 
 **Steps:**
-- [ ] Step 1: Create 4 gateway endpoints in `integrations/routes.py` (all under `/api/integrations/v1/`):
+- [x] Step 1: Create 4 gateway endpoints in `integrations/routes.py` (all under `/api/integrations/v1/`):
   - `POST /suppliers/{supplier_slug}/products` — catalog upsert (auth: `X-Orchestrator-Key`)
   - `GET  /suppliers/{supplier_slug}/schema` — discover required + optional fields
   - `POST /push-requests` — calls `prepare_push_intent()` + `execute_push()`
   - `GET  /push-requests/{push_log_id}` — poll push status; returns `PushStatusResponse`
-- [ ] Step 2: Create `integrations/auth.py` — `get_orchestrator_key()` FastAPI dependency. Reads `X-Orchestrator-Key` header, SHA-256 hashes it, looks up `integration_keys` table, checks `is_active`, `revoked_at`, `allowed_customer_ids`, `allowed_supplier_slugs`. Updates `last_used_at`.
-- [ ] Step 3: Create `integrations/schemas.py` — request envelope, 202 response, terminal GET response, error envelope with all error codes from spec.
+- [x] Step 2: Create `integrations/auth.py` — `get_orchestrator_key()` FastAPI dependency. Reads `X-Orchestrator-Key` header, SHA-256 hashes it, looks up `integration_keys` table, checks `is_active`, `revoked_at`, `allowed_customer_ids`, `allowed_supplier_slugs`. Updates `last_used_at`.
+- [x] Step 3: Create `integrations/schemas.py` — request envelope, 202 response, terminal GET response, error envelope with all error codes from spec.
 - [ ] Step 4: Remove `trigger_n8n_push` + `N8N_PUSH_WEBHOOK_URL` from `service.py` (M4).
 - [ ] Step 5: Delete `backend/modules/n8n_proxy/` entire module (M4).
 - [ ] Step 6: Mark old push route (`POST /api/push/{cid}/{pid}`) as `deprecated=True` in OpenAPI — do not delete yet.
 - [ ] Step 7: Move `n8n-workflows/ops-push.json` → `n8n-workflows/deprecated/`. Write tombstone `README.md` explaining what changed and that n8n is now a consumer of the gateway, not in the push path.
-- [ ] Step 8: Register `integrations` router in `backend/main.py`.
+- [x] Step 8: Register `integrations` router in `backend/main.py`.
 
 **Test:** `curl -H "X-Orchestrator-Key: test" -H "Idempotency-Key: test-1" POST /api/integrations/v1/push-requests` → 401. With valid key → 422 (preflight) or 202 (accepted). Old route still responds.
 

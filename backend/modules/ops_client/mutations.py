@@ -1,29 +1,21 @@
-"""OPS GraphQL mutation wrappers.
+"""OPS GraphQL mutation wrappers — one function per mutation.
 
-Each function wraps one OPS GraphQL mutation. They all:
-1. Accept an OpsGraphQLClient instance
-2. Build the GraphQL query string + variables
-3. Call client.execute() and return an OpsResult
-4. Unwrap the inner data so callers get e.g. result.data["category_id"]
-   not result.data["setProductCategory"]["category_id"]
-
-These wrappers are called by the push orchestrator (push.py) in sequence,
-threading IDs from one step to the next:
-
-    set_product_category → category_id
-        ↓
-    set_product(category_id) → products_id
-        ↓
-    set_product_size(products_id) → size_id
-        ↓
-    set_product_price(products_id, size_id) → done
+ID threading order for apparel push:
+  set_product_category → category_id
+  set_product(category_id) → products_id
+  set_product_size(products_id) → size_id  (once per variant)
+  set_product_price(products_id, size_id)  (once per variant)
+  set_assign_options(products_id)
+  set_additional_option / set_additional_option_attributes / set_products_attribute_price
+  update_product_stock(products_id)
+  set_product_design(products_id)
 """
 from __future__ import annotations
 
 from .client import OpsGraphQLClient, OpsResult
 
 
-# ── T6: set_product_category ────────────────────────────────────────────────
+# ── set_product_category ─────────────────────────────────────────────────────
 
 _SET_PRODUCT_CATEGORY = """
 mutation SetProductCategory($input: setProductCategory_input!) {
@@ -41,28 +33,16 @@ async def set_product_category(
     parent_id: int = 0,
     visible: int = 1,
 ) -> OpsResult:
-    """Create or update a product category in OPS.
-
-    Returns OpsResult.data = {"category_id": int} on success.
-    category_id is passed to set_product() as an input.
-    """
     result = await client.execute(
         _SET_PRODUCT_CATEGORY,
-        variables={
-            "input": {
-                "category_name": category_name,
-                "parent_id": parent_id,
-                "visible": visible,
-            }
-        },
+        variables={"input": {"category_name": category_name, "parent_id": parent_id, "visible": visible}},
     )
     if not result.ok:
         return result
-    inner = (result.data or {}).get("setProductCategory") or {}
-    return OpsResult(ok=True, data=inner, raw=result.raw)
+    return OpsResult(ok=True, data=(result.data or {}).get("setProductCategory") or {}, raw=result.raw)
 
 
-# ── T7: set_product ─────────────────────────────────────────────────────────
+# ── set_product ──────────────────────────────────────────────────────────────
 
 _SET_PRODUCT = """
 mutation SetProduct($input: setProduct_input!) {
@@ -81,29 +61,21 @@ async def set_product(
     products_internal_title: str,
     visible: int = 1,
 ) -> OpsResult:
-    """Create a product in OPS under the given category.
-
-    Returns OpsResult.data = {"products_id": int} on success.
-    products_id is passed to set_product_size() and set_product_price().
-    """
     result = await client.execute(
         _SET_PRODUCT,
-        variables={
-            "input": {
-                "category_id": category_id,
-                "products_title": products_title,
-                "products_internal_title": products_internal_title,
-                "visible": visible,
-            }
-        },
+        variables={"input": {
+            "category_id": category_id,
+            "products_title": products_title,
+            "products_internal_title": products_internal_title,
+            "visible": visible,
+        }},
     )
     if not result.ok:
         return result
-    inner = (result.data or {}).get("setProduct") or {}
-    return OpsResult(ok=True, data=inner, raw=result.raw)
+    return OpsResult(ok=True, data=(result.data or {}).get("setProduct") or {}, raw=result.raw)
 
 
-# ── T8: set_product_size ────────────────────────────────────────────────────
+# ── set_product_size ─────────────────────────────────────────────────────────
 
 _SET_PRODUCT_SIZE = """
 mutation SetProductSize($input: setProductSize_input!) {
@@ -123,30 +95,22 @@ async def set_product_size(
     products_sku: str,
     visible: int = 1,
 ) -> OpsResult:
-    """Create one size+color variant for a product in OPS.
-
-    Called once per variant. Returns OpsResult.data = {"size_id": int}.
-    size_id is paired 1:1 with set_product_price().
-    """
     result = await client.execute(
         _SET_PRODUCT_SIZE,
-        variables={
-            "input": {
-                "products_id": products_id,
-                "size_name": size_name,
-                "color_name": color_name,
-                "products_sku": products_sku,
-                "visible": visible,
-            }
-        },
+        variables={"input": {
+            "products_id": products_id,
+            "size_name": size_name,
+            "color_name": color_name,
+            "products_sku": products_sku,
+            "visible": visible,
+        }},
     )
     if not result.ok:
         return result
-    inner = (result.data or {}).get("setProductSize") or {}
-    return OpsResult(ok=True, data=inner, raw=result.raw)
+    return OpsResult(ok=True, data=(result.data or {}).get("setProductSize") or {}, raw=result.raw)
 
 
-# ── T9: set_product_price ───────────────────────────────────────────────────
+# ── set_product_price ────────────────────────────────────────────────────────
 
 _SET_PRODUCT_PRICE = """
 mutation SetProductPrice($input: setProductPrice_input!) {
@@ -168,11 +132,7 @@ async def set_product_price(
     qty_to: int | None = None,
     visible: int = 1,
 ) -> OpsResult:
-    """Set the price for one variant (size+color) in OPS.
-
-    price / vendor_price are strings to preserve Decimal precision.
-    Returns OpsResult.data = {"product_price_id": int} on success.
-    """
+    # price / vendor_price are strings to preserve Decimal precision
     input_dict: dict = {
         "products_id": products_id,
         "size_id": size_id,
@@ -186,5 +146,185 @@ async def set_product_price(
     result = await client.execute(_SET_PRODUCT_PRICE, variables={"input": input_dict})
     if not result.ok:
         return result
-    inner = (result.data or {}).get("setProductPrice") or {}
-    return OpsResult(ok=True, data=inner, raw=result.raw)
+    return OpsResult(ok=True, data=(result.data or {}).get("setProductPrice") or {}, raw=result.raw)
+
+
+# ── set_assign_options ───────────────────────────────────────────────────────
+
+_SET_ASSIGN_OPTIONS = """
+mutation SetAssignOptions($input: setAssignOptions_input!) {
+  setAssignOptions(input: $input) {
+    products_id
+  }
+}
+""".strip()
+
+
+async def set_assign_options(
+    *,
+    client: OpsGraphQLClient,
+    products_id: int,
+    options_id: list[int],
+) -> OpsResult:
+    result = await client.execute(
+        _SET_ASSIGN_OPTIONS,
+        variables={"input": {"products_id": products_id, "options_id": options_id}},
+    )
+    if not result.ok:
+        return result
+    return OpsResult(ok=True, data=(result.data or {}).get("setAssignOptions") or {}, raw=result.raw)
+
+
+# ── set_additional_option ────────────────────────────────────────────────────
+
+_SET_ADDITIONAL_OPTION = """
+mutation SetAdditionalOption($input: setAdditionalOption_input!) {
+  setAdditionalOption(input: $input) {
+    options_id
+  }
+}
+""".strip()
+
+
+async def set_additional_option(
+    *,
+    client: OpsGraphQLClient,
+    options_name: str,
+    options_type: str,
+    visible: int = 1,
+) -> OpsResult:
+    result = await client.execute(
+        _SET_ADDITIONAL_OPTION,
+        variables={"input": {"options_name": options_name, "options_type": options_type, "visible": visible}},
+    )
+    if not result.ok:
+        return result
+    return OpsResult(ok=True, data=(result.data or {}).get("setAdditionalOption") or {}, raw=result.raw)
+
+
+# ── set_additional_option_attributes ─────────────────────────────────────────
+
+_SET_ADDITIONAL_OPTION_ATTRIBUTES = """
+mutation SetAdditionalOptionAttributes($input: setAdditionalOptionAttributes_input!) {
+  setAdditionalOptionAttributes(input: $input) {
+    options_values_id
+  }
+}
+""".strip()
+
+
+async def set_additional_option_attributes(
+    *,
+    client: OpsGraphQLClient,
+    options_id: int,
+    options_values_name: str,
+    visible: int = 1,
+) -> OpsResult:
+    result = await client.execute(
+        _SET_ADDITIONAL_OPTION_ATTRIBUTES,
+        variables={"input": {
+            "options_id": options_id,
+            "options_values_name": options_values_name,
+            "visible": visible,
+        }},
+    )
+    if not result.ok:
+        return result
+    return OpsResult(
+        ok=True,
+        data=(result.data or {}).get("setAdditionalOptionAttributes") or {},
+        raw=result.raw,
+    )
+
+
+# ── set_products_attribute_price ──────────────────────────────────────────────
+
+_SET_PRODUCTS_ATTRIBUTE_PRICE = """
+mutation SetProductsAttributePrice($input: setProductsAttributePrice_input!) {
+  setProductsAttributePrice(input: $input) {
+    products_attributes_id
+  }
+}
+""".strip()
+
+
+async def set_products_attribute_price(
+    *,
+    client: OpsGraphQLClient,
+    products_id: int,
+    options_id: int,
+    options_values_id: int,
+    price: str,
+    visible: int = 1,
+) -> OpsResult:
+    result = await client.execute(
+        _SET_PRODUCTS_ATTRIBUTE_PRICE,
+        variables={"input": {
+            "products_id": products_id,
+            "options_id": options_id,
+            "options_values_id": options_values_id,
+            "price": price,
+            "visible": visible,
+        }},
+    )
+    if not result.ok:
+        return result
+    return OpsResult(
+        ok=True,
+        data=(result.data or {}).get("setProductsAttributePrice") or {},
+        raw=result.raw,
+    )
+
+
+# ── update_product_stock ─────────────────────────────────────────────────────
+
+_UPDATE_PRODUCT_STOCK = """
+mutation UpdateProductStock($input: updateProductStock_input!) {
+  updateProductStock(input: $input) {
+    products_id
+  }
+}
+""".strip()
+
+
+async def update_product_stock(
+    *,
+    client: OpsGraphQLClient,
+    products_id: int,
+    quantity: int,
+    size_id: int | None = None,
+) -> OpsResult:
+    input_dict: dict = {"products_id": products_id, "quantity": quantity}
+    if size_id is not None:
+        input_dict["size_id"] = size_id
+    result = await client.execute(_UPDATE_PRODUCT_STOCK, variables={"input": input_dict})
+    if not result.ok:
+        return result
+    return OpsResult(ok=True, data=(result.data or {}).get("updateProductStock") or {}, raw=result.raw)
+
+
+# ── set_product_design ───────────────────────────────────────────────────────
+
+_SET_PRODUCT_DESIGN = """
+mutation SetProductDesign($input: setProductDesign_input!) {
+  setProductDesign(input: $input) {
+    products_id
+  }
+}
+""".strip()
+
+
+async def set_product_design(
+    *,
+    client: OpsGraphQLClient,
+    products_id: int,
+    design_url: str,
+    design_type: str | None = None,
+) -> OpsResult:
+    input_dict: dict = {"products_id": products_id, "design_url": design_url}
+    if design_type is not None:
+        input_dict["design_type"] = design_type
+    result = await client.execute(_SET_PRODUCT_DESIGN, variables={"input": input_dict})
+    if not result.ok:
+        return result
+    return OpsResult(ok=True, data=(result.data or {}).get("setProductDesign") or {}, raw=result.raw)
