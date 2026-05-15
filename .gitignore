@@ -23,3 +23,7 @@ sanmar/sanmar_shopify.csv
 !.omc/plans/**
 !.omc/research/
 !.omc/research/**
+backend/.omc/state/agent-replay-91940b3f-3853-44a6-a33d-48c3c527c85b.jsonl
+backend/.omc/state/last-tool-error.json
+backend/.omc/state/subagent-tracking.json
+backend/.omc/state/mission-state.json
