@@ -21,47 +21,131 @@ interface Props {
 
 type MessageType = "info" | "error" | "success";
 
+// Terminal status set — push log enters one of these and stops moving.
+// Mirrors push-status.ts TERMINAL_STATUSES (kept inline to keep T21 PR
+// from depending on T4's status-map PR).
+const TERMINAL_STATUSES = new Set([
+  "pushed",
+  "failed",
+  "partial_failure",
+  "rejected",
+  "canceled",
+  "dry_run_pushed",
+]);
+
+// Poll cadence — 1.5s × 30 attempts = 45s max wait before "still running".
+const POLL_INTERVAL_MS = 1500;
+const POLL_MAX_ATTEMPTS = 30;
+
+interface PushAccepted {
+  push_log_id: string;
+  status: string;
+  dry_run: boolean;
+  callback_status: string;
+}
+
+interface PushStatus {
+  push_log_id: string;
+  status: string;
+  ops_product_id: string | null;
+  error: string | null;
+}
+
+interface ProductDetail {
+  supplier_id: string;
+  supplier_sku: string;
+}
+
+interface SupplierListItem {
+  id: string;
+  slug: string;
+}
+
 export function PushRowAction({ productId, productName }: Props) {
   const [open, setOpen] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
+  const [supplierSlug, setSupplierSlug] = useState("");
+  const [supplierSku, setSupplierSku] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setMessage(null);
-    api<Customer[]>("/api/customers")
-      .then((list) => {
-        setCustomers(list);
-        const first = list.find((c) => c.is_active);
+    Promise.all([
+      api<Customer[]>("/api/customers"),
+      api<ProductDetail>(`/api/products/${productId}`),
+      api<SupplierListItem[]>("/api/suppliers"),
+    ])
+      .then(([custs, product, suppliers]) => {
+        setCustomers(custs);
+        const first = custs.find((c) => c.is_active);
         if (first) setCustomerId(first.id);
+        setSupplierSku(product.supplier_sku);
+        const supplier = suppliers.find((s) => s.id === product.supplier_id);
+        setSupplierSlug(supplier?.slug ?? "");
       })
       .catch((e) =>
         setMessage({ text: e instanceof Error ? e.message : String(e), type: "error" })
       );
-  }, [open]);
+  }, [open, productId]);
 
   async function run() {
     if (!customerId) {
       setMessage({ text: "Pick a storefront first", type: "error" });
       return;
     }
+    if (!supplierSlug || !supplierSku) {
+      setMessage({ text: "Product supplier info still loading — try again", type: "error" });
+      return;
+    }
     setBusy(true);
-    setMessage({ text: "Triggering push workflow…", type: "info" });
+    setMessage({ text: "Submitting push request…", type: "info" });
     try {
-      const res = await api<{ triggered: boolean }>(
-        `/api/n8n/workflows/ops-push-001/trigger?product_id=${productId}&customer_id=${customerId}`,
-        { method: "POST" },
+      // POST to admin proxy — JWT-authed, no orchestrator key needed.
+      // Idempotency key = product + customer + timestamp so accidental
+      // double-clicks don't double-push.
+      const idempotencyKey = `ui-${productId}-${customerId}-${Date.now()}`;
+      const accepted = await api<PushAccepted>(
+        "/api/integrations/admin/push-requests",
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": idempotencyKey },
+          body: JSON.stringify({
+            target: { system: "ops", customer_id: customerId },
+            source: { supplier_slug: supplierSlug },
+            product_ref: { supplier_sku: supplierSku },
+            dry_run: false,
+          }),
+        },
       );
-      if (res.triggered) {
+      setMessage({
+        text: `Push queued (${accepted.push_log_id.slice(0, 8)}…) — polling for status…`,
+        type: "info",
+      });
+
+      // Poll until terminal status or max attempts reached.
+      const terminal = await pollUntilTerminal(accepted.push_log_id);
+      if (terminal.status === "pushed") {
         setMessage({
-          text: "Push started. Check history for status.",
+          text: `Pushed to OPS as products_id=${terminal.ops_product_id ?? "?"}`,
           type: "success",
         });
-        setTimeout(() => setOpen(false), 1800);
+        setTimeout(() => setOpen(false), 2400);
+      } else if (terminal.status === "dry_run_pushed") {
+        setMessage({ text: "Dry-run completed (no OPS writes)", type: "success" });
+        setTimeout(() => setOpen(false), 2400);
+      } else if (terminal.status === "still_running") {
+        setMessage({
+          text: "Still running — check Push Log for final status.",
+          type: "info",
+        });
       } else {
-        setMessage({ text: "Push request failed.", type: "error" });
+        setMessage({
+          text: `Push ${terminal.status}: ${terminal.error ?? "see Push Log for details"}`,
+          type: "error",
+        });
       }
     } catch (e) {
       setMessage({
@@ -71,6 +155,24 @@ export function PushRowAction({ productId, productName }: Props) {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Poll the status endpoint until terminal or timeout. Returns the last
+   *  status seen, with a special `still_running` marker if max attempts hit. */
+  async function pollUntilTerminal(pushLogId: string): Promise<PushStatus & { status: string }> {
+    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+      const status = await api<PushStatus>(
+        `/api/integrations/admin/push-requests/${pushLogId}`,
+      );
+      if (TERMINAL_STATUSES.has(status.status)) return status;
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+    return {
+      push_log_id: pushLogId,
+      status: "still_running",
+      ops_product_id: null,
+      error: null,
+    };
   }
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
