@@ -423,21 +423,38 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             push_log.ops_product_id = ops_product_id
 
         # ── Upsert push_mappings (live push only) ──
-        if final_status == "pushed":
-            existing_mapping = (await db.execute(
-                select(PushMapping).where(
-                    PushMapping.source_product_id == push_log.product_id,
-                    PushMapping.customer_id == push_log.customer_id,
-                )
-            )).scalar_one_or_none()
-            if existing_mapping:
-                existing_mapping.target_ops_product_id = ops_product_id
-            else:
-                db.add(PushMapping(
-                    source_product_id=push_log.product_id,
-                    customer_id=push_log.customer_id,
-                    target_ops_product_id=ops_product_id,
-                ))
+        # target_ops_product_id is an INTEGER column; the mutation responses
+        # carry it as int but step_results stringifies for JSON serialization.
+        # Coerce back to int here and skip the mapping write if the OPS id
+        # isn't numeric (e.g. early-failure cases where ops_product_id is None).
+        if final_status == "pushed" and ops_product_id is not None:
+            try:
+                target_int = int(ops_product_id)
+            except (TypeError, ValueError):
+                target_int = None
+            if target_int is not None:
+                existing_mapping = (await db.execute(
+                    select(PushMapping).where(
+                        PushMapping.source_product_id == push_log.product_id,
+                        PushMapping.customer_id == push_log.customer_id,
+                    )
+                )).scalar_one_or_none()
+                now_mapping = datetime.now(timezone.utc)
+                if existing_mapping:
+                    existing_mapping.target_ops_product_id = target_int
+                    existing_mapping.updated_at = now_mapping
+                else:
+                    db.add(PushMapping(
+                        source_system="api-hub",
+                        source_product_id=push_log.product_id,
+                        source_supplier_sku=push_log.supplier_sku,
+                        customer_id=push_log.customer_id,
+                        target_ops_base_url=(customer.ops_base_url if customer else ""),
+                        target_ops_product_id=target_int,
+                        pushed_at=now_mapping,
+                        updated_at=now_mapping,
+                        status="active",
+                    ))
 
             # Update customer-catalog selection
             sel = (await db.execute(
