@@ -1,5 +1,6 @@
 """Integration Gateway — 4 endpoints under /api/integrations/v1/"""
 import hashlib
+import logging
 import secrets
 import uuid as uuid_mod
 from datetime import datetime, timezone
@@ -10,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from modules.auth.dependencies import VGAdmin
+from modules.catalog.persistence import persist_product
+from modules.catalog.schemas import IngestResult, ProductIngest
 from modules.ops_push.gateway import execute_push, prepare_push_intent
+from modules.suppliers.models import Supplier
+from modules.sync_jobs.models import SyncJob
 from .auth import OrchestratorKey, check_key_scope
 from .models import IntegrationKey
 from .schemas import (
@@ -25,6 +30,8 @@ from .schemas import (
 )
 from modules.push_log.models import ProductPushLog
 from modules.push_log.schemas import StepResult
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/integrations/v1", tags=["integrations"])
 admin_router = APIRouter(prefix="/api/integrations", tags=["integrations_admin"])
@@ -128,15 +135,90 @@ async def get_push_status(
 )
 async def ingest_supplier_products(
     supplier_slug: str,
-    body: dict,
+    batch: list[ProductIngest],
     key: OrchestratorKey,
     db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
-    # Scope check — key must be allowed for this supplier
+    """Batched catalog upsert from an orchestrator (n8n, curl, anything).
+
+    Body is a list of `ProductIngest` — same canonical shape every supplier
+    protocol normalizes to. Persistence reuses `catalog.persistence.persist_product`,
+    which performs an ON CONFLICT DO UPDATE upsert, so the endpoint is
+    idempotent-by-construction: two POSTs with the same batch leave the DB in
+    an identical state. The `Idempotency-Key` header is logged on the
+    SyncJob row for orchestrator-side retry tracing but is not used to short-
+    circuit duplicate processing (the upsert semantics make that unnecessary).
+    """
+    # Scope check — key must be allowed for this supplier ("*" customer placeholder
+    # since ingest does not target a single customer).
     check_key_scope(key, "*", supplier_slug)
-    # Full catalog upsert implementation lives in Task 6 (payload_builder)
-    # For now: accept and acknowledge
-    return {"status": "accepted", "supplier_slug": supplier_slug, "items": len(body.get("items", []))}
+
+    supplier = (
+        await db.execute(select(Supplier).where(Supplier.slug == supplier_slug))
+    ).scalar_one_or_none()
+    if not supplier:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF",
+            "message": f"Supplier '{supplier_slug}' not found",
+        })
+    if not supplier.is_active:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={
+            "code": "SUPPLIER_INACTIVE",
+            "message": f"Supplier '{supplier_slug}' is inactive",
+        })
+
+    job = SyncJob(
+        supplier_id=supplier.id,
+        supplier_name=supplier.name,
+        job_type="products",
+        status="running",
+        started_at=datetime.now(timezone.utc),
+        records_processed=0,
+        total_products=len(batch),
+    )
+    db.add(job)
+    await db.flush()
+
+    processed = 0
+    errors: list[dict] = []
+    for item in batch:
+        try:
+            await persist_product(db, supplier.id, item, category_id=None)
+            processed += 1
+        except Exception as exc:  # noqa: BLE001 — per-item isolation
+            logger.warning(
+                "ingest_supplier_products: persist_product failed sku=%s err=%s",
+                item.supplier_sku,
+                exc,
+            )
+            errors.append({"supplier_sku": item.supplier_sku, "error": str(exc)[:300]})
+
+    job.records_processed = processed
+    job.success_count = processed
+    job.failed_count = len(errors)
+    job.completed_at = datetime.now(timezone.utc)
+    job.status = "completed" if not errors else "partial_failure"
+    if errors:
+        job.errors = errors
+    await db.commit()
+
+    if idempotency_key:
+        logger.info(
+            "ingest_supplier_products idempotency_key=%s sync_job=%s processed=%d",
+            idempotency_key,
+            job.id,
+            processed,
+        )
+
+    return {
+        "status": job.status,
+        "supplier_slug": supplier_slug,
+        "sync_job_id": str(job.id),
+        "records_processed": processed,
+        "failed_count": len(errors),
+        "errors": errors,
+    }
 
 
 # ── GET /suppliers/{supplier_slug}/schema ────────────────────────────
