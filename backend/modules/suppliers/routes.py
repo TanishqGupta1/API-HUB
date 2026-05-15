@@ -1,5 +1,8 @@
+import asyncio
+import logging
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -7,11 +10,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from modules.catalog.models import Category, Product, ProductImage, ProductVariant
+from modules.promostandards.client import PromoStandardsClient
+from modules.promostandards.resolver import resolve_wsdl_url
+from modules.ps_directory.client import get_ps_endpoints
 from modules.sync_jobs.models import SyncJob
 
 from .models import Supplier
 from .schemas import SupplierCreate, SupplierRead
 from .service import get_cached_endpoints
+
+log = logging.getLogger(__name__)
+
+_PROBE_TIMEOUT_SECONDS = 20
+_AUTH_ERROR_HINTS = ("auth", "unauthorized", "credential", "id and password", "invalid id")
 
 router = APIRouter(prefix="/api/suppliers", tags=["suppliers"])
 
@@ -163,34 +174,91 @@ async def save_supplier_mappings(
     supplier.field_mappings = body
     await db.commit()
     return {"saved": True, "supplier_id": str(supplier.id), "mappings": body}
+async def _probe_promostandards(code: str | None, auth_config: dict) -> dict:
+    """Real SOAP probe: resolve the supplier's Product Data WSDL via the PS
+    directory, then call getProductSellable with the provided credentials. A
+    successful response proves both connectivity and auth — the same path the
+    nightly import will take. Replaces the prior fake directory-only check.
+    """
+    if not code:
+        return {"ok": False, "error": "Missing PromoStandards code"}
+
+    user_id = (auth_config or {}).get("id")
+    password = (auth_config or {}).get("password")
+    if not user_id or not password:
+        return {"ok": False, "error": "Missing supplier id or password credentials"}
+
+    try:
+        endpoints = await get_ps_endpoints(code)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return {
+                "ok": False,
+                "error": (
+                    f"Supplier code '{code}' not found in PromoStandards directory. "
+                    "Verify the code (usually lowercase) is correct."
+                ),
+            }
+        return {"ok": False, "error": f"PromoStandards directory returned {e.response.status_code}"}
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        return {"ok": False, "error": f"Cannot reach PromoStandards directory: {e}"}
+    except Exception as e:  # noqa: BLE001 — directory edge cases shouldn't 500 the probe
+        log.warning("PS directory lookup for %s failed: %s", code, e)
+        return {"ok": False, "error": f"Directory check failed: {e}"}
+
+    wsdl_url = resolve_wsdl_url(endpoints, "product_data")
+    if not wsdl_url:
+        return {
+            "ok": False,
+            "error": (
+                f"No Product Data endpoint published in the PromoStandards directory for '{code}'. "
+                "Supplier must publish a productdata WSDL before catalog sync can run."
+            ),
+        }
+
+    soap_client = PromoStandardsClient(wsdl_url, {"id": user_id, "password": password})
+    try:
+        product_ids = await asyncio.wait_for(
+            soap_client.get_sellable_product_ids(), timeout=_PROBE_TIMEOUT_SECONDS
+        )
+    except asyncio.TimeoutError:
+        return {
+            "ok": False,
+            "error": f"SOAP probe to {wsdl_url} timed out after {_PROBE_TIMEOUT_SECONDS}s",
+        }
+    except Exception as e:  # noqa: BLE001
+        msg = str(e)
+        lowered = msg.lower()
+        if any(hint in lowered for hint in _AUTH_ERROR_HINTS):
+            return {"ok": False, "error": f"Authentication failed: {msg[:300]}"}
+        return {"ok": False, "error": f"SOAP call to {wsdl_url} failed: {msg[:300]}"}
+
+    return {
+        "ok": True,
+        "message": f"Connected to {code}: {len(product_ids)} sellable products visible",
+        "wsdl_url": wsdl_url,
+        "product_count": len(product_ids),
+    }
+
+
 @router.post("/test")
 async def test_supplier_connection(body: dict):
     """Test connection to a supplier before adding it.
-    
-    If it's a PromoStandards supplier, we check if the code exists in the directory.
-    If it's a custom REST supplier, we could do a ping.
+
+    PromoStandards (SanMar, S&S, etc.) → real SOAP probe via getProductSellable.
+    REST/HMAC → credential-shape sanity check (real ping deferred until
+    per-protocol adapters expose one).
     """
     protocol = body.get("protocol")
+
     if protocol == "promostandards":
-        code = body.get("promostandards_code")
-        if not code:
-            return {"ok": False, "error": "Missing PromoStandards code"}
-        
-        # Check if company exists in directory
-        from modules.ps_directory.client import get_ps_companies
-        try:
-            companies = await get_ps_companies()
-            exists = any(c.get("Code") == code for c in companies)
-            if exists:
-                return {"ok": True, "message": f"Supplier {code} found in PromoStandards directory"}
-            else:
-                return {"ok": False, "error": f"Supplier {code} not found in directory"}
-        except Exception as e:
-            return {"ok": False, "error": f"Directory check failed: {str(e)}"}
-    
-    # For custom REST/HMAC, we just return OK if creds are present for now,
-    # but we've removed the frontend hardcode.
-    if body.get("auth_config", {}).get("id") and body.get("auth_config", {}).get("password"):
+        return await _probe_promostandards(
+            code=body.get("promostandards_code"),
+            auth_config=body.get("auth_config") or {},
+        )
+
+    # REST/HMAC fallback — shape-only check until per-protocol probes land.
+    auth_config = body.get("auth_config") or {}
+    if auth_config.get("id") and auth_config.get("password"):
         return {"ok": True, "message": "Credentials format valid"}
-        
     return {"ok": False, "error": "Invalid configuration or missing credentials"}

@@ -370,8 +370,21 @@ export interface AttributeConfigItem {
   sort_order: number;
 }
 
-/* Phase 6 — customer-curated catalog selections */
-export type SelectionStatus = "selected" | "pushed" | "stale" | "failed";
+/* Phase 6 — customer-curated catalog selections.
+ * Broadened in T22 to mirror the gateway push vocabulary (T19) so the
+ * customer-catalog overlay surfaces every push_log state, not just terminal
+ * success/failure. Source of truth for colors/labels lives in
+ * `frontend/src/lib/push-status.ts`. */
+export type SelectionStatus =
+  | "selected"
+  | "accepted"
+  | "processing"
+  | "pushed"
+  | "stale"
+  | "failed"
+  | "partial_failure"
+  | "rejected"
+  | "dry_run_pushed";
 
 export interface CustomerProductSelection {
   id: string;
