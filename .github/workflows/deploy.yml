@@ -1,9 +1,11 @@
 name: Deploy to ECS
 
-# Auto-deploys on push to dev. Production (main) deploys remain manual.
+# AUTO-DEPLOY DISABLED. Trigger only via manual run:
+#   GitHub Actions tab → 'Deploy to ECS' → 'Run workflow' button.
+# To re-enable auto-deploy on push to dev, uncomment the `push` block below.
 on:
-  push:
-    branches: [dev]
+  # push:
+  #   branches: [dev]
   workflow_dispatch:
 
 permissions:
