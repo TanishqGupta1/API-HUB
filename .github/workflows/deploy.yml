@@ -1,11 +1,9 @@
-name: Deploy to ECS (staging)
+name: Deploy to ECS
 
-# AUTO-DEPLOY DISABLED. Trigger only via manual run:
-#   GitHub Actions tab → 'Deploy to ECS (staging)' → 'Run workflow' button.
-# To re-enable auto-deploy on push, uncomment the `push` block below.
+# Auto-deploys on push to dev. Production (main) deploys remain manual.
 on:
-  # push:
-  #   branches: [main]
+  push:
+    branches: [dev]
   workflow_dispatch:
 
 permissions:
@@ -14,7 +12,6 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  STACK_NAME: api-hub-staging
   ECR_BACKEND: api-hub-backend
   ECR_FRONTEND: api-hub-frontend
   ECR_N8N: api-hub-n8n
@@ -24,6 +21,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set environment name
+        run: |
+          if [ "${{ github.ref_name }}" = "dev" ]; then
+            echo "ENV_NAME=dev" >> $GITHUB_ENV
+          else
+            echo "ENV_NAME=staging" >> $GITHUB_ENV
+          fi
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -47,8 +52,8 @@ jobs:
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
           SHA=${GITHUB_SHA::8}
           docker build \
-            --build-arg NEXT_PUBLIC_API_URL=https://api.staging.example.com \
-            --build-arg NEXT_PUBLIC_N8N_URL=https://n8n.staging.example.com \
+            --build-arg NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }} \
+            --build-arg NEXT_PUBLIC_N8N_URL=${{ vars.NEXT_PUBLIC_N8N_URL }} \
             -t $ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_FRONTEND:$SHA ./frontend
           docker push  $ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_FRONTEND:$SHA
           echo "FRONTEND_URI=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_FRONTEND:$SHA" >> $GITHUB_ENV
@@ -65,10 +70,10 @@ jobs:
         run: |
           aws cloudformation deploy \
             --template-file deployment/ecs/api-hub.yaml \
-            --stack-name $STACK_NAME \
+            --stack-name api-hub-$ENV_NAME \
             --region $AWS_REGION \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides $(jq -r 'map("\(.ParameterKey)=\(.ParameterValue)") | .[]' deployment/ecs/parameters/staging.json | tr '\n' ' ') \
+            --parameter-overrides $(jq -r 'map("\(.ParameterKey)=\(.ParameterValue)") | .[]' deployment/ecs/parameters/$ENV_NAME.json | tr '\n' ' ') \
               BackendImageUri=$BACKEND_URI \
               FrontendImageUri=$FRONTEND_URI \
               N8nImageUri=$N8N_URI \
@@ -80,9 +85,9 @@ jobs:
           # Inject real values into migrate-task.json and register a task definition
           jq \
             --arg image "$BACKEND_URI" \
-            --arg exec "arn:aws:iam::$ACCOUNT:role/api-hub-staging-EcsTaskExecutionRole" \
-            --arg taskrole "arn:aws:iam::$ACCOUNT:role/api-hub-staging-BackendTaskRole" \
-            --arg secret "arn:aws:secretsmanager:$AWS_REGION:$ACCOUNT:secret:api-hub/staging/POSTGRES_URL" \
+            --arg exec "arn:aws:iam::$ACCOUNT:role/api-hub-$ENV_NAME-EcsTaskExecutionRole" \
+            --arg taskrole "arn:aws:iam::$ACCOUNT:role/api-hub-$ENV_NAME-BackendTaskRole" \
+            --arg secret "arn:aws:secretsmanager:$AWS_REGION:$ACCOUNT:secret:api-hub/$ENV_NAME/POSTGRES_URL" \
             '.containerDefinitions[0].image=$image
              | .containerDefinitions[0].secrets[0].valueFrom=$secret
              | .executionRoleArn=$exec
@@ -94,8 +99,8 @@ jobs:
             --region $AWS_REGION
 
           aws ecs run-task \
-            --cluster api-hub-staging \
+            --cluster api-hub-$ENV_NAME \
             --launch-type FARGATE \
             --task-definition api-hub-migrate \
-            --network-configuration "awsvpcConfiguration={subnets=[$(jq -r '.[] | select(.ParameterKey==\"PrivateSubnetIds\") | .ParameterValue' deployment/ecs/parameters/staging.json)],securityGroups=[$(aws ec2 describe-security-groups --filters Name=group-name,Values=*TaskSg* --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=DISABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$(jq -r '.[] | select(.ParameterKey=="PrivateSubnetIds") | .ParameterValue' deployment/ecs/parameters/$ENV_NAME.json)],securityGroups=[$(aws ec2 describe-security-groups --filters Name=group-name,Values=*TaskSg* --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=DISABLED}" \
             --region $AWS_REGION

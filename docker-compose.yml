@@ -66,7 +66,7 @@ services:
     build:
       context: ./frontend
       target: deps
-    command: npm run dev
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
     ports:
       - "3000:3000"
     environment:
