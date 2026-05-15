@@ -1,3 +1,11 @@
 n8n-nodes-onprintshop/dist/** linguist-generated=true
 n8n-nodes-onprintshop/dist/** -diff
 frontend/tsconfig.tsbuildinfo linguist-generated=true
+
+# Force LF line endings for files that run in Linux containers
+# (otherwise Windows git's autocrlf=true breaks bootstrap.sh etc.)
+*.sh text eol=lf
+*.py text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
