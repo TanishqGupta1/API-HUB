@@ -49,13 +49,36 @@ async def create_push_request(
 
     accepted = await prepare_push_intent(req, key, db, idempotency_key=idempotency_key)
 
-    # If idempotent replay — already terminal, no execute needed
+    # Idempotent replay — already terminal, no execute needed
     if accepted.status not in ("accepted", "queued"):
         return accepted
 
-    # Async execute (BackgroundTask keeps the request fast)
-    background_tasks.add_task(execute_push, accepted.push_log_id)
+    # Dry-run is fast (FakeOpsClient is in-memory) — execute inline so the
+    # 202 response already carries terminal status=dry_run_pushed. Live
+    # pushes still run as a BackgroundTask so the request returns immediately
+    # and the orchestrator polls GET /push-requests/{id} for the outcome.
+    if req.dry_run:
+        await execute_push(accepted.push_log_id)
+        terminal = await db.get(ProductPushLog, accepted.push_log_id)
+        if terminal is not None:
+            await db.refresh(terminal)
+            accepted = PushRequestAccepted(
+                push_log_id=terminal.id,
+                status=terminal.status,
+                customer_id=terminal.customer_id,
+                supplier_slug=terminal.supplier_slug or req.source.supplier_slug,
+                supplier_sku=terminal.supplier_sku,
+                ops_product_id=terminal.ops_product_id,
+                dry_run=terminal.dry_run,
+                callback_status=terminal.callback_status,
+                created_at=terminal.pushed_at,
+                links=PushRequestLinks(
+                    self=f"/api/integrations/v1/push-requests/{terminal.id}"
+                ),
+            )
+        return accepted
 
+    background_tasks.add_task(execute_push, accepted.push_log_id)
     return accepted
 
 
