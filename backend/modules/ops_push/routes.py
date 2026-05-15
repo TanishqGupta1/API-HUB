@@ -3,7 +3,7 @@
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,16 +49,18 @@ async def get_processed_image(
 async def push_product_route(
     customer_id: UUID,
     product_id: UUID,
+    background_tasks: BackgroundTasks,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        result = await push_product(db, customer_id, product_id)
+        result = await push_product(db, customer_id, product_id, background_tasks)
         if result["status"] == "failed":
             raise HTTPException(500, result["message"])
-        if result["status"] == "pending":
+        # Gateway vocab — 'accepted' (queued) returns 202; terminal states
+        # ('pushed', 'partial_failure') return 200.
+        if result["status"] in ("accepted", "processing", "queued"):
             response.status_code = 202
-            
         return result
     except ValueError as e:
         raise HTTPException(404, str(e))
