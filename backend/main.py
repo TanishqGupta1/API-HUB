@@ -161,6 +161,25 @@ _SCHEMA_UPGRADES: list[str] = [
     # Allow markup_pct to be NULL (rules may use markup_amount instead)
     "ALTER TABLE markup_rules ALTER COLUMN markup_pct DROP NOT NULL",
     "ALTER TABLE customers ADD COLUMN IF NOT EXISTS logo_url TEXT",
+    # Phase 8 Integration Gateway — product_push_log columns.
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS request_id UUID",
+    "UPDATE product_push_log SET request_id = gen_random_uuid() WHERE request_id IS NULL",
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_push_log_request_id') THEN ALTER TABLE product_push_log ADD CONSTRAINT uq_push_log_request_id UNIQUE (request_id); END IF; END $$",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS key_id VARCHAR(64)",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128)",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS payload_hash VARCHAR(64)",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS supplier_slug VARCHAR(64)",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS supplier_sku VARCHAR(255)",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS callback_url TEXT",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS callback_status VARCHAR(32) NOT NULL DEFAULT 'not_requested'",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS callback_attempts INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS step_results JSONB",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS cleanup_targets JSONB",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS dry_run BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS retry_of UUID",
+    "CREATE INDEX IF NOT EXISTS idx_push_log_payload_hash ON product_push_log(payload_hash)",
+    "CREATE INDEX IF NOT EXISTS idx_push_log_idempotency ON product_push_log(key_id, idempotency_key)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_in_flight ON product_push_log(customer_id, product_id) WHERE status = 'processing'",
 ]
 
 

@@ -1,10 +1,10 @@
 """Integration Gateway core — prepare_push_intent() + execute_push().
 
-Stub swap guide (replace when parallel tasks merge):
-  Task 6 → replace _stub_build_push_payload with: from .payload_builder import build_push_payload
-  Task 7 → replace _stub_run_preflight with:       from .preflight import run_preflight
-  Task 4 → replace _stub_ops_client with real OPSClient mutation methods
-  Task 5 → replace _stub_fake_ops_client with:     from .fake_ops_client import FakeOpsClient
+Stub swap guide:
+  Task 6 (payload_builder)  ✅ wired — see imports below
+  Task 7 (preflight)        ✅ wired — see imports below
+  Task 4 (real OpsClient)   ⏸ still stubbed — Urvashi
+  Task 5 (FakeOpsClient)    ⏸ still stubbed — Urvashi (dry-run path works via _StubFakeOpsClient)
 """
 from __future__ import annotations
 
@@ -28,6 +28,8 @@ from modules.customers.models import Customer
 from modules.integrations.models import IntegrationKey
 from modules.integrations.schemas import PushRequest, PushRequestAccepted, PushRequestLinks
 from modules.markup.engine import calculate_price
+from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
+from modules.ops_push.preflight import run_preflight
 from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
 from modules.suppliers.models import Supplier
@@ -185,7 +187,7 @@ async def prepare_push_intent(
     """
     customer_id = req.target.customer_id
     supplier_slug = req.source.supplier_slug
-    supplier_sku = req.product_ref.supplier_sku
+    pref = req.product_ref
 
     # ── Resolve customer ──
     customer = (await db.execute(
@@ -205,19 +207,49 @@ async def prepare_push_intent(
             "code": "UNKNOWN_REF", "message": f"Supplier '{supplier_slug}' not found"
         })
 
-    product = (await db.execute(
-        select(Product)
-        .options(selectinload(Product.variants), selectinload(Product.images))
-        .where(Product.supplier_sku == supplier_sku, Product.supplier_id == supplier.id)
-    )).scalar_one_or_none()
-    if not product:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
-            "code": "UNKNOWN_REF", "message": f"Product '{supplier_sku}' not found in catalog"
+    # product_ref accepts product_id (UUID) OR supplier_sku — exactly one path
+    # must resolve a row. We don't enforce "both unset" at the Pydantic layer so
+    # error shape stays consistent with the gateway envelope.
+    if pref.product_id is None and not pref.supplier_sku:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
+            "code": "INVALID_REF",
+            "message": "product_ref must include product_id or supplier_sku",
         })
 
-    # ── Build payload + compute hash ──
-    builder = _stub_build_push_payload(product, customer, [], [])
-    payload_hash = builder.payload_hash()
+    product_query = select(Product).options(
+        selectinload(Product.variants), selectinload(Product.images)
+    )
+    if pref.product_id is not None:
+        product_query = product_query.where(Product.id == pref.product_id)
+    else:
+        product_query = product_query.where(
+            Product.supplier_sku == pref.supplier_sku,
+            Product.supplier_id == supplier.id,
+        )
+    product = (await db.execute(product_query)).scalar_one_or_none()
+    if not product:
+        identifier = str(pref.product_id) if pref.product_id else pref.supplier_sku
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF", "message": f"Product '{identifier}' not found in catalog"
+        })
+
+    # Cross-check: if resolved by product_id, the product must belong to the
+    # supplier the orchestrator named. Stops a key scoped to "sanmar" from
+    # nominating a 4Over product simply by knowing its UUID.
+    if pref.product_id is not None and product.supplier_id != supplier.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={
+            "code": "SUPPLIER_MISMATCH",
+            "message": (
+                f"Product {product.id} belongs to a different supplier than "
+                f"'{supplier_slug}'"
+            ),
+        })
+
+    supplier_sku = product.supplier_sku
+
+    # ── Compute payload hash over the canonical request body (Rev 1, RFC 8785) ──
+    # Task 6: real RFC 8785 JCS hash over the inbound request, not a stub on (product_id, customer_id).
+    payload_hash = compute_payload_hash(req.model_dump(mode="json"))
 
     # ── Idempotency check ──
     existing = (await db.execute(
@@ -262,14 +294,12 @@ async def prepare_push_intent(
             "message": "Another push for this product is currently processing"
         })
 
-    # ── Preflight ──
-    preflight = await _stub_run_preflight(product, customer, db)
-    if preflight.blockers:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
-            "code": "PREFLIGHT_BLOCKER",
-            "message": f"Preflight failed: {', '.join(preflight.blockers)}",
-            "details": {"blockers": preflight.blockers, "warnings": preflight.warnings},
-        })
+    # ── Preflight (Task 7: 8 real checks + token cache) ──
+    preflight = await run_preflight(db, customer_id, product.id)
+    if not preflight.ok:
+        # Use Task 7's spec-shaped error envelope (status/code/message/details/trace_id).
+        envelope = preflight.to_error_envelope()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=envelope)
 
     # ── Insert push_log row ──
     now = datetime.now(timezone.utc)
@@ -338,9 +368,9 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
         # ── Select client ──
         client = _StubFakeOpsClient() if push_log.dry_run else _StubOpsClient()
 
-        # ── Build mutation plan ──
-        builder = _stub_build_push_payload(product, customer, [], [])
-        plan = builder.mutation_plan()
+        # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
+        payload = await build_push_payload(db, push_log.customer_id, push_log.product_id)
+        plan = [step.model_dump(mode="json") for step in payload.plan]
 
         step_results: list[dict] = []
         ops_product_id: Optional[str] = None
@@ -388,21 +418,38 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             push_log.ops_product_id = ops_product_id
 
         # ── Upsert push_mappings (live push only) ──
-        if final_status == "pushed":
-            existing_mapping = (await db.execute(
-                select(PushMapping).where(
-                    PushMapping.source_product_id == push_log.product_id,
-                    PushMapping.customer_id == push_log.customer_id,
-                )
-            )).scalar_one_or_none()
-            if existing_mapping:
-                existing_mapping.target_ops_product_id = ops_product_id
-            else:
-                db.add(PushMapping(
-                    source_product_id=push_log.product_id,
-                    customer_id=push_log.customer_id,
-                    target_ops_product_id=ops_product_id,
-                ))
+        # target_ops_product_id is an INTEGER column; the mutation responses
+        # carry it as int but step_results stringifies for JSON serialization.
+        # Coerce back to int here and skip the mapping write if the OPS id
+        # isn't numeric (e.g. early-failure cases where ops_product_id is None).
+        if final_status == "pushed" and ops_product_id is not None:
+            try:
+                target_int = int(ops_product_id)
+            except (TypeError, ValueError):
+                target_int = None
+            if target_int is not None:
+                existing_mapping = (await db.execute(
+                    select(PushMapping).where(
+                        PushMapping.source_product_id == push_log.product_id,
+                        PushMapping.customer_id == push_log.customer_id,
+                    )
+                )).scalar_one_or_none()
+                now_mapping = datetime.now(timezone.utc)
+                if existing_mapping:
+                    existing_mapping.target_ops_product_id = target_int
+                    existing_mapping.updated_at = now_mapping
+                else:
+                    db.add(PushMapping(
+                        source_system="api-hub",
+                        source_product_id=push_log.product_id,
+                        source_supplier_sku=push_log.supplier_sku,
+                        customer_id=push_log.customer_id,
+                        target_ops_base_url=(customer.ops_base_url if customer else ""),
+                        target_ops_product_id=target_int,
+                        pushed_at=now_mapping,
+                        updated_at=now_mapping,
+                        status="active",
+                    ))
 
             # Update customer-catalog selection
             sel = (await db.execute(

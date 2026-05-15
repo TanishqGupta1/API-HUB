@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { log } from "@/lib/log";
+import { isInFlight } from "@/lib/push-status";
 import type { Customer, CustomerProductSelection, SelectionStatus } from "@/lib/types";
 import {
   AlertTriangle,
@@ -19,12 +20,16 @@ import { SelectionBadge } from "@/components/SelectionBadge";
 
 type StatusFilter = "all" | SelectionStatus;
 
+// Filter options shown in the catalog header. We intentionally keep this
+// list short — the broadened SelectionStatus union (T22) covers in-flight
+// states too, but admins filter by the *outcome*, not the in-flight detail.
 const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "selected", label: "Selected" },
   { value: "pushed", label: "Pushed" },
   { value: "stale", label: "Stale" },
   { value: "failed", label: "Failed" },
+  { value: "partial_failure", label: "Partial" },
 ];
 
 // 8-4-4-4-12 hex UUID — guards against the literal `{customer_id}`
@@ -105,13 +110,20 @@ export default function CustomerCatalogPage() {
   }, [selections, search, statusFilter]);
 
   const counts = useMemo(() => {
-    const c: Record<SelectionStatus, number> = {
+    const c: Partial<Record<SelectionStatus, number>> = {
       selected: 0,
+      accepted: 0,
+      processing: 0,
       pushed: 0,
       stale: 0,
       failed: 0,
+      partial_failure: 0,
+      rejected: 0,
+      dry_run_pushed: 0,
     };
-    for (const s of selections) c[s.status]++;
+    for (const s of selections) {
+      if (c[s.status] !== undefined) c[s.status]! += 1;
+    }
     return c;
   }, [selections]);
 
@@ -126,11 +138,14 @@ export default function CustomerCatalogPage() {
     if (!id) return;
     try {
       await api(`/api/push/${id}/${productId}`, { method: "POST" });
-      // Optimistic — backend writes status="pushed"
+      // Optimistic — backend writes status="accepted" first (gateway pipeline),
+      // then BackgroundTasks flips it to "pushed"/"failed"/"partial_failure".
+      // Show "accepted" so the button gates correctly and the badge updates;
+      // a refresh or push-history fetch will reveal the terminal state.
       setSelections((prev) =>
         prev.map((s) =>
           s.product_id === productId
-            ? { ...s, status: "pushed", pushed_at: new Date().toISOString() }
+            ? { ...s, status: "accepted", pushed_at: new Date().toISOString() }
             : s,
         ),
       );
@@ -194,7 +209,9 @@ export default function CustomerCatalogPage() {
         {STATUS_FILTER_OPTIONS.map((opt) => {
           const isActive = statusFilter === opt.value;
           const count =
-            opt.value === "all" ? selections.length : counts[opt.value as SelectionStatus];
+            opt.value === "all"
+              ? selections.length
+              : (counts[opt.value as SelectionStatus] ?? 0);
           return (
             <button
               key={opt.value}
@@ -271,7 +288,10 @@ export default function CustomerCatalogPage() {
           {filtered.map((s) => {
             const needsDecoration = s.supplier_has_decoration_overlay && !s.decoration_ready;
             const isPushable = !needsDecoration;
-            const showPushUpdate = s.status === "stale" || s.status === "failed";
+            const showPushUpdate =
+              s.status === "stale" || s.status === "failed" || s.status === "partial_failure";
+            const pushInFlight = isInFlight(s.status);
+            const alreadyPushed = s.status === "pushed";
 
             return (
               <div
@@ -339,14 +359,16 @@ export default function CustomerCatalogPage() {
                   {isPushable && (
                     <button
                       onClick={(e) => handlePush(e, s.product_id)}
-                      disabled={s.status === "pushed"}
+                      disabled={alreadyPushed || pushInFlight}
                       className="text-[10px] font-bold bg-[#1e1e24] text-white px-3 py-1.5 rounded hover:bg-[#383842] disabled:bg-[#b4b4bc] disabled:cursor-not-allowed transition-colors"
                     >
-                      {s.status === "pushed"
+                      {alreadyPushed
                         ? "Pushed"
-                        : showPushUpdate
-                          ? "Push Update"
-                          : "Push to OPS"}
+                        : pushInFlight
+                          ? "Pushing…"
+                          : showPushUpdate
+                            ? "Push Update"
+                            : "Push to OPS"}
                     </button>
                   )}
                 </div>

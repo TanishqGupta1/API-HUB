@@ -286,7 +286,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.API_BASE_URL }}/api/push/{{ $('Parse Params').item.json.customer_id }}/product/{{ $('Parse Params').item.json.product_id }}/ops-options",
+        "url": "={{ $env.API_BASE_URL }}/api/push/{{ $('Parse Params').item.json.customer_id }}/product/{{ $('Parse Params').item.json.product_id }}/payload",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -299,7 +299,7 @@
         "options": {}
       },
       "id": "a1111111-0020-0000-0000-000000000020",
-      "name": "Get /ops-options",
+      "name": "Get /payload (options)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -309,7 +309,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// STUB: OPS beta mutations (setAdditionalOption, setAdditionalOptionAttributes,\n// setProductsAttributePrice) are not yet shipped.\n// When they ship, replace this Code node with:\n//   1. Split In Batches over options\n//   2. OPS: setAdditionalOption (per option) -> captures target_ops_option_id\n//   3. Split In Batches over attributes\n//   4. OPS: setAdditionalOptionAttributes -> captures target_ops_attribute_id\n//   5. OPS: setProductsAttributePrice -> applies price\n// For now: annotate each attribute with null target IDs and pass through.\nconst options = $input.all().map(i => i.json);\nconsole.log('[STUB] ops-push options payload:', JSON.stringify(options));\nreturn options.map(opt => ({\n  json: {\n    ...opt,\n    _stub: true,\n    target_ops_option_id: null,\n    attributes: (opt.attributes || []).map(a => ({\n      ...a,\n      target_ops_attribute_id: null,\n    })),\n  }\n}));"
+        "jsCode": "// STUB: OPS beta mutations (setAdditionalOption, setAdditionalOptionAttributes,\n// setProductsAttributePrice) are not yet shipped.\n// When they ship, replace this Code node with:\n//   1. Split In Batches over options\n//   2. OPS: setAdditionalOption (per option) -> captures target_ops_option_id\n//   3. Split In Batches over attributes\n//   4. OPS: setAdditionalOptionAttributes -> captures target_ops_attribute_id\n//   5. OPS: setProductsAttributePrice -> applies price\n// For now: annotate each attribute with null target IDs and pass through.\n// T20 collapse: /payload returns { product, variants, images, markup_rule, ops_variants, options } — read options[] from body.\nconst options = ($input.first().json.options || []);\nconsole.log('[STUB] ops-push options payload:', JSON.stringify(options));\nreturn options.map(opt => ({\n  json: {\n    ...opt,\n    _stub: true,\n    target_ops_option_id: null,\n    attributes: (opt.attributes || []).map(a => ({\n      ...a,\n      target_ops_attribute_id: null,\n    })),\n  }\n}));"
       },
       "id": "a1111111-0021-0000-0000-000000000021",
       "name": "Stub Apply Options",
@@ -406,7 +406,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.API_BASE_URL }}/api/push/{{ $('Parse Params').item.json.customer_id }}/product/{{ $('Parse Params').item.json.product_id }}/ops-options",
+        "url": "={{ $env.API_BASE_URL }}/api/push/{{ $('Parse Params').item.json.customer_id }}/product/{{ $('Parse Params').item.json.product_id }}/payload",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -419,7 +419,7 @@
         "options": {}
       },
       "id": "a1111111-0020-0000-0000-000000000020",
-      "name": "Get /ops-options",
+      "name": "Get /payload (options)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -429,7 +429,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// STUB: OPS beta mutations (setAdditionalOption, setAdditionalOptionAttributes,\n// setProductsAttributePrice) are not yet shipped.\n// When they ship, replace this Code node with:\n//   1. Split In Batches over options\n//   2. OPS: setAdditionalOption (per option) \u2192 captures target_ops_option_id\n//   3. Split In Batches over attributes\n//   4. OPS: setAdditionalOptionAttributes \u2192 captures target_ops_attribute_id\n//   5. OPS: setProductsAttributePrice \u2192 applies price\n// For now: annotate each attribute with null target IDs and pass through.\nconst options = $input.all().map(i => i.json);\nconsole.log('[STUB] ops-push options payload:', JSON.stringify(options));\nreturn options.map(opt => ({\n  json: {\n    ...opt,\n    _stub: true,\n    target_ops_option_id: null,\n    attributes: (opt.attributes || []).map(a => ({\n      ...a,\n      target_ops_attribute_id: null,\n    })),\n  }\n}));"
+        "jsCode": "// STUB: OPS beta mutations (setAdditionalOption, setAdditionalOptionAttributes,\n// setProductsAttributePrice) are not yet shipped.\n// When they ship, replace this Code node with:\n//   1. Split In Batches over options\n//   2. OPS: setAdditionalOption (per option) \u2192 captures target_ops_option_id\n//   3. Split In Batches over attributes\n//   4. OPS: setAdditionalOptionAttributes \u2192 captures target_ops_attribute_id\n//   5. OPS: setProductsAttributePrice \u2192 applies price\n// For now: annotate each attribute with null target IDs and pass through.\n// T20 collapse: /payload returns { product, variants, images, markup_rule, ops_variants, options } — read options[] from body.\nconst options = ($input.first().json.options || []);\nconsole.log('[STUB] ops-push options payload:', JSON.stringify(options));\nreturn options.map(opt => ({\n  json: {\n    ...opt,\n    _stub: true,\n    target_ops_option_id: null,\n    attributes: (opt.attributes || []).map(a => ({\n      ...a,\n      target_ops_attribute_id: null,\n    })),\n  }\n}));"
       },
       "id": "a1111111-0021-0000-0000-000000000021",
       "name": "Stub Apply Options",
@@ -658,7 +658,7 @@
       "main": [
         [
           {
-            "node": "Get /ops-options",
+            "node": "Get /payload (options)",
             "type": "main",
             "index": 0
           }
@@ -672,7 +672,7 @@
         ]
       ]
     },
-    "Get /ops-options": {
+    "Get /payload (options)": {
       "main": [
         [
           {

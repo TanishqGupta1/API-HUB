@@ -48,7 +48,7 @@ def test_decoration_create_validates_options_list():
         }
     ])
     assert len(ok.decoration_options) == 1
-    assert ok.decoration_options[0].option_key == "imprint_method"
+    assert ok.decoration_options[0]["option_key"] == "imprint_method"
 
     with pytest.raises(ValidationError):
         DecorationCreate(decoration_options=[])  # empty list not allowed

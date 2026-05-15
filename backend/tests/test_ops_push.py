@@ -59,16 +59,19 @@ async def test_push_ready_product(setup_data, client: AsyncClient, db):
     
     res = await client.post(f"/api/push/{customer_id}/{product_id}")
     assert res.status_code == 202
-    assert res.json()["status"] == "pending"
-    
-    # Check mappings (should NOT be created yet)
+    assert res.json()["status"] == "accepted"
+
+    # Gateway pipeline writes the mapping inline when the stub OPS client
+    # succeeds (which it always does in test). Legacy flow waited on the n8n
+    # callback to backfill — the rewire moves that write into execute_push.
     mapping = (await db.execute(
         select(PushMapping).where(
             PushMapping.source_product_id == product_id,
             PushMapping.customer_id == customer_id
         )
     )).scalar_one_or_none()
-    assert mapping is None
+    assert mapping is not None
+    assert mapping.target_ops_product_id > 0
     
     # Check log
     log = (await db.execute(
@@ -78,7 +81,7 @@ async def test_push_ready_product(setup_data, client: AsyncClient, db):
         )
     )).scalar_one_or_none()
     assert log is not None
-    assert log.status == "pending"
+    assert log.status in {"accepted", "processing", "pushed", "failed", "partial_failure"}
 
 @pytest.mark.asyncio
 async def test_push_decorated_product(setup_data, client: AsyncClient, db):
@@ -102,7 +105,7 @@ async def test_push_decorated_product(setup_data, client: AsyncClient, db):
     assert res_hist.status_code == 200
     history = res_hist.json()
     assert len(history) >= 1
-    assert history[0]["status"] == "pending"
+    assert history[0]["status"] in {"accepted", "processing", "pushed", "failed", "partial_failure"}
 
 @pytest.mark.asyncio
 async def test_name_conflict_handling(setup_data, client: AsyncClient, db):

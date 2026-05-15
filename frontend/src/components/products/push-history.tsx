@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { getStatusConfig } from "@/lib/push-status";
 import type { ProductPushLogRead } from "@/lib/types";
 
 interface Props {
@@ -50,20 +51,20 @@ export function PushHistory({ productId }: Props) {
               <td className="py-2.5 font-mono text-[#484852]">{fmt(r.pushed_at)}</td>
               <td className="py-2.5 font-mono text-[#484852]">{r.customer_name ?? r.customer_id.slice(0, 8)}</td>
               <td className="py-2.5">
-                <span
-                  className={`inline-flex items-center px-2 py-[2px] rounded-full text-[10px] font-bold border ${
-                    r.status === "pushed"
-                      ? "bg-[#e6f3ec] text-[#247a52] border-[#c3e6d2]"
-                      : r.status === "failed"
-                        ? "bg-[#fdeded] text-[#b93232] border-[#f9d7d7]"
-                        : "bg-[#f9f7f4] text-[#888894] border-[#ebe8e3]"
-                  }`}
-                >
-                  <span className={`w-1 h-1 rounded-full mr-1.5 ${
-                    r.status === "pushed" ? "bg-[#247a52]" : r.status === "failed" ? "bg-[#b93232]" : "bg-[#888894]"
-                  }`} />
-                  {r.status}
-                </span>
+                {(() => {
+                  const c = getStatusConfig(r.status);
+                  return (
+                    <span
+                      className={`inline-flex items-center px-2 py-[2px] rounded-full text-[10px] font-bold border ${c.bg} ${c.text} ${c.border}`}
+                    >
+                      <span
+                        className={`w-1 h-1 rounded-full mr-1.5 ${c.text.replace("text-", "bg-")}`}
+                        aria-hidden
+                      />
+                      {c.label}
+                    </span>
+                  );
+                })()}
               </td>
               <td className="py-2.5 font-mono text-[#484852]">{r.ops_product_id ?? "—"}</td>
               <td className="py-2.5 text-[#b93232] truncate max-w-[200px] font-sans" title={r.error ?? ""}>
