@@ -110,11 +110,7 @@ export default function CustomerCatalogPage() {
   }, [selections, search, statusFilter]);
 
   const counts = useMemo(() => {
-    // Initialize every SelectionStatus variant so TS sees an exhaustive
-    // Record<SelectionStatus, number>. New gateway-vocab statuses
-    // (accepted/processing/partial_failure/rejected/dry_run_pushed) join
-    // the existing selected/pushed/stale/failed counters.
-    const c: Record<SelectionStatus, number> = {
+    const c: Partial<Record<SelectionStatus, number>> = {
       selected: 0,
       accepted: 0,
       processing: 0,
@@ -125,7 +121,9 @@ export default function CustomerCatalogPage() {
       rejected: 0,
       dry_run_pushed: 0,
     };
-    for (const s of selections) c[s.status]++;
+    for (const s of selections) {
+      if (c[s.status] !== undefined) c[s.status]! += 1;
+    }
     return c;
   }, [selections]);
 
@@ -211,7 +209,9 @@ export default function CustomerCatalogPage() {
         {STATUS_FILTER_OPTIONS.map((opt) => {
           const isActive = statusFilter === opt.value;
           const count =
-            opt.value === "all" ? selections.length : counts[opt.value as SelectionStatus];
+            opt.value === "all"
+              ? selections.length
+              : (counts[opt.value as SelectionStatus] ?? 0);
           return (
             <button
               key={opt.value}
