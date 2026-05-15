@@ -528,3 +528,88 @@ async def revoke_key(
     key.is_active = False
     await db.commit()
     return {"status": "revoked", "key_id": key_id}
+
+
+# Admin proxy — JWT-authenticated push for the admin UI. Uses a
+# synthetic IntegrationKey row (is_synthetic=True) that the orchestrator
+# auth path filters out, so this pseudo-key can't be forged via header.
+
+ADMIN_PROXY_KEY_ID = "_admin_ui_proxy"
+
+
+async def _get_or_create_admin_proxy_key(db: AsyncSession) -> IntegrationKey:
+    """Idempotent singleton for the synthetic admin-proxy IntegrationKey."""
+    key = await db.get(IntegrationKey, ADMIN_PROXY_KEY_ID)
+    if key:
+        return key
+    key = IntegrationKey(
+        id=ADMIN_PROXY_KEY_ID,
+        key_hash="synthetic-no-header-lookup",
+        name="Admin UI proxy (JWT-authenticated)",
+        allowed_customer_ids=None,
+        allowed_supplier_slugs=None,
+        rate_limit_per_minute=600,
+        is_synthetic=True,
+    )
+    db.add(key)
+    await db.commit()
+    await db.refresh(key)
+    return key
+
+
+@admin_router.get(
+    "/admin/push-requests/{push_log_id}",
+    response_model=PushStatusOut,
+    summary="Admin-only status poll (JWT auth) — mirrors /v1/push-requests/{id}",
+)
+async def admin_push_status(
+    push_log_id: uuid_mod.UUID,
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin JWT-auth mirror of GET /v1/push-requests/{id}."""
+    push_log = await db.get(ProductPushLog, push_log_id)
+    if not push_log:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF", "message": "Push request not found"
+        })
+    terminal = push_log.status in (
+        "pushed", "failed", "partial_failure", "rejected", "dry_run_pushed", "canceled"
+    )
+    return PushStatusOut(
+        push_log_id=push_log.id,
+        status=push_log.status,
+        customer_id=push_log.customer_id,
+        supplier_slug=push_log.supplier_slug,
+        supplier_sku=push_log.supplier_sku,
+        ops_product_id=push_log.ops_product_id,
+        error=push_log.error,
+        step_results=[StepResultOut(**s) for s in (push_log.step_results or [])],
+        cleanup_targets=push_log.cleanup_targets,
+        callback_status=push_log.callback_status,
+        callback_attempts=push_log.callback_attempts,
+        finished_at=push_log.pushed_at if terminal else None,
+        links=PushRequestLinks(self=f"/api/integrations/admin/push-requests/{push_log_id}"),
+    )
+
+
+@admin_router.post(
+    "/admin/push-requests",
+    status_code=202,
+    response_model=PushRequestAccepted,
+    summary="Admin-only push proxy (JWT auth, no X-Orchestrator-Key required)",
+)
+async def admin_push_request(
+    req: PushRequest,
+    background_tasks: BackgroundTasks,
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+):
+    """Admin JWT mirror of POST /v1/push-requests — same pipeline, JWT-authed."""
+    proxy_key = await _get_or_create_admin_proxy_key(db)
+    accepted = await prepare_push_intent(req, proxy_key, db, idempotency_key=idempotency_key)
+    if accepted.status not in ("accepted", "queued"):
+        return accepted
+    background_tasks.add_task(execute_push, accepted.push_log_id)
+    return accepted
