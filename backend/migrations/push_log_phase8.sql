@@ -59,7 +59,13 @@ CREATE TABLE IF NOT EXISTS integration_keys (
     allowed_supplier_slugs  JSONB,
     rate_limit_per_minute   INT DEFAULT 60,
     is_active               BOOLEAN DEFAULT TRUE,
+    is_synthetic            BOOLEAN NOT NULL DEFAULT FALSE,
     last_used_at            TIMESTAMPTZ,
     created_at              TIMESTAMPTZ DEFAULT NOW(),
     revoked_at              TIMESTAMPTZ
 );
+
+-- For existing deployments that already have integration_keys without
+-- is_synthetic: backfill the column.
+ALTER TABLE integration_keys
+    ADD COLUMN IF NOT EXISTS is_synthetic BOOLEAN NOT NULL DEFAULT FALSE;
