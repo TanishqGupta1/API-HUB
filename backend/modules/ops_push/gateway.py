@@ -185,7 +185,7 @@ async def prepare_push_intent(
     """
     customer_id = req.target.customer_id
     supplier_slug = req.source.supplier_slug
-    supplier_sku = req.product_ref.supplier_sku
+    pref = req.product_ref
 
     # ── Resolve customer ──
     customer = (await db.execute(
@@ -205,19 +205,54 @@ async def prepare_push_intent(
             "code": "UNKNOWN_REF", "message": f"Supplier '{supplier_slug}' not found"
         })
 
-    product = (await db.execute(
-        select(Product)
-        .options(selectinload(Product.variants), selectinload(Product.images))
-        .where(Product.supplier_sku == supplier_sku, Product.supplier_id == supplier.id)
-    )).scalar_one_or_none()
-    if not product:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
-            "code": "UNKNOWN_REF", "message": f"Product '{supplier_sku}' not found in catalog"
+    # product_ref accepts product_id (UUID) OR supplier_sku — exactly one path
+    # must resolve a row. We don't enforce "both unset" at the Pydantic layer so
+    # error shape stays consistent with the gateway envelope.
+    if pref.product_id is None and not pref.supplier_sku:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
+            "code": "INVALID_REF",
+            "message": "product_ref must include product_id or supplier_sku",
         })
 
+    product_query = select(Product).options(
+        selectinload(Product.variants), selectinload(Product.images)
+    )
+    if pref.product_id is not None:
+        product_query = product_query.where(Product.id == pref.product_id)
+    else:
+        product_query = product_query.where(
+            Product.supplier_sku == pref.supplier_sku,
+            Product.supplier_id == supplier.id,
+        )
+    product = (await db.execute(product_query)).scalar_one_or_none()
+    if not product:
+        identifier = str(pref.product_id) if pref.product_id else pref.supplier_sku
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF", "message": f"Product '{identifier}' not found in catalog"
+        })
+
+    # Cross-check: if resolved by product_id, the product must belong to the
+    # supplier the orchestrator named. Stops a key scoped to "sanmar" from
+    # nominating a 4Over product simply by knowing its UUID.
+    if pref.product_id is not None and product.supplier_id != supplier.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={
+            "code": "SUPPLIER_MISMATCH",
+            "message": (
+                f"Product {product.id} belongs to a different supplier than "
+                f"'{supplier_slug}'"
+            ),
+        })
+
+    supplier_sku = product.supplier_sku
+
     # ── Build payload + compute hash ──
+    # Hash the full request envelope so any client-visible field change
+    # (dry_run flag, decorations list, callback URL, etc.) breaks idempotent
+    # replay correctly. The stub builder's hash only covers resolved entities.
+    payload_hash = hashlib.sha256(
+        req.model_dump_json(exclude_none=False).encode()
+    ).hexdigest()
     builder = _stub_build_push_payload(product, customer, [], [])
-    payload_hash = builder.payload_hash()
 
     # ── Idempotency check ──
     existing = (await db.execute(
