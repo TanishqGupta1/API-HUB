@@ -23,6 +23,14 @@ class IntegrationKey(Base):
 
     rate_limit_per_minute: Mapped[int] = mapped_column(Integer, default=60)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Internal pseudo-key used by the admin-UI proxy route. Excluded from
+    # X-Orchestrator-Key lookups via WHERE is_synthetic = FALSE so the
+    # admin proxy cannot be forged by an external orchestrator. Replaces
+    # the earlier sentinel-hash approach (relied on token_urlsafe never
+    # producing a specific hash — brittle contract).
+    is_synthetic: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

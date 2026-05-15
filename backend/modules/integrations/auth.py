@@ -24,8 +24,14 @@ async def get_orchestrator_key(
         })
 
     key_hash = _hash_key(x_orchestrator_key)
+    # Filter out synthetic admin-proxy keys at SQL level — they MUST NOT
+    # be reachable via the X-Orchestrator-Key header path. The admin-proxy
+    # route loads them by primary key separately.
     result = await db.execute(
-        select(IntegrationKey).where(IntegrationKey.key_hash == key_hash)
+        select(IntegrationKey).where(
+            IntegrationKey.key_hash == key_hash,
+            IntegrationKey.is_synthetic == False,  # noqa: E712 — SQL boolean
+        )
     )
     key = result.scalar_one_or_none()
 
