@@ -13,6 +13,8 @@ import inspect
 
 import pytest
 
+pytestmark = pytest.mark.no_db
+
 
 def test_ingest_secret_matches_uses_compare_digest(monkeypatch):
     """The auth helper backs both the X-Ingest-Secret routes and (after T2)

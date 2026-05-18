@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 
+import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
 import asyncio
@@ -16,11 +17,26 @@ _test_db_url = os.environ.get("TEST_DATABASE_URL")
 if _test_db_url:
     os.environ["POSTGRES_URL"] = _test_db_url
 
+# Default to a fake URL so the conftest module can be imported in
+# environments without a running Postgres. The engine itself is lazy —
+# no connection until a fixture or test queries it. Hermetic tests
+# (marked `@pytest.mark.no_db`) skip the autouse fixtures below.
+os.environ.setdefault(
+    "POSTGRES_URL",
+    "postgresql+asyncpg://hermetic:hermetic@127.0.0.1:5432/hermetic_unused",
+)
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
-# Override engine globally for tests to avoid connection sharing issues on Windows
 engine = create_async_engine(os.environ["POSTGRES_URL"], poolclass=NullPool)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "no_db: hermetic test — autouse DB schema/cleanup fixtures skip it",
+    )
 
 os.environ["INGEST_SHARED_SECRET"] = "test-secret-do-not-use-in-prod"
 
@@ -59,8 +75,14 @@ TEST_CUSTOMER_OPS_URLS = (
 _SCHEMA_CREATED = False
 
 @pytest_asyncio.fixture(autouse=True)
-async def _create_schema():
-    """Ensure schema exists. Only runs DDL once per process."""
+async def _create_schema(request):
+    """Ensure schema exists. Only runs DDL once per process.
+
+    Skipped for tests marked `no_db` so hermetic suites don't require Postgres.
+    """
+    if request.node.get_closest_marker("no_db"):
+        yield
+        return
     global _SCHEMA_CREATED
     if not _SCHEMA_CREATED:
         async with engine.begin() as conn:
@@ -71,8 +93,6 @@ async def _create_schema():
                 await conn.execute(text(stmt))
         _SCHEMA_CREATED = True
     yield
-    # No engine.dispose() here to avoid closing resources needed by other tests
-    # in the same process/loop.
 
 
 async def _cleanup_test_customers() -> None:
@@ -136,14 +156,19 @@ async def _cleanup_test_suppliers() -> None:
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def _cleanup_around_test():
-    """Automatically cleans up test data before and after every test."""
+async def _cleanup_around_test(request):
+    """Automatically cleans up test data before and after every test.
+
+    Skipped for tests marked `no_db`.
+    """
+    if request.node.get_closest_marker("no_db"):
+        yield
+        return
     await _cleanup_test_customers()
     await _cleanup_test_suppliers()
     yield
     await _cleanup_test_customers()
     await _cleanup_test_suppliers()
-    # Force pool disposal to avoid connection leaks between tests
     await engine.dispose()
 
 

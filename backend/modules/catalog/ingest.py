@@ -18,6 +18,8 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from modules.auth.dependencies import _ingest_secret_matches
+
 from database import get_db
 from modules.suppliers.models import Supplier
 from modules.sync_jobs.models import SyncJob
@@ -47,22 +49,18 @@ router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 # Auth + helpers
 # ---------------------------------------------------------------------------
 
-def _expected_secret() -> str:
-    value = os.getenv("INGEST_SHARED_SECRET", "").strip()
-    if not value:
-        raise HTTPException(503, "Ingest endpoint temporarily unavailable")
-    return value
-
-
 async def require_ingest_secret(x_ingest_secret: str | None = Header(default=None)) -> None:
-    # Raises 503 (via _expected_secret) when INGEST_SHARED_SECRET is unset —
-    # that path takes precedence over a 401 so misconfiguration is obvious.
-    _expected_secret()
-    # Constant-time compare. Raw `==` short-circuits on the first mismatched
-    # byte, which lets an attacker on the same network recover the secret one
-    # byte at a time by measuring response latency. compare_digest does the
-    # full comparison in fixed time regardless of where the mismatch falls.
-    from modules.auth.dependencies import _ingest_secret_matches
+    """Validate the X-Ingest-Secret header in constant time.
+
+    Delegates to `modules.auth.dependencies._ingest_secret_matches`, which
+    uses `hmac.compare_digest` (PR #106). This module previously did a raw
+    `==` comparison — a timing-oracle that's been removed (Task 2).
+
+    503 is preserved for the "secret not configured" case so ops sees a
+    distinct "temporarily unavailable" signal rather than a 401.
+    """
+    if not os.getenv("INGEST_SHARED_SECRET", "").strip():
+        raise HTTPException(503, "Ingest endpoint temporarily unavailable")
     if not _ingest_secret_matches(x_ingest_secret):
         raise HTTPException(401, "Invalid or missing X-Ingest-Secret header")
 
