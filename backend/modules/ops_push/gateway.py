@@ -1,16 +1,7 @@
-"""Integration Gateway core — prepare_push_intent() + execute_push().
-
-Stub swap guide:
-  Task 6 (payload_builder)  ✅ wired — see imports below
-  Task 7 (preflight)        ✅ wired — see imports below
-  Task 4 (real OpsClient)   ⏸ still stubbed — Urvashi
-  Task 5 (FakeOpsClient)    ⏸ still stubbed — Urvashi (dry-run path works via _StubFakeOpsClient)
-"""
+"""Integration Gateway core — prepare_push_intent() + execute_push()."""
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 import logging
 import uuid as uuid_mod
 from datetime import datetime, timezone
@@ -28,6 +19,8 @@ from modules.customers.models import Customer
 from modules.integrations.models import IntegrationKey
 from modules.integrations.schemas import PushRequest, PushRequestAccepted, PushRequestLinks
 from modules.markup.engine import calculate_price
+from modules.ops_client import mutations as _m
+from modules.ops_client.client import OpsAuth, OpsGraphQLClient
 from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
 from modules.ops_push.preflight import run_preflight
 from modules.push_log.models import ProductPushLog
@@ -38,67 +31,55 @@ logger = logging.getLogger(__name__)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Stubs — swap these out when parallel tasks merge
+# OPS clients — adapters that match the plan-step interface
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# `execute_push` walks the OPSMutationStep plan from payload_builder, calling
+# `getattr(client, _mutation_to_method(step.mutation))(step.variables)` for
+# each step. The OPS client adapter and the dry-run Fake share that
+# (variables: dict) → response: dict interface.
 
-class _PreflightStub:
-    blockers: list[str] = []
-    warnings: list[str] = []
-
-
-async def _stub_run_preflight(product, customer, db) -> _PreflightStub:
-    """TODO Task 7: replace with → from .preflight import run_preflight"""
-    logger.warning("preflight stub active — Task 7 not yet merged")
-    return _PreflightStub()
-
-
-class _PushPayloadStub:
-    def __init__(self, product, customer, markup_rules, push_mappings):
-        self._product = product
-        self._customer = customer
-
-    def mutation_plan(self) -> list[dict]:
-        return [{"step": 1, "mutation": "setProduct", "variables": {"stub": True}}]
-
-    def payload_hash(self) -> str:
-        raw = json.dumps({
-            "product_id": str(self._product.id),
-            "customer_id": str(self._customer.id),
-        }, sort_keys=True)
-        return hashlib.sha256(raw.encode()).hexdigest()
+# Maps GraphQL mutation root → (query string, response root key).
+# The query strings live in ops_client.mutations as the single source of
+# truth for OPS field shapes.
+_MUTATION_DISPATCH: dict[str, tuple[str, str]] = {
+    "set_product_category":            (_m._SET_PRODUCT_CATEGORY,            "setProductCategory"),
+    "set_product":                     (_m._SET_PRODUCT,                     "setProduct"),
+    "set_product_size":                (_m._SET_PRODUCT_SIZE,                "setProductSize"),
+    "set_product_price":               (_m._SET_PRODUCT_PRICE,               "setProductPrice"),
+    "set_assign_options":              (_m._SET_ASSIGN_OPTIONS,              "setAssignOptions"),
+    "set_additional_option":           (_m._SET_ADDITIONAL_OPTION,           "setAdditionalOption"),
+    "set_additional_option_attributes": (_m._SET_ADDITIONAL_OPTION_ATTRIBUTES, "setAdditionalOptionAttributes"),
+    "set_products_attribute_price":    (_m._SET_PRODUCTS_ATTRIBUTE_PRICE,    "setProductsAttributePrice"),
+}
 
 
-def _stub_build_push_payload(product, customer, markup_rules, push_mappings) -> _PushPayloadStub:
-    """TODO Task 6: replace with → from .payload_builder import build_push_payload"""
-    logger.warning("payload_builder stub active — Task 6 not yet merged")
-    return _PushPayloadStub(product, customer, markup_rules, push_mappings)
+class OpsClientAdapter:
+    """Live OPS client — dispatches each plan step through OpsGraphQLClient."""
+
+    def __init__(self, client: OpsGraphQLClient) -> None:
+        self._client = client
+
+    def __getattr__(self, name: str) -> Any:
+        if name not in _MUTATION_DISPATCH:
+            raise AttributeError(name)
+        query, response_root = _MUTATION_DISPATCH[name]
+
+        async def _invoke(variables: dict) -> dict:
+            result = await self._client.execute(query, variables=variables)
+            if not result.ok:
+                code = result.ops_error_code or "OPS_ERROR"
+                msg = result.ops_error_message or "OPS mutation failed"
+                raise RuntimeError(f"{code}: {msg}")
+            return ((result.data or {}).get(response_root) or {})
+
+        return _invoke
 
 
-class _StubOpsClient:
-    """TODO Task 4: replace with real OPSClient mutation methods"""
-    async def set_product_category(self, input: dict) -> dict:
-        logger.warning("OpsClient stub — Task 4 not yet merged")
-        return {"products_id": 99001}
+class FakeOpsClient:
+    """Dry-run client — fabricates IDs and records calls. No OPS traffic."""
 
-    async def set_product(self, input: dict) -> dict:
-        return {"products_id": 99001}
-
-    async def set_product_size(self, input: dict) -> dict:
-        return {"products_id": 99001, "size_id": 1}
-
-    async def set_product_price(self, input: dict) -> dict:
-        return {}
-
-    async def set_assign_options(self, input: dict) -> dict:
-        return {}
-
-    async def set_product_design(self, input: dict) -> dict:
-        return {}
-
-
-class _StubFakeOpsClient:
-    """TODO Task 5: replace with → from .fake_ops_client import FakeOpsClient"""
-    def __init__(self):
+    def __init__(self) -> None:
         self.calls: list[dict] = []
         self._counter = 10000
 
@@ -106,35 +87,66 @@ class _StubFakeOpsClient:
         self._counter += 1
         return self._counter
 
-    async def set_product_category(self, input: dict) -> dict:
-        r = {"products_id": 1}
-        self.calls.append({"method": "set_product_category", "input": input, "response": r})
+    def _record(self, method: str, variables: dict, response: dict) -> None:
+        self.calls.append({"method": method, "input": variables, "response": response})
+
+    async def set_product_category(self, variables: dict) -> dict:
+        r = {"category_id": self._next_id()}
+        self._record("set_product_category", variables, r)
         return r
 
-    async def set_product(self, input: dict) -> dict:
+    async def set_product(self, variables: dict) -> dict:
         r = {"products_id": self._next_id()}
-        self.calls.append({"method": "set_product", "input": input, "response": r})
+        self._record("set_product", variables, r)
         return r
 
-    async def set_product_size(self, input: dict) -> dict:
-        r = {"products_id": self._counter, "size_id": self._next_id()}
-        self.calls.append({"method": "set_product_size", "input": input, "response": r})
+    async def set_product_size(self, variables: dict) -> dict:
+        r = {"size_id": self._next_id()}
+        self._record("set_product_size", variables, r)
         return r
 
-    async def set_product_price(self, input: dict) -> dict:
-        r = {}
-        self.calls.append({"method": "set_product_price", "input": input, "response": r})
+    async def set_product_price(self, variables: dict) -> dict:
+        r = {"product_price_id": self._next_id()}
+        self._record("set_product_price", variables, r)
         return r
 
-    async def set_assign_options(self, input: dict) -> dict:
-        r = {}
-        self.calls.append({"method": "set_assign_options", "input": input, "response": r})
+    async def set_assign_options(self, variables: dict) -> dict:
+        inp = variables.get("input", variables)
+        r = {"products_id": inp.get("products_id", self._counter)}
+        self._record("set_assign_options", variables, r)
         return r
 
-    async def set_product_design(self, input: dict) -> dict:
-        r = {}
-        self.calls.append({"method": "set_product_design", "input": input, "response": r})
+    async def set_additional_option(self, variables: dict) -> dict:
+        r = {"options_id": self._next_id()}
+        self._record("set_additional_option", variables, r)
         return r
+
+    async def set_additional_option_attributes(self, variables: dict) -> dict:
+        r = {"options_values_id": self._next_id()}
+        self._record("set_additional_option_attributes", variables, r)
+        return r
+
+    async def set_products_attribute_price(self, variables: dict) -> dict:
+        r = {"products_attributes_id": self._next_id()}
+        self._record("set_products_attribute_price", variables, r)
+        return r
+
+
+def _build_live_client(customer: Customer) -> OpsClientAdapter:
+    """Hydrate an OpsGraphQLClient from the customer's encrypted ops_auth_config."""
+    secret = (customer.ops_auth_config or {}).get("client_secret")
+    if not secret:
+        raise RuntimeError(
+            f"Customer {customer.id} ops_auth_config.client_secret is unset — "
+            "live push cannot authenticate"
+        )
+    auth = OpsAuth(
+        base_url=customer.ops_base_url,
+        token_url=customer.ops_token_url,
+        client_id=customer.ops_client_id,
+        client_secret=secret,
+    )
+    return OpsClientAdapter(OpsGraphQLClient(auth))
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -366,7 +378,23 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
         customer = await db.get(Customer, push_log.customer_id)
 
         # ── Select client ──
-        client = _StubFakeOpsClient() if push_log.dry_run else _StubOpsClient()
+        if push_log.dry_run:
+            client: Any = FakeOpsClient()
+        else:
+            if customer is None:
+                logger.error("execute_push: customer %s vanished mid-flight", push_log.customer_id)
+                push_log.status = "failed"
+                push_log.cleanup_targets = {"reason": "customer not found at execute time"}
+                await db.commit()
+                return
+            try:
+                client = _build_live_client(customer)
+            except RuntimeError as e:
+                logger.error("execute_push: live client unavailable — %s", e)
+                push_log.status = "failed"
+                push_log.cleanup_targets = {"reason": str(e)}
+                await db.commit()
+                return
 
         # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
         payload = await build_push_payload(db, push_log.customer_id, push_log.product_id)
@@ -493,11 +521,13 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
 
 def _mutation_to_method(mutation: str) -> str:
     mapping = {
-        "setProductCategory": "set_product_category",
-        "setProduct": "set_product",
-        "setProductSize": "set_product_size",
-        "setProductPrice": "set_product_price",
-        "setAssignOptions": "set_assign_options",
-        "setProductDesign": "set_product_design",
+        "setProductCategory":            "set_product_category",
+        "setProduct":                    "set_product",
+        "setProductSize":                "set_product_size",
+        "setProductPrice":               "set_product_price",
+        "setAssignOptions":              "set_assign_options",
+        "setAdditionalOption":           "set_additional_option",
+        "setAdditionalOptionAttributes": "set_additional_option_attributes",
+        "setProductsAttributePrice":     "set_products_attribute_price",
     }
     return mapping.get(mutation, mutation)

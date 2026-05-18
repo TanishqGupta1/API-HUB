@@ -493,8 +493,6 @@ Resources:
               Value: 'http://n8n.api-hub.local:5678'
             - Name: N8N_WEBHOOK_BASE_URL
               Value: 'http://n8n.api-hub.local:5678'
-            - Name: N8N_PUSH_WEBHOOK_URL
-              Value: 'http://n8n.api-hub.local:5678/webhook/vg-ops-push-001'
             - Name: API_BASE_URL
               Value: 'http://backend.api-hub.local:8000'
           Secrets:
