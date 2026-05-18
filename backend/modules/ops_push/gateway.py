@@ -137,6 +137,11 @@ class FakeOpsClient:
         self._record("set_products_attribute_price", variables, r)
         return r
 
+    async def update_product_stock(self, variables: dict) -> dict:
+        r = {"products_id": variables.get("products_id", self._counter)}
+        self._record("update_product_stock", variables, r)
+        return r
+
 
 def _build_live_client(customer: Customer) -> OpsClientAdapter:
     """Hydrate an OpsGraphQLClient from the customer's encrypted ops_auth_config."""
@@ -313,7 +318,7 @@ async def prepare_push_intent(
         })
 
     # ── Preflight (Task 7: 8 real checks + token cache) ──
-    preflight = await run_preflight(db, customer_id, product.id)
+    preflight = await run_preflight(db, customer_id, product.id, dry_run=req.dry_run)
     if not preflight.ok:
         # Use Task 7's spec-shaped error envelope (status/code/message/details/trace_id).
         envelope = preflight.to_error_envelope()
@@ -413,33 +418,39 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             cleanup_targets: Optional[dict] = None
 
             # ── Execute plan sequentially ──
-            for step in plan:
+            import hashlib, json as _json
+            for step_num, step in enumerate(plan, start=1):
                 mutation = step.get("mutation", "")
                 variables = step.get("variables", {})
+                fingerprint = hashlib.sha256(
+                    _json.dumps({"mutation": mutation, "variables": variables}, sort_keys=True).encode()
+                ).hexdigest()[:16]
                 t_start = datetime.now(timezone.utc)
                 try:
                     method = getattr(client, _mutation_to_method(mutation), None)
                     if method is None:
                         raise NotImplementedError(f"No client method for {mutation}")
                     resp = await method(variables)
-                    latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
                     if "products_id" in resp:
                         ops_product_id = str(resp["products_id"])
+                    ops_ids = {k: str(v) for k, v in resp.items() if k.endswith("_id")}
                     step_results.append({
-                        "step": mutation,
-                        "ok": True,
-                        "ops_id": ops_product_id,
-                        "latency_ms": latency,
-                        "called_at": t_start.isoformat(),
+                        "step": step_num,
+                        "mutation": mutation,
+                        "status": "ok",
+                        "ops_ids": ops_ids,
+                        "attempted_at": t_start.isoformat(),
+                        "request_fingerprint": fingerprint,
                     })
                 except Exception as e:
-                    latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
                     step_results.append({
-                        "step": mutation,
-                        "ok": False,
+                        "step": step_num,
+                        "mutation": mutation,
+                        "status": "failed",
+                        "ops_ids": {},
+                        "attempted_at": t_start.isoformat(),
+                        "request_fingerprint": fingerprint,
                         "error": str(e),
-                        "latency_ms": latency,
-                        "called_at": t_start.isoformat(),
                     })
                     cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
                     final_status = "partial_failure" if ops_product_id else "failed"
@@ -538,5 +549,6 @@ def _mutation_to_method(mutation: str) -> str:
         "setAdditionalOption":           "set_additional_option",
         "setAdditionalOptionAttributes": "set_additional_option_attributes",
         "setProductsAttributePrice":     "set_products_attribute_price",
+        "updateProductStock":            "update_product_stock",
     }
     return mapping.get(mutation, mutation)

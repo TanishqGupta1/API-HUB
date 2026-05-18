@@ -12,7 +12,7 @@ export interface Supplier {
   promostandards_code: string | null;
   base_url: string | null;
   adapter_class: string | null;
-  auth_config: Record<string, string>;
+  has_credentials: boolean;
   field_mappings: Record<string, string> | null;
   is_active: boolean;
   created_at: string;
@@ -142,6 +142,7 @@ export interface Product {
   id: string;
   supplier_id: string;
   supplier_name: string;
+  supplier_slug: string | null;
   supplier_has_decoration_overlay: boolean;
   supplier_sku: string;
   product_name: string;
@@ -162,6 +163,25 @@ export interface Product {
   apparel_details: ApparelDetails | null;
   print_details: PrintDetails | null;
   sizes: ProductSize[];
+}
+
+export interface VariantPreview {
+  sku: string | null;
+  size: string | null;
+  color: string | null;
+  price: number | null;
+  inventory: number | null;
+}
+
+export interface ProductPreview {
+  id: string;
+  title: string;
+  description: string | null;
+  brand: string | null;
+  category: string | null;
+  images: ProductImage[];
+  variants: VariantPreview[];
+  missing_fields: string[];
 }
 
 export interface ProductPushStatus {
@@ -575,8 +595,9 @@ export interface OPSStepResult {
   request_fingerprint: string;
   ops_ids: Record<string, unknown>;
   attempted_at: string;
-  /** Synthetic field added by the UI when rendering — not on the wire. */
-  status?: "ok" | "failed";
+  status: "ok" | "failed";
+  error?: string | null;
+  latency_ms?: number;
 }
 
 /** Opaque JSONB shape; spec leaves the contents flexible. */
@@ -641,8 +662,8 @@ export interface PushLog {
 export interface PushRequestBody {
   target: { system: "ops"; customer_id: string };
   source: { supplier_slug: string };
-  /** Either product_ref OR product inline; never both. */
-  product_ref?: { supplier_sku: string };
+  /** Either product_ref OR product inline; never both. Supply product_id OR supplier_sku. */
+  product_ref?: { product_id?: string; supplier_sku?: string };
   product?: Record<string, unknown>; // ProductIngest shape
   decorations?: Array<{
     placement: string;

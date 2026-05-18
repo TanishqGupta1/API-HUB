@@ -12,10 +12,10 @@ existing call sites (`routes.py`, `modules.ops_push.gateway`).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ── Push request envelope ──
@@ -78,11 +78,23 @@ class PushRequestAccepted(BaseModel):
 
 
 class StepResultOut(BaseModel):
-    step: str
-    ok: bool
-    ops_id: Optional[str] = None
+    step: Union[str, int]
+    ok: bool = True
+    status: Optional[str] = None  # "ok" | "failed" — gateway writes this
+    mutation: Optional[str] = None
+    source_key: Optional[str] = None
+    ops_ids: Optional[dict] = None   # gateway writes ops_ids (dict), not ops_id (str)
+    ops_id: Optional[str] = None     # legacy field — kept for backwards compat
     error: Optional[str] = None
     latency_ms: Optional[int] = None
+    attempted_at: Optional[str] = None
+    request_fingerprint: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _derive_ok_from_status(self) -> "StepResultOut":
+        if self.status is not None:
+            object.__setattr__(self, "ok", self.status == "ok")
+        return self
 
 
 class PushRequestStatus(BaseModel):

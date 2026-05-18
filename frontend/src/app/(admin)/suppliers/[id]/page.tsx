@@ -58,7 +58,7 @@ export default function SupplierDetailPage() {
   const handleSave = async () => {
     if (!supplier) return;
     setSaving(true);
-    const { id: _id, created_at, product_count, ...updateData } = supplier;
+    const { id: _id, created_at, product_count, has_credentials: _hc, ...updateData } = supplier;
     try {
       await api(`/api/suppliers/${id}`, {
         method: "PATCH",
@@ -214,20 +214,23 @@ export default function SupplierDetailPage() {
               </span>
             </div>
 
-            <div className="p-6 grid grid-cols-2 gap-5">
-              {Object.entries(supplier.auth_config || {}).map(([key, val]) => (
-                <div key={key}>
-                  <label className="block text-[13px] font-semibold text-[#484852] mb-1.5">
-                    {formatKey(key)}
-                  </label>
-                  <Input
-                    type={key.includes("password") || key.includes("secret") || key.includes("key") ? "password" : "text"}
-                    value={val as string}
-                    onChange={(e) => setSupplier({ ...supplier, auth_config: { ...supplier.auth_config, [key]: e.target.value } })}
-                    className="h-11 border-[#cfccc8] font-mono text-[13px]"
-                  />
+            <div className="p-6">
+              {supplier.has_credentials ? (
+                <div className="flex items-center gap-3 p-4 bg-[#f0f9f4] border border-[#247a52]/30 rounded-xl">
+                  <ShieldCheck className="w-5 h-5 text-[#247a52] flex-shrink-0" />
+                  <div>
+                    <div className="text-[13px] font-bold text-[#247a52]">Credentials configured</div>
+                    <div className="text-[12px] text-[#247a52]/80 mt-0.5">
+                      Stored encrypted. To update, delete this supplier and re-add with new credentials.
+                    </div>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                <div className="flex items-center gap-3 p-4 bg-[#fdf8f2] border border-[#e8a020]/30 rounded-xl">
+                  <Lock className="w-5 h-5 text-[#e8a020] flex-shrink-0" />
+                  <div className="text-[13px] font-semibold text-[#e8a020]">No credentials set</div>
+                </div>
+              )}
             </div>
           </div>
         </div>

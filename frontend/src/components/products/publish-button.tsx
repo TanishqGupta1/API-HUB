@@ -1,15 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { Customer } from "@/lib/types";
 
 interface Props {
   productId: string;
+  supplierSlug?: string;
   onDone?: () => void;
 }
 
-export function PublishButton({ productId, onDone }: Props) {
+interface PushResponse {
+  push_log_id: string;
+  status: string;
+  dry_run: boolean;
+  supplier_sku?: string;
+}
+
+export function PublishButton({ productId, supplierSlug, onDone }: Props) {
+  const router = useRouter();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -28,19 +38,26 @@ export function PublishButton({ productId, onDone }: Props) {
       setMessage({ text: "Pick a storefront first", type: "error" });
       return;
     }
+    if (!supplierSlug) {
+      setMessage({ text: "Supplier not loaded yet — refresh and try again", type: "error" });
+      return;
+    }
     setBusy(true);
-    setMessage({ text: "Dispatching to gateway…", type: "info" });
+    setMessage({ text: "Submitting push request…", type: "info" });
     try {
-      const res = await api<{ status: string; message?: string; push_log_id?: string }>(
-        `/api/push/${customerId}/${productId}`,
-        { method: "POST" },
-      );
-      const ok = ["accepted", "processing", "queued", "pushed", "dry_run_pushed"].includes(res.status);
-      if (ok) {
-        setMessage({ text: res.message || "Push dispatched. Refreshing history in 5s…", type: "success" });
-        onDone?.();
-      } else {
-        setMessage({ text: res.message || `Push ${res.status}.`, type: "error" });
+      const res = await api<PushResponse>("/api/integrations/admin/push-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          source: { supplier_slug: supplierSlug },
+          target: { customer_id: customerId },
+          product_ref: { product_id: productId },
+          dry_run: false,
+        }),
+      });
+      setMessage({ text: `Push accepted — status: ${res.status}`, type: "success" });
+      onDone?.();
+      if (res.push_log_id) {
+        setTimeout(() => router.push(`/push-log/${res.push_log_id}`), 1500);
       }
     } catch (err) {
       setMessage({ text: err instanceof Error ? err.message : String(err), type: "error" });
@@ -52,6 +69,18 @@ export function PublishButton({ productId, onDone }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
+        {customers.length > 1 && (
+          <select
+            value={customerId}
+            onChange={(e) => setCustomerId(e.target.value)}
+            disabled={busy}
+            className="text-[12px] border border-[#cfccc8] rounded-md px-2 py-1.5 bg-white text-[#484852] focus:outline-none focus:border-[#1e4d92]"
+          >
+            {customers.filter((c) => c.is_active).map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        )}
         <button
           type="button"
           onClick={run}

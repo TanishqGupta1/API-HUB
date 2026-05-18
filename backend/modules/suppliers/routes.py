@@ -40,6 +40,7 @@ async def list_suppliers(db: AsyncSession = Depends(get_db)):
         ).scalar() or 0
         data = SupplierRead.model_validate(s)
         data.product_count = count
+        data.has_credentials = bool(s.auth_config)
         out.append(data)
     return out
 
@@ -66,6 +67,7 @@ async def create_supplier(body: SupplierCreate, db: AsyncSession = Depends(get_d
                 select(func.count()).select_from(Product).where(Product.supplier_id == existing.id)
             )
         ).scalar() or 0
+        data.has_credentials = bool(existing.auth_config)
         return data
 
     supplier = Supplier(**payload)
@@ -78,6 +80,7 @@ async def create_supplier(body: SupplierCreate, db: AsyncSession = Depends(get_d
     await db.refresh(supplier)
     data = SupplierRead.model_validate(supplier)
     data.product_count = 0
+    data.has_credentials = bool(supplier.auth_config)
     return data
 
 
@@ -109,6 +112,7 @@ async def get_supplier(supplier_id_or_slug: str, db: AsyncSession = Depends(get_
     ).scalar() or 0
     data = SupplierRead.model_validate(supplier)
     data.product_count = count
+    data.has_credentials = bool(supplier.auth_config)
     return data
 
 
@@ -138,6 +142,7 @@ async def patch_supplier(
     ).scalar() or 0
     data = SupplierRead.model_validate(supplier)
     data.product_count = count
+    data.has_credentials = bool(supplier.auth_config)
     return data
 
 

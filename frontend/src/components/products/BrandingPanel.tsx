@@ -208,7 +208,7 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
             </div>
             
             <p className="text-[11px] text-[#888894] mt-6 text-center italic">
-              Logo positioning is relative to the "Front" view of the {product.product_type}.
+              Logo positioning is relative to the &ldquo;Front&rdquo; view of the {product.product_type}.
             </p>
         </div>
 

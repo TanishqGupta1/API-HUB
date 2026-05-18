@@ -16,6 +16,8 @@ from .models import Category, Product, ProductOption, ProductOptionAttribute, Pr
 from .schemas import (
     ProductListRead,
     ProductRead,
+    ProductPreview,
+    VariantPreview,
     OPSCategoryInput,
     OptionUpdate,
     AttributeUpdate,
@@ -178,6 +180,7 @@ async def get_product(
     supplier = await db.get(Supplier, product.supplier_id)
     data = ProductRead.model_validate(product)
     data.supplier_name = supplier.name if supplier else None
+    data.supplier_slug = supplier.slug if supplier else None
     data.supplier_has_decoration_overlay = bool(supplier.has_decoration_overlay) if supplier else False
     data.images = sorted(data.images, key=lambda i: i.sort_order)
 
@@ -199,6 +202,60 @@ async def get_product(
     for opt in data.options:
         opt.attributes = sorted(opt.attributes, key=lambda a: a.sort_order)
     return data
+
+
+@router.get("/{product_id}/preview", response_model=ProductPreview)
+async def get_product_preview(product_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Product)
+        .where(Product.id == product_id)
+        .options(
+            selectinload(Product.variants),
+            selectinload(Product.images),
+        )
+    )
+    product = result.scalar_one_or_none()
+    if not product:
+        raise HTTPException(404, "Product not found")
+
+    missing: list[str] = []
+    if not product.product_name:
+        missing.append("title")
+    if not product.description:
+        missing.append("description")
+    if not product.brand:
+        missing.append("brand")
+    if not product.category:
+        missing.append("category")
+    if not product.images:
+        missing.append("images")
+
+    variants: list[VariantPreview] = []
+    for v in product.variants:
+        if not v.sku:
+            missing.append(f"sku (variant {v.color or ''} {v.size or ''})".strip())
+        if v.base_price is None:
+            missing.append(f"price (variant {v.sku or v.color or v.size or ''})".strip())
+        if v.inventory is None:
+            missing.append(f"inventory (variant {v.sku or v.color or v.size or ''})".strip())
+        variants.append(VariantPreview(
+            sku=v.sku,
+            size=v.size,
+            color=v.color,
+            price=float(v.base_price) if v.base_price is not None else None,
+            inventory=v.inventory,
+        ))
+
+    return ProductPreview(
+        id=product.id,
+        title=product.product_name,
+        description=product.description,
+        brand=product.brand,
+        category=product.category,
+        images=product.images,
+        variants=variants,
+        missing_fields=missing,
+    )
 
 
 # ---------------------------------------------------------------------------

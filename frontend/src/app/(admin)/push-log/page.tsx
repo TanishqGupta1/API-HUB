@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { getStatusConfig } from "@/lib/push-status";
 import { AlertTriangle, CheckCircle2, Clock, Loader2, XCircle, RefreshCw } from "lucide-react";
@@ -46,6 +47,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function PushLogPage() {
+  const router = useRouter();
   const [logs, setLogs] = useState<PushLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -131,7 +133,10 @@ export default function PushLogPage() {
               {logs.map((log) => (
                 <tr
                   key={log.id}
-                  style={{ borderBottom: "1px solid var(--border)", verticalAlign: "top" }}
+                  onClick={() => router.push(`/push-log/${log.id}`)}
+                  style={{ borderBottom: "1px solid var(--border)", verticalAlign: "top", cursor: "pointer" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-hover, #f9f7f4)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "")}
                 >
                   <td style={{ padding: "10px 12px", color: "var(--ink-muted)", fontFamily: "var(--font-mono)", fontSize: "11px", whiteSpace: "nowrap" }}>
                     {new Date(log.pushed_at).toLocaleString(undefined, {

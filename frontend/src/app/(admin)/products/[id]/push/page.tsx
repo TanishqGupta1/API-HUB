@@ -46,9 +46,10 @@ export default function PushPreviewPage() {
   const searchParams = useSearchParams();
   const productId = params.id;
   const customerId = searchParams.get("customer_id");
+  const supplierSlugParam = searchParams.get("supplier_slug");
 
   const { preflight, payload, error: dryRunError, loading, refetch } =
-    usePushDryRun(customerId, productId);
+    usePushDryRun(customerId, productId, supplierSlugParam);
   const { push, loading: pushing, error: pushError } = usePushRequest();
 
   if (!customerId) {
@@ -77,7 +78,7 @@ export default function PushPreviewPage() {
   const blockers = preflight?.blockers ?? [];
   const hasBlockers = blockers.length > 0;
   const supplierSku = payload?.supplier_sku ?? "PRODUCT";
-  const supplierSlug = payload?.supplier_slug ?? "sanmar";
+  const supplierSlug = payload?.supplier_slug ?? supplierSlugParam ?? "sanmar";
   const realConfirmText = `PUSH ${supplierSku} TO STAGING`;
 
   async function handlePush(dryRun: boolean) {

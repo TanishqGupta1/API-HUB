@@ -17,8 +17,9 @@ import { PushHistory } from "@/components/products/push-history";
 import { useSelectedCustomer } from "@/lib/customer-context";
 import { BrandingPanel } from "@/components/products/BrandingPanel";
 import type { Customer as CustomerType } from "@/lib/types";
-import { CheckCircle2, Plus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
+import type { ProductPreview } from "@/lib/types";
 
 const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
 
@@ -49,6 +50,7 @@ export default function ProductDetailPage() {
   const [adding, setAdding] = useState(false);
   const [addedThisSession, setAddedThisSession] = useState(false);
   const [customer, setCustomer] = useState<CustomerType | null>(null);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
 
   useEffect(() => {
     if (selectedCustomerId) {
@@ -81,10 +83,12 @@ export default function ProductDetailPage() {
 
   const fetchData = async () => {
     try {
-      const [p] = await Promise.all([
+      const [p, preview] = await Promise.all([
         api<Product>(`/api/products/${id}`),
+        api<ProductPreview>(`/api/products/${id}/preview`).catch(() => null),
       ]);
       setProduct(p);
+      setMissingFields(preview?.missing_fields ?? []);
       try {
         const sup = await api<Supplier>(`/api/suppliers/${p.supplier_id}`);
         setSupplier(sup);
@@ -128,10 +132,13 @@ export default function ProductDetailPage() {
   const dataSourceRows: Array<[string, string]> = useMemo(() => {
     const mappings = supplier?.field_mappings;
     if (!mappings || Object.keys(mappings).length === 0) return DEFAULT_DATA_SOURCES;
-    return Object.entries(mappings).map(([source, target]) => [
-      String(target),
-      `${supplier?.protocol ?? "source"} → ${source}`,
-    ]);
+    const rows = Object.entries(mappings)
+      .filter(([, target]) => typeof target === "string" || typeof target === "number")
+      .map(([source, target]) => [
+        String(target),
+        `${supplier?.protocol ?? "source"} → ${source}`,
+      ] as [string, string]);
+    return rows.length > 0 ? rows : DEFAULT_DATA_SOURCES;
   }, [supplier]);
 
 
@@ -167,6 +174,37 @@ export default function ProductDetailPage() {
           </span>
         )}
       </div>
+
+      {/* Missing fields banner */}
+      {missingFields.length > 0 && (() => {
+        const inventoryCount = missingFields.filter((f) => f.startsWith("inventory (variant")).length;
+        const otherFields = missingFields.filter((f) => !f.startsWith("inventory (variant"));
+        const displayFields = [
+          ...otherFields,
+          ...(inventoryCount > 0 ? [`inventory missing on ${inventoryCount} variant${inventoryCount !== 1 ? "s" : ""} — run a sync`] : []),
+        ];
+        return (
+          <div className="mb-4 bg-[#fff7e0] border-2 border-[#c17c00] rounded-xl px-5 py-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-[#c17c00] shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[13px] font-bold text-[#7a4900] mb-2">
+                {displayFields.length} issue{displayFields.length !== 1 ? "s" : ""} — push may fail
+              </div>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
+                {displayFields.map((f) => (
+                  <li key={f} className="text-[12px] text-[#7a4900] font-mono">· {f}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        );
+      })()}
+      {missingFields.length === 0 && product && (
+        <div className="mb-4 bg-[#f0f9f4] border-2 border-[#247a52] rounded-xl px-5 py-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-[#247a52] shrink-0" />
+          <span className="text-[13px] font-semibold text-[#1a5c3a]">All required fields present — ready to push</span>
+        </div>
+      )}
 
       {/* ── Page header ─────────────────────────────────── */}
       <div className="flex items-end justify-between mb-10 pb-5 border-b-2 border-[#1e1e24]">
@@ -214,9 +252,8 @@ export default function ProductDetailPage() {
           )}
           <PublishButton
             productId={id}
+            supplierSlug={supplier?.slug}
             onDone={() => {
-              // History will auto-refresh due to its own effect if we trigger a state change,
-              // but a full fetch is safer for now.
               setTimeout(fetchData, 2000);
             }}
           />

@@ -74,27 +74,6 @@ export default function CustomerCatalogPage() {
       .finally(() => setLoading(false));
   }, [id, isValidId, supplierId]);
 
-  if (!isValidId) {
-    return (
-      <div className="max-w-2xl mx-auto px-6 py-16">
-        <div className="border-2 border-dashed border-[#cfccc8] rounded-2xl p-10 text-center">
-          <Package className="w-10 h-10 text-[#b4b4bc] mx-auto mb-3" />
-          <div className="text-[16px] font-bold text-[#1e1e24]">
-            Invalid customer id
-          </div>
-          <p className="text-[13px] text-[#888894] mt-2">
-            The URL contains <code className="font-mono text-[12px]">{String(id)}</code>{" "}
-            which is not a valid UUID. Pick a customer from{" "}
-            <Link href="/customers" className="text-[#1e4d92] font-semibold hover:underline">
-              /customers
-            </Link>{" "}
-            to navigate to its catalog.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const filtered = useMemo(() => {
     return selections.filter((s) => {
       if (statusFilter !== "all" && s.status !== statusFilter) return false;
@@ -131,6 +110,27 @@ export default function CustomerCatalogPage() {
     () => selections.filter((s) => s.supplier_has_decoration_overlay && !s.decoration_ready).length,
     [selections],
   );
+
+  if (!isValidId) {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-16">
+        <div className="border-2 border-dashed border-[#cfccc8] rounded-2xl p-10 text-center">
+          <Package className="w-10 h-10 text-[#b4b4bc] mx-auto mb-3" />
+          <div className="text-[16px] font-bold text-[#1e1e24]">
+            Invalid customer id
+          </div>
+          <p className="text-[13px] text-[#888894] mt-2">
+            The URL contains <code className="font-mono text-[12px]">{String(id)}</code>{" "}
+            which is not a valid UUID. Pick a customer from{" "}
+            <Link href="/customers" className="text-[#1e4d92] font-semibold hover:underline">
+              /customers
+            </Link>{" "}
+            to navigate to its catalog.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const handlePush = async (e: React.MouseEvent, productId: string) => {
     e.preventDefault();
