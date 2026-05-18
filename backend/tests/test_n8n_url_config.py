@@ -5,7 +5,7 @@ import pytest
 def clean_env(monkeypatch):
     for key in (
         "ENVIRONMENT", "N8N_WEBHOOK_BASE_URL", "N8N_API_BASE_URL",
-        "API_BASE_URL", "N8N_PUSH_WEBHOOK_URL",
+        "API_BASE_URL",
         "SECRET_KEY", "JWT_SECRET_KEY", "INGEST_SHARED_SECRET",
         "ALLOWED_ORIGINS", "POSTGRES_URL",
     ):

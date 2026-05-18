@@ -1,19 +1,28 @@
-"""Merge product, customer-specific pricing, and decorations into an OPS-bound payload.
+"""Admin-UI preview shape — legacy merge of product + pricing + decorations.
 
-This is the last-mile shaping step before the push pipeline hands the payload
-to OPS (or, post-beta, to n8n). It does three things:
+NOT the canonical OPS push payload. The push pipeline uses
+``modules.ops_push.payload_builder.build_push_payload`` (Pydantic
+``OPSPushPayload`` with mutation plan + computed prices + ops_target).
+This module exists for one remaining caller:
 
-1. Composes variant rows with both ``vendor_price`` (supplier wholesale) and
-   ``price`` (customer-facing, markup + decoration applied).
-2. Folds decoration overlays into the per-variant ``decorations`` array and
-   into the ``price`` field via ``dec_cost``.
-3. Emits ``images[]`` (full gallery, sorted) alongside the single ``image_url``
-   (the "hero" image — either the decoration preview or the product primary).
+  - ``service.push_product`` returns this merged dict to the admin UI as the
+    preview-pane body for POST /api/push/{cid}/{pid}.
 
-If ``priced_variants`` is supplied (output from ``markup.engine.calculate_price``),
-its ``base_price`` and ``final_price`` are used. Otherwise we fall back to
-``variant.base_price`` from the DB row with no markup applied — kept only for
-backward-compat with callers that don't have a customer/markup context.
+Once the admin preview pane is repointed at ``build_push_payload``'s output,
+this module can be deleted (M1 plan T25). No new callers should be added.
+
+What it composes:
+
+1. Variant rows with both ``vendor_price`` (supplier wholesale) and ``price``
+   (customer-facing — markup + decoration uplift applied).
+2. Decoration overlays folded into per-variant ``decorations`` and ``price``.
+3. ``images[]`` gallery (sorted by sort_order) alongside the ``image_url`` hero
+   (decoration preview if present, otherwise the product primary image).
+
+If ``priced_variants`` is supplied (from ``markup.engine.calculate_price``),
+its ``base_price`` / ``final_price`` are used; otherwise we fall back to the
+raw DB ``variant.base_price`` with no markup — only kept for the rare caller
+that has no customer/markup context.
 """
 import os
 from typing import Any, Optional

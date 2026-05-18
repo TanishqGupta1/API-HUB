@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Send, Store, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { isTerminal } from "@/lib/push-status";
 import type { Customer } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,58 +20,187 @@ interface Props {
   productName: string;
 }
 
-type MessageType = "info" | "error" | "success";
+type MessageType = "info" | "error" | "success" | "preflight";
+
+/** A single failed preflight check parsed from the gateway 422 envelope. */
+interface PreflightBlocker {
+  name: string;
+  detail: string;
+  field: string | null;
+  suggestion: string | null;
+}
+
+/** Try to parse the gateway's structured PREFLIGHT_BLOCKER error envelope
+ *  out of an ApiError.message. Returns null if it's not that shape. */
+function parsePreflightEnvelope(rawMessage: string): PreflightBlocker[] | null {
+  try {
+    const env = JSON.parse(rawMessage);
+    if (env?.code !== "PREFLIGHT_BLOCKER") return null;
+    const checks = env?.details?.checks;
+    if (!Array.isArray(checks)) return null;
+    return checks
+      .filter((c: { ok: boolean }) => c && c.ok === false)
+      .map((c: PreflightBlocker) => ({
+        name: c.name,
+        detail: c.detail,
+        field: c.field,
+        suggestion: c.suggestion,
+      }));
+  } catch {
+    return null;
+  }
+}
+
+const POLL_INTERVAL_MS = 1500;
+const POLL_MAX_ATTEMPTS = 30; // ~45s ceiling before "still running"
+
+interface PushAccepted {
+  push_log_id: string;
+  status: string;
+  dry_run: boolean;
+  callback_status: string;
+}
+
+interface PushStatus {
+  push_log_id: string;
+  status: string;
+  ops_product_id: string | null;
+  error: string | null;
+}
+
+interface ProductDetail {
+  supplier_id: string;
+  supplier_sku: string;
+}
+
+interface SupplierListItem {
+  id: string;
+  slug: string;
+}
 
 export function PushRowAction({ productId, productName }: Props) {
   const [open, setOpen] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
+  const [supplierSlug, setSupplierSlug] = useState("");
+  const [supplierSku, setSupplierSku] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
+  const [blockers, setBlockers] = useState<PreflightBlocker[] | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setMessage(null);
-    api<Customer[]>("/api/customers")
-      .then((list) => {
-        setCustomers(list);
-        const first = list.find((c) => c.is_active);
+    setBlockers(null);
+    Promise.all([
+      api<Customer[]>("/api/customers"),
+      api<ProductDetail>(`/api/products/${productId}`),
+      api<SupplierListItem[]>("/api/suppliers"),
+    ])
+      .then(([custs, product, suppliers]) => {
+        setCustomers(custs);
+        const first = custs.find((c) => c.is_active);
         if (first) setCustomerId(first.id);
+        setSupplierSku(product.supplier_sku);
+        const supplier = suppliers.find((s) => s.id === product.supplier_id);
+        setSupplierSlug(supplier?.slug ?? "");
       })
       .catch((e) =>
         setMessage({ text: e instanceof Error ? e.message : String(e), type: "error" })
       );
-  }, [open]);
+  }, [open, productId]);
 
   async function run() {
     if (!customerId) {
       setMessage({ text: "Pick a storefront first", type: "error" });
       return;
     }
+    if (!supplierSlug || !supplierSku) {
+      setMessage({ text: "Product supplier info still loading — try again", type: "error" });
+      return;
+    }
     setBusy(true);
-    setMessage({ text: "Triggering push workflow…", type: "info" });
+    setBlockers(null);
+    setMessage({ text: "Submitting push request…", type: "info" });
     try {
-      const res = await api<{ triggered: boolean }>(
-        `/api/n8n/workflows/ops-push-001/trigger?product_id=${productId}&customer_id=${customerId}`,
-        { method: "POST" },
+      // Admin-proxy endpoint: JWT-authed, no orchestrator key needed.
+      // Idempotency key = product + customer + timestamp so accidental
+      // double-clicks within the same second don't double-push.
+      const idempotencyKey = `ui-${productId}-${customerId}-${Date.now()}`;
+      const accepted = await api<PushAccepted>(
+        "/api/integrations/admin/push-requests",
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": idempotencyKey },
+          body: JSON.stringify({
+            target: { system: "ops", customer_id: customerId },
+            source: { supplier_slug: supplierSlug },
+            product_ref: { supplier_sku: supplierSku },
+            dry_run: false,
+          }),
+        },
       );
-      if (res.triggered) {
+      setMessage({
+        text: `Push queued (${accepted.push_log_id.slice(0, 8)}…) — polling for status…`,
+        type: "info",
+      });
+
+      const terminal = await pollUntilTerminal(accepted.push_log_id);
+      if (terminal.status === "pushed") {
         setMessage({
-          text: "Push started. Check history for status.",
+          text: `Pushed to OPS as products_id=${terminal.ops_product_id ?? "?"}`,
           type: "success",
         });
-        setTimeout(() => setOpen(false), 1800);
+        setTimeout(() => setOpen(false), 2400);
+      } else if (terminal.status === "dry_run_pushed") {
+        setMessage({ text: "Dry-run completed (no OPS writes)", type: "success" });
+        setTimeout(() => setOpen(false), 2400);
+      } else if (terminal.status === "still_running") {
+        setMessage({
+          text: "Still running — check Push Log for final status.",
+          type: "info",
+        });
       } else {
-        setMessage({ text: "Push request failed.", type: "error" });
+        setMessage({
+          text: `Push ${terminal.status}: ${terminal.error ?? "see Push Log for details"}`,
+          type: "error",
+        });
       }
     } catch (e) {
-      setMessage({
-        text: e instanceof Error ? e.message : String(e),
-        type: "error",
-      });
+      // If the gateway returned a structured PREFLIGHT_BLOCKER envelope,
+      // render it as a checklist instead of a wall of JSON.
+      const rawMsg = e instanceof Error ? e.message : String(e);
+      const parsed = parsePreflightEnvelope(rawMsg);
+      if (parsed && parsed.length > 0) {
+        setBlockers(parsed);
+        setMessage({
+          text: `Push blocked by ${parsed.length} preflight check${parsed.length === 1 ? "" : "s"}`,
+          type: "preflight",
+        });
+      } else {
+        setMessage({ text: rawMsg, type: "error" });
+      }
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Poll the status endpoint until terminal or timeout. Returns the last
+   *  status seen, with a `still_running` marker if max attempts hit. */
+  async function pollUntilTerminal(pushLogId: string): Promise<PushStatus> {
+    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+      const status = await api<PushStatus>(
+        `/api/integrations/admin/push-requests/${pushLogId}`,
+      );
+      if (isTerminal(status.status)) return status;
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+    return {
+      push_log_id: pushLogId,
+      status: "still_running",
+      ops_product_id: null,
+      error: null,
+    };
   }
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
@@ -168,17 +298,59 @@ export function PushRowAction({ productId, productName }: Props) {
                   ? "bg-[#fdf2f2] text-[#b93232] border-[#f9d7d7]"
                   : message.type === "success"
                     ? "bg-[#f2fcf5] text-[#247a52] border-[#c3e6d2]"
-                    : "bg-[#f9f7f4] text-[#484852] border-[#ebe8e3]"
+                    : message.type === "preflight"
+                      ? "bg-[#fff7e0] text-[#c17c00] border-[#ffdb8c]"
+                      : "bg-[#f9f7f4] text-[#484852] border-[#ebe8e3]"
               }`}
             >
               {message.type === "error" ? (
                 <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
               ) : message.type === "success" ? (
                 <CheckCircle2 className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              ) : message.type === "preflight" ? (
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
               ) : (
                 <Loader2 className="h-4 w-4 flex-shrink-0 mt-0.5 animate-spin" />
               )}
               <span>{message.text}</span>
+            </div>
+          )}
+
+          {/* Preflight blockers — compact list */}
+          {blockers && blockers.length > 0 && (
+            <div className="flex flex-col gap-1 mt-1.5">
+              {blockers.map((b, idx) => (
+                <details
+                  key={idx}
+                  className="text-[11px] px-2.5 py-1.5 rounded-md border border-[#ffdb8c] bg-[#fffbf0] group"
+                >
+                  <summary className="flex items-center gap-2 cursor-pointer list-none leading-tight">
+                    <span className="font-mono text-[9px] font-bold uppercase tracking-[0.06em] text-[#c17c00] bg-[#fff7e0] px-1.5 py-0.5 rounded border border-[#ffdb8c] flex-shrink-0">
+                      {b.name.replace(/_/g, " ")}
+                    </span>
+                    <span className="text-[11px] text-[#1e1e24] leading-tight truncate flex-1">
+                      {b.detail}
+                    </span>
+                    <span className="text-[#888894] text-[10px] group-open:rotate-90 transition-transform flex-shrink-0">
+                      ▸
+                    </span>
+                  </summary>
+                  {(b.suggestion || b.field) && (
+                    <div className="mt-1 pl-1 space-y-0.5">
+                      {b.suggestion && (
+                        <div className="text-[11px] text-[#484852] italic leading-snug">
+                          → {b.suggestion}
+                        </div>
+                      )}
+                      {b.field && (
+                        <div className="text-[10px] font-mono text-[#888894]">
+                          field: {b.field}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </details>
+              ))}
             </div>
           )}
         </div>
