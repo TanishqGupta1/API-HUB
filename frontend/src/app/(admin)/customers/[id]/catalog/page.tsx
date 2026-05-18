@@ -150,11 +150,30 @@ export default function CustomerCatalogPage() {
             : s,
         ),
       );
-      toast.success("Push queued — n8n will deliver to OPS.");
+      toast.success("Push queued — gateway will deliver to OPS.");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Push failed";
+      const rawMsg = err instanceof Error ? err.message : "Push failed";
       log.error("Failed to push product", err);
-      toast.error(msg);
+
+      // If the gateway returned a structured PREFLIGHT_BLOCKER envelope,
+      // show a human-readable summary instead of dumping the JSON.
+      try {
+        const env = JSON.parse(rawMsg);
+        if (env?.code === "PREFLIGHT_BLOCKER" && Array.isArray(env?.details?.checks)) {
+          const failed = env.details.checks.filter((c: { ok: boolean }) => c && !c.ok);
+          const names = failed
+            .map((c: { name: string }) => c.name.replace(/_/g, " "))
+            .join(", ");
+          toast.error(`Push blocked by ${failed.length} preflight checks: ${names}`, {
+            description: "Open the Push Log or product preview for full details.",
+            duration: 6000,
+          });
+          return;
+        }
+      } catch {
+        // not JSON — fall through to raw message
+      }
+      toast.error(rawMsg);
     }
   };
 

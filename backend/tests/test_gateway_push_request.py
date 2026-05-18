@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -15,6 +16,17 @@ import pytest_asyncio
 from sqlalchemy import delete
 
 from database import async_session
+
+
+# Default to preflight=ok for tests that exercise downstream gateway logic
+# (idempotency, dry-run, dispatch). Tests that specifically assert the
+# preflight 422 path patch run_preflight inline to override this default.
+@pytest.fixture(autouse=True)
+def _mock_preflight_ok():
+    ok = MagicMock()
+    ok.ok = True
+    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=ok)):
+        yield
 from modules.catalog.models import Product, CustomerProductSelection
 from modules.customers.models import Customer
 from modules.integrations.models import IntegrationKey

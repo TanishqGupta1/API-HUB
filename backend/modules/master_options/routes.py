@@ -1,14 +1,11 @@
-import os
 from uuid import UUID
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
-from modules.catalog.ingest import require_ingest_secret
 
 from .models import MasterOption
 from .schemas import MasterOptionRead, OptionConfigItem, SyncStatus
@@ -121,49 +118,7 @@ async def duplicate_from(
     return {"copied": copied, "status": "ok"}
 
 
-async def _trigger_n8n_workflow(workflow_id: str, params: dict | None = None) -> dict:
-    """Trigger an n8n workflow by ID. Local to master_options so M4 deletion of
-    modules/n8n_proxy/ does not break this route."""
-    base = (os.getenv("N8N_API_BASE_URL") or os.getenv("N8N_BASE_URL") or "http://n8n:5678").rstrip("/")
-    api_key = os.getenv("N8N_API_KEY")
-    if not api_key:
-        raise HTTPException(500, "N8N_API_KEY not configured")
-
-    headers = {"X-N8N-API-KEY": api_key}
-    async with httpx.AsyncClient(timeout=10.0) as hc:
-        wf = await hc.get(f"{base}/api/v1/workflows/{workflow_id}", headers=headers)
-        if wf.status_code == 404:
-            raise HTTPException(404, f"Workflow {workflow_id} not found")
-        wf.raise_for_status()
-        nodes = wf.json().get("nodes", [])
-
-    webhook_path = next(
-        (n.get("parameters", {}).get("path") for n in nodes if n.get("type") == "n8n-nodes-base.webhook"),
-        None,
-    )
-    if not webhook_path:
-        raise HTTPException(409, f"Workflow {workflow_id} has no webhook trigger")
-
-    webhook_base = (os.getenv("N8N_WEBHOOK_BASE_URL") or os.getenv("N8N_WEBHOOK_BASE") or base).rstrip("/")
-    trigger_url = f"{webhook_base}/webhook/{webhook_path}"
-    async with httpx.AsyncClient(timeout=10.0) as hc:
-        tr = await hc.post(trigger_url, json=params or {})
-        tr.raise_for_status()
-        try:
-            body = tr.json()
-        except ValueError:
-            body = {"raw": tr.text}
-        return {"triggered": True, "url": trigger_url, "response": body}
-
-
-@router.post("/sync", dependencies=[Depends(require_ingest_secret)])
-async def trigger_sync():
-    """Trigger the n8n master options pull workflow."""
-    workflow_id = os.getenv("MASTER_OPTIONS_SYNC_WORKFLOW_ID", "ops-master-options-pull-001")
-    try:
-        return await _trigger_n8n_workflow(workflow_id)
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Warning: n8n trigger failed ({e}). Please execute manually in n8n UI.")
-        return {"triggered": False, "message": f"Please execute workflow '{workflow_id}' manually in n8n."}
+# /sync route removed in T23 — the n8n master-options pull workflow it
+# triggered (ops-master-options-pull.json) is deleted. Callers should use
+# POST /api/integrations/v1/master-options/ingest with the gateway's
+# X-Orchestrator-Key header to push a master-options snapshot directly.

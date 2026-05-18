@@ -41,6 +41,16 @@ class OpsGraphQLClient:
         self._token: str | None = None
         self._token_expires_at: float = 0.0
         self._token_lock = asyncio.Lock()
+        self._http = httpx.AsyncClient(timeout=self._timeout)
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+    async def __aenter__(self) -> "OpsGraphQLClient":
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self.aclose()
 
     async def _get_token(self) -> str:
         async with self._token_lock:
@@ -49,19 +59,23 @@ class OpsGraphQLClient:
                 return self._token
 
             log.debug("Requesting new OPS access token from %s", self.auth.token_url)
-            async with httpx.AsyncClient(timeout=self._timeout) as hc:
-                resp = await hc.post(
-                    self.auth.token_url,
-                    data={
-                        "grant_type": "client_credentials",
-                        "client_id": self.auth.client_id,
-                        "client_secret": self.auth.client_secret,
-                    },
-                )
-                resp.raise_for_status()
-                body = resp.json()
+            resp = await self._http.post(
+                self.auth.token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self.auth.client_id,
+                    "client_secret": self.auth.client_secret,
+                },
+            )
+            resp.raise_for_status()
+            body = resp.json()
 
-            self._token = body["access_token"]
+            token = body.get("access_token")
+            if not token:
+                raise RuntimeError(
+                    f"OPS token endpoint returned no access_token: {str(body)[:200]}"
+                )
+            self._token = token
             ttl = int(body.get("expires_in", 3600))
             self._token_expires_at = now + ttl
             return self._token
@@ -80,15 +94,14 @@ class OpsGraphQLClient:
         token = await self._get_token()
         url = f"{self.auth.base_url.rstrip('/')}{self.GRAPHQL_PATH}"
 
-        async with httpx.AsyncClient(timeout=self._timeout) as hc:
-            resp = await hc.post(
-                url,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
-                json={"query": query, "variables": variables},
-            )
+        resp = await self._http.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json={"query": query, "variables": variables},
+        )
 
         # OPS revoked the token early — refresh once and retry
         if resp.status_code == 401 and allow_retry:

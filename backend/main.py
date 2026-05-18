@@ -36,7 +36,6 @@ from modules.catalog.routes import router as catalog_router, categories_router
 from modules.catalog.ingest import router as catalog_ingest_router
 from modules.master_options.ingest import router as master_options_ingest_router
 from modules.master_options.routes import router as master_options_router, product_config_router as master_options_product_config_router
-from modules.n8n_proxy.routes import router as n8n_proxy_router
 from modules.ps_directory.routes import router as ps_router
 from modules.promostandards.routes import router as promostandards_sync_router
 from modules.sync_jobs.routes import router as sync_jobs_router
@@ -57,7 +56,6 @@ _PROD_REQUIRED_ENV_VARS = (
     "INGEST_SHARED_SECRET",
     "ALLOWED_ORIGINS",
     "POSTGRES_URL",
-    "N8N_WEBHOOK_BASE_URL",
     "API_BASE_URL",
 )
 
@@ -180,6 +178,7 @@ _SCHEMA_UPGRADES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_push_log_payload_hash ON product_push_log(payload_hash)",
     "CREATE INDEX IF NOT EXISTS idx_push_log_idempotency ON product_push_log(key_id, idempotency_key)",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_in_flight ON product_push_log(customer_id, product_id) WHERE status = 'processing'",
+    "ALTER TABLE integration_keys ADD COLUMN IF NOT EXISTS is_synthetic BOOLEAN NOT NULL DEFAULT FALSE",
 ]
 
 
@@ -202,6 +201,13 @@ async def lifespan(app: FastAPI):
             print(f"Database not ready... retrying in 2s ({retries} retries left)")
             await asyncio.sleep(2)
 
+    # Seed the default admin user. Runs after Base.metadata.create_all so the
+    # `users` table exists (bootstrap.sh tried this before lifespan and silently
+    # failed — see ensure_default_admin docstring for env-vs-random behavior).
+    from modules.auth.seed import ensure_default_admin
+    async with async_session() as db:
+        await ensure_default_admin(db)
+
     if ENVIRONMENT == "development":
         from modules.suppliers.demo_seed import ensure_vg_ops_supplier
 
@@ -220,9 +226,6 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await engine.dispose()
-    from modules.n8n_proxy import routes as _n8n_proxy
-    if _n8n_proxy._http_client is not None:
-        await _n8n_proxy._http_client.aclose()
 
 
 import os
@@ -233,7 +236,13 @@ app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
 
 _IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
 _CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-_CORS_HEADERS = ["Authorization", "Content-Type", "X-Ingest-Secret"]
+_CORS_HEADERS = [
+    "Authorization",
+    "Content-Type",
+    "X-Ingest-Secret",
+    "X-Orchestrator-Key",   # Integration Gateway orchestrator auth
+    "Idempotency-Key",      # Gateway idempotent push requests
+]
 
 _cors_kwargs: dict = dict(
     allow_origins=ALLOWED_ORIGINS,
@@ -265,7 +274,6 @@ app.include_router(catalog_router, dependencies=_auth)
 app.include_router(categories_router, dependencies=_auth)
 app.include_router(master_options_router, dependencies=_auth)
 app.include_router(master_options_product_config_router, dependencies=_auth)
-app.include_router(n8n_proxy_router, dependencies=_auth)
 app.include_router(sync_jobs_router, dependencies=_auth)
 app.include_router(ops_push_router, dependencies=_auth)
 app.include_router(push_candidates_router, dependencies=_auth)
