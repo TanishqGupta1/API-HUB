@@ -55,8 +55,15 @@ def _expected_secret() -> str:
 
 
 async def require_ingest_secret(x_ingest_secret: str | None = Header(default=None)) -> None:
-    expected = _expected_secret()
-    if not x_ingest_secret or x_ingest_secret != expected:
+    # Raises 503 (via _expected_secret) when INGEST_SHARED_SECRET is unset —
+    # that path takes precedence over a 401 so misconfiguration is obvious.
+    _expected_secret()
+    # Constant-time compare. Raw `==` short-circuits on the first mismatched
+    # byte, which lets an attacker on the same network recover the secret one
+    # byte at a time by measuring response latency. compare_digest does the
+    # full comparison in fixed time regardless of where the mismatch falls.
+    from modules.auth.dependencies import _ingest_secret_matches
+    if not _ingest_secret_matches(x_ingest_secret):
         raise HTTPException(401, "Invalid or missing X-Ingest-Secret header")
 
 
