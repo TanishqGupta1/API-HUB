@@ -48,20 +48,26 @@ export function PushRowAction({ productId, productName }: Props) {
       return;
     }
     setBusy(true);
-    setMessage({ text: "Triggering push workflow…", type: "info" });
+    setMessage({ text: "Dispatching to gateway…", type: "info" });
     try {
-      const res = await api<{ triggered: boolean }>(
-        `/api/n8n/workflows/ops-push-001/trigger?product_id=${productId}&customer_id=${customerId}`,
+      const res = await api<{ status: string; message?: string; push_log_id?: string }>(
+        `/api/push/${customerId}/${productId}`,
         { method: "POST" },
       );
-      if (res.triggered) {
+      // Gateway vocab: 'accepted'/'processing'/'queued' → in-flight; 'pushed'/'dry_run_pushed' → terminal ok;
+      // 'failed'/'partial_failure'/'rejected' → terminal error.
+      const ok = ["accepted", "processing", "queued", "pushed", "dry_run_pushed"].includes(res.status);
+      if (ok) {
         setMessage({
-          text: "Push started. Check history for status.",
+          text: res.message || "Push dispatched. Check history for status.",
           type: "success",
         });
         setTimeout(() => setOpen(false), 1800);
       } else {
-        setMessage({ text: "Push request failed.", type: "error" });
+        setMessage({
+          text: res.message || `Push ${res.status}.`,
+          type: "error",
+        });
       }
     } catch (e) {
       setMessage({
