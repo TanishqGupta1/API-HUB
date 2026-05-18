@@ -123,21 +123,14 @@ async def test_admin_route_writes_gateway_native_push_log(client, admin_push_sca
         }, log.status
 
 
-@pytest.mark.asyncio
-async def test_admin_route_no_n8n_webhook_trigger(client, admin_push_scaffold, monkeypatch):
-    """Rewire goal: admin push must NOT touch the legacy n8n webhook helper.
+def test_legacy_n8n_push_helper_is_gone():
+    """T24 completion: trigger_n8n_push must not exist on the service module.
 
-    If trigger_n8n_push gets called during the admin push, the rewire is
-    incomplete — the request would still be routed via the deprecated path."""
-    called = {"n": 0}
+    The rewire is finished — the admin push and gateway both call
+    prepare_push_intent + execute_push directly. Any future reintroduction
+    of an n8n webhook helper for OPS push is a regression."""
+    from modules.ops_push import service
 
-    async def _spy(payload):
-        called["n"] += 1
-
-    monkeypatch.setattr("modules.ops_push.service.trigger_n8n_push", _spy)
-
-    cid = admin_push_scaffold["customer"].id
-    pid = admin_push_scaffold["product"].id
-    resp = await client.post(f"/api/push/{cid}/{pid}")
-    assert resp.status_code in (200, 202), resp.text
-    assert called["n"] == 0, "admin push should dispatch via gateway, not n8n webhook"
+    assert not hasattr(service, "trigger_n8n_push"), (
+        "trigger_n8n_push was removed in T24; service.py should not redefine it"
+    )

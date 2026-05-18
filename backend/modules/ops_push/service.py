@@ -1,15 +1,11 @@
-import os
 import uuid
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Optional
 
-import httpx
 from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from database import async_session
 
 from modules.catalog.models import Product
 from modules.customers.models import Customer
@@ -21,30 +17,13 @@ from modules.integrations.schemas import (
     PushRequestSource,
     PushRequestTarget,
 )
-from modules.push_mappings.models import PushMapping
 from modules.push_log.models import ProductPushLog
-from modules.catalog.models import CustomerProductSelection
 from modules.markup.engine import calculate_price
 from .gateway import execute_push, prepare_push_intent
 from .merge import merge_product_with_decorations
 
 logger = logging.getLogger(__name__)
 
-
-async def trigger_n8n_push(payload: dict[str, Any]) -> None:
-    """POST payload to N8N_PUSH_WEBHOOK_URL.
-
-    Silently skips in dev when the env var is unset.
-    Raises in production if unset, or on any non-2xx response.
-    """
-    webhook_url = os.getenv("N8N_PUSH_WEBHOOK_URL", "").strip()
-    if not webhook_url:
-        if os.getenv("ENVIRONMENT", "development").lower() == "production":
-            raise RuntimeError("N8N_PUSH_WEBHOOK_URL is required in production")
-        return
-    async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.post(webhook_url, json=payload)
-        response.raise_for_status()
 
 async def push_product(
     db: AsyncSession,
