@@ -233,7 +233,13 @@ app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
 
 _IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
 _CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-_CORS_HEADERS = ["Authorization", "Content-Type", "X-Ingest-Secret"]
+_CORS_HEADERS = [
+    "Authorization",
+    "Content-Type",
+    "X-Ingest-Secret",
+    "X-Orchestrator-Key",   # Integration Gateway orchestrator auth
+    "Idempotency-Key",      # Gateway idempotent push requests
+]
 
 _cors_kwargs: dict = dict(
     allow_origins=ALLOWED_ORIGINS,

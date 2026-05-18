@@ -554,6 +554,28 @@ async def check_ops_oauth2_reachable(
                     "client_secret": secret,
                 },
             )
+    except httpx.UnsupportedProtocol as exc:
+        # token_url is non-empty but malformed (e.g. missing http:// scheme).
+        # Returning a clean CheckResult prevents the gateway from 500ing — the
+        # operator sees a 422 PREFLIGHT_BLOCKER with a fixable error message.
+        return CheckResult(
+            "ops_oauth2_reachable",
+            False,
+            f"ops_token_url is malformed: {exc}",
+            field="customer.ops_token_url",
+            suggestion=(
+                f"Set ops_token_url to a valid https:// URL "
+                f"(current value: {token_url!r})."
+            ),
+        )
+    except httpx.InvalidURL as exc:
+        return CheckResult(
+            "ops_oauth2_reachable",
+            False,
+            f"ops_token_url is invalid: {exc}",
+            field="customer.ops_token_url",
+            suggestion=f"Fix the ops_token_url value (current: {token_url!r}).",
+        )
     except (httpx.ConnectError, httpx.ReadTimeout, httpx.TimeoutException) as exc:
         return CheckResult(
             "ops_oauth2_reachable",
