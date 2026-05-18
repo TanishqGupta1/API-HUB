@@ -36,7 +36,6 @@ from modules.catalog.routes import router as catalog_router, categories_router
 from modules.catalog.ingest import router as catalog_ingest_router
 from modules.master_options.ingest import router as master_options_ingest_router
 from modules.master_options.routes import router as master_options_router, product_config_router as master_options_product_config_router
-from modules.n8n_proxy.routes import router as n8n_proxy_router
 from modules.ps_directory.routes import router as ps_router
 from modules.promostandards.routes import router as promostandards_sync_router
 from modules.sync_jobs.routes import router as sync_jobs_router
@@ -57,7 +56,6 @@ _PROD_REQUIRED_ENV_VARS = (
     "INGEST_SHARED_SECRET",
     "ALLOWED_ORIGINS",
     "POSTGRES_URL",
-    "N8N_WEBHOOK_BASE_URL",
     "API_BASE_URL",
 )
 
@@ -180,6 +178,7 @@ _SCHEMA_UPGRADES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_push_log_payload_hash ON product_push_log(payload_hash)",
     "CREATE INDEX IF NOT EXISTS idx_push_log_idempotency ON product_push_log(key_id, idempotency_key)",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_in_flight ON product_push_log(customer_id, product_id) WHERE status = 'processing'",
+    "ALTER TABLE integration_keys ADD COLUMN IF NOT EXISTS is_synthetic BOOLEAN NOT NULL DEFAULT FALSE",
 ]
 
 
@@ -220,9 +219,6 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await engine.dispose()
-    from modules.n8n_proxy import routes as _n8n_proxy
-    if _n8n_proxy._http_client is not None:
-        await _n8n_proxy._http_client.aclose()
 
 
 import os
@@ -271,7 +267,6 @@ app.include_router(catalog_router, dependencies=_auth)
 app.include_router(categories_router, dependencies=_auth)
 app.include_router(master_options_router, dependencies=_auth)
 app.include_router(master_options_product_config_router, dependencies=_auth)
-app.include_router(n8n_proxy_router, dependencies=_auth)
 app.include_router(sync_jobs_router, dependencies=_auth)
 app.include_router(ops_push_router, dependencies=_auth)
 app.include_router(push_candidates_router, dependencies=_auth)

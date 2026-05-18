@@ -45,7 +45,7 @@ async def get_processed_image(
         headers={"Cache-Control": "public, max-age=86400"},
     )
 
-@router.post("/{customer_id}/{product_id}")
+@router.post("/{customer_id}/{product_id}", deprecated=True)
 async def push_product_route(
     customer_id: UUID,
     product_id: UUID,

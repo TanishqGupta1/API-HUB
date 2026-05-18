@@ -3,7 +3,7 @@
 **Spec:** `docs/superpowers/specs/2026-05-11-integration-gateway-design.md`
 **Previous spec (superseded):** `docs/superpowers/specs/2026-05-08-sanmar-ops-staging-push-design.md`
 **Date:** 2026-05-13 (updated to match Integration Gateway spec)
-**Status:** 5/11 tasks done. Tasks 4–7 are parallel once Task 1 lands.
+**Status:** 7/11 tasks done. Tasks 4–7 are parallel once Task 1 lands.
 
 > ⚠️ **Plan updated 2026-05-13** — Original plan was based on the VPCE spec (preview/execute + confirm_token). That spec was superseded on 2026-05-11 by the Integration Gateway design. Tasks 1, 8, 9, 11 have been rewritten. Tasks 4, 7 unchanged. Tasks 5, 6, 10 have minor naming updates.
 
@@ -20,8 +20,8 @@
 | 5 | FakeOpsClient (dry-run test double) | Urvashi | ⏳ Pending | 4 | 8 |
 | 6 | payload_builder.py | Shinchana | ⏳ Pending | 1 | 8 |
 | 7 | preflight.py (4 validation checks) | Shinchana | ⏳ Pending | 1 | 8 |
-| 8 | Integration Gateway core (prepare + execute + build) | Vidhi | ⚠️ Partial | 1, 4, 5, 6, 7 | 9 |
-| 9 | New API routes (`/api/integrations/v1/`) + delete n8n path | Vidhi | ⚠️ Partial | 8 | 10 |
+| 8 | Integration Gateway core (prepare + execute + build) | Vidhi | ✅ Done | 1, 4, 5, 6, 7 | 9 |
+| 9 | New API routes (`/api/integrations/v1/`) + delete n8n path | Vidhi | ✅ Done | 8 | 10 |
 | 10 | Admin UI: push log detail, integration keys page | Shinchana | ⏳ Pending | 9 | 11 |
 | 11 | E2E manual test against VG OPS staging | Urvashi | ⏳ Pending | All | — |
 
