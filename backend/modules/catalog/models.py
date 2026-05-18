@@ -79,7 +79,7 @@ class Product(Base):
 class ProductVariant(Base):
     __tablename__ = "product_variants"
     __table_args__ = (
-        UniqueConstraint("product_id", "color", "size", name="uq_variant_product_color_size"),
+        UniqueConstraint("product_id", "sku", name="uq_product_variants_product_sku"),
     )
 
     id: Mapped[uuid_mod.UUID] = mapped_column(primary_key=True, default=uuid_mod.uuid4)

@@ -1,0 +1,542 @@
+"""Integration Gateway core — prepare_push_intent() + execute_push()."""
+from __future__ import annotations
+
+import asyncio
+import logging
+import uuid as uuid_mod
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+import httpx
+from fastapi import HTTPException, status
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from database import async_session
+from modules.catalog.models import Product, CustomerProductSelection
+from modules.customers.models import Customer
+from modules.integrations.models import IntegrationKey
+from modules.integrations.schemas import PushRequest, PushRequestAccepted, PushRequestLinks
+from modules.markup.engine import calculate_price
+from modules.ops_client import mutations as _m
+from modules.ops_client.client import OpsAuth, OpsGraphQLClient
+from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
+from modules.ops_push.preflight import run_preflight
+from modules.push_log.models import ProductPushLog
+from modules.push_mappings.models import PushMapping
+from modules.suppliers.models import Supplier
+
+logger = logging.getLogger(__name__)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# OPS clients — adapters that match the plan-step interface
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# `execute_push` walks the OPSMutationStep plan from payload_builder, calling
+# `getattr(client, _mutation_to_method(step.mutation))(step.variables)` for
+# each step. The OPS client adapter and the dry-run Fake share that
+# (variables: dict) → response: dict interface.
+
+# Maps GraphQL mutation root → (query string, response root key).
+# The query strings live in ops_client.mutations as the single source of
+# truth for OPS field shapes.
+_MUTATION_DISPATCH: dict[str, tuple[str, str]] = {
+    "set_product_category":            (_m._SET_PRODUCT_CATEGORY,            "setProductCategory"),
+    "set_product":                     (_m._SET_PRODUCT,                     "setProduct"),
+    "set_product_size":                (_m._SET_PRODUCT_SIZE,                "setProductSize"),
+    "set_product_price":               (_m._SET_PRODUCT_PRICE,               "setProductPrice"),
+    "set_assign_options":              (_m._SET_ASSIGN_OPTIONS,              "setAssignOptions"),
+    "set_additional_option":           (_m._SET_ADDITIONAL_OPTION,           "setAdditionalOption"),
+    "set_additional_option_attributes": (_m._SET_ADDITIONAL_OPTION_ATTRIBUTES, "setAdditionalOptionAttributes"),
+    "set_products_attribute_price":    (_m._SET_PRODUCTS_ATTRIBUTE_PRICE,    "setProductsAttributePrice"),
+}
+
+
+class OpsClientAdapter:
+    """Live OPS client — dispatches each plan step through OpsGraphQLClient."""
+
+    def __init__(self, client: OpsGraphQLClient) -> None:
+        self._client = client
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+    def __getattr__(self, name: str) -> Any:
+        if name not in _MUTATION_DISPATCH:
+            raise AttributeError(name)
+        query, response_root = _MUTATION_DISPATCH[name]
+
+        async def _invoke(variables: dict) -> dict:
+            result = await self._client.execute(query, variables=variables)
+            if not result.ok:
+                code = result.ops_error_code or "OPS_ERROR"
+                msg = result.ops_error_message or "OPS mutation failed"
+                raise RuntimeError(f"{code}: {msg}")
+            return ((result.data or {}).get(response_root) or {})
+
+        return _invoke
+
+
+class FakeOpsClient:
+    """Dry-run client — fabricates IDs and records calls. No OPS traffic."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+        self._counter = 10000
+
+    async def aclose(self) -> None:
+        pass
+
+    def _next_id(self) -> int:
+        self._counter += 1
+        return self._counter
+
+    def _record(self, method: str, variables: dict, response: dict) -> None:
+        self.calls.append({"method": method, "input": variables, "response": response})
+
+    async def set_product_category(self, variables: dict) -> dict:
+        r = {"category_id": self._next_id()}
+        self._record("set_product_category", variables, r)
+        return r
+
+    async def set_product(self, variables: dict) -> dict:
+        r = {"products_id": self._next_id()}
+        self._record("set_product", variables, r)
+        return r
+
+    async def set_product_size(self, variables: dict) -> dict:
+        r = {"size_id": self._next_id()}
+        self._record("set_product_size", variables, r)
+        return r
+
+    async def set_product_price(self, variables: dict) -> dict:
+        r = {"product_price_id": self._next_id()}
+        self._record("set_product_price", variables, r)
+        return r
+
+    async def set_assign_options(self, variables: dict) -> dict:
+        inp = variables.get("input", variables)
+        r = {"products_id": inp.get("products_id", self._counter)}
+        self._record("set_assign_options", variables, r)
+        return r
+
+    async def set_additional_option(self, variables: dict) -> dict:
+        r = {"options_id": self._next_id()}
+        self._record("set_additional_option", variables, r)
+        return r
+
+    async def set_additional_option_attributes(self, variables: dict) -> dict:
+        r = {"options_values_id": self._next_id()}
+        self._record("set_additional_option_attributes", variables, r)
+        return r
+
+    async def set_products_attribute_price(self, variables: dict) -> dict:
+        r = {"products_attributes_id": self._next_id()}
+        self._record("set_products_attribute_price", variables, r)
+        return r
+
+
+def _build_live_client(customer: Customer) -> OpsClientAdapter:
+    """Hydrate an OpsGraphQLClient from the customer's encrypted ops_auth_config."""
+    secret = (customer.ops_auth_config or {}).get("client_secret")
+    if not secret:
+        raise RuntimeError(
+            f"Customer {customer.id} ops_auth_config.client_secret is unset — "
+            "live push cannot authenticate"
+        )
+    auth = OpsAuth(
+        base_url=customer.ops_base_url,
+        token_url=customer.ops_token_url,
+        client_id=customer.ops_client_id,
+        client_secret=secret,
+    )
+    return OpsClientAdapter(OpsGraphQLClient(auth))
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Helpers
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _redact_auth(steps: list[dict]) -> list[dict]:
+    """Redact Authorization header values before persisting to step_results."""
+    out = []
+    for step in steps:
+        s = dict(step)
+        headers = s.get("headers", {})
+        if headers:
+            s["headers"] = {
+                k: ("Bearer ***" if k.lower() == "authorization" else v)
+                for k, v in headers.items()
+            }
+        out.append(s)
+    return out
+
+
+async def _fire_callback(push_log_id: str, callback_url: str, payload: dict) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                callback_url,
+                json=payload,
+                headers={"X-ApiHub-Event": "push.completed"},
+            )
+            return r.status_code < 300
+    except Exception as e:
+        logger.warning("callback failed push_log=%s err=%s", push_log_id, e)
+        return False
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Core gateway functions
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async def prepare_push_intent(
+    req: PushRequest,
+    key: IntegrationKey,
+    db: AsyncSession,
+    idempotency_key: Optional[str] = None,
+) -> PushRequestAccepted:
+    """Stage 1: validate, idempotency check, preflight, insert push_log row.
+
+    Returns immediately with push_log_id + status=accepted.
+    execute_push() is called after this (sync or background).
+    """
+    customer_id = req.target.customer_id
+    supplier_slug = req.source.supplier_slug
+    pref = req.product_ref
+
+    # ── Resolve customer ──
+    customer = (await db.execute(
+        select(Customer).where(Customer.id == customer_id)
+    )).scalar_one_or_none()
+    if not customer:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF", "message": f"Customer {customer_id} not found"
+        })
+
+    # ── Resolve supplier + product ──
+    supplier = (await db.execute(
+        select(Supplier).where(Supplier.slug == supplier_slug)
+    )).scalar_one_or_none()
+    if not supplier:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF", "message": f"Supplier '{supplier_slug}' not found"
+        })
+
+    # product_ref accepts product_id (UUID) OR supplier_sku — exactly one path
+    # must resolve a row. We don't enforce "both unset" at the Pydantic layer so
+    # error shape stays consistent with the gateway envelope.
+    if pref.product_id is None and not pref.supplier_sku:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
+            "code": "INVALID_REF",
+            "message": "product_ref must include product_id or supplier_sku",
+        })
+
+    product_query = select(Product).options(
+        selectinload(Product.variants), selectinload(Product.images)
+    )
+    if pref.product_id is not None:
+        product_query = product_query.where(Product.id == pref.product_id)
+    else:
+        product_query = product_query.where(
+            Product.supplier_sku == pref.supplier_sku,
+            Product.supplier_id == supplier.id,
+        )
+    product = (await db.execute(product_query)).scalar_one_or_none()
+    if not product:
+        identifier = str(pref.product_id) if pref.product_id else pref.supplier_sku
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF", "message": f"Product '{identifier}' not found in catalog"
+        })
+
+    # Cross-check: if resolved by product_id, the product must belong to the
+    # supplier the orchestrator named. Stops a key scoped to "sanmar" from
+    # nominating a 4Over product simply by knowing its UUID.
+    if pref.product_id is not None and product.supplier_id != supplier.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={
+            "code": "SUPPLIER_MISMATCH",
+            "message": (
+                f"Product {product.id} belongs to a different supplier than "
+                f"'{supplier_slug}'"
+            ),
+        })
+
+    supplier_sku = product.supplier_sku
+
+    # ── Compute payload hash over the canonical request body (Rev 1, RFC 8785) ──
+    # Task 6: real RFC 8785 JCS hash over the inbound request, not a stub on (product_id, customer_id).
+    payload_hash = compute_payload_hash(req.model_dump(mode="json"))
+
+    # ── Idempotency check ──
+    existing = (await db.execute(
+        select(ProductPushLog).where(
+            ProductPushLog.key_id == key.id,
+            ProductPushLog.idempotency_key == idempotency_key,
+        )
+    )).scalar_one_or_none() if idempotency_key else None
+
+    if existing:
+        if existing.payload_hash == payload_hash:
+            # Same key + same body → return existing (idempotent replay)
+            return PushRequestAccepted(
+                push_log_id=existing.id,
+                status=existing.status,
+                customer_id=customer_id,
+                supplier_slug=supplier_slug,
+                supplier_sku=supplier_sku,
+                ops_product_id=existing.ops_product_id,
+                dry_run=existing.dry_run,
+                callback_status=existing.callback_status,
+                created_at=existing.pushed_at,
+                links=PushRequestLinks(self=f"/api/integrations/v1/push-requests/{existing.id}"),
+            )
+        else:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail={
+                "code": "IDEMPOTENCY_CONFLICT",
+                "message": "Same Idempotency-Key was used with a different payload"
+            })
+
+    # ── Concurrency guard ──
+    in_flight = (await db.execute(
+        select(ProductPushLog).where(
+            ProductPushLog.customer_id == customer_id,
+            ProductPushLog.product_id == product.id,
+            ProductPushLog.status == "processing",
+        )
+    )).scalar_one_or_none()
+    if in_flight:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={
+            "code": "IN_FLIGHT",
+            "message": "Another push for this product is currently processing"
+        })
+
+    # ── Preflight (Task 7: 8 real checks + token cache) ──
+    preflight = await run_preflight(db, customer_id, product.id)
+    if not preflight.ok:
+        # Use Task 7's spec-shaped error envelope (status/code/message/details/trace_id).
+        envelope = preflight.to_error_envelope()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=envelope)
+
+    # ── Insert push_log row ──
+    now = datetime.now(timezone.utc)
+    push_log = ProductPushLog(
+        product_id=product.id,
+        customer_id=customer_id,
+        status="accepted",
+        pushed_at=now,
+        key_id=key.id,
+        idempotency_key=idempotency_key,
+        payload_hash=payload_hash,
+        supplier_slug=supplier_slug,
+        supplier_sku=supplier_sku,
+        callback_url=req.callback.url if req.callback else None,
+        callback_status="pending" if req.callback else "not_requested",
+        dry_run=req.dry_run,
+    )
+    db.add(push_log)
+    await db.commit()
+    await db.refresh(push_log)
+
+    return PushRequestAccepted(
+        push_log_id=push_log.id,
+        status="accepted",
+        customer_id=customer_id,
+        supplier_slug=supplier_slug,
+        supplier_sku=supplier_sku,
+        dry_run=req.dry_run,
+        callback_status=push_log.callback_status,
+        created_at=push_log.pushed_at,
+        links=PushRequestLinks(self=f"/api/integrations/v1/push-requests/{push_log.id}"),
+    )
+
+
+async def execute_push(push_log_id: uuid_mod.UUID) -> None:
+    """Stage 2: execute mutation plan against OPS (or FakeOpsClient for dry_run).
+
+    Runs synchronously for ≤20 variants, or as a BackgroundTask for >20.
+    Uses its own DB session — safe to run detached from the request session.
+    """
+    async with async_session() as db:
+        push_log = await db.get(ProductPushLog, push_log_id)
+        if not push_log:
+            logger.error("execute_push: push_log %s not found", push_log_id)
+            return
+
+        # ── Atomic transition: accepted → processing ──
+        result = await db.execute(
+            update(ProductPushLog)
+            .where(ProductPushLog.id == push_log_id, ProductPushLog.status == "accepted")
+            .values(status="processing")
+            .returning(ProductPushLog.id)
+        )
+        if not result.fetchone():
+            logger.warning("execute_push: push_log %s not in accepted state", push_log_id)
+            return
+        await db.commit()
+
+        product = (await db.execute(
+            select(Product)
+            .options(selectinload(Product.variants), selectinload(Product.images))
+            .where(Product.id == push_log.product_id)
+        )).scalar_one_or_none()
+        customer = await db.get(Customer, push_log.customer_id)
+
+        # ── Select client ──
+        if push_log.dry_run:
+            client: Any = FakeOpsClient()
+        else:
+            if customer is None:
+                logger.error("execute_push: customer %s vanished mid-flight", push_log.customer_id)
+                push_log.status = "failed"
+                push_log.cleanup_targets = {"reason": "customer not found at execute time"}
+                await db.commit()
+                return
+            try:
+                client = _build_live_client(customer)
+            except RuntimeError as e:
+                logger.error("execute_push: live client unavailable — %s", e)
+                push_log.status = "failed"
+                push_log.cleanup_targets = {"reason": str(e)}
+                await db.commit()
+                return
+
+        try:
+            # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
+            payload = await build_push_payload(db, push_log.customer_id, push_log.product_id)
+            plan = [step.model_dump(mode="json") for step in payload.plan]
+
+            step_results: list[dict] = []
+            ops_product_id: Optional[str] = None
+            final_status = "pushed" if not push_log.dry_run else "dry_run_pushed"
+            cleanup_targets: Optional[dict] = None
+
+            # ── Execute plan sequentially ──
+            for step in plan:
+                mutation = step.get("mutation", "")
+                variables = step.get("variables", {})
+                t_start = datetime.now(timezone.utc)
+                try:
+                    method = getattr(client, _mutation_to_method(mutation), None)
+                    if method is None:
+                        raise NotImplementedError(f"No client method for {mutation}")
+                    resp = await method(variables)
+                    latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
+                    if "products_id" in resp:
+                        ops_product_id = str(resp["products_id"])
+                    step_results.append({
+                        "step": mutation,
+                        "ok": True,
+                        "ops_id": ops_product_id,
+                        "latency_ms": latency,
+                        "called_at": t_start.isoformat(),
+                    })
+                except Exception as e:
+                    latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
+                    step_results.append({
+                        "step": mutation,
+                        "ok": False,
+                        "error": str(e),
+                        "latency_ms": latency,
+                        "called_at": t_start.isoformat(),
+                    })
+                    cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
+                    final_status = "partial_failure" if ops_product_id else "failed"
+                    break
+
+            # ── Persist results ──
+            push_log.step_results = _redact_auth(step_results)
+            push_log.status = final_status
+            push_log.cleanup_targets = cleanup_targets
+            if ops_product_id and final_status == "pushed":
+                push_log.ops_product_id = ops_product_id
+
+            # ── Upsert push_mappings (live push only) ──
+            # target_ops_product_id is an INTEGER column; the mutation responses
+            # carry it as int but step_results stringifies for JSON serialization.
+            # Coerce back to int here and skip the mapping write if the OPS id
+            # isn't numeric (e.g. early-failure cases where ops_product_id is None).
+            if final_status == "pushed" and ops_product_id is not None:
+                try:
+                    target_int = int(ops_product_id)
+                except (TypeError, ValueError):
+                    target_int = None
+                if target_int is not None:
+                    existing_mapping = (await db.execute(
+                        select(PushMapping).where(
+                            PushMapping.source_product_id == push_log.product_id,
+                            PushMapping.customer_id == push_log.customer_id,
+                        )
+                    )).scalar_one_or_none()
+                    now_mapping = datetime.now(timezone.utc)
+                    if existing_mapping:
+                        existing_mapping.target_ops_product_id = target_int
+                        existing_mapping.updated_at = now_mapping
+                    else:
+                        db.add(PushMapping(
+                            source_system="api-hub",
+                            source_product_id=push_log.product_id,
+                            source_supplier_sku=push_log.supplier_sku,
+                            customer_id=push_log.customer_id,
+                            target_ops_base_url=(customer.ops_base_url if customer else ""),
+                            target_ops_product_id=target_int,
+                            pushed_at=now_mapping,
+                            updated_at=now_mapping,
+                            status="active",
+                        ))
+
+                # Update customer-catalog selection
+                sel = (await db.execute(
+                    select(CustomerProductSelection).where(
+                        CustomerProductSelection.customer_id == push_log.customer_id,
+                        CustomerProductSelection.product_id == push_log.product_id,
+                    )
+                )).scalar_one_or_none()
+                now = datetime.now(timezone.utc)
+                if sel:
+                    sel.status = "pushed"
+                    sel.pushed_at = now
+                else:
+                    db.add(CustomerProductSelection(
+                        customer_id=push_log.customer_id,
+                        product_id=push_log.product_id,
+                        status="pushed",
+                        added_at=now,
+                        pushed_at=now,
+                    ))
+
+            await db.commit()
+
+            # ── Fire callback ──
+            if push_log.callback_url and push_log.callback_status == "pending":
+                success = await _fire_callback(
+                    str(push_log_id),
+                    push_log.callback_url,
+                    {
+                        "event": "push.completed",
+                        "push_log_id": str(push_log_id),
+                        "status": final_status,
+                        "ops_product_id": ops_product_id,
+                        "supplier_sku": push_log.supplier_sku,
+                    },
+                )
+                push_log.callback_status = "sent" if success else "failed"
+                push_log.callback_attempts = 1
+                await db.commit()
+        finally:
+            await client.aclose()
+
+
+def _mutation_to_method(mutation: str) -> str:
+    mapping = {
+        "setProductCategory":            "set_product_category",
+        "setProduct":                    "set_product",
+        "setProductSize":                "set_product_size",
+        "setProductPrice":               "set_product_price",
+        "setAssignOptions":              "set_assign_options",
+        "setAdditionalOption":           "set_additional_option",
+        "setAdditionalOptionAttributes": "set_additional_option_attributes",
+        "setProductsAttributePrice":     "set_products_attribute_price",
+    }
+    return mapping.get(mutation, mutation)

@@ -1,4 +1,3 @@
-import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,8 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
-from modules.catalog.ingest import require_ingest_secret
-from modules.n8n_proxy.routes import trigger_workflow_by_id
 
 from .models import MasterOption
 from .schemas import MasterOptionRead, OptionConfigItem, SyncStatus
@@ -121,12 +118,7 @@ async def duplicate_from(
     return {"copied": copied, "status": "ok"}
 
 
-@router.post("/sync", dependencies=[Depends(require_ingest_secret)])
-async def trigger_sync():
-    """Trigger the n8n master options pull workflow."""
-    workflow_id = os.getenv("MASTER_OPTIONS_SYNC_WORKFLOW_ID", "ops-master-options-pull-001")
-    try:
-        return await trigger_workflow_by_id(workflow_id)
-    except Exception as e:
-        print(f"Warning: n8n trigger failed ({e}). Please execute manually in n8n UI.")
-        return {"triggered": False, "message": f"Please execute workflow '{workflow_id}' manually in n8n."}
+# /sync route removed in T23 — the n8n master-options pull workflow it
+# triggered (ops-master-options-pull.json) is deleted. Callers should use
+# POST /api/integrations/v1/master-options/ingest with the gateway's
+# X-Orchestrator-Key header to push a master-options snapshot directly.

@@ -1,0 +1,2391 @@
+{
+  "_schema_version": 1,
+  "_description": "OPS demo products transformed from file (1) (1).json. Each upserts on (supplier_slug, supplier_sku).",
+  "products": [
+    {
+      "supplier_slug": "vg-ops",
+      "supplier_sku": "OPS-131",
+      "product_name": "Decals - General Performance",
+      "brand": null,
+      "category": null,
+      "description": null,
+      "product_type": "print",
+      "image_url": "https://dei4q67dwezeh.cloudfront.net/ctmediaon/images/product/Decals-General-Performance_1.jpg",
+      "ops_product_id": "131",
+      "external_catalogue": 1,
+      "sizes": [
+        {
+          "width": 0,
+          "height": 0,
+          "unit": "in",
+          "label": "Custom Size"
+        }
+      ],
+      "options": [
+        {
+          "master_option_id": 59,
+          "option_key": "lamMaterial",
+          "title": "lamMaterial",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 956,
+              "master_attribute_id": 160,
+              "attribute_key": "None_lamMaterial",
+              "title": "None_lamMaterial",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 957,
+              "master_attribute_id": 162,
+              "attribute_key": "GF - Concept 240",
+              "title": "GF - Concept 240",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 8130,
+              "master_attribute_id": 161,
+              "attribute_key": "3M - 8048",
+              "title": "3M - 8048",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 69,
+          "option_key": "file_prep",
+          "title": "file_prep",
+          "options_type": "admin_only",
+          "required": false,
+          "sort_order": 0,
+          "attributes": []
+        },
+        {
+          "master_option_id": 70,
+          "option_key": "file_processing_(rip)",
+          "title": "file_processing_(rip)",
+          "options_type": "admin_only",
+          "required": false,
+          "sort_order": 0,
+          "attributes": []
+        },
+        {
+          "master_option_id": 52,
+          "option_key": "prodTime",
+          "title": "prodTime",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 791,
+              "master_attribute_id": 137,
+              "attribute_key": "1",
+              "title": "1",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 2,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 792,
+              "master_attribute_id": 138,
+              "attribute_key": "2",
+              "title": "2",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 1.5,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 793,
+              "master_attribute_id": 139,
+              "attribute_key": "3",
+              "title": "3",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 794,
+              "master_attribute_id": 205,
+              "attribute_key": "7",
+              "title": "7",
+              "sort_order": 4,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 112,
+          "option_key": "inkFinish",
+          "title": "Ink Finish",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 800,
+              "master_attribute_id": 184,
+              "attribute_key": "Gloss",
+              "title": "Gloss",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 801,
+              "master_attribute_id": 185,
+              "attribute_key": "Matte",
+              "title": "Matte",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 1324,
+              "master_attribute_id": 186,
+              "attribute_key": "FLX",
+              "title": "FLX",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 10,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 118,
+          "option_key": "substrateMaterial",
+          "title": "substrateMaterial",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 803,
+              "master_attribute_id": 192,
+              "attribute_key": "Arlon - 510 MT",
+              "title": "Arlon - 510 MT",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 135,
+          "option_key": "imageShape",
+          "title": "Graphic Shape",
+          "options_type": "radio",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 806,
+              "master_attribute_id": 243,
+              "attribute_key": "Rectangle|1",
+              "title": "Rectangle|1",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 808,
+              "master_attribute_id": 245,
+              "attribute_key": "Oval|2",
+              "title": "Oval|2",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 809,
+              "master_attribute_id": 246,
+              "attribute_key": "Contour|3",
+              "title": "Contour|3",
+              "sort_order": 4,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 50,
+          "option_key": "printSides",
+          "title": "Print Sides",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 1057,
+              "master_attribute_id": 132,
+              "attribute_key": "Single|1",
+              "title": "Single|1",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 146,
+          "option_key": "inkType",
+          "title": "Ink Type",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 1059,
+              "master_attribute_id": 287,
+              "attribute_key": "cmyk",
+              "title": "cmyk",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 143,
+          "option_key": "whiteInk",
+          "title": "White Ink",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 1060,
+              "master_attribute_id": 265,
+              "attribute_key": "None_whiteInk",
+              "title": "None_whiteInk",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 173,
+          "option_key": "lamDevice",
+          "title": "lamDevice",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 1250,
+              "master_attribute_id": 386,
+              "attribute_key": "None_lamDevice",
+              "title": "None_lamDevice",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 1251,
+              "master_attribute_id": 379,
+              "attribute_key": "GFP 663TH No-Heat",
+              "title": "GFP 663TH No-Heat",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 1252,
+              "master_attribute_id": 380,
+              "attribute_key": "GFP 663TH Heated",
+              "title": "GFP 663TH Heated",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 189,
+          "option_key": "weeding",
+          "title": "weeding",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 1352,
+              "master_attribute_id": 469,
+              "attribute_key": "None_weeding",
+              "title": "None_weeding",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 1353,
+              "master_attribute_id": 470,
+              "attribute_key": "Standard_weeding",
+              "title": "Standard_weeding",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 3867,
+              "master_attribute_id": 539,
+              "attribute_key": "Reverse",
+              "title": "Reverse",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 190,
+          "option_key": "cutMasking",
+          "title": "cutMasking",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 1354,
+              "master_attribute_id": 471,
+              "attribute_key": "false",
+              "title": "false",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 1355,
+              "master_attribute_id": 472,
+              "attribute_key": "true",
+              "title": "true",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 151,
+          "option_key": "cutType",
+          "title": "cutType",
+          "options_type": "radio",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 1973,
+              "master_attribute_id": 316,
+              "attribute_key": "Through Cut_Knife|2",
+              "title": "Through Cut_Knife|2",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 1974,
+              "master_attribute_id": 318,
+              "attribute_key": "Kiss Cut|1",
+              "title": "Kiss Cut|1",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 4930,
+              "master_attribute_id": 972,
+              "attribute_key": "No Cut|0",
+              "title": "No Cut|0",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 200,
+          "option_key": "specialSign",
+          "title": "specialSign",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 2344,
+              "master_attribute_id": 531,
+              "attribute_key": "None_specialSign|0",
+              "title": "None_specialSign|0",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 89,
+          "option_key": "rcRadius",
+          "title": "rcRadius",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 2447,
+              "master_attribute_id": 168,
+              "attribute_key": "0.000",
+              "title": "0.000",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 2448,
+              "master_attribute_id": 170,
+              "attribute_key": "0.125",
+              "title": "0.125",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 2449,
+              "master_attribute_id": 171,
+              "attribute_key": "0.1875",
+              "title": "0.1875",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 2450,
+              "master_attribute_id": 172,
+              "attribute_key": "0.25",
+              "title": "0.25",
+              "sort_order": 4,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 2451,
+              "master_attribute_id": 201,
+              "attribute_key": "0.5",
+              "title": "0.5",
+              "sort_order": 5,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 2452,
+              "master_attribute_id": 202,
+              "attribute_key": "0.75",
+              "title": "0.75",
+              "sort_order": 6,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 2453,
+              "master_attribute_id": 203,
+              "attribute_key": "1.0",
+              "title": "1.0",
+              "sort_order": 7,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 2454,
+              "master_attribute_id": 204,
+              "attribute_key": "1.5",
+              "title": "1.5",
+              "sort_order": 8,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 218,
+          "option_key": "substrateType",
+          "title": "substrateType",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 3120,
+              "master_attribute_id": 605,
+              "attribute_key": "SAV",
+              "title": "SAV",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 222,
+          "option_key": "provideProof",
+          "title": "provideProof",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 3961,
+              "master_attribute_id": 655,
+              "attribute_key": "false_proof",
+              "title": "false_proof",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 3962,
+              "master_attribute_id": 656,
+              "attribute_key": "true_proof",
+              "title": "true_proof",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 228,
+          "option_key": "design",
+          "title": "design",
+          "options_type": "radio",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 4240,
+              "master_attribute_id": 675,
+              "attribute_key": "yes_design",
+              "title": "yes_design",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 229,
+          "option_key": "designType",
+          "title": "designType",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 4241,
+              "master_attribute_id": 676,
+              "attribute_key": "standard_designType",
+              "title": "standard_designType",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 4242,
+              "master_attribute_id": 678,
+              "attribute_key": "services_designType",
+              "title": "services_designType",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6961,
+              "master_attribute_id": 1018,
+              "attribute_key": "hourly_designType",
+              "title": "hourly_designType",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 230,
+          "option_key": "designServices",
+          "title": "designServices",
+          "options_type": "checkbox",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 4243,
+              "master_attribute_id": 679,
+              "attribute_key": "cutLines_designServices",
+              "title": "cutLines_designServices",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 4244,
+              "master_attribute_id": 680,
+              "attribute_key": "whiteSpot_designServices",
+              "title": "whiteSpot_designServices",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 4245,
+              "master_attribute_id": 681,
+              "attribute_key": "paneling_designServices",
+              "title": "paneling_designServices",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 231,
+          "option_key": "designComm",
+          "title": "designComm",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 4247,
+              "master_attribute_id": 683,
+              "attribute_key": "email_designComm",
+              "title": "email_designComm",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 232,
+          "option_key": "designConsult",
+          "title": "designConsult",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 4249,
+              "master_attribute_id": 685,
+              "attribute_key": "15min_designConsult",
+              "title": "15min_designConsult",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 4250,
+              "master_attribute_id": 686,
+              "attribute_key": "30min_designConsult",
+              "title": "30min_designConsult",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 4251,
+              "master_attribute_id": 687,
+              "attribute_key": "60min_designConsult",
+              "title": "60min_designConsult",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 240,
+          "option_key": "panelType",
+          "title": "panelType",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6839,
+              "master_attribute_id": 1015,
+              "attribute_key": "None_panelType",
+              "title": "None_panelType",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6840,
+              "master_attribute_id": 1013,
+              "attribute_key": "Auto_panelType",
+              "title": "Auto_panelType",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6841,
+              "master_attribute_id": 1014,
+              "attribute_key": "Custom_panelType",
+              "title": "Custom_panelType",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6842,
+              "master_attribute_id": 1016,
+              "attribute_key": "Header_panelType",
+              "title": "Header_panelType",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 224,
+          "option_key": "designTime",
+          "title": "designTime",
+          "options_type": "textmp",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6962,
+              "master_attribute_id": 663,
+              "attribute_key": "hours_designTime",
+              "title": "hours_designTime",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 245,
+          "option_key": "printMode_FluidColor",
+          "title": "printMode_FluidColor",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8965,
+              "master_attribute_id": 1090,
+              "attribute_key": "4-Pass_FluidColor",
+              "title": "4-Pass_FluidColor",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 175,
+          "option_key": "kissCutDevice",
+          "title": "kissCutDevice",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8131,
+              "master_attribute_id": 388,
+              "attribute_key": "None_kissCutDevice",
+              "title": "None_kissCutDevice",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 8132,
+              "master_attribute_id": 389,
+              "attribute_key": "Summa_kissCutDevice",
+              "title": "Summa_kissCutDevice",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 176,
+          "option_key": "thruCutDevice",
+          "title": "thruCutDevice",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8133,
+              "master_attribute_id": 390,
+              "attribute_key": "None_thruCutDevice",
+              "title": "None_thruCutDevice",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 8134,
+              "master_attribute_id": 391,
+              "attribute_key": "Multicam_thruCutDevice",
+              "title": "Multicam_thruCutDevice",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 246,
+          "option_key": "cutComplexity",
+          "title": "cutComplexity",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8135,
+              "master_attribute_id": 1098,
+              "attribute_key": "outside|1",
+              "title": "outside|1",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 8136,
+              "master_attribute_id": 1099,
+              "attribute_key": "simple|1.5",
+              "title": "simple|1.5",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 8137,
+              "master_attribute_id": 1100,
+              "attribute_key": "complex|1.75",
+              "title": "complex|1.75",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 247,
+          "option_key": "thruCutDeviceTool_ThruCut",
+          "title": "thruCutDeviceTool_ThruCut",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8138,
+              "master_attribute_id": 1112,
+              "attribute_key": "K18 Blade",
+              "title": "K18 Blade",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 250,
+          "option_key": "kissCutDeviceTool",
+          "title": "kissCutDeviceTool",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8141,
+              "master_attribute_id": 1182,
+              "attribute_key": "36degBlade",
+              "title": "36degBlade",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 264,
+          "option_key": "substrateClass",
+          "title": "substrateClass",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 11414,
+              "master_attribute_id": 1416,
+              "attribute_key": "roll_substrateClass",
+              "title": "roll_substrateClass",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 172,
+          "option_key": "printDevice",
+          "title": "printDevice",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 12194,
+              "master_attribute_id": 378,
+              "attribute_key": "Canon Colorado M-Series",
+              "title": "Canon Colorado M-Series",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 243,
+          "option_key": "printMode_Colorado",
+          "title": "printMode_Colorado",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 12195,
+              "master_attribute_id": 1044,
+              "attribute_key": "FLX+",
+              "title": "FLX+",
+              "sort_order": 9,
+              "status": 1,
+              "setup_cost": 4,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 12196,
+              "master_attribute_id": 1037,
+              "attribute_key": "Gloss - High Quality",
+              "title": "Gloss - High Quality",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 12197,
+              "master_attribute_id": 1042,
+              "attribute_key": "Matte - High Quality",
+              "title": "Matte - High Quality",
+              "sort_order": 7,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 270,
+          "option_key": "cutting",
+          "title": "cutting",
+          "options_type": "radio",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 12613,
+              "master_attribute_id": 1518,
+              "attribute_key": "Yes_cutting",
+              "title": "Yes_cutting",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 12614,
+              "master_attribute_id": 1519,
+              "attribute_key": "No_cutting",
+              "title": "No_cutting",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "color": null,
+          "size": null,
+          "sku": "OPS-131",
+          "base_price": "0.00",
+          "inventory": 0
+        }
+      ]
+    },
+    {
+      "supplier_slug": "vg-ops",
+      "supplier_sku": "OPS-262",
+      "product_name": "Decals - High Performance",
+      "brand": null,
+      "category": null,
+      "description": null,
+      "product_type": "print",
+      "image_url": "https://dei4q67dwezeh.cloudfront.net/ctmediaon/images/product/Decals-High-Performance_1.jpg",
+      "ops_product_id": "262",
+      "external_catalogue": 1,
+      "sizes": [
+        {
+          "width": 0,
+          "height": 0,
+          "unit": "in",
+          "label": "Custom Size"
+        }
+      ],
+      "options": [
+        {
+          "master_option_id": 59,
+          "option_key": "lamMaterial",
+          "title": "lamMaterial",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6090,
+              "master_attribute_id": 160,
+              "attribute_key": "None_lamMaterial",
+              "title": "None_lamMaterial",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6091,
+              "master_attribute_id": 162,
+              "attribute_key": "GF - Concept 240",
+              "title": "GF - Concept 240",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6141,
+              "master_attribute_id": 599,
+              "attribute_key": "GF - Concept 231",
+              "title": "GF - Concept 231",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 69,
+          "option_key": "file_prep",
+          "title": "file_prep",
+          "options_type": "admin_only",
+          "required": false,
+          "sort_order": 0,
+          "attributes": []
+        },
+        {
+          "master_option_id": 70,
+          "option_key": "file_processing_(rip)",
+          "title": "file_processing_(rip)",
+          "options_type": "admin_only",
+          "required": false,
+          "sort_order": 0,
+          "attributes": []
+        },
+        {
+          "master_option_id": 52,
+          "option_key": "prodTime",
+          "title": "prodTime",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6092,
+              "master_attribute_id": 137,
+              "attribute_key": "1",
+              "title": "1",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 2,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6093,
+              "master_attribute_id": 138,
+              "attribute_key": "2",
+              "title": "2",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 1.5,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6094,
+              "master_attribute_id": 139,
+              "attribute_key": "3",
+              "title": "3",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6095,
+              "master_attribute_id": 205,
+              "attribute_key": "7",
+              "title": "7",
+              "sort_order": 4,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 112,
+          "option_key": "inkFinish",
+          "title": "Ink Finish",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6096,
+              "master_attribute_id": 184,
+              "attribute_key": "Gloss",
+              "title": "Gloss",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6097,
+              "master_attribute_id": 185,
+              "attribute_key": "Matte",
+              "title": "Matte",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6098,
+              "master_attribute_id": 186,
+              "attribute_key": "FLX",
+              "title": "FLX",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 10,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 118,
+          "option_key": "substrateMaterial",
+          "title": "substrateMaterial",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6100,
+              "master_attribute_id": 193,
+              "attribute_key": "GF - 230 Automark",
+              "title": "GF - 230 Automark",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 135,
+          "option_key": "imageShape",
+          "title": "Graphic Shape",
+          "options_type": "radio",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6101,
+              "master_attribute_id": 243,
+              "attribute_key": "Rectangle|1",
+              "title": "Rectangle|1",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6102,
+              "master_attribute_id": 245,
+              "attribute_key": "Oval|2",
+              "title": "Oval|2",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6103,
+              "master_attribute_id": 246,
+              "attribute_key": "Contour|3",
+              "title": "Contour|3",
+              "sort_order": 4,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 50,
+          "option_key": "printSides",
+          "title": "Print Sides",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6104,
+              "master_attribute_id": 132,
+              "attribute_key": "Single|1",
+              "title": "Single|1",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 146,
+          "option_key": "inkType",
+          "title": "Ink Type",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6105,
+              "master_attribute_id": 287,
+              "attribute_key": "cmyk",
+              "title": "cmyk",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 143,
+          "option_key": "whiteInk",
+          "title": "White Ink",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6106,
+              "master_attribute_id": 265,
+              "attribute_key": "None_whiteInk",
+              "title": "None_whiteInk",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 173,
+          "option_key": "lamDevice",
+          "title": "lamDevice",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6108,
+              "master_attribute_id": 386,
+              "attribute_key": "None_lamDevice",
+              "title": "None_lamDevice",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6109,
+              "master_attribute_id": 379,
+              "attribute_key": "GFP 663TH No-Heat",
+              "title": "GFP 663TH No-Heat",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6110,
+              "master_attribute_id": 380,
+              "attribute_key": "GFP 663TH Heated",
+              "title": "GFP 663TH Heated",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 189,
+          "option_key": "weeding",
+          "title": "weeding",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6111,
+              "master_attribute_id": 469,
+              "attribute_key": "None_weeding",
+              "title": "None_weeding",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6112,
+              "master_attribute_id": 470,
+              "attribute_key": "Standard_weeding",
+              "title": "Standard_weeding",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6113,
+              "master_attribute_id": 539,
+              "attribute_key": "Reverse",
+              "title": "Reverse",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 190,
+          "option_key": "cutMasking",
+          "title": "cutMasking",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6114,
+              "master_attribute_id": 471,
+              "attribute_key": "false",
+              "title": "false",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6115,
+              "master_attribute_id": 472,
+              "attribute_key": "true",
+              "title": "true",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 200,
+          "option_key": "specialSign",
+          "title": "specialSign",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6119,
+              "master_attribute_id": 531,
+              "attribute_key": "None_specialSign|0",
+              "title": "None_specialSign|0",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 89,
+          "option_key": "rcRadius",
+          "title": "rcRadius",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6120,
+              "master_attribute_id": 168,
+              "attribute_key": "0.000",
+              "title": "0.000",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6121,
+              "master_attribute_id": 170,
+              "attribute_key": "0.125",
+              "title": "0.125",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6122,
+              "master_attribute_id": 171,
+              "attribute_key": "0.1875",
+              "title": "0.1875",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6123,
+              "master_attribute_id": 172,
+              "attribute_key": "0.25",
+              "title": "0.25",
+              "sort_order": 4,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6124,
+              "master_attribute_id": 201,
+              "attribute_key": "0.5",
+              "title": "0.5",
+              "sort_order": 5,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6125,
+              "master_attribute_id": 202,
+              "attribute_key": "0.75",
+              "title": "0.75",
+              "sort_order": 6,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6126,
+              "master_attribute_id": 203,
+              "attribute_key": "1.0",
+              "title": "1.0",
+              "sort_order": 7,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6127,
+              "master_attribute_id": 204,
+              "attribute_key": "1.5",
+              "title": "1.5",
+              "sort_order": 8,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 218,
+          "option_key": "substrateType",
+          "title": "substrateType",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6128,
+              "master_attribute_id": 605,
+              "attribute_key": "SAV",
+              "title": "SAV",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 222,
+          "option_key": "provideProof",
+          "title": "provideProof",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6129,
+              "master_attribute_id": 655,
+              "attribute_key": "false_proof",
+              "title": "false_proof",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6130,
+              "master_attribute_id": 656,
+              "attribute_key": "true_proof",
+              "title": "true_proof",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 228,
+          "option_key": "design",
+          "title": "design",
+          "options_type": "radio",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6131,
+              "master_attribute_id": 675,
+              "attribute_key": "yes_design",
+              "title": "yes_design",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 229,
+          "option_key": "designType",
+          "title": "designType",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6132,
+              "master_attribute_id": 676,
+              "attribute_key": "standard_designType",
+              "title": "standard_designType",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6133,
+              "master_attribute_id": 678,
+              "attribute_key": "services_designType",
+              "title": "services_designType",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6981,
+              "master_attribute_id": 1018,
+              "attribute_key": "hourly_designType",
+              "title": "hourly_designType",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 230,
+          "option_key": "designServices",
+          "title": "designServices",
+          "options_type": "checkbox",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6134,
+              "master_attribute_id": 679,
+              "attribute_key": "cutLines_designServices",
+              "title": "cutLines_designServices",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6135,
+              "master_attribute_id": 680,
+              "attribute_key": "whiteSpot_designServices",
+              "title": "whiteSpot_designServices",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6136,
+              "master_attribute_id": 681,
+              "attribute_key": "paneling_designServices",
+              "title": "paneling_designServices",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 231,
+          "option_key": "designComm",
+          "title": "designComm",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6137,
+              "master_attribute_id": 683,
+              "attribute_key": "email_designComm",
+              "title": "email_designComm",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 232,
+          "option_key": "designConsult",
+          "title": "designConsult",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6138,
+              "master_attribute_id": 685,
+              "attribute_key": "15min_designConsult",
+              "title": "15min_designConsult",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6139,
+              "master_attribute_id": 686,
+              "attribute_key": "30min_designConsult",
+              "title": "30min_designConsult",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6140,
+              "master_attribute_id": 687,
+              "attribute_key": "60min_designConsult",
+              "title": "60min_designConsult",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 240,
+          "option_key": "panelType",
+          "title": "panelType",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6843,
+              "master_attribute_id": 1015,
+              "attribute_key": "None_panelType",
+              "title": "None_panelType",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6844,
+              "master_attribute_id": 1013,
+              "attribute_key": "Auto_panelType",
+              "title": "Auto_panelType",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6845,
+              "master_attribute_id": 1014,
+              "attribute_key": "Custom_panelType",
+              "title": "Custom_panelType",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 6846,
+              "master_attribute_id": 1016,
+              "attribute_key": "Header_panelType",
+              "title": "Header_panelType",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 224,
+          "option_key": "designTime",
+          "title": "designTime",
+          "options_type": "textmp",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 6982,
+              "master_attribute_id": 663,
+              "attribute_key": "hours_designTime",
+              "title": "hours_designTime",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 144,
+          "option_key": "printSurface",
+          "title": "printSurface",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 7834,
+              "master_attribute_id": 280,
+              "attribute_key": "1st",
+              "title": "1st",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 245,
+          "option_key": "printMode_FluidColor",
+          "title": "printMode_FluidColor",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8966,
+              "master_attribute_id": 1090,
+              "attribute_key": "4-Pass_FluidColor",
+              "title": "4-Pass_FluidColor",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 246,
+          "option_key": "cutComplexity",
+          "title": "cutComplexity",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8219,
+              "master_attribute_id": 1098,
+              "attribute_key": "outside|1",
+              "title": "outside|1",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 8220,
+              "master_attribute_id": 1099,
+              "attribute_key": "simple|1.5",
+              "title": "simple|1.5",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 8221,
+              "master_attribute_id": 1100,
+              "attribute_key": "complex|1.75",
+              "title": "complex|1.75",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 175,
+          "option_key": "kissCutDevice",
+          "title": "kissCutDevice",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8222,
+              "master_attribute_id": 388,
+              "attribute_key": "None_kissCutDevice",
+              "title": "None_kissCutDevice",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 8223,
+              "master_attribute_id": 389,
+              "attribute_key": "Summa_kissCutDevice",
+              "title": "Summa_kissCutDevice",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 250,
+          "option_key": "kissCutDeviceTool",
+          "title": "kissCutDeviceTool",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8224,
+              "master_attribute_id": 1182,
+              "attribute_key": "36degBlade",
+              "title": "36degBlade",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 176,
+          "option_key": "thruCutDevice",
+          "title": "thruCutDevice",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8227,
+              "master_attribute_id": 390,
+              "attribute_key": "None_thruCutDevice",
+              "title": "None_thruCutDevice",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 8228,
+              "master_attribute_id": 391,
+              "attribute_key": "Multicam_thruCutDevice",
+              "title": "Multicam_thruCutDevice",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 247,
+          "option_key": "thruCutDeviceTool_ThruCut",
+          "title": "thruCutDeviceTool_ThruCut",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 8229,
+              "master_attribute_id": 1112,
+              "attribute_key": "K18 Blade",
+              "title": "K18 Blade",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 264,
+          "option_key": "substrateClass",
+          "title": "substrateClass",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 11415,
+              "master_attribute_id": 1416,
+              "attribute_key": "roll_substrateClass",
+              "title": "roll_substrateClass",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 172,
+          "option_key": "printDevice",
+          "title": "printDevice",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 12198,
+              "master_attribute_id": 378,
+              "attribute_key": "Canon Colorado M-Series",
+              "title": "Canon Colorado M-Series",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 243,
+          "option_key": "printMode_Colorado",
+          "title": "printMode_Colorado",
+          "options_type": "combo",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 12199,
+              "master_attribute_id": 1044,
+              "attribute_key": "FLX+",
+              "title": "FLX+",
+              "sort_order": 9,
+              "status": 1,
+              "setup_cost": 4,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 12200,
+              "master_attribute_id": 1037,
+              "attribute_key": "Gloss - High Quality",
+              "title": "Gloss - High Quality",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 12201,
+              "master_attribute_id": 1042,
+              "attribute_key": "Matte - High Quality",
+              "title": "Matte - High Quality",
+              "sort_order": 7,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 151,
+          "option_key": "cutType",
+          "title": "cutType",
+          "options_type": "radio",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 12418,
+              "master_attribute_id": 316,
+              "attribute_key": "Through Cut_Knife|2",
+              "title": "Through Cut_Knife|2",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 12419,
+              "master_attribute_id": 318,
+              "attribute_key": "Kiss Cut|1",
+              "title": "Kiss Cut|1",
+              "sort_order": 2,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 12420,
+              "master_attribute_id": 972,
+              "attribute_key": "No Cut|0",
+              "title": "No Cut|0",
+              "sort_order": 3,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        },
+        {
+          "master_option_id": 270,
+          "option_key": "cutting",
+          "title": "cutting",
+          "options_type": "radio",
+          "required": false,
+          "sort_order": 0,
+          "attributes": [
+            {
+              "ops_attribute_id": 12615,
+              "master_attribute_id": 1518,
+              "attribute_key": "Yes_cutting",
+              "title": "Yes_cutting",
+              "sort_order": 0,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            },
+            {
+              "ops_attribute_id": 12616,
+              "master_attribute_id": 1519,
+              "attribute_key": "No_cutting",
+              "title": "No_cutting",
+              "sort_order": 1,
+              "status": 1,
+              "setup_cost": 0,
+              "multiplier": 0,
+              "numeric_value": null
+            }
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "color": null,
+          "size": null,
+          "sku": "OPS-262",
+          "base_price": "0.00",
+          "inventory": 0
+        }
+      ]
+    }
+  ]
+}

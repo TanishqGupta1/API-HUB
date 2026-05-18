@@ -866,3 +866,52 @@ tbody tr:hover {
 .prose-storefront ul { padding-left: 1.25em; list-style: disc; margin-bottom: 0.9em; }
 .prose-storefront ol { padding-left: 1.25em; list-style: decimal; margin-bottom: 0.9em; }
 .prose-storefront li { margin-bottom: 0.3em; }
+
+/* === ADMIN COMPONENT UTILITIES === */
+.card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+  background: white;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(30,77,146,0.08);
+}
+
+.input:disabled,
+.input[readonly] {
+  background: var(--surface-raised);
+  color: var(--ink-muted);
+  cursor: not-allowed;
+}
+
+select.input {
+  cursor: pointer;
+}
+
+.form-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  margin-bottom: 5px;
+}

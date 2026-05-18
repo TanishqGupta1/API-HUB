@@ -17,6 +17,7 @@ services:
 
   api:
     build: ./backend
+    command: ["sh", "/app/bootstrap.sh"]
     ports:
       - "8000:8000"
     env_file:
@@ -26,10 +27,12 @@ services:
       - SECRET_KEY=${SECRET_KEY:-y0uR_s3cr3t_k3y_h3r3}
       - N8N_API_BASE_URL=${N8N_API_BASE_URL:-http://n8n:5678}
       - N8N_WEBHOOK_BASE_URL=${N8N_WEBHOOK_BASE_URL:-http://n8n:5678}
-      - N8N_PUSH_WEBHOOK_URL=${N8N_PUSH_WEBHOOK_URL:-}
       - API_BASE_URL=${API_BASE_URL:-http://api:8000}
       - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173}
+      - AUTO_SEED=${AUTO_SEED:-1}
+      - DEMO_ADMIN_EMAIL=${DEMO_ADMIN_EMAIL:-admin@example.com}
+      - DEMO_ADMIN_PASSWORD=${DEMO_ADMIN_PASSWORD:-demo1234}
     volumes:
       - ./backend:/app
     depends_on:

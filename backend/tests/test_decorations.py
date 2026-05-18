@@ -48,7 +48,7 @@ def test_decoration_create_validates_options_list():
         }
     ])
     assert len(ok.decoration_options) == 1
-    assert ok.decoration_options[0].option_key == "imprint_method"
+    assert ok.decoration_options[0]["option_key"] == "imprint_method"
 
     with pytest.raises(ValidationError):
         DecorationCreate(decoration_options=[])  # empty list not allowed
@@ -65,6 +65,40 @@ def test_decoration_read_serializes_from_attributes():
         updated_at=datetime.datetime.now(datetime.timezone.utc),
     )
     assert r.decoration_options == []
+
+
+def test_decoration_freeform_round_trip():
+    """Round-trip: CRUD path stores any dict; renderer silently ignores unknown keys.
+
+    DecorationOption has all-default fields so it never raises on unknown shapes —
+    consumers that need strict validation must check opt.url is not None before rendering.
+    This test documents that contract explicitly so it can't break silently.
+    """
+    from modules.decorations.schemas import DecorationCreate, DecorationOption
+
+    # Master-option overlay shape (what decoration-editor.tsx saves) — accepted by CRUD
+    master_option_overlay = {
+        "option_key": "imprint_method",
+        "title": "Imprint Method",
+        "options_type": "radio",
+        "sort_order": 1,
+        "attributes": [{"title": "Screen Print", "sort_order": 0}],
+    }
+    create = DecorationCreate(decoration_options=[master_option_overlay])
+    stored = create.decoration_options[0]
+    assert stored["option_key"] == "imprint_method"
+
+    # Renderer parses the same shape without error (all fields have defaults),
+    # but the overlay-specific keys are stripped — url remains None.
+    opt = DecorationOption.model_validate(stored)
+    assert opt.url is None  # not a renderer-shape record — url was never set
+    assert opt.type == "logo"  # default preserved
+
+    # Renderer accepts its own shape (logo overlay with position fields)
+    renderer_shape = {"type": "logo", "url": "https://example.com/logo.png", "position_x": 50.0, "position_y": 30.0}
+    opt2 = DecorationOption.model_validate(renderer_shape)
+    assert opt2.url == "https://example.com/logo.png"
+    assert opt2.position_x == 50.0
 
 
 # ---------------------------------------------------------------------------

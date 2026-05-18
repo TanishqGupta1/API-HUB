@@ -21,6 +21,7 @@ export default function VGProductDetailPage() {
   const [category, setCategory] = useState<Category | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,12 +50,29 @@ export default function VGProductDetailPage() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-10">
-        <div className="aspect-square bg-[#ebe8e3] rounded-[10px] animate-pulse" />
-        <div className="flex flex-col gap-4">
-          <div className="h-[40px] bg-[#ebe8e3] rounded animate-pulse" />
-          <div className="h-[20px] w-[200px] bg-[#ebe8e3] rounded animate-pulse" />
-          <div className="h-[80px] bg-[#ebe8e3] rounded animate-pulse mt-4" />
+      <div className="flex h-full gap-0">
+        {/* Left panel skeleton */}
+        <div className="flex flex-col w-[55%] border-r border-[#cfccc8] pr-6">
+          <div className="h-[20px] w-[180px] bg-[#ebe8e3] rounded animate-pulse mb-3" />
+          <div className="flex-1 min-h-0 bg-[#ebe8e3] rounded-[10px] animate-pulse" />
+        </div>
+        {/* Right panel skeleton */}
+        <div className="flex flex-col w-[45%] pl-6 gap-4">
+          <div className="h-[14px] w-[80px] bg-[#ebe8e3] rounded animate-pulse" />
+          <div className="h-[32px] w-[85%] bg-[#ebe8e3] rounded animate-pulse" />
+          <div className="h-[14px] w-[140px] bg-[#ebe8e3] rounded animate-pulse" />
+          <div className="h-[40px] w-[100px] bg-[#ebe8e3] rounded animate-pulse mt-2" />
+          <div className="flex gap-2 mt-2">
+            {[1,2,3,4].map((i) => (
+              <div key={i} className="h-[36px] w-[72px] bg-[#ebe8e3] rounded-full animate-pulse" />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            {["S","M","L","XL"].map((s) => (
+              <div key={s} className="h-[36px] w-[44px] bg-[#ebe8e3] rounded animate-pulse" />
+            ))}
+          </div>
+          <div className="h-[44px] bg-[#ebe8e3] rounded animate-pulse mt-2" />
         </div>
       </div>
     );
@@ -74,21 +92,51 @@ export default function VGProductDetailPage() {
 
   const showDecorationTab = product.supplier_has_decoration_overlay && selectedCustomerId;
 
+  const ctaButtons = (
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="px-4 py-2.5 rounded-md border border-[#cfccc8] text-[#484852] text-[13px] font-semibold hover:border-[#1e4d92] hover:text-[#1e4d92] transition-colors"
+        >
+          ← Back
+        </button>
+        <button
+          type="button"
+          disabled
+          className="flex-1 px-5 py-2.5 rounded-md bg-[#1e4d92] text-white text-[13px] font-bold cursor-not-allowed relative overflow-hidden"
+          title="Quote flow coming in future phase"
+        >
+          <span className="opacity-50">Add to quote</span>
+          <span className="absolute inset-0 flex items-center justify-end pr-3 pointer-events-none">
+            <span className="text-[9px] font-bold uppercase tracking-[0.1em] bg-white/20 px-1.5 py-0.5 rounded">
+              Soon
+            </span>
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+
   const info = (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div>
         {product.brand && (
-          <div className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#1e4d92] mb-2">
+          <div className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#1e4d92] mb-1.5">
             {product.brand}
           </div>
         )}
-        <h1 className="text-[28px] font-extrabold tracking-[-0.03em] leading-tight text-[#1e1e24]">
+        <h1 className="text-[24px] font-extrabold tracking-[-0.02em] leading-snug text-[#1e1e24]">
           {product.product_name}
         </h1>
-        <div className="flex items-center gap-3 mt-2">
-          <div className="font-mono text-[12px] text-[#888894]">
-            {product.supplier_sku} · {product.product_type}
-          </div>
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          <span className="font-mono text-[11px] text-[#888894] bg-[#f2f0ed] px-2 py-0.5 rounded">
+            {product.supplier_sku}
+          </span>
+          <span className="font-mono text-[11px] text-[#888894] capitalize">
+            {product.product_type}
+          </span>
           {product.external_catalogue === 1 && (
             <span className="px-2 py-0.5 rounded bg-[#eef4fb] border border-[#1e4d92] text-[#1e4d92] text-[10px] font-bold tracking-wide uppercase">
               External Catalogue
@@ -97,48 +145,35 @@ export default function VGProductDetailPage() {
         </div>
       </div>
 
-      <ProductDetailPanel product={product} />
+      <ProductDetailPanel product={product} cta={ctaButtons} onColorChange={setSelectedColor} />
 
       {customers.length > 0 && (
         <div className="border-t border-dashed border-[#cfccc8] pt-4">
-          <label className="block text-[11px] font-bold uppercase tracking-[0.12em] text-[#888894] mb-1.5">
-            Storefront
-          </label>
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-3.5 h-3.5 text-[#1e4d92] shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#484852]">
+              Push to OPS storefront
+            </label>
+          </div>
           <select
             value={selectedCustomerId}
             onChange={(e) => setSelectedCustomerId(e.target.value)}
-            className="w-full h-10 px-3 rounded-md border border-[#cfccc8] bg-white text-[13px] text-[#1e1e24] outline-none focus:border-[#1e4d92] transition-colors"
+            className="w-full h-9 px-3 rounded-md border border-[#cfccc8] bg-white text-[13px] text-[#1e1e24] outline-none focus:border-[#1e4d92] transition-colors"
           >
-            <option value="">— select a storefront —</option>
+            <option value="">— select a customer —</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
           {product.supplier_has_decoration_overlay && !selectedCustomerId && (
             <p className="mt-1.5 text-[11px] text-[#b47a00] font-medium">
-              Select a storefront to configure decoration options
+              Select a customer to configure decoration options
             </p>
           )}
         </div>
       )}
-
-      <div className="flex gap-3 pt-2">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-5 py-3 rounded-md border border-[#cfccc8] text-[#1e1e24] text-[13px] font-semibold hover:border-[#1e4d92] hover:text-[#1e4d92]"
-        >
-          ← Back
-        </button>
-        <button
-          type="button"
-          disabled
-          className="flex-1 px-5 py-3 rounded-md bg-[#1e4d92] text-white text-[13px] font-semibold opacity-60 cursor-not-allowed"
-          title="Quote flow coming in future phase"
-        >
-          Add to quote
-        </button>
-      </div>
     </div>
   );
 
@@ -147,7 +182,7 @@ export default function VGProductDetailPage() {
       breadcrumbCategory={category ? { id: category.id, name: category.name } : null}
       breadcrumbProduct={product.supplier_sku}
       gallery={
-        <ImageGallery images={product.images} fallbackUrl={product.image_url} alt={product.product_name} />
+        <ImageGallery images={product.images} fallbackUrl={product.image_url} alt={product.product_name} selectedColor={selectedColor} />
       }
       info={info}
       options={

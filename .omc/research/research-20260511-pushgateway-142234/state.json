@@ -1,0 +1,18 @@
+{
+  "id": "research-20260511-pushgateway-142234",
+  "goal": "Comprehensive audit before Integration Gateway spec — 4 parallel stages",
+  "status": "complete",
+  "mode": "standard",
+  "iteration": 1,
+  "maxIterations": 10,
+  "stages": [
+    {"id": 1, "name": "ops_push module audit vs Gateway design", "tier": "MEDIUM", "status": "complete", "findingsFile": "stages/stage-1.md"},
+    {"id": 2, "name": "Decode 4 spike script bugs + minimal fixes", "tier": "MEDIUM", "status": "complete", "findingsFile": "stages/stage-2.md"},
+    {"id": 3, "name": "n8n reference map across backend", "tier": "LOW", "status": "complete", "findingsFile": "stages/stage-3.md"},
+    {"id": 4, "name": "ProductIngest schema fit for PC61/K500/Decals#131", "tier": "MEDIUM", "status": "complete", "findingsFile": "stages/stage-4.md"}
+  ],
+  "verification": {"status": "passed", "conflicts": [], "completedAt": "2026-05-11T09:08:58Z"},
+  "createdAt": "2026-05-11T09:08:58Z",
+  "updatedAt": "2026-05-11T09:08:58Z",
+  "reportFile": "report.md"
+}

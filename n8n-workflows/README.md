@@ -86,67 +86,17 @@ or webhook triggers fire. Activating before credentials are set causes every exe
 
 ---
 
-## `ops-push.json` — Push products from Hub → OnPrintShop (minimal)
+## Removed in M1 (T23)
 
-**What it does**
+- `ops-push.json` — OPS push moved to FastAPI (`POST /api/push/{customer_id}/{product_id}` →
+  integration gateway → `modules/ops_client`). The legacy webhook + `setProduct`/`setProductPrice`
+  + `X-Ingest-Secret` flow is gone.
+- `ops-master-options-pull.json` — Master-options ingest is now a direct FastAPI route
+  (`POST /api/integrations/v1/master-options/ingest` + the in-process `master_options/routes.py`),
+  not an n8n-orchestrated pull.
 
-1. Trigger via webhook with a `customer_id`.
-2. Lists hub products via `GET /api/products`.
-3. For each product, calls `GET /api/push/{customer_id}/product/{product_id}/payload` (requires `X-Ingest-Secret`) to apply markup rules.
-4. Calls OPS GraphQL mutations via the custom node:
-   - `setProduct` (creates/updates a product shell)
-   - `setProductPrice` (creates a simple 1..999999 price band)
-5. Writes an audit row to `POST /api/push-log`.
-
-**Prerequisites**
-
-- FastAPI running on host :8000
-- n8n running: `docker compose up -d n8n`
-- `INGEST_SHARED_SECRET` set in repo-root `.env` and exposed to n8n (compose already includes it)
-- Create a hub customer (Storefront) in the UI and note its UUID
-- In n8n, create an OnPrintShop credential named **`OPS Storefront`** (matches the workflow JSON)
-
-**Activate + run**
-
-1. Import `ops-push.json` in n8n.
-2. Set the `OPS Storefront` credential on both OPS nodes if it didn’t auto-bind.
-3. Activate the workflow (required for webhooks).
-4. Trigger:
-   ```bash
-   curl "http://localhost:5678/webhook/ops-push?customer_id=<UUID>&limit=5"
-   ```
-5. Verify:
-   - `GET /api/push-log` shows new rows
-   - Product detail push-status shows latest per-customer status
-
-**Notes / limitations**
-
-- The workflow pushes to a *single* OPS credential; it does not dynamically select credentials per customer.
-- It uses default `category_id=0` and `size_id=0`. If your OPS instance requires valid IDs, update the `Build OPS Inputs` code node accordingly.
-
----
-
-## `ops-master-options-pull.json` — Pull master options catalog from OnPrintShop
-
-**What it does**
-
-1. Calls the OnPrintShop custom node `getManyMasterOptions` operation (paginated, all master-option fields + nested `attributes`).
-2. Normalizes each record into the hub's `MasterOptionIngest` contract (casts IDs to int, coerces pricing fields, unwraps the `attributes[]` array).
-3. POSTs the batch to `/api/ingest/master-options` with the `X-Ingest-Secret` header.
-4. On HTTP error, routes the failure through a `Format Error` code node for downstream logging.
-
-**Prerequisites**
-
-- FastAPI running on host :8000 with the master-options ingest endpoint live.
-- n8n running with the `OnPrintShop` credential configured (same cred type used by `vg-ops-pull`).
-- `INGEST_SHARED_SECRET` exposed to the n8n container.
-
-**Import**
-
-```bash
-docker cp n8n-workflows/ops-master-options-pull.json api-hub-n8n-1:/tmp/mo.json
-docker exec api-hub-n8n-1 n8n import:workflow --input=/tmp/mo.json
-```
+n8n remains the orchestrator for **inbound supplier sync only** (catalog + pricing + inventory
+pulls). The OPS push path is FastAPI-owned end-to-end.
 
 ## Workflow index
 
@@ -154,8 +104,11 @@ docker exec api-hub-n8n-1 n8n import:workflow --input=/tmp/mo.json
 |---|---|---|
 | `vg-ops-pull.json` | Manual / Daily | OPS categories + products → hub `/api/ingest/{sid}/*` |
 | `sanmar-sftp-pull.json` | Daily | SanMar SFTP → hub `/api/ingest/{sid}/*` |
-| `ops-push.json` | Webhook | Hub `/api/push/...` → OPS `setProduct` + `setProductPrice` |
-| `ops-master-options-pull.json` | Daily | OPS `getManyMasterOptions` → hub `/api/ingest/master-options` |
+| `sanmar-soap-pull.json` | Daily | SanMar PromoStandards SOAP → hub `/api/ingest/{sid}/*` |
+| `inventory-sync-hourly.json` | Hourly | Per-supplier inventory delta → hub `/api/ingest/{sid}/inventory` |
+| `pricing-sync-daily.json` | Daily | Per-supplier pricing refresh → hub `/api/ingest/{sid}/pricing` |
+| `catalog-sync-weekly.json` | Weekly | Full catalog rebuild |
+| `closeouts-monthly.json` | Monthly | Closeouts pull |
 
 ## Next additions (not in v1)
 

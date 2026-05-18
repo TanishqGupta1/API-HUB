@@ -9,9 +9,6 @@ interface Props {
   onDone?: () => void;
 }
 
-const N8N_URL = process.env.NEXT_PUBLIC_N8N_URL ?? "http://localhost:5678";
-const PUSH_WORKFLOW_ID = process.env.NEXT_PUBLIC_PUSH_WORKFLOW_ID ?? "ops-push-001";
-
 export function PublishButton({ productId, onDone }: Props) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState<string>("");
@@ -32,18 +29,18 @@ export function PublishButton({ productId, onDone }: Props) {
       return;
     }
     setBusy(true);
-    setMessage({ text: "Triggering push workflow...", type: "info" });
+    setMessage({ text: "Dispatching to gateway…", type: "info" });
     try {
-      // Fires the single-product push path via n8n proxy
-      const res = await api<{ triggered: boolean }>(
-        `/api/n8n/workflows/${PUSH_WORKFLOW_ID}/trigger?product_id=${productId}&customer_id=${customerId}`,
+      const res = await api<{ status: string; message?: string; push_log_id?: string }>(
+        `/api/push/${customerId}/${productId}`,
         { method: "POST" },
       );
-      if (res.triggered) {
-        setMessage({ text: "Push started. Refreshing history in 5s...", type: "success" });
+      const ok = ["accepted", "processing", "queued", "pushed", "dry_run_pushed"].includes(res.status);
+      if (ok) {
+        setMessage({ text: res.message || "Push dispatched. Refreshing history in 5s…", type: "success" });
         onDone?.();
       } else {
-        setMessage({ text: "Push request failed.", type: "error" });
+        setMessage({ text: res.message || `Push ${res.status}.`, type: "error" });
       }
     } catch (err) {
       setMessage({ text: err instanceof Error ? err.message : String(err), type: "error" });
@@ -63,13 +60,6 @@ export function PublishButton({ productId, onDone }: Props) {
         >
           {busy ? "Pushing…" : "Publish to OPS"}
         </button>
-        <a
-          href={`${N8N_URL}/workflow/${PUSH_WORKFLOW_ID}`}
-          target="_blank" rel="noopener noreferrer"
-          className="text-[11px] font-bold text-[#888894] hover:text-[#1e4d92] flex items-center transition-colors ml-2"
-        >
-          Monitor in n8n <span className="ml-1">↗</span>
-        </a>
       </div>
       {message && (
         <div className={`text-[12px] font-mono px-3 py-2 rounded-md border ${

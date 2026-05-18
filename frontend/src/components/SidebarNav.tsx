@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { fetchUser, logout, type AuthUser } from "@/lib/auth";
+import { useSelectedCustomer } from "@/lib/customer-context";
+import { LayoutGrid } from "lucide-react";
 
 const NAV_ITEMS = [
   {
@@ -57,6 +59,17 @@ const NAV_ITEMS = [
             <line x1="16" y1="13" x2="8" y2="13"></line>
             <line x1="16" y1="17" x2="8" y2="17"></line>
             <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+        ),
+      },
+      {
+        href: "/print-products",
+        label: "Print Products",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9" />
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            <rect x="6" y="14" width="12" height="8" />
           </svg>
         ),
       },
@@ -171,6 +184,30 @@ const NAV_ITEMS = [
         ),
       },
       {
+        // Phase 8 / Task 10 — Push preview + execute demo (works in mock mode).
+        // Lands on the preview page with a known-good fixture ID. From here:
+        //   - Click "Send Dry-Run" → bounces to /push-log/<id> with green timeline
+        //   - Click "Send LIVE"   → typed-confirm modal → push
+        //   - Append ?demo=blocked / ?demo=pushed / ?demo=failed for state variants
+        href: "/products/demo/push?customer_id=demo",
+        label: "Push to OPS (Demo)",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        ),
+      },
+      {
+        href: "/integrations",
+        label: "Integration Keys",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+          </svg>
+        ),
+      },
+      {
         href: "/api-registry",
         label: "API Registry",
         icon: (
@@ -199,6 +236,7 @@ export default function SidebarNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const { selectedCustomerId, selectedCustomerName } = useSelectedCustomer();
 
   useEffect(() => {
     fetchUser().then(setUser);
@@ -224,7 +262,8 @@ export default function SidebarNav() {
         if (
           pathname.startsWith("/products/configure") ||
           pathname.startsWith("/products/setup") ||
-          pathname.startsWith("/products/archived")
+          pathname.startsWith("/products/archived") ||
+          pathname.startsWith("/print-products")
         ) {
           return false;
         }
@@ -263,6 +302,25 @@ export default function SidebarNav() {
               </span>
             </Link>
           ))}
+          {/* Dynamic Customer Catalog Link */}
+          {group.section === "Products" && selectedCustomerId && (
+            <Link
+              href={`/customers/${selectedCustomerId}/catalog`}
+              className={`nav-item${isActive(`/customers/${selectedCustomerId}/catalog`) ? " active" : ""}`}
+              style={{ 
+                borderLeft: '2px solid var(--blue)', 
+                background: isActive(`/customers/${selectedCustomerId}/catalog`) ? 'var(--blue-faint)' : 'transparent',
+                marginTop: '4px'
+              }}
+            >
+              <LayoutGrid className="nav-icon" style={{ color: 'var(--blue)' }} />
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <span style={{ color: 'var(--blue)', fontWeight: 700 }}>
+                  {selectedCustomerName}&apos;s Catalog
+                </span>
+              </span>
+            </Link>
+          )}
         </div>
       ))}
 

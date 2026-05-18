@@ -21,6 +21,8 @@ import modules.ops_config.models  # noqa: F401
 import modules.decorations.models  # noqa: F401
 import modules.auth.models  # noqa: F401
 import modules.audit_log.models  # noqa: F401
+# customer_catalog re-exports CustomerProductSelection from catalog.models
+# so no separate import is needed here.
 
 from modules.suppliers.models import Supplier
 from modules.catalog.models import Product, ProductVariant
@@ -28,11 +30,12 @@ from modules.suppliers.routes import router as suppliers_router
 from modules.customers.routes import router as customers_router
 from modules.markup.routes import router as markup_router, push_router as markup_push_router
 from modules.push_log.routes import router as push_log_router, push_status_router
+from modules.integrations.models import IntegrationKey  # noqa: F401 — registers table with Base
+from modules.integrations.routes import router as integrations_router, admin_router as integrations_admin_router
 from modules.catalog.routes import router as catalog_router, categories_router
 from modules.catalog.ingest import router as catalog_ingest_router
 from modules.master_options.ingest import router as master_options_ingest_router
 from modules.master_options.routes import router as master_options_router, product_config_router as master_options_product_config_router
-from modules.n8n_proxy.routes import router as n8n_proxy_router
 from modules.ps_directory.routes import router as ps_router
 from modules.promostandards.routes import router as promostandards_sync_router
 from modules.sync_jobs.routes import router as sync_jobs_router
@@ -45,6 +48,7 @@ from modules.auth.routes import router as auth_router
 from modules.auth.dependencies import get_current_user
 from modules.audit_log.routes import router as audit_log_router
 from modules.audit_log.middleware import AuditLogMiddleware
+from modules.customer_catalog.routes import router as customer_catalog_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -52,7 +56,6 @@ _PROD_REQUIRED_ENV_VARS = (
     "INGEST_SHARED_SECRET",
     "ALLOWED_ORIGINS",
     "POSTGRES_URL",
-    "N8N_WEBHOOK_BASE_URL",
     "API_BASE_URL",
 )
 
@@ -146,6 +149,36 @@ _SCHEMA_UPGRADES: list[str] = [
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_image_fetch_attempt_at TIMESTAMP WITH TIME ZONE NULL",
     # Fix ProductImage upsert key (Moderate 7)
     "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_images_supplier_url') THEN ALTER TABLE product_images ADD CONSTRAINT uq_product_images_supplier_url UNIQUE (product_id, supplier_image_url); END IF; END $$",
+    # Pricing Rules Tier-1 enhancements
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE",
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS effective_from TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS effective_until TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS markup_amount NUMERIC(10,2)",
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS min_price NUMERIC(10,2)",
+    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS max_price NUMERIC(10,2)",
+    # Allow markup_pct to be NULL (rules may use markup_amount instead)
+    "ALTER TABLE markup_rules ALTER COLUMN markup_pct DROP NOT NULL",
+    "ALTER TABLE customers ADD COLUMN IF NOT EXISTS logo_url TEXT",
+    # Phase 8 Integration Gateway — product_push_log columns.
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS request_id UUID",
+    "UPDATE product_push_log SET request_id = gen_random_uuid() WHERE request_id IS NULL",
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_push_log_request_id') THEN ALTER TABLE product_push_log ADD CONSTRAINT uq_push_log_request_id UNIQUE (request_id); END IF; END $$",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS key_id VARCHAR(64)",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128)",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS payload_hash VARCHAR(64)",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS supplier_slug VARCHAR(64)",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS supplier_sku VARCHAR(255)",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS callback_url TEXT",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS callback_status VARCHAR(32) NOT NULL DEFAULT 'not_requested'",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS callback_attempts INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS step_results JSONB",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS cleanup_targets JSONB",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS dry_run BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS retry_of UUID",
+    "CREATE INDEX IF NOT EXISTS idx_push_log_payload_hash ON product_push_log(payload_hash)",
+    "CREATE INDEX IF NOT EXISTS idx_push_log_idempotency ON product_push_log(key_id, idempotency_key)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_in_flight ON product_push_log(customer_id, product_id) WHERE status = 'processing'",
+    "ALTER TABLE integration_keys ADD COLUMN IF NOT EXISTS is_synthetic BOOLEAN NOT NULL DEFAULT FALSE",
 ]
 
 
@@ -168,6 +201,13 @@ async def lifespan(app: FastAPI):
             print(f"Database not ready... retrying in 2s ({retries} retries left)")
             await asyncio.sleep(2)
 
+    # Seed the default admin user. Runs after Base.metadata.create_all so the
+    # `users` table exists (bootstrap.sh tried this before lifespan and silently
+    # failed — see ensure_default_admin docstring for env-vs-random behavior).
+    from modules.auth.seed import ensure_default_admin
+    async with async_session() as db:
+        await ensure_default_admin(db)
+
     if ENVIRONMENT == "development":
         from modules.suppliers.demo_seed import ensure_vg_ops_supplier
 
@@ -186,9 +226,6 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await engine.dispose()
-    from modules.n8n_proxy import routes as _n8n_proxy
-    if _n8n_proxy._http_client is not None:
-        await _n8n_proxy._http_client.aclose()
 
 
 import os
@@ -198,8 +235,14 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127
 app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
 
 _IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
-_CORS_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
-_CORS_HEADERS = ["Authorization", "Content-Type", "X-Ingest-Secret"]
+_CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+_CORS_HEADERS = [
+    "Authorization",
+    "Content-Type",
+    "X-Ingest-Secret",
+    "X-Orchestrator-Key",   # Integration Gateway orchestrator auth
+    "Idempotency-Key",      # Gateway idempotent push requests
+]
 
 _cors_kwargs: dict = dict(
     allow_origins=ALLOWED_ORIGINS,
@@ -231,7 +274,6 @@ app.include_router(catalog_router, dependencies=_auth)
 app.include_router(categories_router, dependencies=_auth)
 app.include_router(master_options_router, dependencies=_auth)
 app.include_router(master_options_product_config_router, dependencies=_auth)
-app.include_router(n8n_proxy_router, dependencies=_auth)
 app.include_router(sync_jobs_router, dependencies=_auth)
 app.include_router(ops_push_router, dependencies=_auth)
 app.include_router(push_candidates_router, dependencies=_auth)
@@ -244,6 +286,10 @@ app.include_router(pricing_router, dependencies=_auth)
 app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
+app.include_router(customer_catalog_router, dependencies=_auth)
+# Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
+app.include_router(integrations_router)
+app.include_router(integrations_admin_router, dependencies=_auth)
 
 
 @app.get("/health")
@@ -254,11 +300,36 @@ async def health():
 @app.get("/api/stats")
 async def get_stats(db: AsyncSession = Depends(get_db)):
     suppliers = (await db.execute(select(func.count()).select_from(Supplier))).scalar()
-    products = (await db.execute(select(func.count()).select_from(Product))).scalar()
+    # Dashboard "total catalog" should reflect live products only — archived
+    # rows would inflate the counter and confuse admins about why category
+    # imports don't seem to grow it. Total-including-archived is still
+    # available via the /products list with explicit filter.
+    products = (await db.execute(
+        select(func.count())
+        .select_from(Product)
+        .where(Product.archived_at.is_(None))
+    )).scalar()
     variants = (await db.execute(select(func.count()).select_from(ProductVariant))).scalar()
+    
+    # Calculate health (success rate of jobs in last 24h)
+    from datetime import datetime, timedelta, timezone
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    
+    from modules.sync_jobs.models import SyncJob
+    jobs_24h = (await db.execute(
+        select(SyncJob).where(SyncJob.started_at >= yesterday)
+    )).scalars().all()
+    
+    total_jobs = len(jobs_24h)
+    success_jobs = len([j for j in jobs_24h if j.status in ("success", "completed", "partial_success")])
+    health = (success_jobs / total_jobs * 100) if total_jobs > 0 else 100.0
+    
+    total_processed = sum(j.records_processed for j in jobs_24h)
     
     return {
         "suppliers": suppliers,
         "products": products,
         "variants": variants,
+        "health": round(health, 1),
+        "total_processed": total_processed,
     }

@@ -16,6 +16,7 @@ from .models import MarkupRule
 from .schemas import (
     MarkupRuleCreate,
     MarkupRuleRead,
+    MarkupRuleUpdate,
     PushPayload,
     OPSProductSizeInput,
     OPSProductPriceEntry,
@@ -34,30 +35,35 @@ push_router = APIRouter(prefix="/api/push", tags=["markup"])
     dependencies=[Depends(require_ingest_secret)],
 )
 async def push_payload(
-    customer_id: UUID, product_id: UUID, db: AsyncSession = Depends(get_db)
-):
-    """OPS-ready payload for a product under a customer's markup rules.
-
-    n8n calls this before invoking OPS `setProduct`/`setProductPrice` mutations.
-    """
-    return await calculate_price(db, customer_id, product_id)
-
-
-@push_router.get(
-    "/{customer_id}/product/{product_id}/ops-variants",
-    response_model=OPSVariantsBundle,
-    dependencies=[Depends(require_ingest_secret)],
-)
-async def ops_variants_bundle(
     customer_id: UUID,
     product_id: UUID,
     ops_products_id: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
-    """Return sizes + prices aligned by index for n8n OPS push loop."""
-    payload = await calculate_price(db, customer_id, product_id)
-    variants = payload["variants"]
+    """Unified OPS-ready payload for a product under a customer's markup rules.
 
+    Returns everything the legacy `/payload`, `/ops-variants`, and
+    `/ops-options` routes used to return separately (T20 collapse):
+
+      - product / variants / images / markup_rule (legacy /payload shape)
+      - ops_variants: sizes + prices arrays aligned for the OPS
+        setProductSize / setProductPrice loop (legacy /ops-variants shape)
+      - options: product-scoped OPS option bundle, master_option_id stripped
+        from the core body, retained as source_master_* fields (legacy
+        /ops-options shape)
+
+    Callers (n8n today; FastAPI's own ops_client orchestrator in M1.5)
+    now make ONE round trip instead of three.
+    """
+    payload = await calculate_price(db, customer_id, product_id)
+    payload["ops_variants"] = _build_ops_variants_bundle(payload["variants"], ops_products_id)
+    payload["options"] = await _build_ops_product_options(db, product_id)
+    return payload
+
+
+def _build_ops_variants_bundle(variants: list[dict], ops_products_id: int) -> OPSVariantsBundle:
+    """Derive sizes + prices arrays from the variant list. Index-aligned
+    so the OPS push loop can pair them step-by-step."""
     sizes = [
         OPSProductSizeInput(
             products_id=ops_products_id,
@@ -78,22 +84,15 @@ async def ops_variants_bundle(
     return OPSVariantsBundle(sizes=sizes, prices=prices)
 
 
-@push_router.get(
-    "/{customer_id}/product/{product_id}/ops-options",
-    response_model=list[OPSProductOptionSchema],
-    dependencies=[Depends(require_ingest_secret)],
-)
-async def ops_product_options(
-    customer_id: UUID,
-    product_id: UUID,
-    db: AsyncSession = Depends(get_db),
-):
-    """Product-scoped OPS option shape (strips master_option_id from core).
+async def _build_ops_product_options(
+    db: AsyncSession, product_id: UUID
+) -> list[OPSProductOptionSchema]:
+    """Build the product-scoped OPS option shape.
 
     Converts the hub's master-option-based product config into the shape
     OPS expects on per-product push. master_option_id / ops_attribute_id
-    are intentionally excluded from the core body — they're retained only
-    as source_master_* fields for traceback into push_mappings.
+    are excluded from the core body — they're retained only as
+    source_master_* fields for traceback into push_mappings.
     """
     po_rows = (
         await db.execute(
@@ -168,6 +167,21 @@ async def list_markup_rules(customer_id: UUID, db: AsyncSession = Depends(get_db
 async def create_markup_rule(body: MarkupRuleCreate, db: AsyncSession = Depends(get_db)):
     rule = MarkupRule(**body.model_dump())
     db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    return rule
+
+
+@router.patch("/{rule_id}", response_model=MarkupRuleRead)
+async def update_markup_rule(rule_id: UUID, body: MarkupRuleUpdate, db: AsyncSession = Depends(get_db)):
+    """Partial update of a markup rule. Only fields present in the body are updated."""
+    result = await db.execute(select(MarkupRule).where(MarkupRule.id == rule_id))
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(404, "Markup rule not found")
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(rule, field, value)
     await db.commit()
     await db.refresh(rule)
     return rule

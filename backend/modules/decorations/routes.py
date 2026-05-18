@@ -37,7 +37,7 @@ async def upsert_decoration(
         raise HTTPException(404, f"Product {product_id} not found")
 
     now = datetime.now(timezone.utc)
-    options_json = [opt.model_dump() for opt in body.decoration_options]
+    options_json = body.decoration_options
 
     stmt = (
         pg_insert(CustomerProductDecoration)
@@ -88,3 +88,29 @@ async def delete_decoration(
         raise HTTPException(404, "No decoration to delete")
     await db.delete(row)
     await db.commit()
+from fastapi.responses import Response
+from .engine import generate_decorated_image
+
+@router.get(
+    "/{customer_id}/products/{product_id}/decorations/preview.png",
+    response_class=Response,
+)
+async def get_decoration_preview(
+    customer_id: uuid.UUID,
+    product_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Dynamically generate a PNG preview of the decorated product."""
+    row = await db.get(CustomerProductDecoration, (customer_id, product_id))
+    if row is None:
+        raise HTTPException(404, "No decoration found")
+
+    product = await db.get(Product, product_id)
+    if not product or not product.image_url:
+        raise HTTPException(404, "Product image not found")
+
+    from .schemas import DecorationOption
+    options = [DecorationOption.model_validate(opt) for opt in row.decoration_options]
+
+    img_bytes = await generate_decorated_image(product.image_url, options)
+    return Response(content=img_bytes, media_type="image/png")
