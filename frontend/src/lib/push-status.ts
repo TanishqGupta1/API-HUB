@@ -31,6 +31,7 @@ export type PushStatus =
   | "failed"
   | "partial_failure"
   | "rejected"
+  | "canceled"
   | "dry_run_pushed"
   | "pending"
   | "skipped";
@@ -123,6 +124,14 @@ export const PUSH_STATUS_CONFIG: Record<PushStatus, StatusConfig> = {
     color: "#4b5563",
     category: "neutral",
   },
+  canceled: {
+    label: "Canceled",
+    bg: "bg-[#f2f0ed]",
+    border: "border-[#888894]",
+    text: "text-[#484852]",
+    color: "#484852",
+    category: "neutral",
+  },
   pending: {
     label: "Pending",
     bg: "bg-[#fef7e7]",
@@ -180,6 +189,7 @@ const TERMINAL: ReadonlySet<string> = new Set([
   "failed",
   "partial_failure",
   "rejected",
+  "canceled",
   "dry_run_pushed",
   "skipped",
 ]);

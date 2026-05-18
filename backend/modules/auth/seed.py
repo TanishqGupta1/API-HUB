@@ -1,3 +1,5 @@
+import logging
+import os
 import secrets
 
 from sqlalchemy import func, select
@@ -7,6 +9,8 @@ from .models import User
 from .security import hash_password
 
 DEFAULT_EMAIL = "admin@localhost"
+
+logger = logging.getLogger(__name__)
 
 
 async def ensure_default_admin(db: AsyncSession) -> None:
@@ -21,5 +25,17 @@ async def ensure_default_admin(db: AsyncSession) -> None:
     )
     db.add(user)
     await db.commit()
-    print(f"[auth] Created default admin — email: {DEFAULT_EMAIL}  password: {password}")
-    print("[auth] IMPORTANT: Change this password immediately after first login.")
+    # Never log the raw password in production — a prod operator must reset via
+    # the admin-reset flow, not pluck it from stdout.
+    if os.getenv("ENVIRONMENT", "development").lower() == "production":
+        logger.warning(
+            "[auth] Created default admin %s — generated random password; reset via admin flow",
+            DEFAULT_EMAIL,
+        )
+    else:
+        logger.warning(
+            "[auth] Created default admin — email: %s  password: %s",
+            DEFAULT_EMAIL,
+            password,
+        )
+        logger.warning("[auth] IMPORTANT: Change this password immediately after first login.")

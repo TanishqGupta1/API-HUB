@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Send, Store, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { isTerminal } from "@/lib/push-status";
 import type { Customer } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,17 +50,6 @@ function parsePreflightEnvelope(rawMessage: string): PreflightBlocker[] | null {
     return null;
   }
 }
-
-// Push log enters one of these and stops moving. Inlined to keep T21 PR
-// from depending on T4's push-status.ts (which lives in another PR).
-const TERMINAL_STATUSES = new Set([
-  "pushed",
-  "failed",
-  "partial_failure",
-  "rejected",
-  "canceled",
-  "dry_run_pushed",
-]);
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_MAX_ATTEMPTS = 30; // ~45s ceiling before "still running"
@@ -202,7 +192,7 @@ export function PushRowAction({ productId, productName }: Props) {
       const status = await api<PushStatus>(
         `/api/integrations/admin/push-requests/${pushLogId}`,
       );
-      if (TERMINAL_STATUSES.has(status.status)) return status;
+      if (isTerminal(status.status)) return status;
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     }
     return {

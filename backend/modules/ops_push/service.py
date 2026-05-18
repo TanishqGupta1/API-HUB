@@ -11,6 +11,7 @@ from modules.catalog.models import Product
 from modules.customers.models import Customer
 from modules.suppliers.models import Supplier
 from modules.decorations.models import CustomerProductDecoration
+from modules.integrations.admin_proxy import get_or_create_admin_proxy_key
 from modules.integrations.schemas import (
     PushRequest,
     PushRequestProductRef,
@@ -85,17 +86,12 @@ async def push_product(
     prefix = supplier.push_name_prefix or f"{supplier.slug[:2].upper()}-"
     payload["name"] = f"{prefix}{payload['name']}"
 
-    # Dispatch through the gateway. Admin route has JWT auth, not an
-    # X-Orchestrator-Key, so we pass an in-memory sentinel IntegrationKey
-    # whose id="admin-route" gets recorded on push_log.key_id for audit.
-    from modules.integrations.models import IntegrationKey
-    admin_key = IntegrationKey(
-        id="admin-route",
-        key_hash="",
-        name="Admin UI dispatch",
-        allowed_customer_ids=None,
-        allowed_supplier_slugs=None,
-    )
+    # Dispatch through the gateway. Admin route is JWT-authed, not header-
+    # authed, so we use the persisted synthetic IntegrationKey (is_synthetic=
+    # True) — orchestrator auth filters those out at SQL level, so it cannot
+    # be forged via X-Orchestrator-Key. The row satisfies push_log.key_id FK
+    # + idempotency ledger keying.
+    admin_key = await get_or_create_admin_proxy_key(db)
     req = PushRequest(
         target=PushRequestTarget(customer_id=customer_id),
         source=PushRequestSource(supplier_slug=supplier.slug),
