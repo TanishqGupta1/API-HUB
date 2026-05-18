@@ -144,9 +144,6 @@ export default function ProductsPage() {
           <div className="text-[32px] font-extrabold tracking-[-0.04em] leading-none text-[#1e1e24]">
             Product Catalog
           </div>
-          <div className="text-[13px] text-[#888894] mt-2 font-normal">
-            32.4k products indexed across 4 normalized schemas
-          </div>
         </div>
         <div className="flex items-center gap-3">
           <button 

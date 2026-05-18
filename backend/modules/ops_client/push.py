@@ -44,7 +44,15 @@ async def push_apparel_product(
             "size_id_by_sku": {}, "step_results": step_results,
             "cleanup_targets": [], "error": r.ops_error_message,
         }
-    ops_category_id = r.data["category_id"]
+    ops_category_id = (r.data or {}).get("category_id")
+    if ops_category_id is None:
+        _record("set_product_category", False, error="OPS returned null category_id")
+        return {
+            "ok": False, "status": "failed",
+            "ops_product_id": None, "ops_category_id": None,
+            "size_id_by_sku": {}, "step_results": step_results,
+            "cleanup_targets": [], "error": "OPS returned null category_id",
+        }
     _record("set_product_category", True, category_id=ops_category_id)
 
     # Step 2: setProduct
@@ -64,7 +72,16 @@ async def push_apparel_product(
             "size_id_by_sku": {}, "step_results": step_results,
             "cleanup_targets": cleanup_targets, "error": r.ops_error_message,
         }
-    ops_product_id = r.data["products_id"]
+    ops_product_id = (r.data or {}).get("products_id")
+    if ops_product_id is None:
+        _record("set_product", False, error="OPS returned null products_id")
+        cleanup_targets.append({"ops_category_id": ops_category_id})
+        return {
+            "ok": False, "status": "failed",
+            "ops_product_id": None, "ops_category_id": ops_category_id,
+            "size_id_by_sku": {}, "step_results": step_results,
+            "cleanup_targets": cleanup_targets, "error": "OPS returned null products_id",
+        }
     _record("set_product", True, products_id=ops_product_id)
 
     # Step 3: setProductSize per variant
@@ -91,8 +108,20 @@ async def push_apparel_product(
                 "size_id_by_sku": size_id_by_sku, "step_results": step_results,
                 "cleanup_targets": cleanup_targets, "error": r.ops_error_message,
             }
-        size_id_by_sku[variant.sku] = r.data["size_id"]
-        _record("set_product_size", True, sku=variant.sku, size_id=r.data["size_id"])
+        size_id = (r.data or {}).get("size_id")
+        if size_id is None:
+            _record("set_product_size", False, sku=variant.sku, error="OPS returned null size_id")
+            cleanup_targets.append({"ops_product_id": ops_product_id})
+            for sku, sid in size_id_by_sku.items():
+                cleanup_targets.append({"ops_size_id": sid, "sku": sku})
+            return {
+                "ok": False, "status": "partial_failure",
+                "ops_product_id": ops_product_id, "ops_category_id": ops_category_id,
+                "size_id_by_sku": size_id_by_sku, "step_results": step_results,
+                "cleanup_targets": cleanup_targets, "error": "OPS returned null size_id",
+            }
+        size_id_by_sku[variant.sku] = size_id
+        _record("set_product_size", True, sku=variant.sku, size_id=size_id)
 
     # Step 4: setProductPrice per variant
     for variant in product.variants:

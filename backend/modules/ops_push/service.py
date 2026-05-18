@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from modules.catalog.models import Product
+from modules.catalog.models import Product, CustomerProductSelection
 from modules.customers.models import Customer
 from modules.suppliers.models import Supplier
 from modules.decorations.models import CustomerProductDecoration

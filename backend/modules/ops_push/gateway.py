@@ -60,6 +60,9 @@ class OpsClientAdapter:
     def __init__(self, client: OpsGraphQLClient) -> None:
         self._client = client
 
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
     def __getattr__(self, name: str) -> Any:
         if name not in _MUTATION_DISPATCH:
             raise AttributeError(name)
@@ -82,6 +85,9 @@ class FakeOpsClient:
     def __init__(self) -> None:
         self.calls: list[dict] = []
         self._counter = 10000
+
+    async def aclose(self) -> None:
+        pass
 
     def _next_id(self) -> int:
         self._counter += 1
@@ -396,127 +402,130 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 await db.commit()
                 return
 
-        # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
-        payload = await build_push_payload(db, push_log.customer_id, push_log.product_id)
-        plan = [step.model_dump(mode="json") for step in payload.plan]
+        try:
+            # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
+            payload = await build_push_payload(db, push_log.customer_id, push_log.product_id)
+            plan = [step.model_dump(mode="json") for step in payload.plan]
 
-        step_results: list[dict] = []
-        ops_product_id: Optional[str] = None
-        final_status = "pushed" if not push_log.dry_run else "dry_run_pushed"
-        cleanup_targets: Optional[dict] = None
+            step_results: list[dict] = []
+            ops_product_id: Optional[str] = None
+            final_status = "pushed" if not push_log.dry_run else "dry_run_pushed"
+            cleanup_targets: Optional[dict] = None
 
-        # ── Execute plan sequentially ──
-        for step in plan:
-            mutation = step.get("mutation", "")
-            variables = step.get("variables", {})
-            t_start = datetime.now(timezone.utc)
-            try:
-                method = getattr(client, _mutation_to_method(mutation), None)
-                if method is None:
-                    raise NotImplementedError(f"No client method for {mutation}")
-                resp = await method(variables)
-                latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
-                if "products_id" in resp:
-                    ops_product_id = str(resp["products_id"])
-                step_results.append({
-                    "step": mutation,
-                    "ok": True,
-                    "ops_id": ops_product_id,
-                    "latency_ms": latency,
-                    "called_at": t_start.isoformat(),
-                })
-            except Exception as e:
-                latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
-                step_results.append({
-                    "step": mutation,
-                    "ok": False,
-                    "error": str(e),
-                    "latency_ms": latency,
-                    "called_at": t_start.isoformat(),
-                })
-                cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
-                final_status = "partial_failure" if ops_product_id else "failed"
-                break
+            # ── Execute plan sequentially ──
+            for step in plan:
+                mutation = step.get("mutation", "")
+                variables = step.get("variables", {})
+                t_start = datetime.now(timezone.utc)
+                try:
+                    method = getattr(client, _mutation_to_method(mutation), None)
+                    if method is None:
+                        raise NotImplementedError(f"No client method for {mutation}")
+                    resp = await method(variables)
+                    latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
+                    if "products_id" in resp:
+                        ops_product_id = str(resp["products_id"])
+                    step_results.append({
+                        "step": mutation,
+                        "ok": True,
+                        "ops_id": ops_product_id,
+                        "latency_ms": latency,
+                        "called_at": t_start.isoformat(),
+                    })
+                except Exception as e:
+                    latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
+                    step_results.append({
+                        "step": mutation,
+                        "ok": False,
+                        "error": str(e),
+                        "latency_ms": latency,
+                        "called_at": t_start.isoformat(),
+                    })
+                    cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
+                    final_status = "partial_failure" if ops_product_id else "failed"
+                    break
 
-        # ── Persist results ──
-        push_log.step_results = _redact_auth(step_results)
-        push_log.status = final_status
-        push_log.cleanup_targets = cleanup_targets
-        if ops_product_id and final_status == "pushed":
-            push_log.ops_product_id = ops_product_id
+            # ── Persist results ──
+            push_log.step_results = _redact_auth(step_results)
+            push_log.status = final_status
+            push_log.cleanup_targets = cleanup_targets
+            if ops_product_id and final_status == "pushed":
+                push_log.ops_product_id = ops_product_id
 
-        # ── Upsert push_mappings (live push only) ──
-        # target_ops_product_id is an INTEGER column; the mutation responses
-        # carry it as int but step_results stringifies for JSON serialization.
-        # Coerce back to int here and skip the mapping write if the OPS id
-        # isn't numeric (e.g. early-failure cases where ops_product_id is None).
-        if final_status == "pushed" and ops_product_id is not None:
-            try:
-                target_int = int(ops_product_id)
-            except (TypeError, ValueError):
-                target_int = None
-            if target_int is not None:
-                existing_mapping = (await db.execute(
-                    select(PushMapping).where(
-                        PushMapping.source_product_id == push_log.product_id,
-                        PushMapping.customer_id == push_log.customer_id,
+            # ── Upsert push_mappings (live push only) ──
+            # target_ops_product_id is an INTEGER column; the mutation responses
+            # carry it as int but step_results stringifies for JSON serialization.
+            # Coerce back to int here and skip the mapping write if the OPS id
+            # isn't numeric (e.g. early-failure cases where ops_product_id is None).
+            if final_status == "pushed" and ops_product_id is not None:
+                try:
+                    target_int = int(ops_product_id)
+                except (TypeError, ValueError):
+                    target_int = None
+                if target_int is not None:
+                    existing_mapping = (await db.execute(
+                        select(PushMapping).where(
+                            PushMapping.source_product_id == push_log.product_id,
+                            PushMapping.customer_id == push_log.customer_id,
+                        )
+                    )).scalar_one_or_none()
+                    now_mapping = datetime.now(timezone.utc)
+                    if existing_mapping:
+                        existing_mapping.target_ops_product_id = target_int
+                        existing_mapping.updated_at = now_mapping
+                    else:
+                        db.add(PushMapping(
+                            source_system="api-hub",
+                            source_product_id=push_log.product_id,
+                            source_supplier_sku=push_log.supplier_sku,
+                            customer_id=push_log.customer_id,
+                            target_ops_base_url=(customer.ops_base_url if customer else ""),
+                            target_ops_product_id=target_int,
+                            pushed_at=now_mapping,
+                            updated_at=now_mapping,
+                            status="active",
+                        ))
+
+                # Update customer-catalog selection
+                sel = (await db.execute(
+                    select(CustomerProductSelection).where(
+                        CustomerProductSelection.customer_id == push_log.customer_id,
+                        CustomerProductSelection.product_id == push_log.product_id,
                     )
                 )).scalar_one_or_none()
-                now_mapping = datetime.now(timezone.utc)
-                if existing_mapping:
-                    existing_mapping.target_ops_product_id = target_int
-                    existing_mapping.updated_at = now_mapping
+                now = datetime.now(timezone.utc)
+                if sel:
+                    sel.status = "pushed"
+                    sel.pushed_at = now
                 else:
-                    db.add(PushMapping(
-                        source_system="api-hub",
-                        source_product_id=push_log.product_id,
-                        source_supplier_sku=push_log.supplier_sku,
+                    db.add(CustomerProductSelection(
                         customer_id=push_log.customer_id,
-                        target_ops_base_url=(customer.ops_base_url if customer else ""),
-                        target_ops_product_id=target_int,
-                        pushed_at=now_mapping,
-                        updated_at=now_mapping,
-                        status="active",
+                        product_id=push_log.product_id,
+                        status="pushed",
+                        added_at=now,
+                        pushed_at=now,
                     ))
 
-            # Update customer-catalog selection
-            sel = (await db.execute(
-                select(CustomerProductSelection).where(
-                    CustomerProductSelection.customer_id == push_log.customer_id,
-                    CustomerProductSelection.product_id == push_log.product_id,
-                )
-            )).scalar_one_or_none()
-            now = datetime.now(timezone.utc)
-            if sel:
-                sel.status = "pushed"
-                sel.pushed_at = now
-            else:
-                db.add(CustomerProductSelection(
-                    customer_id=push_log.customer_id,
-                    product_id=push_log.product_id,
-                    status="pushed",
-                    added_at=now,
-                    pushed_at=now,
-                ))
-
-        await db.commit()
-
-        # ── Fire callback ──
-        if push_log.callback_url and push_log.callback_status == "pending":
-            success = await _fire_callback(
-                str(push_log_id),
-                push_log.callback_url,
-                {
-                    "event": "push.completed",
-                    "push_log_id": str(push_log_id),
-                    "status": final_status,
-                    "ops_product_id": ops_product_id,
-                    "supplier_sku": push_log.supplier_sku,
-                },
-            )
-            push_log.callback_status = "sent" if success else "failed"
-            push_log.callback_attempts = 1
             await db.commit()
+
+            # ── Fire callback ──
+            if push_log.callback_url and push_log.callback_status == "pending":
+                success = await _fire_callback(
+                    str(push_log_id),
+                    push_log.callback_url,
+                    {
+                        "event": "push.completed",
+                        "push_log_id": str(push_log_id),
+                        "status": final_status,
+                        "ops_product_id": ops_product_id,
+                        "supplier_sku": push_log.supplier_sku,
+                    },
+                )
+                push_log.callback_status = "sent" if success else "failed"
+                push_log.callback_attempts = 1
+                await db.commit()
+        finally:
+            await client.aclose()
 
 
 def _mutation_to_method(mutation: str) -> str:

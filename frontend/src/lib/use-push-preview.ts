@@ -24,7 +24,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import {
   FIXTURE_ERROR_PREFLIGHT_BLOCKER,
   FIXTURE_PREFLIGHT_BLOCKED,
@@ -113,6 +113,7 @@ export interface UsePushDryRunResult {
 export function usePushDryRun(
   customerId: string | null,
   productId: string,
+  supplierSlug?: string | null,
 ): UsePushDryRunResult {
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
   const [payload, setPayload] = useState<OPSPushPayload | null>(null);
@@ -150,8 +151,8 @@ export function usePushDryRun(
         // Live mode: dry-run POST to discover the plan + computed prices.
         const body: PushRequestBody = {
           target: { system: "ops", customer_id: customerId },
-          source: { supplier_slug: "sanmar" }, // TODO: derive from product
-          product_ref: { supplier_sku: productId }, // TODO: resolve supplier_sku
+          source: { supplier_slug: supplierSlug ?? "sanmar" },
+          product_ref: { product_id: productId },
           dry_run: true,
         };
         const resp = await api<PushRequestResponse>(
@@ -173,15 +174,18 @@ export function usePushDryRun(
         setError(null);
       } catch (e) {
         if (cancelled) return;
-        // Try to surface the gateway error envelope shape
+        // Recover the PREFLIGHT_BLOCKER envelope that api() attaches as .envelope
+        const raw = e instanceof ApiError ? e.envelope : undefined;
         const env: GatewayErrorEnvelope =
-          (e as { envelope?: GatewayErrorEnvelope }).envelope ?? {
-            status: "error",
-            code: "PREFLIGHT_BLOCKER",
-            message: String(e),
-            details: {},
-            trace_id: null,
-          };
+          raw != null && typeof raw === "object" && "code" in (raw as object)
+            ? (raw as GatewayErrorEnvelope)
+            : {
+                status: "error",
+                code: "PREFLIGHT_BLOCKER",
+                message: e instanceof Error ? e.message : String(e),
+                details: {},
+                trace_id: null,
+              };
         setError(env);
       } finally {
         if (!cancelled) setLoading(false);
@@ -191,7 +195,7 @@ export function usePushDryRun(
     return () => {
       cancelled = true;
     };
-  }, [customerId, productId, refetchCount]);
+  }, [customerId, productId, supplierSlug, refetchCount]);
 
   return {
     preflight,
@@ -265,7 +269,7 @@ export function usePushRequest(): UsePushRequestResult {
         const body: PushRequestBody = {
           target: { system: "ops", customer_id: args.customerId },
           source: { supplier_slug: args.supplierSlug },
-          product_ref: { supplier_sku: args.supplierSku },
+          product_ref: { product_id: args.productId },
           dry_run: args.dryRun,
           callback: args.callback,
         };
@@ -412,7 +416,7 @@ export const usePushExecute = () => {
         customerId: args.customerId,
         productId: args.productId,
         supplierSlug: "sanmar",
-        supplierSku: args.productId,
+        supplierSku: "",
         dryRun: args.dryRun,
       });
       return resp ? { push_log_id: resp.push_log_id, status: resp.status } : null;
