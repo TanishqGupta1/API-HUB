@@ -23,6 +23,7 @@ from modules.push_mappings import service as push_mapping_service
 from modules.push_mappings.schemas import PushMappingUpsert
 from modules.suppliers.models import Supplier
 from modules.sync_jobs.models import SyncJob
+from .admin_proxy import get_or_create_admin_proxy_key
 from .auth import OrchestratorKey, check_key_scope
 from .models import IntegrationKey
 from .schemas import (
@@ -438,10 +439,15 @@ async def ops_connection_test(
         })
 
     client_secret = (customer.ops_auth_config or {}).get("client_secret")
-    if not customer.ops_token_url or not customer.ops_client_id or not client_secret:
+    if (
+        not customer.ops_base_url
+        or not customer.ops_token_url
+        or not customer.ops_client_id
+        or not client_secret
+    ):
         return {
             "ok": False,
-            "error": "Customer missing one of: ops_token_url, ops_client_id, client_secret",
+            "error": "Customer missing one of: ops_base_url, ops_token_url, ops_client_id, client_secret",
         }
 
     try:
@@ -449,11 +455,13 @@ async def ops_connection_test(
             customer.ops_token_url, customer.ops_client_id, client_secret
         )
     except Exception as exc:  # noqa: BLE001 — surface upstream auth detail
+        logger.exception("ops_connection_test OAuth failed customer=%s", customer.id)
         return {"ok": False, "error": f"OAuth failed: {exc}"}
 
     try:
         await _ops_graphql_ping(customer.ops_base_url, token)
     except Exception as exc:  # noqa: BLE001
+        logger.exception("ops_connection_test GraphQL ping failed customer=%s", customer.id)
         return {"ok": False, "error": f"GraphQL ping failed: {exc}"}
 
     return {
@@ -533,28 +541,8 @@ async def revoke_key(
 # Admin proxy — JWT-authenticated push for the admin UI. Uses a
 # synthetic IntegrationKey row (is_synthetic=True) that the orchestrator
 # auth path filters out, so this pseudo-key can't be forged via header.
-
-ADMIN_PROXY_KEY_ID = "_admin_ui_proxy"
-
-
-async def _get_or_create_admin_proxy_key(db: AsyncSession) -> IntegrationKey:
-    """Idempotent singleton for the synthetic admin-proxy IntegrationKey."""
-    key = await db.get(IntegrationKey, ADMIN_PROXY_KEY_ID)
-    if key:
-        return key
-    key = IntegrationKey(
-        id=ADMIN_PROXY_KEY_ID,
-        key_hash="synthetic-no-header-lookup",
-        name="Admin UI proxy (JWT-authenticated)",
-        allowed_customer_ids=None,
-        allowed_supplier_slugs=None,
-        rate_limit_per_minute=600,
-        is_synthetic=True,
-    )
-    db.add(key)
-    await db.commit()
-    await db.refresh(key)
-    return key
+# Helper lives in admin_proxy.py so service.py can share it without
+# importing the router module.
 
 
 @admin_router.get(
@@ -607,7 +595,7 @@ async def admin_push_request(
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """Admin JWT mirror of POST /v1/push-requests — same pipeline, JWT-authed."""
-    proxy_key = await _get_or_create_admin_proxy_key(db)
+    proxy_key = await get_or_create_admin_proxy_key(db)
     accepted = await prepare_push_intent(req, proxy_key, db, idempotency_key=idempotency_key)
     if accepted.status not in ("accepted", "queued"):
         return accepted

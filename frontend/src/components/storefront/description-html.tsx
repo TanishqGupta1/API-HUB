@@ -1,6 +1,6 @@
 "use client";
 
-import DOMPurify from "isomorphic-dompurify";
+import { useEffect, useState } from "react";
 
 interface Props {
   html: string | null;
@@ -39,11 +39,19 @@ function renderPlainAsFeatures(text: string) {
 }
 
 export function DescriptionHtml({ html }: Props) {
-  if (!html) return null;
-  const clean = DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ["p", "br", "strong", "em", "ul", "ol", "li", "a", "span", "h1", "h2", "h3", "h4", "h5", "h6"],
-    ALLOWED_ATTR: ["href", "target", "rel"],
-  });
+  const [clean, setClean] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!html) { setClean(null); return; }
+    import("dompurify").then(({ default: DOMPurify }) => {
+      setClean(DOMPurify.sanitize(html, {
+        ALLOWED_TAGS: ["p", "br", "strong", "em", "ul", "ol", "li", "a", "span", "h1", "h2", "h3", "h4", "h5", "h6"],
+        ALLOWED_ATTR: ["href", "target", "rel"],
+      }));
+    });
+  }, [html]);
+
+  if (!clean) return null;
 
   const isPlain = !hasBlockTags(clean);
 

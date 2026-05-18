@@ -8,9 +8,9 @@ the equivalent gateway-pipeline failure mode: execute_push blows up mid-plan.
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy import select
 
 from modules.catalog.models import Product
@@ -22,9 +22,11 @@ from modules.suppliers.models import Supplier
 
 @pytest.fixture(autouse=True)
 def _mock_preflight_ok():
-    ok_result = MagicMock()
-    ok_result.ok = True
-    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=ok_result)):
+    """Preflight=ok so we can exercise the gateway failure path itself,
+    not a preflight rejection."""
+    ok = MagicMock()
+    ok.ok = True
+    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=ok)):
         yield
 
 

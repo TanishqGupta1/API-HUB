@@ -22,11 +22,15 @@ from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
 
 
+# Mock preflight so this suite doesn't fail on test scaffolds that lack
+# markup rules / reachable OPS creds / images. Preflight has its own
+# dedicated tests; here we exercise admin-route response shape + gateway
+# wiring downstream of preflight.
 @pytest.fixture(autouse=True)
 def _mock_preflight_ok():
-    ok_result = MagicMock()
-    ok_result.ok = True
-    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=ok_result)):
+    ok = MagicMock()
+    ok.ok = True
+    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=ok)):
         yield
 
 
@@ -132,3 +136,14 @@ async def test_admin_route_writes_gateway_native_push_log(client, admin_push_sca
         }, log.status
 
 
+def test_legacy_n8n_push_helper_is_gone():
+    """T24 completion: trigger_n8n_push must not exist on the service module.
+
+    The rewire is finished — the admin push and gateway both call
+    prepare_push_intent + execute_push directly. Any future reintroduction
+    of an n8n webhook helper for OPS push is a regression."""
+    from modules.ops_push import service
+
+    assert not hasattr(service, "trigger_n8n_push"), (
+        "trigger_n8n_push was removed in T24; service.py should not redefine it"
+    )
