@@ -641,8 +641,10 @@ export interface PushLog {
 export interface PushRequestBody {
   target: { system: "ops"; customer_id: string };
   source: { supplier_slug: string };
-  /** Either product_ref OR product inline; never both. */
-  product_ref?: { supplier_sku: string };
+  /** Either product_ref OR product inline; never both.
+   *  product_ref identifies a product by internal UUID OR supplier_sku — backend
+   *  resolves whichever is supplied (see modules/integrations/schemas.py:PushRequestProductRef). */
+  product_ref?: { product_id?: string; supplier_sku?: string };
   product?: Record<string, unknown>; // ProductIngest shape
   decorations?: Array<{
     placement: string;

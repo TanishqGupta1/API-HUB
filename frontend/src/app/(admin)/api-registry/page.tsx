@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { API_BASE } from "@/lib/env";
 import { log } from "@/lib/log";
 
 // --- Components ---
@@ -130,7 +131,7 @@ export default function APIRegistryPage() {
             color: "var(--blue)", 
             fontSize: "11px" 
           }}>
-            API_HOST: {process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}
+            API_HOST: {API_BASE}
           </span>
         </div>
       </div>
