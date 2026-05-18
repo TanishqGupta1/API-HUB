@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import uuid as uuid_mod
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -20,7 +21,8 @@ from modules.customers.models import Customer
 from modules.integrations.models import IntegrationKey
 from modules.integrations.schemas import PushRequest, PushRequestAccepted, PushRequestLinks
 from modules.markup.engine import calculate_price
-from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
+from modules.ops_client.client import OpsAuth, OpsGraphQLClient
+from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash, _request_fingerprint
 from modules.ops_push.preflight import run_preflight
 from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
@@ -30,75 +32,188 @@ logger = logging.getLogger(__name__)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Stubs — Tasks 4 & 5 (Urvashi): swap with real OpsClient + FakeOpsClient
+# Real OPS client — wraps OpsGraphQLClient with the stub method interface
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-class _StubOpsClient:
-    """TODO Task 4: replace with real OPSClient mutation methods"""
-    async def set_product_category(self, input: dict) -> dict:
-        logger.warning("OpsClient stub — Task 4 not yet merged")
-        return {"products_id": 99001}
+class RealOpsClient:
+    """Calls live OPS GraphQL mutations. Variables are pre-resolved dicts."""
 
-    async def set_product(self, input: dict) -> dict:
-        return {"products_id": 99001}
+    _QUERIES: dict[str, tuple[str, str]] = {
+        "set_product_category": (
+            "mutation SetProductCategory($input: setProductCategory_input!) {"
+            " setProductCategory(input: $input) { category_id } }",
+            "setProductCategory",
+        ),
+        "set_product": (
+            "mutation SetProduct($input: setProduct_input!) {"
+            " setProduct(input: $input) { products_id } }",
+            "setProduct",
+        ),
+        "set_product_size": (
+            "mutation SetProductSize($input: setProductSize_input!) {"
+            " setProductSize(input: $input) { size_id } }",
+            "setProductSize",
+        ),
+        "set_product_price": (
+            "mutation SetProductPrice($input: setProductPrice_input!) {"
+            " setProductPrice(input: $input) { product_price_id } }",
+            "setProductPrice",
+        ),
+        "set_assign_options": (
+            "mutation SetAssignOptions($input: setAssignOptions_input!) {"
+            " setAssignOptions(input: $input) { products_id } }",
+            "setAssignOptions",
+        ),
+        "set_additional_option": (
+            "mutation SetAdditionalOption($input: setAdditionalOption_input!) {"
+            " setAdditionalOption(input: $input) { options_id } }",
+            "setAdditionalOption",
+        ),
+        "set_additional_option_attributes": (
+            "mutation SetAdditionalOptionAttributes($input: setAdditionalOptionAttributes_input!) {"
+            " setAdditionalOptionAttributes(input: $input) { options_values_id } }",
+            "setAdditionalOptionAttributes",
+        ),
+        "update_product_stock": (
+            "mutation UpdateProductStock($input: updateProductStock_input!) {"
+            " updateProductStock(input: $input) { products_id } }",
+            "updateProductStock",
+        ),
+        "set_product_design": (
+            "mutation SetProductDesign($input: setProductDesign_input!) {"
+            " setProductDesign(input: $input) { products_id } }",
+            "setProductDesign",
+        ),
+    }
 
-    async def set_product_size(self, input: dict) -> dict:
-        return {"products_id": 99001, "size_id": 1}
+    def __init__(self, gql: OpsGraphQLClient) -> None:
+        self._gql = gql
 
-    async def set_product_price(self, input: dict) -> dict:
-        return {}
+    async def aclose(self) -> None:
+        await self._gql.aclose()
 
-    async def set_assign_options(self, input: dict) -> dict:
-        return {}
+    async def _call(self, method_name: str, variables: dict) -> dict:
+        entry = self._QUERIES.get(method_name)
+        if entry is None:
+            raise NotImplementedError(f"No query registered for '{method_name}'")
+        query, data_key = entry
+        result = await self._gql.execute(query, variables=variables)
+        if not result.ok:
+            raise RuntimeError(
+                f"OPS {method_name} failed: [{result.ops_error_code}] {result.ops_error_message}"
+            )
+        return (result.data or {}).get(data_key) or {}
 
-    async def set_product_design(self, input: dict) -> dict:
-        return {}
+    async def set_product_category(self, variables: dict) -> dict:
+        return await self._call("set_product_category", variables)
+
+    async def set_product(self, variables: dict) -> dict:
+        return await self._call("set_product", variables)
+
+    async def set_product_size(self, variables: dict) -> dict:
+        return await self._call("set_product_size", variables)
+
+    async def set_product_price(self, variables: dict) -> dict:
+        return await self._call("set_product_price", variables)
+
+    async def set_assign_options(self, variables: dict) -> dict:
+        return await self._call("set_assign_options", variables)
+
+    async def set_additional_option(self, variables: dict) -> dict:
+        return await self._call("set_additional_option", variables)
+
+    async def set_additional_option_attributes(self, variables: dict) -> dict:
+        return await self._call("set_additional_option_attributes", variables)
+
+    async def update_product_stock(self, variables: dict) -> dict:
+        return await self._call("update_product_stock", variables)
+
+    async def set_product_design(self, variables: dict) -> dict:
+        return await self._call("set_product_design", variables)
 
 
-class _StubFakeOpsClient:
-    """TODO Task 5: replace with → from .fake_ops_client import FakeOpsClient"""
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Fake OPS client — used for dry_run pushes; records calls without HTTP
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class FakeOpsClient:
     def __init__(self):
         self.calls: list[dict] = []
         self._counter = 10000
+
+    async def aclose(self) -> None:
+        pass
 
     def _next_id(self) -> int:
         self._counter += 1
         return self._counter
 
-    async def set_product_category(self, input: dict) -> dict:
-        r = {"products_id": 1}
-        self.calls.append({"method": "set_product_category", "input": input, "response": r})
+    async def set_product_category(self, variables: dict) -> dict:
+        r = {"category_id": self._next_id()}
+        self.calls.append({"method": "set_product_category", "variables": variables, "response": r})
         return r
 
-    async def set_product(self, input: dict) -> dict:
+    async def set_product(self, variables: dict) -> dict:
         r = {"products_id": self._next_id()}
-        self.calls.append({"method": "set_product", "input": input, "response": r})
+        self.calls.append({"method": "set_product", "variables": variables, "response": r})
         return r
 
-    async def set_product_size(self, input: dict) -> dict:
-        r = {"products_id": self._counter, "size_id": self._next_id()}
-        self.calls.append({"method": "set_product_size", "input": input, "response": r})
+    async def set_product_size(self, variables: dict) -> dict:
+        r = {"size_id": self._next_id()}
+        self.calls.append({"method": "set_product_size", "variables": variables, "response": r})
         return r
 
-    async def set_product_price(self, input: dict) -> dict:
-        r = {}
-        self.calls.append({"method": "set_product_price", "input": input, "response": r})
+    async def set_product_price(self, variables: dict) -> dict:
+        r = {"product_price_id": self._next_id()}
+        self.calls.append({"method": "set_product_price", "variables": variables, "response": r})
         return r
 
-    async def set_assign_options(self, input: dict) -> dict:
-        r = {}
-        self.calls.append({"method": "set_assign_options", "input": input, "response": r})
+    async def set_assign_options(self, variables: dict) -> dict:
+        r = {"products_id": self._counter}
+        self.calls.append({"method": "set_assign_options", "variables": variables, "response": r})
         return r
 
-    async def set_product_design(self, input: dict) -> dict:
-        r = {}
-        self.calls.append({"method": "set_product_design", "input": input, "response": r})
+    async def set_additional_option(self, variables: dict) -> dict:
+        r = {"options_id": self._next_id()}
+        self.calls.append({"method": "set_additional_option", "variables": variables, "response": r})
+        return r
+
+    async def set_additional_option_attributes(self, variables: dict) -> dict:
+        r = {"options_values_id": self._next_id()}
+        self.calls.append({"method": "set_additional_option_attributes", "variables": variables, "response": r})
+        return r
+
+    async def update_product_stock(self, variables: dict) -> dict:
+        r = {"products_id": self._counter}
+        self.calls.append({"method": "update_product_stock", "variables": variables, "response": r})
+        return r
+
+    async def set_product_design(self, variables: dict) -> dict:
+        r = {"products_id": self._counter}
+        self.calls.append({"method": "set_product_design", "variables": variables, "response": r})
         return r
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Helpers
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+_STEP_REF_RE = re.compile(r'^\$step(\d+)\.(\w+)$')
+
+
+def _resolve_step_refs(value: Any, step_responses: dict[int, dict]) -> Any:
+    """Recursively replace '$stepN.field' placeholders with resolved values."""
+    if isinstance(value, str):
+        m = _STEP_REF_RE.match(value)
+        if m:
+            step_num, field = int(m.group(1)), m.group(2)
+            return step_responses.get(step_num, {}).get(field, value)
+    if isinstance(value, dict):
+        return {k: _resolve_step_refs(v, step_responses) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_step_refs(v, step_responses) for v in value]
+    return value
+
 
 def _redact_auth(steps: list[dict]) -> list[dict]:
     """Redact Authorization header values before persisting to step_results."""
@@ -325,129 +440,162 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
         customer = await db.get(Customer, push_log.customer_id)
 
         # ── Select client ──
-        client = _StubFakeOpsClient() if push_log.dry_run else _StubOpsClient()
+        if push_log.dry_run:
+            client: Any = FakeOpsClient()
+        else:
+            if not customer or not customer.ops_base_url:
+                logger.error("execute_push: customer %s has no OPS credentials", push_log.customer_id)
+                push_log.status = "failed"
+                push_log.step_results = [{"error": "Customer has no OPS credentials configured"}]
+                await db.commit()
+                return
+            auth = OpsAuth(
+                base_url=customer.ops_base_url,
+                token_url=customer.ops_token_url or "",
+                client_id=customer.ops_client_id or "",
+                client_secret=(customer.ops_auth_config or {}).get("client_secret", ""),
+            )
+            client = RealOpsClient(OpsGraphQLClient(auth))
 
-        # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
-        payload = await build_push_payload(db, push_log.customer_id, push_log.product_id)
-        plan = [step.model_dump(mode="json") for step in payload.plan]
+        try:
+            # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
+            payload = await build_push_payload(db, push_log.customer_id, push_log.product_id)
+            plan = [step.model_dump(mode="json") for step in payload.plan]
 
-        step_results: list[dict] = []
-        ops_product_id: Optional[str] = None
-        final_status = "pushed" if not push_log.dry_run else "dry_run_pushed"
-        cleanup_targets: Optional[dict] = None
+            step_results: list[dict] = []
+            step_responses: dict[int, dict] = {}  # step_num → OPS response dict for placeholder resolution
+            ops_product_id: Optional[str] = None
+            final_status = "pushed" if not push_log.dry_run else "dry_run_pushed"
+            cleanup_targets: Optional[dict] = None
 
-        # ── Execute plan sequentially ──
-        for step in plan:
-            mutation = step.get("mutation", "")
-            variables = step.get("variables", {})
-            t_start = datetime.now(timezone.utc)
-            try:
-                method = getattr(client, _mutation_to_method(mutation), None)
-                if method is None:
-                    raise NotImplementedError(f"No client method for {mutation}")
-                resp = await method(variables)
-                latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
-                if "products_id" in resp:
-                    ops_product_id = str(resp["products_id"])
-                step_results.append({
-                    "step": mutation,
-                    "ok": True,
-                    "ops_id": ops_product_id,
-                    "latency_ms": latency,
-                    "called_at": t_start.isoformat(),
-                })
-            except Exception as e:
-                latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
-                step_results.append({
-                    "step": mutation,
-                    "ok": False,
-                    "error": str(e),
-                    "latency_ms": latency,
-                    "called_at": t_start.isoformat(),
-                })
-                cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
-                final_status = "partial_failure" if ops_product_id else "failed"
-                break
+            # ── Execute plan sequentially ──
+            for step in plan:
+                step_num = step.get("step", 0)
+                mutation = step.get("mutation", "")
+                raw_variables = step.get("variables", {})
+                variables = _resolve_step_refs(raw_variables, step_responses)
+                t_start = datetime.now(timezone.utc)
+                try:
+                    method = getattr(client, _mutation_to_method(mutation), None)
+                    if method is None:
+                        raise NotImplementedError(f"No client method for {mutation}")
+                    resp = await method(variables)
+                    step_responses[step_num] = resp
+                    latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
+                    if "products_id" in resp:
+                        ops_product_id = str(resp["products_id"])
+                    step_results.append({
+                        "step": step_num,
+                        "source_key": step.get("source_key", ""),
+                        "mutation": mutation,
+                        "request_fingerprint": _request_fingerprint(variables),
+                        "ops_ids": resp,
+                        "attempted_at": t_start.isoformat(),
+                        "status": "ok",
+                        "latency_ms": latency,
+                    })
+                except Exception as e:
+                    latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
+                    step_results.append({
+                        "step": step_num,
+                        "source_key": step.get("source_key", ""),
+                        "mutation": mutation,
+                        "request_fingerprint": _request_fingerprint(variables),
+                        "ops_ids": {},
+                        "attempted_at": t_start.isoformat(),
+                        "status": "failed",
+                        "error": str(e),
+                        "latency_ms": latency,
+                    })
+                    cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
+                    final_status = "partial_failure" if ops_product_id else "failed"
+                    break
 
-        # ── Persist results ──
-        push_log.step_results = _redact_auth(step_results)
-        push_log.status = final_status
-        push_log.cleanup_targets = cleanup_targets
-        if ops_product_id and final_status == "pushed":
-            push_log.ops_product_id = ops_product_id
+            # ── Persist results ──
+            push_log.step_results = _redact_auth(step_results)
+            push_log.status = final_status
+            push_log.cleanup_targets = cleanup_targets
+            if final_status in ("failed", "partial_failure"):
+                failed_step = next((s for s in step_results if s.get("status") == "failed"), None)
+                if failed_step:
+                    push_log.error = f"{failed_step['mutation']}: {failed_step.get('error', 'unknown error')}"
+            if ops_product_id and final_status == "pushed":
+                push_log.ops_product_id = ops_product_id
 
-        # ── Upsert push_mappings (live push only) ──
-        # target_ops_product_id is an INTEGER column; the mutation responses
-        # carry it as int but step_results stringifies for JSON serialization.
-        # Coerce back to int here and skip the mapping write if the OPS id
-        # isn't numeric (e.g. early-failure cases where ops_product_id is None).
-        if final_status == "pushed" and ops_product_id is not None:
-            try:
-                target_int = int(ops_product_id)
-            except (TypeError, ValueError):
-                target_int = None
-            if target_int is not None:
-                existing_mapping = (await db.execute(
-                    select(PushMapping).where(
-                        PushMapping.source_product_id == push_log.product_id,
-                        PushMapping.customer_id == push_log.customer_id,
+            # ── Upsert push_mappings (live push only) ──
+            # target_ops_product_id is an INTEGER column; the mutation responses
+            # carry it as int but step_results stringifies for JSON serialization.
+            # Coerce back to int here and skip the mapping write if the OPS id
+            # isn't numeric (e.g. early-failure cases where ops_product_id is None).
+            if final_status == "pushed" and ops_product_id is not None:
+                try:
+                    target_int = int(ops_product_id)
+                except (TypeError, ValueError):
+                    target_int = None
+                if target_int is not None:
+                    existing_mapping = (await db.execute(
+                        select(PushMapping).where(
+                            PushMapping.source_product_id == push_log.product_id,
+                            PushMapping.customer_id == push_log.customer_id,
+                        )
+                    )).scalar_one_or_none()
+                    now_mapping = datetime.now(timezone.utc)
+                    if existing_mapping:
+                        existing_mapping.target_ops_product_id = target_int
+                        existing_mapping.updated_at = now_mapping
+                    else:
+                        db.add(PushMapping(
+                            source_system="api-hub",
+                            source_product_id=push_log.product_id,
+                            source_supplier_sku=push_log.supplier_sku,
+                            customer_id=push_log.customer_id,
+                            target_ops_base_url=(customer.ops_base_url if customer else ""),
+                            target_ops_product_id=target_int,
+                            pushed_at=now_mapping,
+                            updated_at=now_mapping,
+                            status="active",
+                        ))
+
+                # Update customer-catalog selection
+                sel = (await db.execute(
+                    select(CustomerProductSelection).where(
+                        CustomerProductSelection.customer_id == push_log.customer_id,
+                        CustomerProductSelection.product_id == push_log.product_id,
                     )
                 )).scalar_one_or_none()
-                now_mapping = datetime.now(timezone.utc)
-                if existing_mapping:
-                    existing_mapping.target_ops_product_id = target_int
-                    existing_mapping.updated_at = now_mapping
+                now = datetime.now(timezone.utc)
+                if sel:
+                    sel.status = "pushed"
+                    sel.pushed_at = now
                 else:
-                    db.add(PushMapping(
-                        source_system="api-hub",
-                        source_product_id=push_log.product_id,
-                        source_supplier_sku=push_log.supplier_sku,
+                    db.add(CustomerProductSelection(
                         customer_id=push_log.customer_id,
-                        target_ops_base_url=(customer.ops_base_url if customer else ""),
-                        target_ops_product_id=target_int,
-                        pushed_at=now_mapping,
-                        updated_at=now_mapping,
-                        status="active",
+                        product_id=push_log.product_id,
+                        status="pushed",
+                        added_at=now,
+                        pushed_at=now,
                     ))
 
-            # Update customer-catalog selection
-            sel = (await db.execute(
-                select(CustomerProductSelection).where(
-                    CustomerProductSelection.customer_id == push_log.customer_id,
-                    CustomerProductSelection.product_id == push_log.product_id,
-                )
-            )).scalar_one_or_none()
-            now = datetime.now(timezone.utc)
-            if sel:
-                sel.status = "pushed"
-                sel.pushed_at = now
-            else:
-                db.add(CustomerProductSelection(
-                    customer_id=push_log.customer_id,
-                    product_id=push_log.product_id,
-                    status="pushed",
-                    added_at=now,
-                    pushed_at=now,
-                ))
-
-        await db.commit()
-
-        # ── Fire callback ──
-        if push_log.callback_url and push_log.callback_status == "pending":
-            success = await _fire_callback(
-                str(push_log_id),
-                push_log.callback_url,
-                {
-                    "event": "push.completed",
-                    "push_log_id": str(push_log_id),
-                    "status": final_status,
-                    "ops_product_id": ops_product_id,
-                    "supplier_sku": push_log.supplier_sku,
-                },
-            )
-            push_log.callback_status = "sent" if success else "failed"
-            push_log.callback_attempts = 1
             await db.commit()
+
+            # ── Fire callback ──
+            if push_log.callback_url and push_log.callback_status == "pending":
+                success = await _fire_callback(
+                    str(push_log_id),
+                    push_log.callback_url,
+                    {
+                        "event": "push.completed",
+                        "push_log_id": str(push_log_id),
+                        "status": final_status,
+                        "ops_product_id": ops_product_id,
+                        "supplier_sku": push_log.supplier_sku,
+                    },
+                )
+                push_log.callback_status = "sent" if success else "failed"
+                push_log.callback_attempts = 1
+            await db.commit()
+        finally:
+            await client.aclose()
 
 
 def _mutation_to_method(mutation: str) -> str:
@@ -457,6 +605,9 @@ def _mutation_to_method(mutation: str) -> str:
         "setProductSize": "set_product_size",
         "setProductPrice": "set_product_price",
         "setAssignOptions": "set_assign_options",
+        "setAdditionalOption": "set_additional_option",
+        "setAdditionalOptionAttributes": "set_additional_option_attributes",
+        "updateProductStock": "update_product_stock",
         "setProductDesign": "set_product_design",
     }
     return mapping.get(mutation, mutation)

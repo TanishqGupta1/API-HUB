@@ -2,10 +2,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Parsed JSON body from the backend, if the response was JSON. */
+  envelope?: unknown;
+  constructor(status: number, message: string, envelope?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.envelope = envelope;
   }
 }
 
@@ -56,16 +59,18 @@ export async function api<T>(path: string, options?: ApiOptions): Promise<T> {
   if (!res.ok) {
     const contentType = res.headers.get("content-type") ?? "";
     let message: string;
+    let envelope: unknown;
     if (contentType.includes("application/json")) {
       const json = await res.json().catch(() => null);
       const detail = json?.detail ?? json;
       message = typeof detail === "string" ? detail : JSON.stringify(detail);
+      envelope = detail;
     } else {
       message = await res.text().catch(() => res.statusText);
       // Truncate HTML responses to avoid flooding the UI
       if (message.length > 200) message = message.slice(0, 200) + "…";
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, envelope);
   }
 
   if (res.status === 204) {
