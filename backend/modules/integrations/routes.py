@@ -1,16 +1,28 @@
-"""Integration Gateway — 4 endpoints under /api/integrations/v1/"""
+"""Integration Gateway — endpoints under /api/integrations/v1/"""
 import hashlib
+import logging
 import secrets
 import uuid as uuid_mod
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from modules.auth.dependencies import VGAdmin
+from modules.catalog.persistence import persist_product
+from modules.catalog.schemas import IngestResult, ProductIngest
+from modules.customers.models import Customer
+from modules.master_options.models import MasterOption, MasterOptionAttribute
+from modules.master_options.schemas import MasterOptionIngest
 from modules.ops_push.gateway import execute_push, prepare_push_intent
+from modules.push_mappings import service as push_mapping_service
+from modules.push_mappings.schemas import PushMappingUpsert
+from modules.suppliers.models import Supplier
+from modules.sync_jobs.models import SyncJob
 from .auth import OrchestratorKey, check_key_scope
 from .models import IntegrationKey
 from .schemas import (
@@ -25,6 +37,50 @@ from .schemas import (
 )
 from modules.push_log.models import ProductPushLog
 from modules.push_log.schemas import StepResult
+
+logger = logging.getLogger(__name__)
+
+
+# ── OPS connection-test helpers (extracted so tests can mock them) ──
+
+async def _fetch_oauth_token(token_url: str, client_id: str, client_secret: str) -> str:
+    """OAuth2 client-credentials grant against the customer's OPS token URL."""
+    async with httpx.AsyncClient(timeout=15.0) as http:
+        resp = await http.post(
+            token_url,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+        resp.raise_for_status()
+        body = resp.json()
+    token = body.get("access_token")
+    if not token:
+        raise RuntimeError("OAuth token response missing access_token")
+    return token
+
+
+async def _ops_graphql_ping(base_url: str, auth_token: str) -> bool:
+    """Cheap GraphQL ping — introspect __typename. Verifies the token reaches
+    OPS and the GraphQL endpoint responds without a 4xx/5xx."""
+    async with httpx.AsyncClient(timeout=15.0) as http:
+        resp = await http.post(
+            f"{base_url.rstrip('/')}/graphql",
+            json={"query": "{ __typename }"},
+            headers={
+                "authorization": f"Bearer {auth_token}",
+                "content-type": "application/json",
+            },
+        )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"OPS GraphQL returned {resp.status_code}: {resp.text[:200]}")
+    payload = resp.json()
+    if payload.get("errors"):
+        raise RuntimeError(f"OPS GraphQL errors: {payload['errors'][0].get('message', '')}")
+    return True
 
 router = APIRouter(prefix="/api/integrations/v1", tags=["integrations"])
 admin_router = APIRouter(prefix="/api/integrations", tags=["integrations_admin"])
@@ -49,13 +105,36 @@ async def create_push_request(
 
     accepted = await prepare_push_intent(req, key, db, idempotency_key=idempotency_key)
 
-    # If idempotent replay — already terminal, no execute needed
+    # Idempotent replay — already terminal, no execute needed
     if accepted.status not in ("accepted", "queued"):
         return accepted
 
-    # Async execute (BackgroundTask keeps the request fast)
-    background_tasks.add_task(execute_push, accepted.push_log_id)
+    # Dry-run is fast (FakeOpsClient is in-memory) — execute inline so the
+    # 202 response already carries terminal status=dry_run_pushed. Live
+    # pushes still run as a BackgroundTask so the request returns immediately
+    # and the orchestrator polls GET /push-requests/{id} for the outcome.
+    if req.dry_run:
+        await execute_push(accepted.push_log_id)
+        terminal = await db.get(ProductPushLog, accepted.push_log_id)
+        if terminal is not None:
+            await db.refresh(terminal)
+            accepted = PushRequestAccepted(
+                push_log_id=terminal.id,
+                status=terminal.status,
+                customer_id=terminal.customer_id,
+                supplier_slug=terminal.supplier_slug or req.source.supplier_slug,
+                supplier_sku=terminal.supplier_sku,
+                ops_product_id=terminal.ops_product_id,
+                dry_run=terminal.dry_run,
+                callback_status=terminal.callback_status,
+                created_at=terminal.pushed_at,
+                links=PushRequestLinks(
+                    self=f"/api/integrations/v1/push-requests/{terminal.id}"
+                ),
+            )
+        return accepted
 
+    background_tasks.add_task(execute_push, accepted.push_log_id)
     return accepted
 
 
@@ -105,33 +184,282 @@ async def get_push_status(
 )
 async def ingest_supplier_products(
     supplier_slug: str,
-    body: dict,
+    batch: list[ProductIngest],
     key: OrchestratorKey,
     db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
-    # Scope check — key must be allowed for this supplier
+    """Batched catalog upsert from an orchestrator (n8n, curl, anything).
+
+    Body is a list of `ProductIngest` — same canonical shape every supplier
+    protocol normalizes to. Persistence reuses `catalog.persistence.persist_product`,
+    which performs an ON CONFLICT DO UPDATE upsert, so the endpoint is
+    idempotent-by-construction: two POSTs with the same batch leave the DB in
+    an identical state. The `Idempotency-Key` header is logged on the
+    SyncJob row for orchestrator-side retry tracing but is not used to short-
+    circuit duplicate processing (the upsert semantics make that unnecessary).
+    """
+    # Scope check — key must be allowed for this supplier ("*" customer placeholder
+    # since ingest does not target a single customer).
     check_key_scope(key, "*", supplier_slug)
-    # Full catalog upsert implementation lives in Task 6 (payload_builder)
-    # For now: accept and acknowledge
-    return {"status": "accepted", "supplier_slug": supplier_slug, "items": len(body.get("items", []))}
+
+    supplier = (
+        await db.execute(select(Supplier).where(Supplier.slug == supplier_slug))
+    ).scalar_one_or_none()
+    if not supplier:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF",
+            "message": f"Supplier '{supplier_slug}' not found",
+        })
+    if not supplier.is_active:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={
+            "code": "SUPPLIER_INACTIVE",
+            "message": f"Supplier '{supplier_slug}' is inactive",
+        })
+
+    job = SyncJob(
+        supplier_id=supplier.id,
+        supplier_name=supplier.name,
+        job_type="products",
+        status="running",
+        started_at=datetime.now(timezone.utc),
+        records_processed=0,
+        total_products=len(batch),
+    )
+    db.add(job)
+    await db.flush()
+
+    processed = 0
+    errors: list[dict] = []
+    for item in batch:
+        try:
+            await persist_product(db, supplier.id, item, category_id=None)
+            processed += 1
+        except Exception as exc:  # noqa: BLE001 — per-item isolation
+            logger.warning(
+                "ingest_supplier_products: persist_product failed sku=%s err=%s",
+                item.supplier_sku,
+                exc,
+            )
+            errors.append({"supplier_sku": item.supplier_sku, "error": str(exc)[:300]})
+
+    job.records_processed = processed
+    job.success_count = processed
+    job.failed_count = len(errors)
+    job.completed_at = datetime.now(timezone.utc)
+    job.status = "completed" if not errors else "partial_failure"
+    if errors:
+        job.errors = errors
+    await db.commit()
+
+    if idempotency_key:
+        logger.info(
+            "ingest_supplier_products idempotency_key=%s sync_job=%s processed=%d",
+            idempotency_key,
+            job.id,
+            processed,
+        )
+
+    return {
+        "status": job.status,
+        "supplier_slug": supplier_slug,
+        "sync_job_id": str(job.id),
+        "records_processed": processed,
+        "failed_count": len(errors),
+        "errors": errors,
+    }
 
 
 # ── GET /suppliers/{supplier_slug}/schema ────────────────────────────
 
 @router.get(
     "/suppliers/{supplier_slug}/schema",
-    summary="Discover required and optional fields for a supplier",
+    summary="JSON Schema for ProductIngest plus a quick-reference summary",
 )
 async def get_supplier_schema(
     supplier_slug: str,
     key: OrchestratorKey,
 ):
+    """Discovery endpoint orchestrators can hit before sending a batch.
+
+    Returns the full ProductIngest JSON Schema (generated from the Pydantic
+    model so it tracks any schema changes automatically) alongside a quick
+    summary of required/optional fields — the spec asks for the schema; the
+    summary stays as a human-readable cheat sheet for n8n / curl users.
+    """
     return {
         "supplier_slug": supplier_slug,
+        "json_schema": ProductIngest.model_json_schema(),
         "required": ["supplier_sku", "product_name", "variants"],
         "optional": ["brand", "description", "images", "options", "decorations"],
         "variant_required": ["part_id", "sku", "base_price"],
         "variant_optional": ["color", "size", "sort_order", "inventory", "prices"],
+    }
+
+
+# ── POST /master-options/ingest ──────────────────────────────────────
+
+@router.post(
+    "/master-options/ingest",
+    status_code=202,
+    summary="Snapshot upsert of master options (option catalog)",
+)
+async def ingest_master_options(
+    batch: list[MasterOptionIngest],
+    key: OrchestratorKey,
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+):
+    """Bulk upsert master options + their attributes.
+
+    Mirrors the legacy /api/ingest/master-options route (X-Ingest-Secret-gated)
+    but is fronted by the integration-gateway auth. Attributes are
+    delete-and-reinsert per master option so titles/prices can change between
+    snapshots without leaving orphan rows.
+    """
+    now = datetime.now(timezone.utc)
+    for item in batch:
+        stmt = (
+            pg_insert(MasterOption)
+            .values(
+                ops_master_option_id=item.ops_master_option_id,
+                title=item.title,
+                option_key=item.option_key,
+                options_type=item.options_type,
+                pricing_method=item.pricing_method,
+                status=item.status,
+                sort_order=item.sort_order,
+                description=item.description,
+                master_option_tag=item.master_option_tag,
+                raw_json=item.raw_json,
+                synced_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=["ops_master_option_id"],
+                set_={
+                    "title": item.title,
+                    "option_key": item.option_key,
+                    "options_type": item.options_type,
+                    "pricing_method": item.pricing_method,
+                    "status": item.status,
+                    "sort_order": item.sort_order,
+                    "description": item.description,
+                    "master_option_tag": item.master_option_tag,
+                    "raw_json": item.raw_json,
+                    "synced_at": now,
+                },
+            )
+            .returning(MasterOption.id)
+        )
+        mo_id = (await db.execute(stmt)).scalar_one()
+
+        await db.execute(
+            MasterOptionAttribute.__table__.delete().where(
+                MasterOptionAttribute.master_option_id == mo_id
+            )
+        )
+        for attr in item.attributes:
+            db.add(
+                MasterOptionAttribute(
+                    master_option_id=mo_id,
+                    ops_attribute_id=attr.ops_attribute_id,
+                    title=attr.title,
+                    sort_order=attr.sort_order,
+                    default_price=attr.default_price,
+                    raw_json=attr.raw_json,
+                )
+            )
+    await db.commit()
+
+    if idempotency_key:
+        logger.info(
+            "ingest_master_options idempotency_key=%s records=%d",
+            idempotency_key,
+            len(batch),
+        )
+    return {"status": "completed", "records_processed": len(batch)}
+
+
+# ── POST /push-mappings ──────────────────────────────────────────────
+
+@router.post(
+    "/push-mappings",
+    summary="Upsert an OPS↔hub product mapping after a successful push",
+)
+async def upsert_push_mapping_gateway(
+    body: PushMappingUpsert,
+    key: OrchestratorKey,
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+):
+    """Gateway-fronted version of POST /api/push-mappings.
+
+    Scope check uses the body's customer_id so a key restricted to specific
+    customers cannot write mappings for other customers' products. Persistence
+    reuses push_mappings.service.upsert_push_mapping.
+    """
+    check_key_scope(key, str(body.customer_id), "*")
+    mapping_id = await push_mapping_service.upsert_push_mapping(db, body)
+    if idempotency_key:
+        logger.info(
+            "upsert_push_mapping idempotency_key=%s mapping_id=%s",
+            idempotency_key,
+            mapping_id,
+        )
+    return {"id": mapping_id, "status": "ok"}
+
+
+# ── POST /customers/{customer_id}/ops/connection-test ────────────────
+
+@router.post(
+    "/customers/{customer_id}/ops/connection-test",
+    summary="Probe a customer's OPS storefront — OAuth token + GraphQL ping",
+)
+async def ops_connection_test(
+    customer_id: uuid_mod.UUID,
+    key: OrchestratorKey,
+    db: AsyncSession = Depends(get_db),
+):
+    """Real auth probe against a customer's OPS instance.
+
+    OAuth2 client-credentials grant to fetch a token, then a cheap GraphQL
+    query (`{ __typename }`) to confirm the token is accepted by the
+    GraphQL endpoint. A successful response proves both connectivity and
+    auth — same path the real push will take, so a green probe means the
+    next push will not 401.
+    """
+    check_key_scope(key, str(customer_id), "*")
+
+    customer = await db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF",
+            "message": f"Customer {customer_id} not found",
+        })
+
+    client_secret = (customer.ops_auth_config or {}).get("client_secret")
+    if not customer.ops_token_url or not customer.ops_client_id or not client_secret:
+        return {
+            "ok": False,
+            "error": "Customer missing one of: ops_token_url, ops_client_id, client_secret",
+        }
+
+    try:
+        token = await _fetch_oauth_token(
+            customer.ops_token_url, customer.ops_client_id, client_secret
+        )
+    except Exception as exc:  # noqa: BLE001 — surface upstream auth detail
+        return {"ok": False, "error": f"OAuth failed: {exc}"}
+
+    try:
+        await _ops_graphql_ping(customer.ops_base_url, token)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"GraphQL ping failed: {exc}"}
+
+    return {
+        "ok": True,
+        "message": f"Connected to {customer.ops_base_url}",
+        "customer_id": str(customer.id),
     }
 
 

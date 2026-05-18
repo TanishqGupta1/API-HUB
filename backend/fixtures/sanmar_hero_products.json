@@ -1,0 +1,6710 @@
+{
+  "_schema_version": 1,
+  "_description": "Real SanMar products + variants + pricing exported from live DB after PromoStandards import. Reproducible seed.",
+  "_source": "Exported 2026-05-15 from SanMar Web Services (ws.sanmar.com:8080).",
+  "products": [
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "436MP",
+      "product_name": "Jerzees Dri-Power Pocket Sport Shirt. 436MP",
+      "brand": "Jerzees",
+      "category": null,
+      "description": "5.4-ounce, 50/50 cotton/poly preshrunk jersey     Oxford is 47/53 cotton/poly     Moisture-wicking for all day comfort     Made with sustainably sourced, USA-grown cotton     Tear-away label     Welt knit collar that resists curling     5-point left chest pocket     2-button placket with bottom box stitch     Pearlized buttons with durable cross-stitching     Double-needle sleeves and hem     Ash (formerly Birch)",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/436MP.jpg",
+      "variants": [
+        {
+          "color": "Ash",
+          "size": "2XL",
+          "sku": "113441",
+          "base_price": "13.66",
+          "inventory": null
+        },
+        {
+          "color": "Ash",
+          "size": "3XL",
+          "sku": "113452",
+          "base_price": "15.67",
+          "inventory": null
+        },
+        {
+          "color": "Ash",
+          "size": "L",
+          "sku": "113434",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Ash",
+          "size": "M",
+          "sku": "113433",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Ash",
+          "size": "S",
+          "sku": "113432",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Ash",
+          "size": "XL",
+          "sku": "113435",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "2XL",
+          "sku": "113501",
+          "base_price": "13.66",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "3XL",
+          "sku": "113522",
+          "base_price": "15.67",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "113494",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "113493",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "113492",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XL",
+          "sku": "113495",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "2XL",
+          "sku": "466701",
+          "base_price": "13.66",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "3XL",
+          "sku": "470522",
+          "base_price": "15.67",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "L",
+          "sku": "466694",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "M",
+          "sku": "466693",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "S",
+          "sku": "466692",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "XL",
+          "sku": "466695",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "2XL",
+          "sku": "3230991",
+          "base_price": "13.66",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "3XL",
+          "sku": "3231001",
+          "base_price": "15.67",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "L",
+          "sku": "3231011",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "M",
+          "sku": "3231021",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "S",
+          "sku": "3231031",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "XL",
+          "sku": "3231041",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "2XL",
+          "sku": "466721",
+          "base_price": "13.66",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "3XL",
+          "sku": "470492",
+          "base_price": "15.67",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "L",
+          "sku": "466714",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "M",
+          "sku": "466713",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "S",
+          "sku": "466712",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "XL",
+          "sku": "466715",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "2XL",
+          "sku": "864441",
+          "base_price": "13.66",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "3XL",
+          "sku": "864452",
+          "base_price": "15.67",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "L",
+          "sku": "864434",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "M",
+          "sku": "864433",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "S",
+          "sku": "864432",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "XL",
+          "sku": "864435",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "2XL",
+          "sku": "631631",
+          "base_price": "13.66",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "3XL",
+          "sku": "631642",
+          "base_price": "15.67",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "L",
+          "sku": "631624",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "631623",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "S",
+          "sku": "631622",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XL",
+          "sku": "631625",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "2XL",
+          "sku": "113641",
+          "base_price": "13.66",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "3XL",
+          "sku": "113652",
+          "base_price": "15.67",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "L",
+          "sku": "113634",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "M",
+          "sku": "113633",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "S",
+          "sku": "113632",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "XL",
+          "sku": "113635",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "2XL",
+          "sku": "113681",
+          "base_price": "13.66",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "113692",
+          "base_price": "15.67",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "113674",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "113673",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "113672",
+          "base_price": "11.67",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "113675",
+          "base_price": "11.67",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "437M",
+      "product_name": "Jerzees Dri-Power Sport Shirt. 437M",
+      "brand": "Jerzees",
+      "category": null,
+      "description": "5.4-ounce, 50/50 cotton/poly jersey     Oxford is 47/53 cotton/poly     Moisture-wicking for all day comfort     Made with sustainably sourced, USA-grown cotton     Tear-away label     Welt knit collar that resists curling     1x1 rib knit cuffs     2-button placket with bottom box stitch     Pearlized buttons with durable cross-stitching     Double-needle hem     Ash (formerly Birch)     Deep Purple, Forest, Gold S-4XL",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/437M.jpg",
+      "variants": [
+        {
+          "color": "Ash",
+          "size": "2XL",
+          "sku": "79171",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "Ash",
+          "size": "3XL",
+          "sku": "79252",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Ash",
+          "size": "L",
+          "sku": "79094",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Ash",
+          "size": "M",
+          "sku": "79093",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Ash",
+          "size": "S",
+          "sku": "79092",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Ash",
+          "size": "XL",
+          "sku": "79095",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "2XL",
+          "sku": "79181",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "3XL",
+          "sku": "79262",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "4XL",
+          "sku": "116543",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "79104",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "79103",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "79102",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XL",
+          "sku": "79105",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal Grey",
+          "size": "2XL",
+          "sku": "1559531",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal Grey",
+          "size": "3XL",
+          "sku": "1559551",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal Grey",
+          "size": "4XL",
+          "sku": "1559571",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal Grey",
+          "size": "L",
+          "sku": "1559591",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal Grey",
+          "size": "M",
+          "sku": "1559611",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal Grey",
+          "size": "S",
+          "sku": "1559631",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal Grey",
+          "size": "XL",
+          "sku": "1559651",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Forest",
+          "size": "2XL",
+          "sku": "79191",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "Forest",
+          "size": "3XL",
+          "sku": "79272",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Forest",
+          "size": "4XL",
+          "sku": "116533",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Forest",
+          "size": "L",
+          "sku": "79114",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Forest",
+          "size": "M",
+          "sku": "79113",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Forest",
+          "size": "S",
+          "sku": "79112",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Forest",
+          "size": "XL",
+          "sku": "79115",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "2XL",
+          "sku": "88021",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "3XL",
+          "sku": "180292",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "4XL",
+          "sku": "663113",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "L",
+          "sku": "88014",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "M",
+          "sku": "88013",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "S",
+          "sku": "88012",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "XL",
+          "sku": "88015",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "2XL",
+          "sku": "3231051",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "3XL",
+          "sku": "3231061",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "4XL",
+          "sku": "3231071",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "L",
+          "sku": "3231081",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "M",
+          "sku": "3231091",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "S",
+          "sku": "3231101",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "XL",
+          "sku": "3231111",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "2XL",
+          "sku": "79201",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "3XL",
+          "sku": "79282",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "4XL",
+          "sku": "116553",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "L",
+          "sku": "79124",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "M",
+          "sku": "79123",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "S",
+          "sku": "79122",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "XL",
+          "sku": "79125",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "2XL",
+          "sku": "465051",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "3XL",
+          "sku": "465062",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "4XL",
+          "sku": "663123",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "L",
+          "sku": "465044",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "M",
+          "sku": "465043",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "S",
+          "sku": "465042",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "XL",
+          "sku": "465045",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "2XL",
+          "sku": "631601",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "3XL",
+          "sku": "631612",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "4XL",
+          "sku": "632103",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "L",
+          "sku": "631594",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "631593",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "S",
+          "sku": "631592",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XL",
+          "sku": "631595",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Safety Green",
+          "size": "2XL",
+          "sku": "945641",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "Safety Green",
+          "size": "3XL",
+          "sku": "945652",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Safety Green",
+          "size": "4XL",
+          "sku": "945663",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Safety Green",
+          "size": "L",
+          "sku": "945634",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Safety Green",
+          "size": "M",
+          "sku": "945633",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Safety Green",
+          "size": "S",
+          "sku": "945632",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Safety Green",
+          "size": "XL",
+          "sku": "945635",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Safety Orange",
+          "size": "2XL",
+          "sku": "945681",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "Safety Orange",
+          "size": "3XL",
+          "sku": "945692",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Safety Orange",
+          "size": "4XL",
+          "sku": "945703",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "Safety Orange",
+          "size": "L",
+          "sku": "945674",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Safety Orange",
+          "size": "M",
+          "sku": "945673",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Safety Orange",
+          "size": "S",
+          "sku": "945672",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "Safety Orange",
+          "size": "XL",
+          "sku": "945675",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "2XL",
+          "sku": "79221",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "3XL",
+          "sku": "79302",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "4XL",
+          "sku": "116573",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "L",
+          "sku": "79144",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "M",
+          "sku": "79143",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "S",
+          "sku": "79142",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "XL",
+          "sku": "79145",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "2XL",
+          "sku": "79161",
+          "base_price": "11.22",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "79242",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "4XL",
+          "sku": "116593",
+          "base_price": "12.24",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "79084",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "79083",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "79082",
+          "base_price": "9.30",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "79085",
+          "base_price": "9.30",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "443M",
+      "product_name": "Jerzees Unisex Premium Ring Spun Cotton Pique Sport Shirt 443M",
+      "brand": "Jerzees",
+      "category": null,
+      "description": "6.5-ounce, 100% ring spun cotton pique     90/10 cotton/polyester (Athletic Heather)     Made with sustainably sourced USA-grown cotton     Welt knit collar that resists curling     1x1 rib knit cuffs     3-button placket with bottom box stitch     Pearlized buttons with durable cross-stitching     Double-needle hem     Tear-away label",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/443M.jpg",
+      "variants": [
+        {
+          "color": "Athletic Heather",
+          "size": "2XL",
+          "sku": "2954321",
+          "base_price": "12.08",
+          "inventory": null
+        },
+        {
+          "color": "Athletic Heather",
+          "size": "3XL",
+          "sku": "2954331",
+          "base_price": "13.70",
+          "inventory": null
+        },
+        {
+          "color": "Athletic Heather",
+          "size": "L",
+          "sku": "2928051",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Athletic Heather",
+          "size": "M",
+          "sku": "2928061",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Athletic Heather",
+          "size": "S",
+          "sku": "2928071",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Athletic Heather",
+          "size": "XL",
+          "sku": "2928081",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "2XL",
+          "sku": "95971",
+          "base_price": "12.08",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "3XL",
+          "sku": "2927801",
+          "base_price": "13.70",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "2927811",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "2927821",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "2927831",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XL",
+          "sku": "2927841",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "2XL",
+          "sku": "2954421",
+          "base_price": "12.08",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "3XL",
+          "sku": "2954431",
+          "base_price": "13.70",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "L",
+          "sku": "2928011",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "M",
+          "sku": "2928021",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "S",
+          "sku": "2928031",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Forest Green",
+          "size": "XL",
+          "sku": "2928041",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "2XL",
+          "sku": "2954401",
+          "base_price": "12.08",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "3XL",
+          "sku": "2954411",
+          "base_price": "13.70",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "L",
+          "sku": "2927971",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "M",
+          "sku": "2927981",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "S",
+          "sku": "2927991",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "J. Navy",
+          "size": "XL",
+          "sku": "2928001",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "2XL",
+          "sku": "2954341",
+          "base_price": "12.08",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "3XL",
+          "sku": "2954351",
+          "base_price": "13.70",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "L",
+          "sku": "2927851",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "M",
+          "sku": "2927861",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "S",
+          "sku": "2927871",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "XL",
+          "sku": "2927881",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "2XL",
+          "sku": "2954361",
+          "base_price": "12.08",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "3XL",
+          "sku": "2954371",
+          "base_price": "13.70",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "L",
+          "sku": "2927891",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "2927901",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "S",
+          "sku": "2927911",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XL",
+          "sku": "2927921",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "2XL",
+          "sku": "2954441",
+          "base_price": "12.08",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "3XL",
+          "sku": "2954451",
+          "base_price": "13.70",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "L",
+          "sku": "2928091",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "M",
+          "sku": "2928101",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "S",
+          "sku": "2928111",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "True Red",
+          "size": "XL",
+          "sku": "2928121",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "2XL",
+          "sku": "2954381",
+          "base_price": "12.08",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "2954391",
+          "base_price": "13.70",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "2927931",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "2927941",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "2927951",
+          "base_price": "10.12",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "2927961",
+          "base_price": "10.12",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "BG200",
+      "product_name": "Port Authority Improved Grocery Tote",
+      "brand": "Port Authority",
+      "category": "Bags",
+      "description": "Durable polypropylene grocery tote. Great for promotions and events.",
+      "product_type": "apparel",
+      "image_url": "https://placehold.co/600x600/1e4d92/ffffff?text=BG200+Tote",
+      "variants": [
+        {
+          "color": "Black",
+          "size": "OSFA",
+          "sku": "BG200-BLK-OS",
+          "base_price": "1.49",
+          "inventory": 1200
+        },
+        {
+          "color": "Red",
+          "size": "OSFA",
+          "sku": "BG200-RED-OS",
+          "base_price": "1.49",
+          "inventory": 1100
+        },
+        {
+          "color": "Royal",
+          "size": "OSFA",
+          "sku": "BG200-RYL-OS",
+          "base_price": "1.49",
+          "inventory": 980
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "CP90",
+      "product_name": "Port & Company Knit Cap",
+      "brand": "Port & Company",
+      "category": "Headwear",
+      "description": "Classic acrylic knit beanie. One-size-fits-most.",
+      "product_type": "apparel",
+      "image_url": "https://placehold.co/600x600/1e4d92/ffffff?text=CP90+Beanie",
+      "variants": [
+        {
+          "color": "Athletic Heather",
+          "size": "OSFA",
+          "sku": "CP90-AH-OS",
+          "base_price": "2.99",
+          "inventory": 480
+        },
+        {
+          "color": "Black",
+          "size": "OSFA",
+          "sku": "CP90-BLK-OS",
+          "base_price": "2.99",
+          "inventory": 600
+        },
+        {
+          "color": "Navy",
+          "size": "OSFA",
+          "sku": "CP90-NAV-OS",
+          "base_price": "2.99",
+          "inventory": 540
+        },
+        {
+          "color": "Red",
+          "size": "OSFA",
+          "sku": "CP90-RED-OS",
+          "base_price": "2.99",
+          "inventory": 420
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "F260",
+      "product_name": "Port Authority Sweater Fleece Jacket",
+      "brand": "Port Authority",
+      "category": "Outerwear",
+      "description": "A heathered sweater knit face with a soft fleece interior. Full zip, on-seam pockets.",
+      "product_type": "apparel",
+      "image_url": "https://placehold.co/600x600/1e4d92/ffffff?text=F260+Jacket",
+      "variants": [
+        {
+          "color": "Black Heather",
+          "size": "L",
+          "sku": "F260-BH-L",
+          "base_price": "38.99",
+          "inventory": 130
+        },
+        {
+          "color": "Black Heather",
+          "size": "M",
+          "sku": "F260-BH-M",
+          "base_price": "38.99",
+          "inventory": 110
+        },
+        {
+          "color": "Black Heather",
+          "size": "XL",
+          "sku": "F260-BH-XL",
+          "base_price": "38.99",
+          "inventory": 95
+        },
+        {
+          "color": "Medium Charcoal",
+          "size": "L",
+          "sku": "F260-MC-L",
+          "base_price": "38.99",
+          "inventory": 90
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "K321",
+      "product_name": "Port Authority Interlock Knit Mock Turtleneck. K321",
+      "brand": "Port Authority",
+      "category": null,
+      "description": "Our mock is crafted from combed ring spun cotton for a soft hand feel.     6.3-ounce, 100% combed ring spun cotton     1x1 rib knit collar and cuffs     Double-needle collar and hem",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/K321.jpg",
+      "variants": [
+        {
+          "color": "Black",
+          "size": "2XL",
+          "sku": "183531",
+          "base_price": "15.28",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "3XL",
+          "sku": "183542",
+          "base_price": "17.28",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "4XL",
+          "sku": "183553",
+          "base_price": "18.28",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "5XL",
+          "sku": "304144",
+          "base_price": "20.28",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "6XL",
+          "sku": "304155",
+          "base_price": "21.28",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "183524",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "183523",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "183522",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XL",
+          "sku": "183525",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XS",
+          "sku": "183521",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "2XL",
+          "sku": "183611",
+          "base_price": "15.28",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "3XL",
+          "sku": "183622",
+          "base_price": "17.28",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "4XL",
+          "sku": "183633",
+          "base_price": "18.28",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "5XL",
+          "sku": "304204",
+          "base_price": "20.28",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "6XL",
+          "sku": "304215",
+          "base_price": "21.28",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "L",
+          "sku": "183604",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "M",
+          "sku": "183603",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "S",
+          "sku": "183602",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XL",
+          "sku": "183605",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XS",
+          "sku": "183601",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "2XL",
+          "sku": "248641",
+          "base_price": "15.28",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "3XL",
+          "sku": "248652",
+          "base_price": "17.28",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "4XL",
+          "sku": "248663",
+          "base_price": "18.28",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "5XL",
+          "sku": "304304",
+          "base_price": "20.28",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "6XL",
+          "sku": "304315",
+          "base_price": "21.28",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "L",
+          "sku": "248634",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "M",
+          "sku": "248633",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "S",
+          "sku": "248632",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XL",
+          "sku": "248635",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XS",
+          "sku": "248631",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "2XL",
+          "sku": "183701",
+          "base_price": "15.28",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "183712",
+          "base_price": "17.28",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "4XL",
+          "sku": "183723",
+          "base_price": "18.28",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "5XL",
+          "sku": "304324",
+          "base_price": "20.28",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "6XL",
+          "sku": "304335",
+          "base_price": "21.28",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "183694",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "183693",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "183692",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "183695",
+          "base_price": "14.28",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XS",
+          "sku": "183691",
+          "base_price": "14.28",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "K420",
+      "product_name": "Port Authority Heavyweight Cotton Pique Polo. K420",
+      "brand": "Port Authority",
+      "category": null,
+      "description": "A favorite year after year, these polos are known for their exceptional range of colors, styles and sizes. The soft pique knit is shrink-resistant and easy to care for, so your group will always look its best.     7-ounce, 100% ring spun combed cotton heavyweight pique     Garment washed for softness     Flat knit collar and cuffs     Horn-tone buttons     Side vents",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/K420.jpg",
+      "variants": [
+        {
+          "color": "Black",
+          "size": "2XL",
+          "sku": "92041",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "3XL",
+          "sku": "92052",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "4XL",
+          "sku": "92063",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "5XL",
+          "sku": "192544",
+          "base_price": "23.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "6XL",
+          "sku": "192555",
+          "base_price": "24.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "92034",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "92033",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "92032",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XL",
+          "sku": "92035",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XS",
+          "sku": "92031",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "2XL",
+          "sku": "92241",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "3XL",
+          "sku": "92252",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "4XL",
+          "sku": "92263",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "5XL",
+          "sku": "192684",
+          "base_price": "23.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "6XL",
+          "sku": "192695",
+          "base_price": "24.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "L",
+          "sku": "92234",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "M",
+          "sku": "92233",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "S",
+          "sku": "92232",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XL",
+          "sku": "92235",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XS",
+          "sku": "92231",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "2XL",
+          "sku": "92281",
+          "base_price": "19.52",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "3XL",
+          "sku": "92292",
+          "base_price": "21.52",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "4XL",
+          "sku": "92303",
+          "base_price": "22.52",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "5XL",
+          "sku": "192724",
+          "base_price": "24.52",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "6XL",
+          "sku": "192735",
+          "base_price": "25.52",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "L",
+          "sku": "92274",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "M",
+          "sku": "92273",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "S",
+          "sku": "92272",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "XL",
+          "sku": "92275",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "XS",
+          "sku": "92271",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "2XL",
+          "sku": "92321",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "3XL",
+          "sku": "92332",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "4XL",
+          "sku": "92343",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "5XL",
+          "sku": "192764",
+          "base_price": "23.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "6XL",
+          "sku": "192785",
+          "base_price": "24.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "L",
+          "sku": "92314",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "M",
+          "sku": "92313",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "S",
+          "sku": "92312",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "XL",
+          "sku": "92315",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "XS",
+          "sku": "92311",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "2XL",
+          "sku": "210771",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "3XL",
+          "sku": "210782",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "4XL",
+          "sku": "210793",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "5XL",
+          "sku": "211704",
+          "base_price": "23.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "6XL",
+          "sku": "211715",
+          "base_price": "24.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "L",
+          "sku": "210764",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "210763",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "S",
+          "sku": "210762",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XL",
+          "sku": "210765",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XS",
+          "sku": "210761",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "2XL",
+          "sku": "246551",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "3XL",
+          "sku": "246562",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "4XL",
+          "sku": "246573",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "5XL",
+          "sku": "246584",
+          "base_price": "23.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "6XL",
+          "sku": "246595",
+          "base_price": "24.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "L",
+          "sku": "246544",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "M",
+          "sku": "246543",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "S",
+          "sku": "246542",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XL",
+          "sku": "246545",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XS",
+          "sku": "246541",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "2XL",
+          "sku": "92361",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "92372",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "4XL",
+          "sku": "92383",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "5XL",
+          "sku": "192814",
+          "base_price": "23.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "6XL",
+          "sku": "192825",
+          "base_price": "24.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "92354",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "92353",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "92352",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "92355",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XS",
+          "sku": "92351",
+          "base_price": "17.40",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "K420P",
+      "product_name": "Port Authority Heavyweight Cotton Pique Polo with Pocket. K420P",
+      "brand": "Port Authority",
+      "category": null,
+      "description": "We garment washed our pique knit polo for softness and added a left chest pocket for pens and more.     7-ounce, 100% ring spun combed cotton     Double-needle stitching throughout     Flat knit collar and cuffs     Locker patch     Horn-tone buttons     Side vents",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/K420P.jpg",
+      "variants": [
+        {
+          "color": "Black",
+          "size": "2XL",
+          "sku": "150121",
+          "base_price": "19.52",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "3XL",
+          "sku": "150132",
+          "base_price": "21.52",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "4XL",
+          "sku": "150143",
+          "base_price": "22.52",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "5XL",
+          "sku": "303184",
+          "base_price": "24.52",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "6XL",
+          "sku": "303195",
+          "base_price": "25.52",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "150114",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "150113",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "150112",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XL",
+          "sku": "150115",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XS",
+          "sku": "150111",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "2XL",
+          "sku": "150201",
+          "base_price": "19.52",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "3XL",
+          "sku": "150212",
+          "base_price": "21.52",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "4XL",
+          "sku": "150223",
+          "base_price": "22.52",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "5XL",
+          "sku": "303264",
+          "base_price": "24.52",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "6XL",
+          "sku": "303275",
+          "base_price": "25.52",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "L",
+          "sku": "150194",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "M",
+          "sku": "150193",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "S",
+          "sku": "150192",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XL",
+          "sku": "150195",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XS",
+          "sku": "150191",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "2XL",
+          "sku": "150241",
+          "base_price": "20.64",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "3XL",
+          "sku": "150252",
+          "base_price": "22.64",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "4XL",
+          "sku": "150263",
+          "base_price": "23.64",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "5XL",
+          "sku": "303284",
+          "base_price": "25.64",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "6XL",
+          "sku": "303295",
+          "base_price": "26.64",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "L",
+          "sku": "150234",
+          "base_price": "19.64",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "M",
+          "sku": "150233",
+          "base_price": "19.64",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "S",
+          "sku": "150232",
+          "base_price": "19.64",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "XL",
+          "sku": "150235",
+          "base_price": "19.64",
+          "inventory": null
+        },
+        {
+          "color": "Oxford",
+          "size": "XS",
+          "sku": "150231",
+          "base_price": "19.64",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "2XL",
+          "sku": "453781",
+          "base_price": "19.52",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "3XL",
+          "sku": "453792",
+          "base_price": "21.52",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "4XL",
+          "sku": "453803",
+          "base_price": "22.52",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "5XL",
+          "sku": "453814",
+          "base_price": "24.52",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "6XL",
+          "sku": "453825",
+          "base_price": "25.52",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "L",
+          "sku": "453774",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "453773",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "S",
+          "sku": "453772",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XL",
+          "sku": "453775",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XS",
+          "sku": "453771",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "2XL",
+          "sku": "150321",
+          "base_price": "19.52",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "150332",
+          "base_price": "21.52",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "4XL",
+          "sku": "150343",
+          "base_price": "22.52",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "5XL",
+          "sku": "303344",
+          "base_price": "24.52",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "6XL",
+          "sku": "303355",
+          "base_price": "25.52",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "150314",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "150313",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "150312",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "150315",
+          "base_price": "18.52",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XS",
+          "sku": "150311",
+          "base_price": "18.52",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "K455",
+      "product_name": "Port Authority Rapid Dry Polo. K455",
+      "brand": "Port Authority",
+      "category": null,
+      "description": "Soft and breathable, this baby pique polo has our exclusive Rapid Dry moisture-wicking technology. This unique knit has a soft inner layer which wicks moisture away from your skin to the shirt's surface where it quickly disperses and evaporates.     5.6-ounce, 60/40 cotton/poly     Double-needle stitching throughout     3-button placket     Pearlized buttons     Open hem sleeves     Side vents",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/K455.jpg",
+      "variants": [
+        {
+          "color": "Charcoal",
+          "size": "2XL",
+          "sku": "248421",
+          "base_price": "19.48",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal",
+          "size": "3XL",
+          "sku": "248432",
+          "base_price": "21.48",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal",
+          "size": "4XL",
+          "sku": "248443",
+          "base_price": "22.48",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal",
+          "size": "5XL",
+          "sku": "303504",
+          "base_price": "24.48",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal",
+          "size": "6XL",
+          "sku": "303515",
+          "base_price": "25.48",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal",
+          "size": "L",
+          "sku": "248414",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal",
+          "size": "M",
+          "sku": "248413",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal",
+          "size": "S",
+          "sku": "248412",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal",
+          "size": "XL",
+          "sku": "248415",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Charcoal",
+          "size": "XS",
+          "sku": "248411",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "2XL",
+          "sku": "166841",
+          "base_price": "19.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "3XL",
+          "sku": "166852",
+          "base_price": "21.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "4XL",
+          "sku": "166863",
+          "base_price": "22.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "5XL",
+          "sku": "303524",
+          "base_price": "24.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "6XL",
+          "sku": "303535",
+          "base_price": "25.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "L",
+          "sku": "166834",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "M",
+          "sku": "166833",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "S",
+          "sku": "166832",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "XL",
+          "sku": "166835",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "XS",
+          "sku": "166831",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "2XL",
+          "sku": "181341",
+          "base_price": "19.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "3XL",
+          "sku": "181352",
+          "base_price": "21.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "4XL",
+          "sku": "181363",
+          "base_price": "22.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "5XL",
+          "sku": "303584",
+          "base_price": "24.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "6XL",
+          "sku": "303595",
+          "base_price": "25.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "L",
+          "sku": "181334",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "M",
+          "sku": "181333",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "S",
+          "sku": "181332",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "XL",
+          "sku": "181335",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "XS",
+          "sku": "181331",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "2XL",
+          "sku": "167001",
+          "base_price": "19.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "3XL",
+          "sku": "167012",
+          "base_price": "21.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "4XL",
+          "sku": "167023",
+          "base_price": "22.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "5XL",
+          "sku": "303664",
+          "base_price": "24.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "6XL",
+          "sku": "303675",
+          "base_price": "25.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "L",
+          "sku": "166994",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "166993",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "S",
+          "sku": "166992",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XL",
+          "sku": "166995",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XS",
+          "sku": "166991",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "2XL",
+          "sku": "166801",
+          "base_price": "19.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "166812",
+          "base_price": "21.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "4XL",
+          "sku": "166823",
+          "base_price": "22.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "5XL",
+          "sku": "303704",
+          "base_price": "24.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "6XL",
+          "sku": "303715",
+          "base_price": "25.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "166794",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "166793",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "166792",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "166795",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XS",
+          "sku": "166791",
+          "base_price": "18.48",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "K500",
+      "product_name": "Port Authority Silk Touch Polo K500",
+      "brand": "Port Authority",
+      "category": null,
+      "description": "An enduring favorite, our comfortable classic polo is anything but ordinary. With superior wrinkle and shrink resistance, a silky soft hand and an incredible range of styles, sizes and colors, it's a first-rate choice for uniforming just about any group.     5-ounce, 65/35 poly/cotton pique     Flat knit collar and cuffs     Metal buttons with dyed-to-match plastic rims     Double-needle armhole seams and hem     Side vents",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/K500.jpg",
+      "variants": [
+        {
+          "color": "Banana",
+          "size": "2XL",
+          "sku": "240841",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "3XL",
+          "sku": "240852",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "4XL",
+          "sku": "240863",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "5XL",
+          "sku": "240874",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "6XL",
+          "sku": "240885",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "L",
+          "sku": "240834",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "M",
+          "sku": "240833",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "S",
+          "sku": "240832",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "XL",
+          "sku": "240835",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "XS",
+          "sku": "240831",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "2XL",
+          "sku": "208291",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "3XL",
+          "sku": "208302",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "4XL",
+          "sku": "208313",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "5XL",
+          "sku": "209004",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "6XL",
+          "sku": "209015",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "K500-BLK-L",
+          "base_price": "12.99",
+          "inventory": 180
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "208284",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "K500-BLK-M",
+          "base_price": "12.99",
+          "inventory": 200
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "208283",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "K500-BLK-S",
+          "base_price": "12.99",
+          "inventory": 100
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "208282",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XL",
+          "sku": "208285",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XS",
+          "sku": "208281",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "2XL",
+          "sku": "208331",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "3XL",
+          "sku": "208342",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "4XL",
+          "sku": "208353",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "5XL",
+          "sku": "209024",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "6XL",
+          "sku": "209035",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "L",
+          "sku": "208324",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "M",
+          "sku": "208323",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "S",
+          "sku": "208322",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "XL",
+          "sku": "208325",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "XS",
+          "sku": "208321",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "2XL",
+          "sku": "452581",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "3XL",
+          "sku": "452592",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "4XL",
+          "sku": "452603",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "5XL",
+          "sku": "452614",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "6XL",
+          "sku": "452625",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "L",
+          "sku": "452574",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "M",
+          "sku": "452573",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "S",
+          "sku": "452572",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "XL",
+          "sku": "452575",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "XS",
+          "sku": "452571",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "2XL",
+          "sku": "399781",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "3XL",
+          "sku": "399792",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "4XL",
+          "sku": "399803",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "5XL",
+          "sku": "399814",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "6XL",
+          "sku": "399825",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "L",
+          "sku": "399774",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "M",
+          "sku": "399773",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "S",
+          "sku": "399772",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "XL",
+          "sku": "399775",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "XS",
+          "sku": "399771",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "2XL",
+          "sku": "208451",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "3XL",
+          "sku": "208462",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "4XL",
+          "sku": "208473",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "5XL",
+          "sku": "209084",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "6XL",
+          "sku": "209095",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "L",
+          "sku": "208444",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "M",
+          "sku": "208443",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "S",
+          "sku": "208442",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "XL",
+          "sku": "208445",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "XS",
+          "sku": "208441",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "2XL",
+          "sku": "208371",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "3XL",
+          "sku": "208382",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "4XL",
+          "sku": "208393",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "5XL",
+          "sku": "209044",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "6XL",
+          "sku": "209055",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "L",
+          "sku": "208364",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "M",
+          "sku": "208363",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "S",
+          "sku": "208362",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "XL",
+          "sku": "208365",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "XS",
+          "sku": "208361",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "2XL",
+          "sku": "390041",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "3XL",
+          "sku": "390052",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "4XL",
+          "sku": "390063",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "5XL",
+          "sku": "390074",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "6XL",
+          "sku": "390085",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "L",
+          "sku": "390034",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "M",
+          "sku": "390033",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "S",
+          "sku": "390032",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "XL",
+          "sku": "390035",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "XS",
+          "sku": "390031",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "2XL",
+          "sku": "337191",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "3XL",
+          "sku": "337202",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "4XL",
+          "sku": "337213",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "5XL",
+          "sku": "337224",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "6XL",
+          "sku": "337235",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "L",
+          "sku": "337184",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "M",
+          "sku": "337183",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "S",
+          "sku": "337182",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "XL",
+          "sku": "337185",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "XS",
+          "sku": "337181",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "2XL",
+          "sku": "276301",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "3XL",
+          "sku": "276312",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "4XL",
+          "sku": "276323",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "5XL",
+          "sku": "276334",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "6XL",
+          "sku": "276345",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "L",
+          "sku": "276294",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "M",
+          "sku": "276293",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "S",
+          "sku": "276292",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "XL",
+          "sku": "276295",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "XS",
+          "sku": "276291",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "2XL",
+          "sku": "406161",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "3XL",
+          "sku": "406172",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "4XL",
+          "sku": "406183",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "5XL",
+          "sku": "406194",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "6XL",
+          "sku": "406205",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "L",
+          "sku": "406154",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "M",
+          "sku": "406153",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "S",
+          "sku": "406152",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "XL",
+          "sku": "406155",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "XS",
+          "sku": "406151",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "2XL",
+          "sku": "399901",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "3XL",
+          "sku": "399912",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "4XL",
+          "sku": "399923",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "5XL",
+          "sku": "399934",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "6XL",
+          "sku": "399945",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "L",
+          "sku": "399894",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "M",
+          "sku": "399893",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "S",
+          "sku": "399892",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "XL",
+          "sku": "399895",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "XS",
+          "sku": "399891",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "2XL",
+          "sku": "208411",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "3XL",
+          "sku": "208422",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "4XL",
+          "sku": "208433",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "5XL",
+          "sku": "209064",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "6XL",
+          "sku": "209075",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "L",
+          "sku": "208404",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "M",
+          "sku": "208403",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "S",
+          "sku": "208402",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XL",
+          "sku": "208405",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XS",
+          "sku": "208401",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "2XL",
+          "sku": "208491",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "3XL",
+          "sku": "208502",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "4XL",
+          "sku": "208513",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "5XL",
+          "sku": "209104",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "6XL",
+          "sku": "209115",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "L",
+          "sku": "208484",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "M",
+          "sku": "208483",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "S",
+          "sku": "208482",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "XL",
+          "sku": "208485",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "XS",
+          "sku": "208481",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "2XL",
+          "sku": "208531",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "3XL",
+          "sku": "208542",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "4XL",
+          "sku": "208553",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "5XL",
+          "sku": "209124",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "6XL",
+          "sku": "209135",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "L",
+          "sku": "208524",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "208523",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "S",
+          "sku": "208522",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XL",
+          "sku": "208525",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XS",
+          "sku": "208521",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "2XL",
+          "sku": "399961",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "3XL",
+          "sku": "399972",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "4XL",
+          "sku": "399983",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "5XL",
+          "sku": "399994",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "6XL",
+          "sku": "400005",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "L",
+          "sku": "399954",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "M",
+          "sku": "399953",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "S",
+          "sku": "399952",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XL",
+          "sku": "399955",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XS",
+          "sku": "399951",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "2XL",
+          "sku": "208571",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "3XL",
+          "sku": "208582",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "4XL",
+          "sku": "208593",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "5XL",
+          "sku": "209144",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "6XL",
+          "sku": "209155",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "L",
+          "sku": "208564",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "M",
+          "sku": "208563",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "S",
+          "sku": "208562",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "XL",
+          "sku": "208565",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "XS",
+          "sku": "208561",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "2XL",
+          "sku": "400021",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "3XL",
+          "sku": "400032",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "4XL",
+          "sku": "400043",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "5XL",
+          "sku": "400054",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "6XL",
+          "sku": "400065",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "L",
+          "sku": "400014",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "M",
+          "sku": "400013",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "S",
+          "sku": "400012",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "XL",
+          "sku": "400015",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "XS",
+          "sku": "400011",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "2XL",
+          "sku": "400081",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "3XL",
+          "sku": "400092",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "4XL",
+          "sku": "400103",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "5XL",
+          "sku": "400114",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "6XL",
+          "sku": "400125",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "L",
+          "sku": "400074",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "M",
+          "sku": "400073",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "S",
+          "sku": "400072",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "XL",
+          "sku": "400075",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "XS",
+          "sku": "400071",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "2XL",
+          "sku": "208611",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "208622",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "4XL",
+          "sku": "208633",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "5XL",
+          "sku": "209164",
+          "base_price": "18.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "6XL",
+          "sku": "209175",
+          "base_price": "19.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "208604",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "208603",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "208602",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "208605",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XS",
+          "sku": "208601",
+          "base_price": "12.04",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "L420",
+      "product_name": "Port Authority Women's Heavyweight Cotton Pique Polo. L420",
+      "brand": "Port Authority",
+      "category": null,
+      "description": "A favorite year after year, these polos are known for their exceptional range of colors, styles and sizes. The soft pique knit is shrink-resistant and easy to care for, so your group will always look its best.     7-ounce, 100% ring spun combed cotton heavyweight pique     Garment washed for softness     Flat knit collar and cuffs     Horn-tone buttons     Side vents",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/L420.jpg",
+      "variants": [
+        {
+          "color": "Black",
+          "size": "3XL",
+          "sku": "541702",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "4XL",
+          "sku": "541713",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "167714",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "167713",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "167712",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XL",
+          "sku": "167715",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XS",
+          "sku": "167711",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XXL",
+          "sku": "286441",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "3XL",
+          "sku": "541222",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "4XL",
+          "sku": "541233",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "L",
+          "sku": "127714",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "M",
+          "sku": "127713",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "S",
+          "sku": "127712",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XL",
+          "sku": "127715",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XS",
+          "sku": "127711",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XXL",
+          "sku": "286511",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "3XL",
+          "sku": "541242",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "4XL",
+          "sku": "541253",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "L",
+          "sku": "127724",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "M",
+          "sku": "127723",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "S",
+          "sku": "127722",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "XL",
+          "sku": "127725",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "XS",
+          "sku": "127721",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "XXL",
+          "sku": "286551",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "3XL",
+          "sku": "555012",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "4XL",
+          "sku": "555023",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "L",
+          "sku": "443054",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "443053",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "S",
+          "sku": "443052",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XL",
+          "sku": "443055",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XS",
+          "sku": "443051",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XXL",
+          "sku": "443061",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "3XL",
+          "sku": "555032",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "4XL",
+          "sku": "555043",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "L",
+          "sku": "443094",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "M",
+          "sku": "443093",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "S",
+          "sku": "443092",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XL",
+          "sku": "443095",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XS",
+          "sku": "443091",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XXL",
+          "sku": "443101",
+          "base_price": "18.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "541282",
+          "base_price": "20.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "4XL",
+          "sku": "541293",
+          "base_price": "21.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "127744",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "127743",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "127742",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "127745",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XS",
+          "sku": "127741",
+          "base_price": "17.40",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XXL",
+          "sku": "286601",
+          "base_price": "18.40",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "L455",
+      "product_name": "Port Authority Women's Rapid Dry Polo. L455",
+      "brand": "Port Authority",
+      "category": null,
+      "description": "Soft and breathable, this baby pique polo has our exclusive Rapid Dry moisture-wicking technology. This unique knit has a soft inner layer which wicks moisture away from your skin to the shirt's surface where it quickly disperses and evaporates.     5.6-ounce, 60/40 cotton/poly     Double-needle stitching throughout     V-neck collar with crossover flat knit trim     Open hem sleeves     Side vents",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/L455.jpg",
+      "variants": [
+        {
+          "color": "Classic Navy",
+          "size": "3XL",
+          "sku": "541602",
+          "base_price": "21.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "4XL",
+          "sku": "541613",
+          "base_price": "22.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "L",
+          "sku": "167104",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "M",
+          "sku": "167103",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "S",
+          "sku": "167102",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "XL",
+          "sku": "167105",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "XS",
+          "sku": "167101",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Classic Navy",
+          "size": "XXL",
+          "sku": "284521",
+          "base_price": "19.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "3XL",
+          "sku": "541822",
+          "base_price": "21.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "4XL",
+          "sku": "541833",
+          "base_price": "22.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "L",
+          "sku": "181374",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "M",
+          "sku": "181373",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "S",
+          "sku": "181372",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "XL",
+          "sku": "181375",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "XS",
+          "sku": "181371",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Jet Black",
+          "size": "XXL",
+          "sku": "284571",
+          "base_price": "19.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "3XL",
+          "sku": "541662",
+          "base_price": "21.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "4XL",
+          "sku": "541673",
+          "base_price": "22.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "L",
+          "sku": "167224",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "167223",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "S",
+          "sku": "167222",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XL",
+          "sku": "167225",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XS",
+          "sku": "167221",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XXL",
+          "sku": "284631",
+          "base_price": "19.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "541582",
+          "base_price": "21.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "4XL",
+          "sku": "541593",
+          "base_price": "22.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "167074",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "167073",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "167072",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "167075",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XS",
+          "sku": "167071",
+          "base_price": "18.48",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XXL",
+          "sku": "284661",
+          "base_price": "19.48",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "L500",
+      "product_name": "Port Authority Women's Silk Touch Polo. L500",
+      "brand": "Port Authority",
+      "category": null,
+      "description": "An enduring favorite, our comfortable classic polo is anything but ordinary. With superior wrinkle and shrink resistance, a silky soft hand and an incredible range of styles, sizes and colors, it's a first-rate choice for uniforming just about any group.     5-ounce, 65/35 poly/cotton pique     Flat knit collar and cuffs     Metal buttons with dyed-to-match plastic rims     Double-needle armhole seams and hem     Side vents",
+      "product_type": "apparel",
+      "image_url": "https://cdnm.sanmar.com/catalog/images/L500.jpg",
+      "variants": [
+        {
+          "color": "Banana",
+          "size": "3XL",
+          "sku": "543462",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "4XL",
+          "sku": "543473",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "L",
+          "sku": "240764",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "M",
+          "sku": "240763",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "S",
+          "sku": "240762",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "XL",
+          "sku": "240765",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "XS",
+          "sku": "240761",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Banana",
+          "size": "XXL",
+          "sku": "278881",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "3XL",
+          "sku": "542182",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "4XL",
+          "sku": "542193",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "L500-BLK-L",
+          "base_price": "12.99",
+          "inventory": 160
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "208644",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "L500-BLK-M",
+          "base_price": "12.99",
+          "inventory": 180
+        },
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "208643",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "L500-BLK-S",
+          "base_price": "12.99",
+          "inventory": 150
+        },
+        {
+          "color": "Black",
+          "size": "S",
+          "sku": "208642",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XL",
+          "sku": "208645",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XS",
+          "sku": "208641",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Black",
+          "size": "XXL",
+          "sku": "278901",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "3XL",
+          "sku": "542212",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "4XL",
+          "sku": "542203",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "L",
+          "sku": "208674",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "M",
+          "sku": "208673",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "S",
+          "sku": "208672",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "XL",
+          "sku": "208675",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "XS",
+          "sku": "208671",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Burgundy",
+          "size": "XXL",
+          "sku": "278911",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "L",
+          "sku": "452094",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "M",
+          "sku": "452093",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "S",
+          "sku": "452092",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "XL",
+          "sku": "452095",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "XS",
+          "sku": "452091",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Clover Green",
+          "size": "XXL",
+          "sku": "452101",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "3XL",
+          "sku": "551712",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "4XL",
+          "sku": "551723",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "L",
+          "sku": "400134",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "M",
+          "sku": "400133",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "S",
+          "sku": "400132",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "XL",
+          "sku": "400135",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "XS",
+          "sku": "400131",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Coffee Bean",
+          "size": "XXL",
+          "sku": "400141",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "3XL",
+          "sku": "542262",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "4XL",
+          "sku": "542273",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "L",
+          "sku": "208764",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "M",
+          "sku": "208763",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "S",
+          "sku": "208762",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "XL",
+          "sku": "208765",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "XS",
+          "sku": "208761",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Cool Grey",
+          "size": "XXL",
+          "sku": "278921",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "3XL",
+          "sku": "542222",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "4XL",
+          "sku": "542233",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "L",
+          "sku": "208704",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "M",
+          "sku": "208703",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "S",
+          "sku": "208702",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "XL",
+          "sku": "208705",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "XS",
+          "sku": "208701",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Dark Green",
+          "size": "XXL",
+          "sku": "278931",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "3XL",
+          "sku": "551032",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "4XL",
+          "sku": "551043",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "L",
+          "sku": "390194",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "M",
+          "sku": "390193",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "S",
+          "sku": "390192",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "XL",
+          "sku": "390195",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "XS",
+          "sku": "390191",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Gold",
+          "size": "XXL",
+          "sku": "390201",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "3XL",
+          "sku": "547692",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "4XL",
+          "sku": "547703",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "L",
+          "sku": "337104",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "M",
+          "sku": "337103",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "S",
+          "sku": "337102",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "XL",
+          "sku": "337105",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "XS",
+          "sku": "337101",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Hibiscus",
+          "size": "XXL",
+          "sku": "337111",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Kelly Green",
+          "size": "L",
+          "sku": "452134",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Kelly Green",
+          "size": "M",
+          "sku": "452133",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Kelly Green",
+          "size": "S",
+          "sku": "452132",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Kelly Green",
+          "size": "XL",
+          "sku": "452135",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Kelly Green",
+          "size": "XS",
+          "sku": "452131",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Kelly Green",
+          "size": "XXL",
+          "sku": "452141",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "3XL",
+          "sku": "544242",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "4XL",
+          "sku": "544253",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "L",
+          "sku": "276354",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "M",
+          "sku": "276353",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "S",
+          "sku": "276352",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "XL",
+          "sku": "276355",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "XS",
+          "sku": "276351",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Blue",
+          "size": "XXL",
+          "sku": "278941",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "3XL",
+          "sku": "544262",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "4XL",
+          "sku": "544273",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "L",
+          "sku": "276384",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "M",
+          "sku": "276383",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "S",
+          "sku": "276382",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "XL",
+          "sku": "276385",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "XS",
+          "sku": "276381",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Light Pink",
+          "size": "XXL",
+          "sku": "278951",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Lime",
+          "size": "L",
+          "sku": "467444",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Lime",
+          "size": "M",
+          "sku": "467443",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Lime",
+          "size": "S",
+          "sku": "467442",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Lime",
+          "size": "XL",
+          "sku": "467445",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Lime",
+          "size": "XS",
+          "sku": "467441",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Lime",
+          "size": "XXL",
+          "sku": "467451",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "L",
+          "sku": "452174",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "M",
+          "sku": "452173",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "S",
+          "sku": "452172",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "XL",
+          "sku": "452175",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "XS",
+          "sku": "452171",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Maroon",
+          "size": "XXL",
+          "sku": "452181",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Maui Blue",
+          "size": "L",
+          "sku": "452214",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Maui Blue",
+          "size": "M",
+          "sku": "452213",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Maui Blue",
+          "size": "S",
+          "sku": "452212",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Maui Blue",
+          "size": "XL",
+          "sku": "452215",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Maui Blue",
+          "size": "XS",
+          "sku": "452211",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Maui Blue",
+          "size": "XXL",
+          "sku": "452221",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "3XL",
+          "sku": "551752",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "4XL",
+          "sku": "551763",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "L",
+          "sku": "400214",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "M",
+          "sku": "400213",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "S",
+          "sku": "400212",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "XL",
+          "sku": "400215",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "XS",
+          "sku": "400211",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Mediterranean Blue",
+          "size": "XXL",
+          "sku": "400221",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "3XL",
+          "sku": "542242",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "4XL",
+          "sku": "542253",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "L",
+          "sku": "208734",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "M",
+          "sku": "208733",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "S",
+          "sku": "208732",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XL",
+          "sku": "208735",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XS",
+          "sku": "208731",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Navy",
+          "size": "XXL",
+          "sku": "278961",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Orange",
+          "size": "L",
+          "sku": "467484",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Orange",
+          "size": "M",
+          "sku": "467483",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Orange",
+          "size": "S",
+          "sku": "467482",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Orange",
+          "size": "XL",
+          "sku": "467485",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Orange",
+          "size": "XS",
+          "sku": "467481",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Orange",
+          "size": "XXL",
+          "sku": "467491",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Purple",
+          "size": "L",
+          "sku": "452254",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Purple",
+          "size": "M",
+          "sku": "452253",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Purple",
+          "size": "S",
+          "sku": "452252",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Purple",
+          "size": "XL",
+          "sku": "452255",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Purple",
+          "size": "XS",
+          "sku": "452251",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Purple",
+          "size": "XXL",
+          "sku": "452261",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "3XL",
+          "sku": "542282",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "4XL",
+          "sku": "542293",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "L",
+          "sku": "208794",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "M",
+          "sku": "L500-RED-M",
+          "base_price": "12.99",
+          "inventory": 120
+        },
+        {
+          "color": "Red",
+          "size": "M",
+          "sku": "208793",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "S",
+          "sku": "208792",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "XL",
+          "sku": "208795",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "XS",
+          "sku": "208791",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Red",
+          "size": "XXL",
+          "sku": "278971",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "3XL",
+          "sku": "542302",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "4XL",
+          "sku": "542313",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "L",
+          "sku": "208824",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "L500-RYL-M",
+          "base_price": "12.99",
+          "inventory": 130
+        },
+        {
+          "color": "Royal",
+          "size": "M",
+          "sku": "208823",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "S",
+          "sku": "208822",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XL",
+          "sku": "208825",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XS",
+          "sku": "208821",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Royal",
+          "size": "XXL",
+          "sku": "278991",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "3XL",
+          "sku": "551772",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "4XL",
+          "sku": "551783",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "L",
+          "sku": "400254",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "M",
+          "sku": "400253",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "S",
+          "sku": "400252",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XL",
+          "sku": "400255",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XS",
+          "sku": "400251",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Steel Grey",
+          "size": "XXL",
+          "sku": "400261",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "3XL",
+          "sku": "542322",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "4XL",
+          "sku": "542333",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "L",
+          "sku": "208854",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "M",
+          "sku": "208853",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "S",
+          "sku": "208852",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "XL",
+          "sku": "208855",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "XS",
+          "sku": "208851",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Stone",
+          "size": "XXL",
+          "sku": "279001",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "3XL",
+          "sku": "551792",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "4XL",
+          "sku": "551803",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "L",
+          "sku": "400294",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "M",
+          "sku": "400293",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "S",
+          "sku": "400292",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "XL",
+          "sku": "400295",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "XS",
+          "sku": "400291",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Texas Orange",
+          "size": "XXL",
+          "sku": "400301",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "3XL",
+          "sku": "551812",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "4XL",
+          "sku": "551823",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "L",
+          "sku": "400334",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "M",
+          "sku": "400333",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "S",
+          "sku": "400332",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "XL",
+          "sku": "400335",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "XS",
+          "sku": "400331",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Tropical Pink",
+          "size": "XXL",
+          "sku": "400341",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "Ultramarine Blue",
+          "size": "L",
+          "sku": "452294",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Ultramarine Blue",
+          "size": "M",
+          "sku": "452293",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Ultramarine Blue",
+          "size": "S",
+          "sku": "452292",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Ultramarine Blue",
+          "size": "XL",
+          "sku": "452295",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Ultramarine Blue",
+          "size": "XS",
+          "sku": "452291",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "Ultramarine Blue",
+          "size": "XXL",
+          "sku": "452301",
+          "base_price": "13.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "3XL",
+          "sku": "542342",
+          "base_price": "15.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "4XL",
+          "sku": "542353",
+          "base_price": "16.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "L",
+          "sku": "208884",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "208883",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "S",
+          "sku": "208882",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XL",
+          "sku": "208885",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XS",
+          "sku": "208881",
+          "base_price": "12.04",
+          "inventory": null
+        },
+        {
+          "color": "White",
+          "size": "XXL",
+          "sku": "279011",
+          "base_price": "13.04",
+          "inventory": null
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "PC450",
+      "product_name": "Port & Company Fan Favorite Tee",
+      "brand": "Port & Company",
+      "category": "T-Shirts",
+      "description": "Soft, lightweight ring-spun cotton. Best-in-class print surface.",
+      "product_type": "apparel",
+      "image_url": "https://placehold.co/600x600/1e4d92/ffffff?text=PC450+Tee",
+      "variants": [
+        {
+          "color": "Red",
+          "size": "M",
+          "sku": "PC450-RED-M",
+          "base_price": "5.99",
+          "inventory": 290
+        },
+        {
+          "color": "True Royal",
+          "size": "L",
+          "sku": "PC450-TR-L",
+          "base_price": "5.99",
+          "inventory": 380
+        },
+        {
+          "color": "True Royal",
+          "size": "M",
+          "sku": "PC450-TR-M",
+          "base_price": "5.99",
+          "inventory": 400
+        },
+        {
+          "color": "True Royal",
+          "size": "S",
+          "sku": "PC450-TR-S",
+          "base_price": "5.99",
+          "inventory": 300
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "PC54",
+      "product_name": "Port & Company Core Cotton Tee",
+      "brand": "Port & Company",
+      "category": "T-Shirts",
+      "description": "A go-to tee at a great price. 5.4-ounce, 100% cotton with double-needle stitching.",
+      "product_type": "apparel",
+      "image_url": "https://placehold.co/600x600/1e4d92/ffffff?text=PC54+Tee",
+      "variants": [
+        {
+          "color": "Black",
+          "size": "M",
+          "sku": "PC54-BLK-M",
+          "base_price": "3.49",
+          "inventory": 340
+        },
+        {
+          "color": "Navy",
+          "size": "L",
+          "sku": "PC54-NAV-L",
+          "base_price": "3.49",
+          "inventory": 480
+        },
+        {
+          "color": "Navy",
+          "size": "M",
+          "sku": "PC54-NAV-M",
+          "base_price": "3.49",
+          "inventory": 510
+        },
+        {
+          "color": "Navy",
+          "size": "S",
+          "sku": "PC54-NAV-S",
+          "base_price": "3.49",
+          "inventory": 420
+        },
+        {
+          "color": "Navy",
+          "size": "XL",
+          "sku": "PC54-NAV-XL",
+          "base_price": "3.49",
+          "inventory": 360
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "PC54-WHT-M",
+          "base_price": "3.49",
+          "inventory": 380
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "PC61",
+      "product_name": "Port & Company Essential Tee",
+      "brand": "Port & Company",
+      "category": null,
+      "description": "A customer favorite, this value-priced tee hits the mark on quality and comfort.",
+      "product_type": "apparel",
+      "image_url": "https://www.sanmar.com/imgindex/PC61_NAVY_front.jpg",
+      "variants": [
+        {
+          "color": "Navy",
+          "size": "L",
+          "sku": "PC61-NAV-L",
+          "base_price": "3.99",
+          "inventory": 480
+        },
+        {
+          "color": "Navy",
+          "size": "M",
+          "sku": "PC61-NAV-M",
+          "base_price": "3.99",
+          "inventory": 500
+        },
+        {
+          "color": "Navy",
+          "size": "S",
+          "sku": "PC61-NAV-S",
+          "base_price": "3.99",
+          "inventory": 250
+        },
+        {
+          "color": "White",
+          "size": "M",
+          "sku": "PC61-WHT-M",
+          "base_price": "3.99",
+          "inventory": 320
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "PC78H",
+      "product_name": "Port & Company Core Fleece Pullover Hooded Sweatshirt",
+      "brand": "Port & Company",
+      "category": "Hoodies",
+      "description": "A perennial favorite \u2014 7.8-ounce, 50/50 cotton/poly fleece with front pouch pocket.",
+      "product_type": "apparel",
+      "image_url": "https://placehold.co/600x600/1e4d92/ffffff?text=PC78H+Hoodie",
+      "variants": [
+        {
+          "color": "Athletic Heather",
+          "size": "L",
+          "sku": "PC78H-AH-L",
+          "base_price": "14.99",
+          "inventory": 280
+        },
+        {
+          "color": "Athletic Heather",
+          "size": "M",
+          "sku": "PC78H-AH-M",
+          "base_price": "14.99",
+          "inventory": 220
+        },
+        {
+          "color": "Athletic Heather",
+          "size": "XL",
+          "sku": "PC78H-AH-XL",
+          "base_price": "14.99",
+          "inventory": 240
+        },
+        {
+          "color": "Black",
+          "size": "L",
+          "sku": "PC78H-BLK-L",
+          "base_price": "14.99",
+          "inventory": 260
+        },
+        {
+          "color": "Navy",
+          "size": "L",
+          "sku": "PC78H-NAV-L",
+          "base_price": "14.99",
+          "inventory": 250
+        }
+      ]
+    },
+    {
+      "supplier_slug": "sanmar",
+      "supplier_sku": "ST350",
+      "product_name": "Sport-Tek PosiCharge Competitor Tee",
+      "brand": "Sport-Tek",
+      "category": "Performance",
+      "description": "Lightweight moisture-wicking performance tee. PosiCharge technology locks in color.",
+      "product_type": "apparel",
+      "image_url": "https://placehold.co/600x600/1e4d92/ffffff?text=ST350+Tee",
+      "variants": [
+        {
+          "color": "True Black",
+          "size": "L",
+          "sku": "ST350-TBK-L",
+          "base_price": "7.99",
+          "inventory": 230
+        },
+        {
+          "color": "True Navy",
+          "size": "L",
+          "sku": "ST350-TN-L",
+          "base_price": "7.99",
+          "inventory": 240
+        },
+        {
+          "color": "True Navy",
+          "size": "M",
+          "sku": "ST350-TN-M",
+          "base_price": "7.99",
+          "inventory": 260
+        },
+        {
+          "color": "True Navy",
+          "size": "S",
+          "sku": "ST350-TN-S",
+          "base_price": "7.99",
+          "inventory": 200
+        },
+        {
+          "color": "True Red",
+          "size": "M",
+          "sku": "ST350-TRD-M",
+          "base_price": "7.99",
+          "inventory": 220
+        }
+      ]
+    }
+  ]
+}

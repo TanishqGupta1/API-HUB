@@ -88,9 +88,9 @@ async def _cleanup_test_customers() -> None:
 
 async def _cleanup_test_suppliers() -> None:
     from modules.catalog.models import (
-        Category, 
-        Product, 
-        ProductImage, 
+        Category,
+        Product,
+        ProductImage,
         ProductVariant,
         CustomerProductSelection
     )
@@ -98,9 +98,14 @@ async def _cleanup_test_suppliers() -> None:
     from modules.sync_jobs.models import SyncJob
 
     async with async_session() as s:
+        # Also sweep slugs from test_customer_catalog (cps-test-*) which
+        # builds throwaway suppliers per-test but doesn't clean them up.
         supplier_ids = (
             await s.execute(
-                select(Supplier.id).where(Supplier.slug.in_(TEST_SUPPLIER_SLUGS))
+                select(Supplier.id).where(
+                    Supplier.slug.in_(TEST_SUPPLIER_SLUGS)
+                    | Supplier.slug.like("cps-test-%")
+                )
             )
         ).scalars().all()
         if not supplier_ids:

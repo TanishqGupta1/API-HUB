@@ -136,6 +136,13 @@ class PromoStandardsClient:
     def get_service_with_history(self) -> tuple[Any, Any]:
         """Return (service, history_plugin). History allows raw XML access."""
         if self._service is not None:
+            # An injected service (typically a test fake) shouldn't need to
+            # spin up zeep; lazily attach a HistoryPlugin only when callers
+            # actually need history. The plugin has no side-effects when not
+            # wired into a zeep client.
+            if self._history is None:
+                from zeep.plugins import HistoryPlugin
+                self._history = HistoryPlugin()
             return self._service, self._history
 
         from zeep.settings import Settings
@@ -487,6 +494,10 @@ class PromoStandardsClient:
     def _sanmar_products_by_category(
         self, svc: Any, category_name: str, limit: int
     ) -> list[PSProductData]:
+        # WSDL requires arg0=productCategory, arg1=webServiceUser. SanMar
+        # accepts the webServiceUser with just 3 creds (id, password,
+        # customer_number); senderId defaults to 0 and senderPassword to ""
+        # and SanMar tolerates that for most category calls.
         try:
             response = svc.getProductInfoByCategory(
                 arg0={"category": category_name},

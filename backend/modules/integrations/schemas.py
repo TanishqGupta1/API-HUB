@@ -1,5 +1,18 @@
-from typing import Any, Optional
+"""Integration Gateway envelope schemas.
+
+Names follow the Rev 3 spec (`docs/superpowers/specs/2026-05-13-centralized-
+fastapi-ops-design.md`): `PushRequestTarget`, `PushRequestSource`,
+`PushRequestProductRef`, `PushRequestCallback`, `PushRequest`,
+`PushRequestAccepted`, `PushRequestStatus`, `ErrorEnvelope`.
+
+Short aliases (`PushTarget`, `PushSource`, `PushProductRef`, `PushCallback`,
+`PushStatusOut`, `GatewayError`) are kept for backwards compatibility with
+existing call sites (`routes.py`, `modules.ops_push.gateway`).
+"""
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -7,32 +20,42 @@ from pydantic import BaseModel, Field
 
 # ── Push request envelope ──
 
-class PushTarget(BaseModel):
-    system: str = "ops"
+class PushRequestTarget(BaseModel):
+    system: Literal["ops"] = "ops"
     customer_id: UUID
 
 
-class PushSource(BaseModel):
+class PushRequestSource(BaseModel):
     supplier_slug: str
 
 
-class PushProductRef(BaseModel):
-    supplier_sku: str
+class PushRequestProductRef(BaseModel):
+    """Identify the product to push by either internal UUID or supplier SKU.
+
+    At least one of `product_id` / `supplier_sku` must be set — the gateway
+    resolves the canonical product row from whichever is supplied. We don't
+    enforce the "at least one" rule at the schema layer because the spec
+    leaves room for future ref types (e.g. external SKU); the resolver
+    raises if neither is usable.
+    """
+
+    product_id: Optional[UUID] = None
+    supplier_sku: Optional[str] = None
 
 
-class PushCallback(BaseModel):
+class PushRequestCallback(BaseModel):
     url: str
     secret: Optional[str] = None
 
 
 class PushRequest(BaseModel):
-    target: PushTarget
-    source: PushSource
-    product_ref: PushProductRef
+    target: PushRequestTarget
+    source: PushRequestSource
+    product_ref: PushRequestProductRef
     product: Optional[dict[str, Any]] = None   # inline upsert (future)
-    decorations: list[dict[str, Any]] = []
+    decorations: list[dict[str, Any]] = Field(default_factory=list)
     dry_run: bool = False
-    callback: Optional[PushCallback] = None
+    callback: Optional[PushRequestCallback] = None
 
 
 # ── Push responses ──
@@ -46,7 +69,7 @@ class PushRequestAccepted(BaseModel):
     status: str
     customer_id: UUID
     supplier_slug: str
-    supplier_sku: str
+    supplier_sku: Optional[str] = None
     ops_product_id: Optional[str] = None
     dry_run: bool = False
     callback_status: str = "not_requested"
@@ -62,13 +85,16 @@ class StepResultOut(BaseModel):
     latency_ms: Optional[int] = None
 
 
-class PushStatusOut(BaseModel):
+class PushRequestStatus(BaseModel):
+    """Spec-named poll-response envelope (GET /push-requests/{id})."""
+
     push_log_id: UUID
     status: str
     customer_id: UUID
     supplier_slug: Optional[str] = None
     supplier_sku: Optional[str] = None
     ops_product_id: Optional[str] = None
+    mapping_id: Optional[UUID] = None
     error: Optional[str] = None
     step_results: Optional[list[StepResultOut]] = None
     cleanup_targets: Optional[dict[str, Any]] = None
@@ -85,11 +111,16 @@ class ErrorDetail(BaseModel):
     suggestion: Optional[str] = None
 
 
-class GatewayError(BaseModel):
-    status: str = "error"
+class ErrorEnvelope(BaseModel):
+    """Spec name for the gateway error envelope. `details` is an open dict
+    so each error code can attach its own structured context (e.g.
+    PREFLIGHT_BLOCKER carries missing[], IDEMPOTENCY_CONFLICT carries the
+    diverging payload hash)."""
+
+    status: Literal["error"] = "error"
     code: str
     message: str
-    details: Optional[ErrorDetail] = None
+    details: dict[str, Any] = Field(default_factory=dict)
     trace_id: Optional[str] = None
 
 
@@ -117,3 +148,13 @@ class IntegrationKeyOut(BaseModel):
 
 class IntegrationKeyCreated(IntegrationKeyOut):
     raw_key: str = Field(..., description="Shown once — not stored. Copy immediately.")
+
+
+# ── Backwards-compat aliases (do not remove without sweeping call sites) ──
+
+PushTarget = PushRequestTarget
+PushSource = PushRequestSource
+PushProductRef = PushRequestProductRef
+PushCallback = PushRequestCallback
+PushStatusOut = PushRequestStatus
+GatewayError = ErrorEnvelope
