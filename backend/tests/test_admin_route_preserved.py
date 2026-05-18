@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -19,6 +20,18 @@ from modules.catalog.models import Product, ProductVariant, CustomerProductSelec
 from modules.customers.models import Customer
 from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
+
+
+# Mock preflight so this suite doesn't fail on test scaffolds that lack
+# markup rules / reachable OPS creds / images. Preflight has its own
+# dedicated tests; here we exercise admin-route response shape + gateway
+# wiring downstream of preflight.
+@pytest.fixture(autouse=True)
+def _mock_preflight_ok():
+    ok = MagicMock()
+    ok.ok = True
+    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=ok)):
+        yield
 
 
 @pytest_asyncio.fixture

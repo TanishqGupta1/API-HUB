@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy import select
 
 from modules.catalog.models import Product
@@ -18,6 +18,16 @@ from modules.customers.models import Customer
 from modules.ops_push.service import push_product
 from modules.push_log.models import ProductPushLog
 from modules.suppliers.models import Supplier
+
+
+@pytest.fixture(autouse=True)
+def _mock_preflight_ok():
+    """Preflight=ok so we can exercise the gateway failure path itself,
+    not a preflight rejection."""
+    ok = MagicMock()
+    ok.ok = True
+    with patch("modules.ops_push.gateway.run_preflight", new=AsyncMock(return_value=ok)):
+        yield
 
 
 @pytest.mark.asyncio
