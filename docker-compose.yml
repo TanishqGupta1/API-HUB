@@ -70,6 +70,10 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # Server-side fetch from Next.js API routes (uses Docker DNS, not the
+      # browser-visible URL).
+      - API_BASE_URL=${API_BASE_URL:-http://api:8000}
+      - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET:-}
       - WATCHPACK_POLLING=true
     volumes:
       - ./frontend:/app

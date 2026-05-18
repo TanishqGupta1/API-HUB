@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-const API_BASE = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+import { SERVER_API_BASE } from "@/lib/env";
+
 const INGEST_SECRET = process.env.INGEST_SHARED_SECRET ?? "";
 
 export async function POST() {
@@ -11,7 +12,7 @@ export async function POST() {
     );
   }
 
-  const upstream = await fetch(`${API_BASE}/api/master-options/sync`, {
+  const upstream = await fetch(`${SERVER_API_BASE}/api/master-options/sync`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
