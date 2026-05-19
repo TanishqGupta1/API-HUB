@@ -1,13 +1,16 @@
+import logging
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
 
-from .models import MasterOption
+from .models import MasterOption, MasterOptionAttribute
 from .schemas import MasterOptionRead, OptionConfigItem, SyncStatus
 from .service import (
     delete_product_option,
@@ -15,6 +18,32 @@ from .service import (
     save_product_config,
     save_product_option,
 )
+
+log = logging.getLogger(__name__)
+
+_QUERY_GET_MASTER_OPTIONS = """
+query GetMasterOptions($limit: Int, $offset: Int) {
+  getMasterOptions(limit: $limit, offset: $offset) {
+    master_option_id
+    title
+    option_key
+    options_type
+    pricing_method
+    status
+    sort_order
+    description
+    master_option_tag
+    attributes {
+      attribute_id
+      title
+      sort_order
+      price
+      attribute_key
+      master_attribute_id
+    }
+  }
+}
+""".strip()
 
 router = APIRouter(prefix="/api/master-options", tags=["master_options"])
 
@@ -37,6 +66,117 @@ async def sync_status(db: AsyncSession = Depends(get_db)):
         total=total or 0,
         last_synced_at=last_synced.isoformat() if last_synced else None,
     )
+
+
+@router.post("/sync", status_code=202)
+async def sync_master_options(db: AsyncSession = Depends(get_db)):
+    """Pull master options from the first configured OPS customer and upsert them."""
+    from modules.customers.models import Customer
+    from modules.ops_client.client import OpsAuth, OpsGraphQLClient
+
+    # Find first active customer with full OPS credentials
+    result = await db.execute(
+        select(Customer).where(Customer.is_active.is_(True))
+    )
+    customer = result.scalars().first()
+
+    if not customer:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No active OPS customer configured.")
+
+    secret = (customer.ops_auth_config or {}).get("client_secret")
+    if not customer.ops_base_url or not customer.ops_token_url or not customer.ops_client_id or not secret:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Customer missing OPS credentials.")
+
+    auth = OpsAuth(
+        base_url=customer.ops_base_url,
+        token_url=customer.ops_token_url,
+        client_id=customer.ops_client_id,
+        client_secret=secret,
+    )
+
+    try:
+        async with OpsGraphQLClient(auth) as ops:
+            res = await ops.execute(_QUERY_GET_MASTER_OPTIONS, variables={"limit": 200, "offset": 0})
+    except Exception as exc:
+        log.warning("master_options sync OPS connection failed: %s", exc)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"Could not connect to OPS storefront: {exc}",
+        )
+
+    if not res.ok:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"OPS error: {res.ops_error_code} — {res.ops_error_message}",
+        )
+
+    raw_options = (res.data or {}).get("getMasterOptions") or []
+    if not raw_options:
+        return {"synced": 0, "message": "OPS returned no master options."}
+
+    now = datetime.now(timezone.utc)
+    synced = 0
+    for mo in raw_options:
+        mo_id = mo.get("master_option_id")
+        if mo_id is None:
+            continue
+        stmt = (
+            pg_insert(MasterOption)
+            .values(
+                ops_master_option_id=int(mo_id),
+                title=mo.get("title") or "",
+                option_key=mo.get("option_key"),
+                options_type=mo.get("options_type"),
+                pricing_method=mo.get("pricing_method"),
+                status=int(mo.get("status") or 1),
+                sort_order=int(mo.get("sort_order") or 0),
+                description=mo.get("description"),
+                master_option_tag=mo.get("master_option_tag"),
+                raw_json=mo,
+                synced_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=["ops_master_option_id"],
+                set_={
+                    "title": mo.get("title") or "",
+                    "option_key": mo.get("option_key"),
+                    "options_type": mo.get("options_type"),
+                    "pricing_method": mo.get("pricing_method"),
+                    "status": int(mo.get("status") or 1),
+                    "sort_order": int(mo.get("sort_order") or 0),
+                    "description": mo.get("description"),
+                    "master_option_tag": mo.get("master_option_tag"),
+                    "raw_json": mo,
+                    "synced_at": now,
+                },
+            )
+            .returning(MasterOption.id)
+        )
+        row = (await db.execute(stmt)).scalar_one()
+
+        # Rebuild attributes (delete + reinsert)
+        await db.execute(
+            MasterOptionAttribute.__table__.delete().where(
+                MasterOptionAttribute.master_option_id == row
+            )
+        )
+        for attr in mo.get("attributes") or []:
+            attr_id = attr.get("attribute_id")
+            if attr_id is None:
+                continue
+            db.add(MasterOptionAttribute(
+                master_option_id=row,
+                ops_attribute_id=int(attr_id),
+                title=attr.get("title") or "",
+                sort_order=int(attr.get("sort_order") or 0),
+                default_price=attr.get("price"),
+                raw_json=attr,
+            ))
+        synced += 1
+
+    await db.commit()
+    log.info("master_options sync: upserted %d options", synced)
+    return {"synced": synced, "status": "ok"}
 
 
 @router.get("/{master_option_id}", response_model=MasterOptionRead)

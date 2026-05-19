@@ -8,12 +8,18 @@ from pydantic import BaseModel, ConfigDict
 # --- JSONB sub-shapes ---
 
 class StepResult(BaseModel):
-    step: str
-    ok: bool
+    step: Any  # int or str depending on gateway version
+    ok: bool = True
     ops_id: Optional[str] = None
+    ops_ids: Optional[dict[str, Any]] = None
+    status: Optional[str] = None
+    mutation: Optional[str] = None
     error: Optional[str] = None
     latency_ms: Optional[int] = None
     called_at: Optional[datetime] = None
+    attempted_at: Optional[str] = None
+    request_fingerprint: Optional[str] = None
+    source_key: Optional[str] = None
 
 
 # --- Top-level request/response models ---
@@ -36,7 +42,7 @@ class PushLogRead(BaseModel):
     ops_product_id: Optional[str]
     status: str
     error: Optional[str]
-    pushed_at: datetime
+    pushed_at: Optional[datetime] = None
 
     # Integration Gateway fields
     request_id: Optional[UUID] = None

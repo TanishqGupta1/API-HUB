@@ -15,7 +15,8 @@ from passlib.context import CryptContext
 log = logging.getLogger(__name__)
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 480   # 8 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = 480        # 8 hours (default / non-remember)
+REMEMBER_TOKEN_EXPIRE_MINUTES = 1080    # 18 hours
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 
@@ -50,10 +51,11 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(payload: dict[str, Any]) -> str:
+def create_access_token(payload: dict[str, Any], *, expire_minutes: int | None = None) -> str:
+    minutes = expire_minutes if expire_minutes is not None else ACCESS_TOKEN_EXPIRE_MINUTES
     data = {
         **payload,
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=minutes),
         "type": "access",
     }
     return jwt.encode(data, JWT_SECRET_KEY, algorithm=ALGORITHM)

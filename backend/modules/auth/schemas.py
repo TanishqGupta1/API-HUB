@@ -10,6 +10,7 @@ Role = Literal["vg_admin", "customer_admin"]
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    remember_me: bool = False
 
     @field_validator("email")
     @classmethod

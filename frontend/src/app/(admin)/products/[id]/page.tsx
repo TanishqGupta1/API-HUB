@@ -178,21 +178,25 @@ export default function ProductDetailPage() {
       {/* Missing fields banner */}
       {missingFields.length > 0 && (() => {
         const inventoryCount = missingFields.filter((f) => f.startsWith("inventory (variant")).length;
-        const otherFields = missingFields.filter((f) => !f.startsWith("inventory (variant"));
+        const priceCount = missingFields.filter((f) => f.startsWith("price (variant")).length;
+        const otherFields = missingFields.filter(
+          (f) => !f.startsWith("inventory (variant") && !f.startsWith("price (variant")
+        );
         const displayFields = [
           ...otherFields,
+          ...(priceCount > 0 ? [`price missing on ${priceCount} variant${priceCount !== 1 ? "s" : ""}`] : []),
           ...(inventoryCount > 0 ? [`inventory missing on ${inventoryCount} variant${inventoryCount !== 1 ? "s" : ""} — run a sync`] : []),
         ];
         return (
-          <div className="mb-4 bg-[#fff7e0] border-2 border-[#c17c00] rounded-xl px-5 py-4 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-[#c17c00] shrink-0 mt-0.5" />
+          <div className="mb-4 bg-[#fffbf0] border border-[#e8c840] rounded-lg px-5 py-3 flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-[#b8860b] shrink-0 mt-0.5" />
             <div>
-              <div className="text-[13px] font-bold text-[#7a4900] mb-2">
-                {displayFields.length} issue{displayFields.length !== 1 ? "s" : ""} — push may fail
+              <div className="text-[12px] font-semibold text-[#7a6000] mb-1.5">
+                {displayFields.length} field{displayFields.length !== 1 ? "s" : ""} incomplete — push may be blocked by preflight
               </div>
-              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
+              <ul className="flex flex-wrap gap-x-6 gap-y-0.5">
                 {displayFields.map((f) => (
-                  <li key={f} className="text-[12px] text-[#7a4900] font-mono">· {f}</li>
+                  <li key={f} className="text-[11px] text-[#8a7000] font-mono">· {f}</li>
                 ))}
               </ul>
             </div>

@@ -20,7 +20,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from database import async_session
 from modules.catalog.models import Product, ProductVariant, CustomerProductSelection
@@ -279,7 +279,7 @@ async def test_preflight_blocks_when_variant_has_no_price(client, smoke_scaffold
     """If base_price is missing, preflight must block with 422."""
     async with async_session() as s:
         result = await s.execute(
-            __import__("sqlalchemy", fromlist=["select"]).select(ProductVariant).where(
+            select(ProductVariant).where(
                 ProductVariant.product_id == smoke_scaffold["product"].id
             )
         )
@@ -304,7 +304,7 @@ async def test_preflight_blocks_when_variant_has_no_price(client, smoke_scaffold
     finally:
         async with async_session() as s:
             result = await s.execute(
-                __import__("sqlalchemy", fromlist=["select"]).select(ProductVariant).where(
+                select(ProductVariant).where(
                     ProductVariant.product_id == smoke_scaffold["product"].id
                 )
             )
