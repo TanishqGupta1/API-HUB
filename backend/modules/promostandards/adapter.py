@@ -150,14 +150,20 @@ class PromoStandardsAdapter(BaseAdapter):
         except Exception as exc:
             log.warning("Media fetch failed for %s: %s", ref.supplier_sku, exc)
 
-        # Bug 2 fix: Inventory v200 was never called on the V2 adapter path.
-        # client.get_inventory() returns parsed PSInventoryLevel rows; map them
-        # back onto each variant by part_id. INVENTORY WSDL must exist in the
-        # supplier's endpoint cache; if not, swallow and continue (existing
-        # downstream code already treats variant.inventory=None as "unknown").
+        # Bug 4 fix: Inventory v200 — pass the variant part_ids so SanMar v200
+        # uses getFilteredInventoryLevels (which it actually answers) instead
+        # of the bare getInventoryLevels (which returns empty / times out on
+        # SanMar's implementation). client.get_inventory() returns parsed
+        # PSInventoryLevel rows; map them back onto each variant by part_id.
+        # INVENTORY WSDL must exist in the supplier's endpoint cache; if not,
+        # swallow and continue (existing downstream code already treats
+        # variant.inventory=None as "unknown").
         try:
             inv_client = self._get_client("INVENTORY")
-            inv_levels = await inv_client.get_inventory([ref.supplier_sku])
+            part_ids = [v.part_id for v in ingest.variants if v.part_id]
+            inv_levels = await inv_client.get_inventory(
+                [ref.supplier_sku], part_ids=part_ids or None
+            )
             inv_by_part = {level.part_id: level for level in inv_levels}
             for variant in ingest.variants:
                 level = inv_by_part.get(variant.part_id)
