@@ -1,3 +1,6 @@
 n8n-nodes-onprintshop/dist/** linguist-generated=true
 n8n-nodes-onprintshop/dist/** -diff
 frontend/tsconfig.tsbuildinfo linguist-generated=true
+
+# Shell scripts must keep LF line endings — bootstrap.sh breaks in Docker with CRLF
+*.sh text eol=lf
