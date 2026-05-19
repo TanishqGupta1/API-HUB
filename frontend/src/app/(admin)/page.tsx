@@ -21,7 +21,7 @@ type Stats = {
   suppliers: number;
   products: number;
   variants: number;
-  health: number;
+  health: number | null;
   total_processed: number;
 };
 
@@ -71,7 +71,7 @@ export default function AdminDashboard() {
     suppliers: 0, 
     products: 0, 
     variants: 0, 
-    health: 100, 
+    health: null,
     total_processed: 0 
   });
   const [recentJobs, setRecentJobs] = useState<SyncJob[]>([]);
@@ -147,10 +147,10 @@ export default function AdminDashboard() {
         />
         <StatCard 
           title="Sync Health" 
-          value={`${stats.health}%`} 
+          value={stats.health !== null ? `${stats.health}%` : "—"}
           icon={<Activity className="w-5 h-5 text-emerald-600" />} 
           color="emerald"
-          subText="Success rate (24h)"
+          subText={stats.health !== null ? "Success rate (24h)" : "No jobs in last 24h"}
         />
       </div>
 
