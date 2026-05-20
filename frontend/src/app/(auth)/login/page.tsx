@@ -3,8 +3,9 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clearCachedUser } from "@/lib/auth";
+import { resolveApiBase } from "@/lib/api-base";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = resolveApiBase();
 
 export default function LoginPage() {
   return (

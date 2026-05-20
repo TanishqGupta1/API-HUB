@@ -9,7 +9,9 @@ export interface AuthUser {
   customer_id: string | null;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { resolveApiBase } from "./api-base";
+
+const API_BASE = resolveApiBase();
 
 let cachedUser: AuthUser | null | undefined = undefined;
 
