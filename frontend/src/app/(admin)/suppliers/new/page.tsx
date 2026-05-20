@@ -64,7 +64,7 @@ const PROTOCOLS: ProtocolDef[] = [
     ],
   },
   {
-    value: "rest_hmac",
+    value: "hmac",
     label: "REST + HMAC — 4Over",
     base_url_label: "API Base URL",
     base_url_default: "https://api.4over.com",

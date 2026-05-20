@@ -20,6 +20,7 @@ from .schemas import (
 )
 from .security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
+    REMEMBER_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     hash_password,
     verify_password,
@@ -44,11 +45,11 @@ def _token_payload(user: User) -> dict:
     return payload
 
 
-def _set_auth_cookie(response: Response, access_token: str) -> None:
+def _set_auth_cookie(response: Response, access_token: str, max_age_minutes: int = ACCESS_TOKEN_EXPIRE_MINUTES) -> None:
     response.set_cookie(
         key=_COOKIE_NAME,
         value=access_token,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        max_age=max_age_minutes * 60,
         httponly=True,
         secure=_COOKIE_SECURE,
         samesite="lax",
@@ -72,7 +73,8 @@ async def login(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
 
     payload = _token_payload(user)
-    _set_auth_cookie(response, create_access_token(payload))
+    expire = REMEMBER_TOKEN_EXPIRE_MINUTES if body.remember_me else ACCESS_TOKEN_EXPIRE_MINUTES
+    _set_auth_cookie(response, create_access_token(payload, expire_minutes=expire), max_age_minutes=expire)
     return user
 
 

@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict
 
 
-Protocol = Literal["soap", "rest", "hmac", "ops_graphql", "promostandards"]
+Protocol = Literal["soap", "rest", "hmac", "ops_graphql", "promostandards", "sftp"]
 
 
 class SupplierCreate(BaseModel):
@@ -14,6 +14,7 @@ class SupplierCreate(BaseModel):
     protocol: Protocol
     promostandards_code: Optional[str] = None
     base_url: Optional[str] = None
+    adapter_class: Optional[str] = None
     auth_config: dict = Field(default_factory=dict)
 
 
@@ -25,7 +26,7 @@ class SupplierRead(BaseModel):
     promostandards_code: Optional[str]
     base_url: Optional[str]
     adapter_class: Optional[str] = None
-    auth_config: dict
+    has_credentials: bool = False
     field_mappings: Optional[dict] = None
     is_active: bool
     created_at: datetime

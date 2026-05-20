@@ -12,14 +12,12 @@ describe("useDebouncedQuote", () => {
   });
 
   it("posts request and returns the quote after the debounce window", async () => {
+    const body = { unit_price: "12.50", total: "625.00", currency: "USD", breakdown: { base: "8.00" } };
     const fakeFetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        unit_price: "12.50",
-        total: "625.00",
-        currency: "USD",
-        breakdown: { base: "8.00" },
-      }),
+      status: 200,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
       headers: new Headers({ "content-type": "application/json" }),
     });
     vi.stubGlobal("fetch", fakeFetch);

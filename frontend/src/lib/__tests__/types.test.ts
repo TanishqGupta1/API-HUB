@@ -7,6 +7,7 @@ describe("polymorphic Product types", () => {
       id: "p1",
       supplier_id: "s1",
       supplier_name: "SanMar",
+      supplier_slug: "sanmar",
       supplier_has_decoration_overlay: false,
       supplier_sku: "PC61",
       product_name: "Polo",

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { resolveApiBase } from "@/lib/api-base";
 import { log } from "@/lib/log";
 import type { Customer, Product, ProductDecoration, DecorationOption } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -197,7 +198,7 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                   </>
                 ) : (
                   <img 
-                    src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/customers/${customer.id}/products/${product.id}/decorations/preview.png?t=${Date.now()}`}
+                    src={`${resolveApiBase()}/api/customers/${customer.id}/products/${product.id}/decorations/preview.png?t=${Date.now()}`}
                     alt="Engine Preview"
                     className="w-full h-full object-contain"
                   />
@@ -208,7 +209,7 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
             </div>
             
             <p className="text-[11px] text-[#888894] mt-6 text-center italic">
-              Logo positioning is relative to the "Front" view of the {product.product_type}.
+              Logo positioning is relative to the &ldquo;Front&rdquo; view of the {product.product_type}.
             </p>
         </div>
 

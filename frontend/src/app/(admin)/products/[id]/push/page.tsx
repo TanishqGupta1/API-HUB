@@ -46,9 +46,10 @@ export default function PushPreviewPage() {
   const searchParams = useSearchParams();
   const productId = params.id;
   const customerId = searchParams.get("customer_id");
+  const supplierSlugParam = searchParams.get("supplier_slug");
 
   const { preflight, payload, error: dryRunError, loading, refetch } =
-    usePushDryRun(customerId, productId);
+    usePushDryRun(customerId, productId, supplierSlugParam);
   const { push, loading: pushing, error: pushError } = usePushRequest();
 
   if (!customerId) {
@@ -59,25 +60,10 @@ export default function PushPreviewPage() {
     return <LoadingCard />;
   }
 
-  if (dryRunError && !payload) {
-    return (
-      <ErrorCard
-        message={dryRunError.message}
-        details={
-          (dryRunError.details?.field as string | undefined) ?? null
-        }
-        suggestion={
-          (dryRunError.details?.suggestion as string | undefined) ?? null
-        }
-        onRetry={refetch}
-      />
-    );
-  }
-
   const blockers = preflight?.blockers ?? [];
   const hasBlockers = blockers.length > 0;
   const supplierSku = payload?.supplier_sku ?? "PRODUCT";
-  const supplierSlug = payload?.supplier_slug ?? "sanmar";
+  const supplierSlug = payload?.supplier_slug ?? supplierSlugParam ?? "sanmar";
   const realConfirmText = `PUSH ${supplierSku} TO STAGING`;
 
   async function handlePush(dryRun: boolean) {
@@ -100,8 +86,6 @@ export default function PushPreviewPage() {
       <header className="flex items-end justify-between pb-5 border-b-2 border-[#1e1e24]">
         <div>
           <Link
-            // Use the catalog list in mock/demo mode — the legacy /products/[id]
-            // detail page requires a real UUID and 500s on demo strings like "abc-123".
             href={_isUuid(productId) ? `/products/${productId}` : "/products"}
             className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-[#888894] hover:text-[#1e4d92] transition-colors mb-3"
           >
@@ -132,6 +116,35 @@ export default function PushPreviewPage() {
         )}
       </header>
 
+      {/* Preflight error — shown inline so the page still has context */}
+      {dryRunError && !payload && (
+        <div className="bg-[#fdf2f2] border-2 border-[#b93232] rounded-2xl px-6 py-5 flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-[#b93232] shrink-0" />
+            <span className="text-[14px] font-bold text-[#b93232]">Preflight blocked</span>
+          </div>
+          <p className="text-[13px] text-[#7b1d1d]">{dryRunError.message}</p>
+          {(dryRunError.details?.field as string | undefined) && (
+            <p className="font-mono text-[11px] text-[#7b1d1d] opacity-70">
+              field: {dryRunError.details.field as string}
+            </p>
+          )}
+          {(dryRunError.details?.suggestion as string | undefined) && (
+            <p className="text-[12px] text-[#7b1d1d] italic">
+              {dryRunError.details.suggestion as string}
+            </p>
+          )}
+          <div>
+            <button
+              onClick={refetch}
+              className="mt-1 px-4 h-9 bg-white border-2 border-[#b93232] text-[#b93232] rounded-full font-bold text-[11px] uppercase tracking-wide hover:bg-[#fdf2f2] transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Image policy warnings — if any */}
       {payload?.image_warnings && payload.image_warnings.length > 0 && (
         <div className="bg-[#fff7e0] border-2 border-[#c17c00] rounded-2xl px-4 py-3 text-[12px] text-[#7a4900] flex items-start gap-2">
@@ -147,12 +160,14 @@ export default function PushPreviewPage() {
         </div>
       )}
 
-      {/* Preflight + computed prices + plan */}
-      <PreviewPanel
-        preflight={preflight}
-        plan={payload?.plan ?? []}
-        computedPrices={payload?.computed_prices}
-      />
+      {/* Preflight + computed prices + plan — only when we have data */}
+      {!dryRunError && (
+        <PreviewPanel
+          preflight={preflight}
+          plan={payload?.plan ?? []}
+          computedPrices={payload?.computed_prices}
+        />
+      )}
 
       {pushError && (
         <div className="bg-[#fdf2f2] border-2 border-[#b93232] rounded-2xl px-4 py-3 text-[12px] text-[#b93232] flex items-center gap-2">
@@ -163,21 +178,23 @@ export default function PushPreviewPage() {
         </div>
       )}
 
-      {/* Dry-run + live controls */}
-      <DryRunControls
-        liveConfirmText={realConfirmText}
-        disabled={hasBlockers || pushing}
-        disabledReason={
-          hasBlockers
-            ? `Push blocked: ${blockers.join(", ")}`
-            : pushing
-              ? "A push is already in flight"
-              : undefined
-        }
-        mockMode={IS_MOCK_MODE}
-        onDryRun={() => handlePush(true)}
-        onLive={() => handlePush(false)}
-      />
+      {/* Dry-run + live controls — hidden when preflight blocked */}
+      {!dryRunError && (
+        <DryRunControls
+          liveConfirmText={realConfirmText}
+          disabled={hasBlockers || pushing}
+          disabledReason={
+            hasBlockers
+              ? `Push blocked: ${blockers.join(", ")}`
+              : pushing
+                ? "A push is already in flight"
+                : undefined
+          }
+          mockMode={IS_MOCK_MODE}
+          onDryRun={() => handlePush(true)}
+          onLive={() => handlePush(false)}
+        />
+      )}
     </div>
   );
 }

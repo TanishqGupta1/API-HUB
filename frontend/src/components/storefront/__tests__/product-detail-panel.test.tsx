@@ -14,6 +14,7 @@ const baseProduct: Product = {
   id: "p1",
   supplier_id: "s1",
   supplier_name: "x",
+  supplier_slug: null,
   supplier_has_decoration_overlay: false,
   supplier_sku: "x",
   product_name: "x",

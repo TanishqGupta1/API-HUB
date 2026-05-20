@@ -22,15 +22,19 @@ function fmt(iso: string) {
 export function PushHistory({ productId }: Props) {
   const [rows, setRows] = useState<ProductPushLogRead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     setLoading(true);
+    setError(false);
     api<ProductPushLogRead[]>(`/api/push-log?product_id=${productId}&limit=20`)
       .then(setRows)
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [productId]);
 
   if (loading) return <div className="text-[12px] text-[#888894] font-mono">Loading push history…</div>;
+  if (error) return <div className="text-[12px] text-[#888894] font-mono">Push history unavailable.</div>;
   if (rows.length === 0) return <div className="text-[12px] text-[#888894] font-mono">Never pushed.</div>;
 
   return (

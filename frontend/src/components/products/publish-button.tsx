@@ -1,75 +1,62 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useSelectedCustomer } from "@/lib/customer-context";
 import type { Customer } from "@/lib/types";
 
 interface Props {
   productId: string;
+  supplierSlug?: string;
   onDone?: () => void;
 }
 
-export function PublishButton({ productId, onDone }: Props) {
+export function PublishButton({ productId, supplierSlug, onDone }: Props) {
+  const router = useRouter();
+  const { selectedCustomerId } = useSelectedCustomer();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState<string>("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: "info" | "error" | "success" } | null>(null);
 
   useEffect(() => {
     api<Customer[]>("/api/customers").then((list) => {
-      setCustomers(list);
-      const first = list.find((c) => c.is_active);
-      if (first) setCustomerId(first.id);
+      const active = list.filter((c) => c.is_active);
+      setCustomers(active);
+      // Prefer the globally selected customer; fall back to first active
+      const preferred = active.find((c) => c.id === selectedCustomerId) ?? active[0];
+      if (preferred) setCustomerId(preferred.id);
     });
-  }, []);
+  }, [selectedCustomerId]);
 
-  async function run() {
-    if (!customerId) {
-      setMessage({ text: "Pick a storefront first", type: "error" });
-      return;
-    }
-    setBusy(true);
-    setMessage({ text: "Dispatching to gateway…", type: "info" });
-    try {
-      const res = await api<{ status: string; message?: string; push_log_id?: string }>(
-        `/api/push/${customerId}/${productId}`,
-        { method: "POST" },
-      );
-      const ok = ["accepted", "processing", "queued", "pushed", "dry_run_pushed"].includes(res.status);
-      if (ok) {
-        setMessage({ text: res.message || "Push dispatched. Refreshing history in 5s…", type: "success" });
-        onDone?.();
-      } else {
-        setMessage({ text: res.message || `Push ${res.status}.`, type: "error" });
-      }
-    } catch (err) {
-      setMessage({ text: err instanceof Error ? err.message : String(err), type: "error" });
-    } finally {
-      setBusy(false);
-    }
+  function go() {
+    if (!customerId) return;
+    const params = new URLSearchParams({ customer_id: customerId });
+    if (supplierSlug) params.set("supplier_slug", supplierSlug);
+    onDone?.();
+    router.push(`/products/${productId}/push?${params}`);
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={run}
-          disabled={busy || !customerId}
-          className="px-5 py-2 rounded-lg bg-[#1e4d92] text-white text-[13px] font-bold hover:bg-[#163f78] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm active:scale-[0.98]"
+    <div className="flex items-center gap-3">
+      {customers.length > 1 && (
+        <select
+          value={customerId}
+          onChange={(e) => setCustomerId(e.target.value)}
+          className="text-[12px] border border-[#cfccc8] rounded-md px-2 py-1.5 bg-white text-[#484852] focus:outline-none focus:border-[#1e4d92]"
         >
-          {busy ? "Pushing…" : "Publish to OPS"}
-        </button>
-      </div>
-      {message && (
-        <div className={`text-[12px] font-mono px-3 py-2 rounded-md border ${
-          message.type === "error" ? "bg-[#fdf2f2] text-[#b93232] border-[#f9d7d7]" :
-          message.type === "success" ? "bg-[#f2fcf5] text-[#247a52] border-[#c3e6d2]" :
-          "bg-[#f9f7f4] text-[#484852] border-[#ebe8e3]"
-        }`}>
-          {message.text}
-        </div>
+          {customers.filter((c) => c.is_active).map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
       )}
+      <button
+        type="button"
+        onClick={go}
+        disabled={!customerId}
+        className="px-5 py-2 rounded-lg bg-[#1e4d92] text-white text-[13px] font-bold hover:bg-[#163f78] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm active:scale-[0.98]"
+      >
+        Publish to OPS
+      </button>
     </div>
   );
 }

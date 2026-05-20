@@ -322,14 +322,14 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     
     total_jobs = len(jobs_24h)
     success_jobs = len([j for j in jobs_24h if j.status in ("success", "completed", "partial_success")])
-    health = (success_jobs / total_jobs * 100) if total_jobs > 0 else 100.0
-    
+    health = round(success_jobs / total_jobs * 100, 1) if total_jobs > 0 else None
+
     total_processed = sum(j.records_processed for j in jobs_24h)
-    
+
     return {
         "suppliers": suppliers,
         "products": products,
         "variants": variants,
-        "health": round(health, 1),
+        "health": health,
         "total_processed": total_processed,
     }

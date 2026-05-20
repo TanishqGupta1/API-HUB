@@ -63,6 +63,11 @@ const ADMIN_PROXY_MODE =
 
 export const IS_MOCK_MODE = !LIVE_MODE;
 
+const _UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function _isUuid(s: string | null | undefined): boolean {
+  return !!s && _UUID_RE.test(s);
+}
+
 /** Endpoint switch — admin proxy uses JWT, gateway uses X-Orchestrator-Key.
  *  Admin-proxy lets the in-app admin UI push without the operator pasting a key. */
 const PUSH_ENDPOINT = ADMIN_PROXY_MODE
@@ -131,7 +136,7 @@ export function usePushDryRun(
     setError(null);
 
     (async () => {
-      if (IS_MOCK_MODE) {
+      if (IS_MOCK_MODE || !_isUuid(customerId) || !_isUuid(productId)) {
         await _delay(400);
         if (cancelled) return;
         if (_demoFlag() === "blocked") {
@@ -236,7 +241,7 @@ export function usePushRequest(): UsePushRequestResult {
       setLoading(true);
       setError(null);
       try {
-        if (IS_MOCK_MODE) {
+        if (IS_MOCK_MODE || !_isUuid(args.customerId) || !_isUuid(args.productId)) {
           await _delay(600);
           if (args.dryRun) return FIXTURE_PUSH_TERMINAL_DRY_RUN;
           switch (args.mockMode) {

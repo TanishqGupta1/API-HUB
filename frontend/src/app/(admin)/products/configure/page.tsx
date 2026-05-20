@@ -42,9 +42,9 @@ export default function MasterOptionsCatalogPage() {
       await new Promise((r) => setTimeout(r, 3000));
       await load();
     } catch (e) {
-      log.error("Sync failed", e);
-      const n8nUrl = process.env.NEXT_PUBLIC_N8N_URL || "http://localhost:5678";
-      alert(`Sync failed. Check n8n at ${n8nUrl}.`);
+      log.warn("Sync failed", e);
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      alert(`Sync failed: ${msg}`);
     } finally {
       setSyncing(false);
     }
