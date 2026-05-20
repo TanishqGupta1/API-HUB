@@ -334,7 +334,7 @@ export function usePushStatus(pushLogId: string | null): UsePushStatusResult {
 
     async function load() {
       try {
-        if (IS_MOCK_MODE) {
+        if (IS_MOCK_MODE || !_isUuid(id)) {
           await _delay(350);
           if (cancelled) return;
           const demo = _demoFlag();
