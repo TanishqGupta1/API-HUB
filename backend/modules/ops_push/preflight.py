@@ -623,7 +623,7 @@ async def check_ops_oauth2_reachable(
 
 
 async def check_image_urls_reachable(
-    ctx: _PreflightContext, *, timeout_seconds: float = 5.0
+    ctx: _PreflightContext, *, timeout_seconds: float = 5.0, dry_run: bool = False
 ) -> CheckResult:
     """5. HEAD request per image URL returns 2xx.
 
@@ -642,6 +642,13 @@ async def check_image_urls_reachable(
                 "Run the supplier media sync, or attach at least one image "
                 "to this product."
             ),
+        )
+
+    if dry_run:
+        return CheckResult(
+            "image_urls_reachable",
+            True,
+            f"{len(urls)} image(s) present — HTTP HEAD check skipped in dry_run mode",
         )
 
     sem = asyncio.Semaphore(5)
@@ -866,7 +873,7 @@ async def run_preflight(
     # 5
     checks.append(
         await check_image_urls_reachable(
-            ctx, timeout_seconds=image_head_timeout_seconds
+            ctx, timeout_seconds=image_head_timeout_seconds, dry_run=dry_run
         )
     )
     # 6
