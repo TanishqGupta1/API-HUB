@@ -17,7 +17,6 @@ log = logging.getLogger(__name__)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480        # 8 hours (default / non-remember)
 REMEMBER_TOKEN_EXPIRE_MINUTES = 1080    # 18 hours
-REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 
 def _resolve_jwt_secret() -> str:
@@ -60,14 +59,6 @@ def create_access_token(payload: dict[str, Any], *, expire_minutes: int | None =
     }
     return jwt.encode(data, JWT_SECRET_KEY, algorithm=ALGORITHM)
 
-
-def create_refresh_token(payload: dict[str, Any]) -> str:
-    data = {
-        **payload,
-        "exp": datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
-        "type": "refresh",
-    }
-    return jwt.encode(data, JWT_SECRET_KEY, algorithm=ALGORITHM)
 
 
 def decode_token(token: str) -> dict[str, Any]:

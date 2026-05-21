@@ -4,6 +4,9 @@ import logging
 import secrets
 import uuid as uuid_mod
 from datetime import datetime, timezone
+from typing import Annotated
+
+from pydantic import Field
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
@@ -193,7 +196,7 @@ async def get_push_status(
 )
 async def ingest_supplier_products(
     supplier_slug: str,
-    batch: list[ProductIngest],
+    batch: Annotated[list[ProductIngest], Field(max_length=500)],
     key: OrchestratorKey,
     db: AsyncSession = Depends(get_db),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
@@ -314,7 +317,7 @@ async def get_supplier_schema(
     summary="Snapshot upsert of master options (option catalog)",
 )
 async def ingest_master_options(
-    batch: list[MasterOptionIngest],
+    batch: Annotated[list[MasterOptionIngest], Field(max_length=500)],
     key: OrchestratorKey,
     db: AsyncSession = Depends(get_db),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),

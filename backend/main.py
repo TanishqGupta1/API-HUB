@@ -45,7 +45,7 @@ from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
 from modules.suppliers.category_import import router as category_import_router
 from modules.auth.routes import router as auth_router
-from modules.auth.dependencies import get_current_user
+from modules.auth.dependencies import get_current_user, VGAdmin
 from modules.audit_log.routes import router as audit_log_router
 from modules.audit_log.middleware import AuditLogMiddleware
 from modules.customer_catalog.routes import router as customer_catalog_router
@@ -299,7 +299,7 @@ async def health():
 
 
 @app.get("/api/stats")
-async def get_stats(db: AsyncSession = Depends(get_db)):
+async def get_stats(_: VGAdmin, db: AsyncSession = Depends(get_db)):
     suppliers = (await db.execute(select(func.count()).select_from(Supplier))).scalar()
     # Dashboard "total catalog" should reflect live products only — archived
     # rows would inflate the counter and confuse admins about why category
