@@ -40,7 +40,7 @@ export default function FieldMappingPage() {
     try {
       await api(`/api/suppliers/${supplierId}/mappings`, {
         method: "PUT",
-        body: JSON.stringify({ mapping: payload }),
+        body: JSON.stringify(payload),
       });
       toast.success("Configuration saved");
     } catch (e) {

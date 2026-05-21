@@ -58,11 +58,13 @@ export default function SupplierDetailPage() {
   const handleSave = async () => {
     if (!supplier) return;
     setSaving(true);
-    const { id: _id, created_at, product_count, has_credentials: _hc, ...updateData } = supplier;
     try {
       await api(`/api/suppliers/${id}`, {
         method: "PATCH",
-        body: JSON.stringify(updateData),
+        body: JSON.stringify({
+          promostandards_code: supplier.promostandards_code,
+          adapter_class: supplier.adapter_class,
+        }),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);

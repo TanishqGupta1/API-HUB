@@ -23,6 +23,7 @@ _SERVICE_ACCOUNT_ID = uuid_mod.UUID("00000000-0000-0000-0000-000000000001")
 # requires a JWT cookie. Narrows blast radius if the shared secret leaks.
 _INGEST_ALLOWED_PATH_PREFIXES: tuple[str, ...] = (
     "/api/ingest",
+    "/api/sync",
     "/api/sync-jobs",
     "/api/suppliers",
     "/api/push-log",

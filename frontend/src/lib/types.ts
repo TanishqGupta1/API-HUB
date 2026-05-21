@@ -419,6 +419,7 @@ export interface CustomerProductSelection {
 
   // Embedded product fields (saves an extra fetch on the catalog page)
   supplier_id: string;
+  supplier_slug: string | null;
   supplier_sku: string;
   product_name: string;
   product_type: string;

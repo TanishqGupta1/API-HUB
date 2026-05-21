@@ -204,9 +204,14 @@ export default function ProductDetailPage() {
         );
       })()}
       {missingFields.length === 0 && product && (
-        <div className="mb-4 bg-[#f0f9f4] border-2 border-[#247a52] rounded-xl px-5 py-3 flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 text-[#247a52] shrink-0" />
-          <span className="text-[13px] font-semibold text-[#1a5c3a]">All required fields present — ready to push</span>
+        <div className="mb-4 bg-[#f0f9f4] border-2 border-[#247a52] rounded-xl px-5 py-3 flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-[#247a52] shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-[13px] font-semibold text-[#1a5c3a]">Product data complete</div>
+            <div className="text-[12px] text-[#247a52]/80 mt-0.5">
+              All product fields are present. Customer-side checks (OPS credentials, markup rules, master options) run when you click <span className="font-semibold">Push to OPS</span>.
+            </div>
+          </div>
         </div>
       )}
 

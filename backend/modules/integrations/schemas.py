@@ -112,6 +112,12 @@ class PushRequestStatus(BaseModel):
     cleanup_targets: Optional[dict[str, Any]] = None
     callback_status: str = "not_requested"
     callback_attempts: int = 0
+    # Gateway metadata — shown on push-log detail page
+    key_id: Optional[str] = None
+    request_id: Optional[UUID] = None
+    idempotency_key: Optional[str] = None
+    payload_hash: Optional[str] = None
+    created_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     links: Optional[PushRequestLinks] = None
 

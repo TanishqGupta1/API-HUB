@@ -556,7 +556,11 @@ class PromoStandardsClient:
             if style not in grouped:
                 if limit and len(grouped) >= limit:
                     continue
-                cat_name = _text(_attr(basic, "category"))
+                # SanMar's response usually omits 'category' on each product
+                # even when we filtered by category. Fall back to the
+                # category_name argument we asked SanMar for — every product
+                # in this response is, by definition, in that category.
+                cat_name = _text(_attr(basic, "category")) or category_name
                 grouped[style] = PSProductData(
                     product_id=style,
                     product_name=_text(_attr(basic, "productTitle")),

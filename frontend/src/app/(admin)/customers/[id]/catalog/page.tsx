@@ -132,21 +132,26 @@ export default function CustomerCatalogPage() {
     );
   }
 
-  const handlePush = async (e: React.MouseEvent, productId: string) => {
+  const handlePush = async (e: React.MouseEvent, productId: string, s: (typeof filtered)[number]) => {
     e.preventDefault();
     e.stopPropagation();
     if (!id) return;
     try {
-      await api(`/api/push/${id}/${productId}`, { method: "POST" });
-      // Optimistic — backend writes status="accepted" first (gateway pipeline),
-      // then BackgroundTasks flips it to "pushed"/"failed"/"partial_failure".
-      // Show "accepted" so the button gates correctly and the badge updates;
-      // a refresh or push-history fetch will reveal the terminal state.
+      await api(`/api/integrations/admin/push-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: { supplier_slug: s.supplier_slug ?? "sanmar" },
+          target: { customer_id: id },
+          product_ref: { supplier_sku: s.supplier_sku },
+          dry_run: false,
+        }),
+      });
       setSelections((prev) =>
-        prev.map((s) =>
-          s.product_id === productId
-            ? { ...s, status: "accepted", pushed_at: new Date().toISOString() }
-            : s,
+        prev.map((sel) =>
+          sel.product_id === productId
+            ? { ...sel, status: "accepted", pushed_at: new Date().toISOString() }
+            : sel,
         ),
       );
       toast.success("Push queued — gateway will deliver to OPS.");
@@ -317,7 +322,7 @@ export default function CustomerCatalogPage() {
                 key={s.id}
                 className="group flex flex-col bg-white border border-[#cfccc8] rounded-xl overflow-hidden shadow-sm hover:border-[#1e4d92] hover:shadow-md transition-all relative"
               >
-                <Link href={`/storefront/vg/product/${s.product_id}`} className="block flex-1">
+                <Link href={`/products/${s.product_id}`} className="block flex-1">
                   {/* Image */}
                   <div className="aspect-square bg-[#f2f0ed] relative overflow-hidden">
                     {s.image_url ? (
@@ -367,17 +372,26 @@ export default function CustomerCatalogPage() {
 
                 {/* Actions */}
                 <div className="p-3 pt-0 mt-auto border-t border-[#f2f0ed] flex items-center justify-between gap-2">
-                  <button
-                    onClick={(e) => handleRemove(e, s.product_id)}
-                    title="Remove from customer catalog"
-                    className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#888894] hover:text-[#b93232] transition-colors"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    Remove
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => handleRemove(e, s.product_id)}
+                      title="Remove from customer catalog"
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#888894] hover:text-[#b93232] transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Remove
+                    </button>
+                    <Link
+                      href={`/products/${s.product_id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[10px] font-semibold text-[#888894] hover:text-[#1e4d92] transition-colors"
+                    >
+                      View
+                    </Link>
+                  </div>
                   {isPushable && (
                     <button
-                      onClick={(e) => handlePush(e, s.product_id)}
+                      onClick={(e) => handlePush(e, s.product_id, s)}
                       disabled={alreadyPushed || pushInFlight}
                       className="text-[10px] font-bold bg-[#1e1e24] text-white px-3 py-1.5 rounded hover:bg-[#383842] disabled:bg-[#b4b4bc] disabled:cursor-not-allowed transition-colors"
                     >

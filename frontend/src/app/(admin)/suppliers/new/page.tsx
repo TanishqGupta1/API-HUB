@@ -168,7 +168,7 @@ export default function NewSupplierPage() {
         const fdef = def.fields.find((f) => f.key === k);
         trimmedAuth[k] = fdef?.type === "number" ? Number(v) : v;
       }
-      await api("/api/suppliers", {
+      const created = await api<{ id: string }>("/api/suppliers", {
         method: "POST",
         body: JSON.stringify({
           name, slug, protocol,
@@ -178,7 +178,8 @@ export default function NewSupplierPage() {
           auth_config: trimmedAuth,
         }),
       });
-      router.push("/suppliers");
+      // Land directly on the import page — that's where the next step lives.
+      router.push(`/mappings/${created.id}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to create supplier.";
       alert(`${msg}\n\nMake sure the slug is unique.`);
@@ -401,7 +402,7 @@ export default function NewSupplierPage() {
               <span className="text-[12px] font-bold text-[#484852]">After Registration</span>
             </div>
             <p className="text-[12px] text-[#888894] leading-relaxed">
-              Go to the supplier detail page and use <span className="font-semibold text-[#484852]">Refresh Endpoints</span> to verify credentials and start syncing.
+              You&apos;ll be taken to <span className="font-semibold text-[#484852]">Data Configuration</span> — pick a category, set a limit, and click <span className="font-semibold text-[#484852]">Initialize Import</span> to start syncing. Endpoints refresh automatically on the first import.
             </p>
           </div>
         </div>
