@@ -60,14 +60,14 @@ jobs:
 
       - name: Build & push FastAPI
         run: |
-          docker build -f backend/Dockerfile.prod \
+          docker build -f Dockerfile.prod \
             -t ${{ env.ECR_REGISTRY }}/apihub-fastapi:${{ steps.meta.outputs.tag }} \
             ./backend
           docker push ${{ env.ECR_REGISTRY }}/apihub-fastapi:${{ steps.meta.outputs.tag }}
 
       - name: Build & push Next.js
         run: |
-          docker build -f frontend/Dockerfile.prod \
+          docker build -f Dockerfile \
             -t ${{ env.ECR_REGISTRY }}/apihub-nextjs:${{ steps.meta.outputs.tag }} \
             ./frontend
           docker push ${{ env.ECR_REGISTRY }}/apihub-nextjs:${{ steps.meta.outputs.tag }}
