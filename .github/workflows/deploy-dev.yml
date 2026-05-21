@@ -47,7 +47,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-apihub-dev
+          role-to-assume: arn:aws:iam::690816807846:role/github-actions-apihub-dev
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
@@ -89,7 +89,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-apihub-dev
+          role-to-assume: arn:aws:iam::690816807846:role/github-actions-apihub-dev
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Download current task definition
@@ -124,7 +124,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-apihub-dev
+          role-to-assume: arn:aws:iam::690816807846:role/github-actions-apihub-dev
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Download current task definition
@@ -159,7 +159,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-apihub-dev
+          role-to-assume: arn:aws:iam::690816807846:role/github-actions-apihub-dev
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Download current task definition
