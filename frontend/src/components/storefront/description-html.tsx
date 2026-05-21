@@ -44,10 +44,19 @@ export function DescriptionHtml({ html }: Props) {
   useEffect(() => {
     if (!html) { setClean(null); return; }
     import("dompurify").then(({ default: DOMPurify }) => {
+      // Issue #29 — force rel="noopener noreferrer" on every <a target="_blank">.
+      // Without this, supplier-controlled HTML can tabnap (the new tab
+      // gains window.opener and can redirect the parent page).
+      DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+        if (node.tagName === "A" && node.getAttribute("target") === "_blank") {
+          node.setAttribute("rel", "noopener noreferrer");
+        }
+      });
       setClean(DOMPurify.sanitize(html, {
         ALLOWED_TAGS: ["p", "br", "strong", "em", "ul", "ol", "li", "a", "span", "h1", "h2", "h3", "h4", "h5", "h6"],
         ALLOWED_ATTR: ["href", "target", "rel"],
       }));
+      DOMPurify.removeHook("afterSanitizeAttributes");
     });
   }, [html]);
 

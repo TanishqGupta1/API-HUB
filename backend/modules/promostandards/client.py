@@ -619,27 +619,74 @@ class PromoStandardsClient:
     # -- Inventory ---------------------------------------------------------
 
     async def get_inventory(
-        self, product_ids: list[str], ws_version: str = "2.0.0"
+        self,
+        product_ids: list[str],
+        ws_version: str = "2.0.0",
+        part_ids: list[str] | None = None,
     ) -> list[PSInventoryLevel]:
+        """Fetch inventory for ``product_ids``.
+
+        When ``part_ids`` is provided we call ``getFilteredInventoryLevels``
+        (PromoStandards Inventory 2.0.0) — SanMar's v200 endpoint returns empty
+        or times out on the unfiltered ``getInventoryLevels`` for catalogs
+        with many SKUs, but always responds correctly to the filtered variant.
+
+        Without ``part_ids`` we fall back to ``getInventoryLevels`` for
+        suppliers whose implementation supports the simpler call.
+        """
         return await asyncio.to_thread(
-            self._sync_get_inventory, product_ids, ws_version
+            self._sync_get_inventory, product_ids, ws_version, part_ids
         )
 
     def _sync_get_inventory(
-        self, product_ids: list[str], ws_version: str
+        self,
+        product_ids: list[str],
+        ws_version: str,
+        part_ids: list[str] | None = None,
     ) -> list[PSInventoryLevel]:
         svc = self._get_service()
         out: list[PSInventoryLevel] = []
         for pid in product_ids:
-            try:
-                response = svc.getInventoryLevels(
-                    productId=pid, **self._auth(ws_version)
-                )
-            except Exception as exc:  # noqa: BLE001
-                log.warning("getInventoryLevels(%s) failed: %s", pid, exc)
+            response = self._call_inventory(svc, pid, ws_version, part_ids)
+            if response is None:
                 continue
             out.extend(self._parse_inventory(response, pid))
         return out
+
+    def _call_inventory(
+        self,
+        svc: Any,
+        product_id: str,
+        ws_version: str,
+        part_ids: list[str] | None,
+    ) -> Any:
+        """Try filtered first when part_ids are known; fall back to unfiltered.
+
+        SanMar v200 reliably answers ``getFilteredInventoryLevels`` and often
+        rejects/empties ``getInventoryLevels`` for full-catalog queries; other
+        PromoStandards implementations (S&S, Alphabroder) are the opposite.
+        Calling filtered-first when we have part IDs covers both worlds.
+        """
+        if part_ids:
+            try:
+                return svc.getFilteredInventoryLevels(
+                    productId=product_id,
+                    partIdArray={"partId": part_ids},
+                    **self._auth(ws_version),
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "getFilteredInventoryLevels(%s) failed, falling back: %s",
+                    product_id,
+                    exc,
+                )
+        try:
+            return svc.getInventoryLevels(
+                productId=product_id, **self._auth(ws_version)
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("getInventoryLevels(%s) failed: %s", product_id, exc)
+            return None
 
     def _parse_inventory(self, response: Any, product_id: str) -> Iterable[PSInventoryLevel]:
         inv_root = _attr(response, "Inventory", "inventory") or response
