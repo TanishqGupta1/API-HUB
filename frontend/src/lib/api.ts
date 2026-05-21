@@ -28,8 +28,10 @@ export interface ApiOptions extends RequestInit {
 }
 
 export async function api<T>(path: string, options?: ApiOptions): Promise<T> {
+  const method = (options?.method ?? "GET").toUpperCase();
+  const needsContentType = ["POST", "PUT", "PATCH"].includes(method);
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(needsContentType ? { "Content-Type": "application/json" } : {}),
     ...(options?.headers as Record<string, string>),
   };
 
@@ -76,7 +78,7 @@ export async function api<T>(path: string, options?: ApiOptions): Promise<T> {
   }
 
   if (res.status === 204) {
-    return {} as T;
+    return undefined as unknown as T;
   }
 
   const contentType = res.headers.get("content-type") ?? "";

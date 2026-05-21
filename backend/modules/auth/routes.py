@@ -1,5 +1,6 @@
 import logging
 import os
+import uuid as uuid_mod
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from jose import JWTError
@@ -114,10 +115,6 @@ async def setup_first_admin(
     Race-safe via INSERT ... ON CONFLICT DO NOTHING on the email unique
     constraint.
     """
-    count = (await db.execute(select(func.count()).select_from(User))).scalar()
-    if count and count > 0:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Admin already configured")
-
     stmt = (
         pg_insert(User)
         .values(
@@ -238,9 +235,9 @@ async def list_users(_: VGAdmin, db: AsyncSession = Depends(get_db)):
 
 @router.delete("/users/{user_id}", status_code=204)
 async def delete_user(
-    user_id: str, current_admin: VGAdmin, db: AsyncSession = Depends(get_db)
+    user_id: uuid_mod.UUID, current_admin: VGAdmin, db: AsyncSession = Depends(get_db)
 ) -> None:
-    if str(current_admin.id) == user_id:
+    if current_admin.id == user_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot delete your own account")
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()

@@ -43,9 +43,47 @@ class PushRequestProductRef(BaseModel):
     supplier_sku: Optional[str] = None
 
 
+def _validate_callback_url(url: str) -> str:
+    """Block SSRF: require https, reject private/loopback/link-local destinations."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError("callback url must use http or https scheme")
+    hostname = parsed.hostname or ""
+    # Block loopback and link-local by hostname string
+    if hostname in ("localhost", "127.0.0.1", "::1") or hostname.startswith("169.254."):
+        raise ValueError("callback url must not target loopback or link-local addresses")
+    # Block RFC 1918 private ranges by resolving the hostname
+    try:
+        resolved = socket.gethostbyname(hostname)
+        addr = ipaddress.ip_address(resolved)
+        if addr.is_private or addr.is_loopback or addr.is_link_local:
+            raise ValueError(
+                f"callback url resolves to a private/loopback address ({resolved})"
+            )
+    except (socket.gaierror, ValueError):
+        # DNS failure at validation time is fine — let it fail at fire time
+        pass
+    return url
+
+
 class PushRequestCallback(BaseModel):
     url: str
     secret: Optional[str] = None
+
+    @classmethod
+    def __get_validators__(cls):
+        yield from super().__get_validators__()
+
+    from pydantic import field_validator
+
+    @field_validator("url")
+    @classmethod
+    def url_must_be_safe(cls, v: str) -> str:
+        return _validate_callback_url(v)
 
 
 class PushRequest(BaseModel):

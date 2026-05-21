@@ -1,13 +1,39 @@
 """X-Orchestrator-Key authentication dependency for the Integration Gateway."""
+import asyncio
+import collections
 import hashlib
+import time
 from typing import Annotated, Optional
 
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from .models import IntegrationKey
+
+# ── In-process rate limiter (token bucket, per key id) ───────────────────────
+# Keyed by IntegrationKey.id (UUID str) → (tokens_remaining, window_start_ts)
+_RATE_BUCKETS: dict[str, tuple[int, float]] = {}
+
+def _check_rate_limit(key: IntegrationKey) -> None:
+    """Raise 429 if the key has exceeded its rate_limit_per_minute."""
+    limit = key.rate_limit_per_minute
+    if not limit or limit <= 0:
+        return
+    key_str = str(key.id)
+    now = time.monotonic()
+    tokens, window_start = _RATE_BUCKETS.get(key_str, (limit, now))
+    if now - window_start >= 60:
+        # New window
+        tokens = limit
+        window_start = now
+    if tokens <= 0:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "RATE_LIMITED", "message": "Request rate limit exceeded"},
+        )
+    _RATE_BUCKETS[key_str] = (tokens - 1, window_start)
 
 
 def _hash_key(raw_key: str) -> str:
@@ -48,7 +74,27 @@ async def get_orchestrator_key(
             "code": "KEY_REVOKED", "message": "This API key is inactive"
         })
 
+    # Enforce per-minute rate limit
+    _check_rate_limit(key)
+
+    # Fire-and-forget last_used_at update — doesn't block the request
+    asyncio.create_task(_update_last_used(key.id, db))
+
     return key
+
+
+async def _update_last_used(key_id, db: AsyncSession) -> None:
+    """Update last_used_at on the integration key (background, best-effort)."""
+    from datetime import datetime, timezone
+    try:
+        await db.execute(
+            update(IntegrationKey)
+            .where(IntegrationKey.id == key_id)
+            .values(last_used_at=datetime.now(timezone.utc))
+        )
+        await db.commit()
+    except Exception:
+        pass  # Non-critical — never fail a request over this
 
 
 def check_key_scope(

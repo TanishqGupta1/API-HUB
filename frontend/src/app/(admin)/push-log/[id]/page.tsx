@@ -142,8 +142,8 @@ export default function PushLogDetailPage() {
         live={log.status === "queued" || log.status === "processing"}
       />
 
-      {/* Worker lease info (when actively processing) */}
-      {log.worker_id && log.lease_until && (
+      {/* Worker lease info (only while actively processing) */}
+      {log.status === "processing" && log.worker_id && log.lease_until && (
         <div className="text-[10px] font-mono text-[#888894] text-center">
           worker: {log.worker_id} · lease until{" "}
           {new Date(log.lease_until).toLocaleTimeString()}
