@@ -65,7 +65,10 @@ jobs:
 
       - name: Build & push Next.js
         run: |
-          docker build -f frontend/Dockerfile -t ${{ env.ECR_REGISTRY }}/apihub-nextjs:${{ steps.meta.outputs.tag }} frontend
+          docker build -f frontend/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }} \
+            --build-arg NEXT_PUBLIC_N8N_URL=${{ vars.NEXT_PUBLIC_N8N_URL }} \
+            -t ${{ env.ECR_REGISTRY }}/apihub-nextjs:${{ steps.meta.outputs.tag }} frontend
           docker push ${{ env.ECR_REGISTRY }}/apihub-nextjs:${{ steps.meta.outputs.tag }}
 
       - name: Build & push n8n
