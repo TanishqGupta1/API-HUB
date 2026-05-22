@@ -142,7 +142,7 @@ function TimelineRow({
               </span>
             )}
             <span className="ml-auto font-mono text-[10px] text-[#888894]">
-              {new Date(step.attempted_at).toLocaleTimeString()}
+              {step.attempted_at ? new Date(step.attempted_at).toLocaleTimeString() : "—"}
             </span>
             {open ? (
               <ChevronDown className="w-4 h-4 text-[#888894]" />
@@ -161,7 +161,7 @@ function TimelineRow({
             </div>
           )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <JsonPanel label="OPS IDs returned" data={step.ops_ids} />
+            <JsonPanel label="OPS IDs returned" data={step.ops_ids ?? {}} />
             <JsonPanel
               label="Request fingerprint"
               data={{
