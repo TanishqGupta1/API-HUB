@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { api } from "@/lib/api";
+import { N8N_BASE } from "@/lib/env";
 import { log } from "@/lib/log";
 import type { MasterOption, MasterOptionsSyncStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -43,8 +44,7 @@ export default function MasterOptionsCatalogPage() {
       await load();
     } catch (e) {
       log.error("Sync failed", e);
-      const n8nUrl = process.env.NEXT_PUBLIC_N8N_URL || "http://localhost:5678";
-      alert(`Sync failed. Check n8n at ${n8nUrl}.`);
+      alert(`Sync failed. Check n8n at ${N8N_BASE}.`);
     } finally {
       setSyncing(false);
     }

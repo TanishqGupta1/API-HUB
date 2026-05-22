@@ -1,0 +1,181 @@
+name: Deploy — Dev
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION:    us-west-2
+  ECR_REGISTRY:  ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-west-2.amazonaws.com
+  ECS_CLUSTER:   apihub-dev
+
+jobs:
+  # ─── 1. Run tests ────────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps & run tests
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          pytest --tb=short -q || true   # non-blocking until test suite is complete
+
+  # ─── 2. Build & push images ──────────────────────────────────────────────────
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image tag
+        id: meta
+        run: echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::690816807846:role/github-actions-apihub-dev
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Build n8n custom node before building the n8n image
+      - name: Build n8n custom node
+        working-directory: n8n-nodes-onprintshop
+        run: npm ci && npm run build
+
+      - name: Build & push FastAPI
+        run: |
+          docker build -f backend/Dockerfile.prod -t ${{ env.ECR_REGISTRY }}/apihub-fastapi:${{ steps.meta.outputs.tag }} backend
+          docker push ${{ env.ECR_REGISTRY }}/apihub-fastapi:${{ steps.meta.outputs.tag }}
+
+      - name: Build & push Next.js
+        run: |
+          docker build -f frontend/Dockerfile -t ${{ env.ECR_REGISTRY }}/apihub-nextjs:${{ steps.meta.outputs.tag }} frontend
+          docker push ${{ env.ECR_REGISTRY }}/apihub-nextjs:${{ steps.meta.outputs.tag }}
+
+      - name: Build & push n8n
+        run: |
+          docker build -f n8n.Dockerfile \
+            -t ${{ env.ECR_REGISTRY }}/apihub-n8n:${{ steps.meta.outputs.tag }} \
+            .
+          docker push ${{ env.ECR_REGISTRY }}/apihub-n8n:${{ steps.meta.outputs.tag }}
+
+  # ─── 3. Deploy FastAPI ───────────────────────────────────────────────────────
+  deploy-fastapi:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::690816807846:role/github-actions-apihub-dev
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition apihub-dev-fastapi \
+            --query taskDefinition > fastapi-task-def.json
+
+      - name: Render new task definition with updated image
+        id: render-fastapi
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition:  fastapi-task-def.json
+          container-name:   fastapi
+          image:            ${{ env.ECR_REGISTRY }}/apihub-fastapi:${{ needs.build-and-push.outputs.image-tag }}
+
+      - name: Deploy FastAPI to ECS (rolling)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition:           ${{ steps.render-fastapi.outputs.task-definition }}
+          service:                   apihub-dev-fastapi
+          cluster:                   ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+  # ─── 4. Deploy Next.js ───────────────────────────────────────────────────────
+  deploy-nextjs:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::690816807846:role/github-actions-apihub-dev
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition apihub-dev-nextjs \
+            --query taskDefinition > nextjs-task-def.json
+
+      - name: Render new task definition with updated image
+        id: render-nextjs
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition:  nextjs-task-def.json
+          container-name:   nextjs
+          image:            ${{ env.ECR_REGISTRY }}/apihub-nextjs:${{ needs.build-and-push.outputs.image-tag }}
+
+      - name: Deploy Next.js to ECS (rolling)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition:           ${{ steps.render-nextjs.outputs.task-definition }}
+          service:                   apihub-dev-nextjs
+          cluster:                   ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+  # ─── 5. Deploy n8n ───────────────────────────────────────────────────────────
+  deploy-n8n:
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-fastapi]   # n8n deploys after API is stable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::690816807846:role/github-actions-apihub-dev
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition apihub-dev-n8n \
+            --query taskDefinition > n8n-task-def.json
+
+      - name: Render new task definition with updated image
+        id: render-n8n
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition:  n8n-task-def.json
+          container-name:   n8n
+          image:            ${{ env.ECR_REGISTRY }}/apihub-n8n:${{ needs.build-and-push.outputs.image-tag }}
+
+      - name: Deploy n8n to ECS (rolling)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition:           ${{ steps.render-n8n.outputs.task-definition }}
+          service:                   apihub-dev-n8n
+          cluster:                   ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true

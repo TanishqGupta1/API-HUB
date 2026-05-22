@@ -48,6 +48,44 @@ export default function CustomerCatalogPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
+  // All useMemo calls must be unconditional — hoisted above the isValidId early return.
+  const filtered = useMemo(() => {
+    return selections.filter((s) => {
+      if (statusFilter !== "all" && s.status !== statusFilter) return false;
+      if (
+        search &&
+        !s.product_name.toLowerCase().includes(search.toLowerCase()) &&
+        !s.supplier_sku.toLowerCase().includes(search.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [selections, search, statusFilter]);
+
+  const counts = useMemo(() => {
+    const c: Partial<Record<SelectionStatus, number>> = {
+      selected: 0,
+      accepted: 0,
+      processing: 0,
+      pushed: 0,
+      stale: 0,
+      failed: 0,
+      partial_failure: 0,
+      rejected: 0,
+      dry_run_pushed: 0,
+    };
+    for (const s of selections) {
+      if (c[s.status] !== undefined) c[s.status]! += 1;
+    }
+    return c;
+  }, [selections]);
+
+  const needsDecorationCount = useMemo(
+    () => selections.filter((s) => s.supplier_has_decoration_overlay && !s.decoration_ready).length,
+    [selections],
+  );
+
   useEffect(() => {
     if (!id) return;
     if (!isValidId) {
@@ -94,43 +132,6 @@ export default function CustomerCatalogPage() {
       </div>
     );
   }
-
-  const filtered = useMemo(() => {
-    return selections.filter((s) => {
-      if (statusFilter !== "all" && s.status !== statusFilter) return false;
-      if (
-        search &&
-        !s.product_name.toLowerCase().includes(search.toLowerCase()) &&
-        !s.supplier_sku.toLowerCase().includes(search.toLowerCase())
-      ) {
-        return false;
-      }
-      return true;
-    });
-  }, [selections, search, statusFilter]);
-
-  const counts = useMemo(() => {
-    const c: Partial<Record<SelectionStatus, number>> = {
-      selected: 0,
-      accepted: 0,
-      processing: 0,
-      pushed: 0,
-      stale: 0,
-      failed: 0,
-      partial_failure: 0,
-      rejected: 0,
-      dry_run_pushed: 0,
-    };
-    for (const s of selections) {
-      if (c[s.status] !== undefined) c[s.status]! += 1;
-    }
-    return c;
-  }, [selections]);
-
-  const needsDecorationCount = useMemo(
-    () => selections.filter((s) => s.supplier_has_decoration_overlay && !s.decoration_ready).length,
-    [selections],
-  );
 
   const handlePush = async (e: React.MouseEvent, productId: string) => {
     e.preventDefault();

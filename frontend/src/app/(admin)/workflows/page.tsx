@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import PipelineView, { type PipelineNode } from "@/components/workflows/pipeline-view";
 import { api } from "@/lib/api";
+import { N8N_BASE as N8N_URL } from "@/lib/env";
 import type { JobType, SyncJob, SyncStatus } from "@/lib/types";
-
-const N8N_URL = process.env.NEXT_PUBLIC_N8N_URL ?? "http://localhost:5678";
 
 const PIPELINE_NODES: PipelineNode[] = [
   { id: "supplier",  label: "Supplier",          sublabel: "Source data",       status: "idle", icon: "supplier"  },

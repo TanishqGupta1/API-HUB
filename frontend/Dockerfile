@@ -9,6 +9,10 @@ EXPOSE 3000
 # builder — produce Next.js standalone bundle for production.
 FROM deps AS builder
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_N8N_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_N8N_URL=$NEXT_PUBLIC_N8N_URL
 RUN npm run build
 
 # runner — minimal runtime image for production.

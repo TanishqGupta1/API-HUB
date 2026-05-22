@@ -2,14 +2,14 @@
 // the backend on /api/auth/login. The client cannot read or write it.
 // User info comes from /api/auth/me.
 
+import { API_BASE } from "./env";
+
 export interface AuthUser {
   id: string;
   email: string;
   role: "vg_admin" | "customer_admin";
   customer_id: string | null;
 }
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 let cachedUser: AuthUser | null | undefined = undefined;
 
