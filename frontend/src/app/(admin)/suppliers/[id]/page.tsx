@@ -7,7 +7,41 @@ import { log } from "@/lib/log";
 import { Supplier } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, ShieldCheck, Trash2, Lock, Globe, Package, Calendar, Activity, Cpu } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Trash2, Lock, Globe, Package, Calendar, Activity, Cpu, Pencil, X } from "lucide-react";
+
+// Per-protocol credential field definitions (mirrors new/page.tsx)
+const AUTH_FIELDS: Record<string, Array<{ key: string; label: string; type?: string }>> = {
+  promostandards: [
+    { key: "id", label: "PromoStandards ID" },
+    { key: "password", label: "Password", type: "password" },
+    { key: "customer_number", label: "Customer Number" },
+  ],
+  soap: [
+    { key: "id", label: "ID" },
+    { key: "password", label: "Password", type: "password" },
+    { key: "customer_number", label: "Customer Number" },
+  ],
+  rest: [
+    { key: "username", label: "Username" },
+    { key: "password", label: "Password", type: "password" },
+  ],
+  hmac: [
+    { key: "client_id", label: "Client ID" },
+    { key: "client_secret", label: "Client Secret", type: "password" },
+  ],
+  sftp: [
+    { key: "host", label: "Host" },
+    { key: "port", label: "Port" },
+    { key: "username", label: "Username" },
+    { key: "password", label: "Password", type: "password" },
+  ],
+  ops_graphql: [
+    { key: "client_id", label: "Client ID" },
+    { key: "client_secret", label: "Client Secret", type: "password" },
+    { key: "token_url", label: "Token URL" },
+    { key: "store_url", label: "Store URL" },
+  ],
+};
 
 const ADAPTER_OPTIONS = [
   { value: "", label: "— None (manual / legacy)" },
@@ -26,6 +60,10 @@ export default function SupplierDetailPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
+  const [showCredUpdate, setShowCredUpdate] = useState(false);
+  const [newCreds, setNewCreds] = useState<Record<string, string>>({});
+  const [savingCreds, setSavingCreds] = useState(false);
+  const [savedCreds, setSavedCreds] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -74,6 +112,30 @@ export default function SupplierDetailPage() {
       alert("Failed to save changes.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveCreds = async () => {
+    if (!supplier) return;
+    const filled = Object.fromEntries(Object.entries(newCreds).filter(([, v]) => v.trim()));
+    if (Object.keys(filled).length === 0) return;
+    setSavingCreds(true);
+    try {
+      await api(`/api/suppliers/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ auth_config: filled }),
+      });
+      setSavedCreds(true);
+      setShowCredUpdate(false);
+      setNewCreds({});
+      // Reload to get updated has_credentials flag
+      const updated = await api<Supplier>(`/api/suppliers/${id}`);
+      setSupplier(updated);
+      setTimeout(() => setSavedCreds(false), 3000);
+    } catch {
+      alert("Failed to update credentials.");
+    } finally {
+      setSavingCreds(false);
     }
   };
 
@@ -238,21 +300,106 @@ export default function SupplierDetailPage() {
               </span>
             </div>
 
-            <div className="p-6">
-              {supplier.has_credentials ? (
+            <div className="p-6 space-y-4">
+              {/* Status row */}
+              {supplier.has_credentials && !showCredUpdate ? (
                 <div className="flex items-center gap-3 p-4 bg-[#f0f9f4] border border-[#247a52]/30 rounded-xl">
                   <ShieldCheck className="w-5 h-5 text-[#247a52] flex-shrink-0" />
-                  <div>
-                    <div className="text-[13px] font-bold text-[#247a52]">Credentials configured</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-bold text-[#247a52]">
+                      Credentials configured
+                      {savedCreds && (
+                        <span className="ml-2 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          ✓ Updated
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[12px] text-[#247a52]/80 mt-0.5">
-                      Stored encrypted. To update, delete this supplier and re-add with new credentials.
+                      Stored encrypted — never exposed in API responses.
                     </div>
                   </div>
+                  <button
+                    onClick={() => { setShowCredUpdate(true); setNewCreds({}); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#1e4d92] border border-[#1e4d92] rounded-lg hover:bg-[#eef4fb] transition-colors shrink-0"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    Update
+                  </button>
                 </div>
-              ) : (
-                <div className="flex items-center gap-3 p-4 bg-[#fdf8f2] border border-[#e8a020]/30 rounded-xl">
-                  <Lock className="w-5 h-5 text-[#e8a020] flex-shrink-0" />
-                  <div className="text-[13px] font-semibold text-[#e8a020]">No credentials set</div>
+              ) : !supplier.has_credentials && !showCredUpdate ? (
+                <div className="flex items-center justify-between gap-3 p-4 bg-[#fdf8f2] border border-[#e8a020]/30 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <Lock className="w-5 h-5 text-[#e8a020] flex-shrink-0" />
+                    <div className="text-[13px] font-semibold text-[#e8a020]">No credentials set</div>
+                  </div>
+                  <button
+                    onClick={() => { setShowCredUpdate(true); setNewCreds({}); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#1e4d92] border border-[#1e4d92] rounded-lg hover:bg-[#eef4fb] transition-colors shrink-0"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    Add Credentials
+                  </button>
+                </div>
+              ) : null}
+
+              {/* Credential update form */}
+              {showCredUpdate && (
+                <div className="border border-[#cfccc8] rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 bg-[#f9f7f4] border-b border-[#f2f0ed] flex items-center justify-between">
+                    <span className="text-[12px] font-bold text-[#484852]">
+                      {supplier.has_credentials ? "Replace credentials" : "Enter credentials"}
+                    </span>
+                    <button
+                      onClick={() => { setShowCredUpdate(false); setNewCreds({}); }}
+                      className="text-[#888894] hover:text-[#484852] transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {supplier.has_credentials && (
+                      <p className="text-[11px] text-[#888894]">
+                        Only filled fields will be updated. Leave blank to keep the existing value.
+                      </p>
+                    )}
+                    {(AUTH_FIELDS[supplier.protocol] ?? []).map(({ key, label, type }) => (
+                      <div key={key}>
+                        <label className="block text-[12px] font-semibold text-[#484852] mb-1">{label}</label>
+                        <Input
+                          type={type ?? "text"}
+                          value={newCreds[key] ?? ""}
+                          onChange={(e) => setNewCreds((prev) => ({ ...prev, [key]: e.target.value }))}
+                          className="h-10 border-[#cfccc8] font-mono text-[13px]"
+                          placeholder={type === "password" ? "••••••••" : `Enter ${label.toLowerCase()}`}
+                          autoComplete={type === "password" ? "new-password" : "off"}
+                        />
+                      </div>
+                    ))}
+                    {(AUTH_FIELDS[supplier.protocol] ?? []).length === 0 && (
+                      <p className="text-[12px] text-[#888894] italic">
+                        No standard credential fields defined for protocol &quot;{supplier.protocol}&quot;.
+                        Use the supplier mappings page to set protocol_config instead.
+                      </p>
+                    )}
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={handleSaveCreds}
+                        disabled={
+                          savingCreds ||
+                          Object.values(newCreds).filter(Boolean).length === 0
+                        }
+                        className="flex-1 py-2 text-[13px] font-bold text-white bg-[#1e4d92] rounded-lg hover:bg-[#173d74] disabled:opacity-40 transition-colors shadow-[0_2px_0_#143566] active:shadow-none active:translate-y-px"
+                      >
+                        {savingCreds ? "Saving…" : "Save Credentials"}
+                      </button>
+                      <button
+                        onClick={() => { setShowCredUpdate(false); setNewCreds({}); }}
+                        className="px-4 py-2 text-[13px] font-semibold text-[#484852] border border-[#cfccc8] rounded-lg hover:border-[#888894] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
