@@ -403,7 +403,9 @@ def check_markup_rule_resolves(ctx: _PreflightContext) -> CheckResult:
     )
 
 
-def check_push_mappings_present(ctx: _PreflightContext) -> CheckResult:
+def check_push_mappings_present(
+    ctx: _PreflightContext, *, dry_run: bool = False
+) -> CheckResult:
     """3. Every ProductOption (and attribute) has a push_mapping_options row.
 
     Block when:
@@ -413,12 +415,27 @@ def check_push_mappings_present(ctx: _PreflightContext) -> CheckResult:
     Pass when:
       - product has no options (nothing to map)
       - every option has a non-null target_ops_option_id
+
+    Soft-pass (dry_run only) when:
+      - product has options but NO mapping rows exist yet (first-time push).
+        The product will be pushed without option mapping — acceptable for a
+        dry-run / demo. A live push still requires full mapping.
     """
     if not ctx.options:
         return CheckResult(
             "push_mappings_present",
             True,
             "product has no options — nothing to map",
+        )
+
+    # Soft-pass for dry_run when this is a brand-new product with no mapping yet
+    if dry_run and not ctx.push_mapping_options:
+        return CheckResult(
+            "push_mappings_present",
+            True,
+            f"no mapping yet for {len(ctx.options)} option(s) — "
+            "skipped in dry_run (product will push without option mapping). "
+            "Sync master options + resolve before live push.",
         )
 
     expected_keys = {opt.option_key for opt in ctx.options}
@@ -862,7 +879,7 @@ async def run_preflight(
     # 2
     checks.append(check_markup_rule_resolves(ctx))
     # 3
-    checks.append(check_push_mappings_present(ctx))
+    checks.append(check_push_mappings_present(ctx, dry_run=dry_run))
     # 4a (NEW — split out from 4 for precise field-level reporting)
     checks.append(check_customer_ops_creds_present(ctx))
     # 4 — skip OAuth2 network call in dry_run (FakeOpsClient needs no token)
