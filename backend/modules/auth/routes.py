@@ -97,7 +97,10 @@ def _clear_auth_cookie(response: Response) -> None:
 @router.post("/login", response_model=UserRead)
 @limiter.limit("10/minute")
 async def login(
-    request: Request, body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)
+    request: Request,  # required by slowapi — do not remove
+    body: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
 ) -> User:
     result = await db.execute(
         select(User).where(User.email == body.email, User.is_active.is_(True))
@@ -119,7 +122,9 @@ async def login(
 @router.post("/refresh", response_model=UserRead)
 @limiter.limit("30/minute")
 async def refresh_access_token(
-    request: Request, response: Response, db: AsyncSession = Depends(get_db)
+    request: Request,  # required by slowapi — do not remove
+    response: Response,
+    db: AsyncSession = Depends(get_db),
 ) -> User:
     """Exchange a valid refresh_token cookie for a new access_token cookie.
 
@@ -163,11 +168,19 @@ async def get_me(current_user: CurrentUser):
 async def setup_first_admin(
     body: SetupRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> User:
-    """Create the first vg_admin. Returns 409 if any user already exists.
+    """Create the first vg_admin. Returns 409 if ANY user already exists.
 
-    Race-safe via INSERT ... ON CONFLICT DO NOTHING on the email unique
-    constraint.
+    The count guard is the primary protection — it blocks a second caller
+    from registering with a *different* email (which ON CONFLICT alone
+    would not catch).  ON CONFLICT DO NOTHING is a belt-and-suspenders
+    guard against a narrow TOCTOU race between two simultaneous /setup
+    requests.
     """
+    # Primary guard: refuse if even one user exists (any email, any role).
+    count = (await db.execute(select(func.count()).select_from(User))).scalar()
+    if count and count > 0:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Setup already complete")
+
     stmt = (
         pg_insert(User)
         .values(

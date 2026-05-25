@@ -1,7 +1,7 @@
 """Schema cleanup — image mirroring columns.
 
 Revision ID: 0003_schema_cleanup
-Revises: 0002_phase8_pricing
+Revises: 0001_baseline
 Create Date: 2026-05-25
 
 Adds mirrored_at + its index to product_images.  All other columns that were
@@ -14,7 +14,7 @@ All statements use IF NOT EXISTS guards so they are safe to re-run.
 from alembic import op
 
 revision = "0003_schema_cleanup"
-down_revision = "0002_phase8_pricing"
+down_revision = "0001_baseline"
 branch_labels = None
 depends_on = None
 
@@ -46,6 +46,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute(
+        "ALTER TABLE product_images "
+        "DROP CONSTRAINT IF EXISTS uq_product_images_supplier_url"
+    )
     op.execute(
         "DROP INDEX IF EXISTS idx_product_images_mirrored_at"
     )

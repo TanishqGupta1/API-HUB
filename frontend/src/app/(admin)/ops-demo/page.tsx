@@ -4,9 +4,11 @@ import { useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, Loader2, Play, RefreshCw, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
 
-const DEMO_PRODUCT_ID  = "cc12cd6e-b84b-4806-b585-40fa2b5c634f";
-const DEMO_CUSTOMER_ID = "5a47202b-b5ae-410a-afc0-10d13cd32c98";
-const DEMO_SUPPLIER_SLUG = "sanmar";
+// Override via NEXT_PUBLIC_DEMO_PRODUCT_ID / NEXT_PUBLIC_DEMO_CUSTOMER_ID in
+// .env.local to use a different product or customer without touching code.
+const DEMO_PRODUCT_ID  = process.env.NEXT_PUBLIC_DEMO_PRODUCT_ID  ?? "cc12cd6e-b84b-4806-b585-40fa2b5c634f";
+const DEMO_CUSTOMER_ID = process.env.NEXT_PUBLIC_DEMO_CUSTOMER_ID ?? "5a47202b-b5ae-410a-afc0-10d13cd32c98";
+const DEMO_SUPPLIER_SLUG = process.env.NEXT_PUBLIC_DEMO_SUPPLIER_SLUG ?? "sanmar";
 
 interface StepResult {
   step: number;
