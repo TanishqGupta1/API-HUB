@@ -19,9 +19,15 @@ def rule(scope, markup_pct, *, priority=0, min_margin=None, rounding="none"):
         id=uuid4(),
         scope=scope,
         markup_pct=markup_pct,
+        markup_amount=None,
         priority=priority,
         min_margin=min_margin,
         rounding=rounding,
+        is_active=True,
+        effective_from=None,
+        effective_until=None,
+        min_price=None,
+        max_price=None,
     )
 
 

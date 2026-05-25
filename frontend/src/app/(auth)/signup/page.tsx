@@ -1,34 +1,48 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { clearCachedUser } from "@/lib/auth";
-import { API_BASE } from "@/lib/env";
 
-export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
-  );
-}
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-function LoginForm() {
+export default function SignupPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<"checking" | "open" | "closed">("checking");
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/auth/signup-status`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((j: { open: boolean }) => setStatus(j.open ? "open" : "closed"))
+      .catch(() => setStatus("closed"));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Enter a valid email address");
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords do not match");
+      return;
+    }
+    if (password.trim().length < 12) {
+      setError("Password must be at least 12 non-whitespace characters");
+      return;
+    }
+
+    setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -37,21 +51,60 @@ function LoginForm() {
 
       if (!res.ok) {
         const json = await res.json().catch(() => null);
-        throw new Error(json?.detail ?? "Invalid credentials");
+        throw new Error(json?.detail ?? "Registration failed");
       }
 
-      // Cookie is set by the backend; just clear the cached user so the next
-      // fetchUser() pulls fresh data.
       clearCachedUser();
-
-      const next = searchParams.get("next") ?? "/";
-      router.push(next);
+      router.push("/");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setLoading(false);
     }
+  }
+
+  if (status === "closed") {
+    return (
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "400px",
+          padding: "40px",
+          background: "var(--paper)",
+          border: "1px solid var(--border)",
+          borderRadius: "4px",
+        }}
+      >
+        <div style={{ marginBottom: "16px" }}>
+          <div
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "11px",
+              fontWeight: 700,
+              color: "var(--blue)",
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+              marginBottom: "8px",
+            }}
+          >
+            API-HUB
+          </div>
+          <h1 style={{ fontSize: "20px", fontWeight: 700, color: "var(--ink)", margin: 0 }}>
+            Registration closed
+          </h1>
+        </div>
+        <p style={{ fontSize: "13px", color: "var(--ink-muted)", marginBottom: "20px" }}>
+          Public signup is currently disabled. Contact an administrator for access.
+        </p>
+        <Link
+          href="/login"
+          style={{ color: "var(--blue)", textDecoration: "none", fontWeight: 600, fontSize: "13px" }}
+        >
+          Sign in instead →
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -87,7 +140,7 @@ function LoginForm() {
             margin: 0,
           }}
         >
-          Sign in
+          Create account
         </h1>
       </div>
 
@@ -145,10 +198,54 @@ function LoginForm() {
           <input
             id="password"
             type="password"
-            autoComplete="current-password"
+            autoComplete="new-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              border: "1px solid var(--border)",
+              borderRadius: "3px",
+              background: "#fff",
+              color: "var(--ink)",
+              fontSize: "14px",
+              boxSizing: "border-box",
+            }}
+          />
+          <div
+            style={{
+              fontSize: "11px",
+              color: "var(--ink-muted)",
+              marginTop: "4px",
+            }}
+          >
+            Minimum 12 characters
+          </div>
+        </div>
+
+        <div>
+          <label
+            htmlFor="confirm"
+            style={{
+              display: "block",
+              fontSize: "11px",
+              fontWeight: 700,
+              color: "var(--ink-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              marginBottom: "6px",
+            }}
+          >
+            Confirm Password
+          </label>
+          <input
+            id="confirm"
+            type="password"
+            autoComplete="new-password"
+            required
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
             style={{
               width: "100%",
               padding: "8px 12px",
@@ -192,7 +289,7 @@ function LoginForm() {
             opacity: loading ? 0.7 : 1,
           }}
         >
-          {loading ? "Signing in…" : "Sign in"}
+          {loading ? "Creating account…" : "Create account"}
         </button>
 
         <div
@@ -202,12 +299,12 @@ function LoginForm() {
             color: "var(--ink-muted)",
           }}
         >
-          Need an account?{" "}
+          Already have an account?{" "}
           <Link
-            href="/signup"
+            href="/login"
             style={{ color: "var(--blue)", textDecoration: "none", fontWeight: 600 }}
           >
-            Create one
+            Sign in
           </Link>
         </div>
       </form>
