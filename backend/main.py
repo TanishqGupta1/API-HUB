@@ -49,6 +49,7 @@ from modules.auth.dependencies import get_current_user
 from modules.audit_log.routes import router as audit_log_router
 from modules.audit_log.middleware import AuditLogMiddleware
 from modules.customer_catalog.routes import router as customer_catalog_router
+from modules.n8n_proxy.routes import router as n8n_proxy_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -287,6 +288,7 @@ app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
+app.include_router(n8n_proxy_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
 app.include_router(integrations_router)
 app.include_router(integrations_admin_router, dependencies=_auth)
