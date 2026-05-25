@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { log } from "@/lib/log";
 import { Supplier } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,31 +70,25 @@ function timeAgo(iso: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SuppliersPage() {
-  const [suppliers, setSuppliers]   = useState<Supplier[]>([]);
-  const [healthMap, setHealthMap]   = useState<Record<string, SupplierSyncHealth>>({});
-  const [loading, setLoading]       = useState(true);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [health, setHealth] = useState<SyncHealthResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [data, health] = await Promise.all([
-          api<Supplier[]>("/api/suppliers"),
-          api<SyncHealthResponse>("/api/sync-jobs/health").catch(() => ({ suppliers: [], generated_at: "" })),
-        ]);
-        setSuppliers(data);
-        const map: Record<string, SupplierSyncHealth> = {};
-        for (const h of health.suppliers) map[h.supplier_id] = h;
-        setHealthMap(map);
-      } catch (e) {
-        log.error("Failed to load suppliers", e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
+    setIsLoading(true);
+    Promise.all([
+      api<Supplier[]>("/api/suppliers"),
+      api<SyncHealthResponse>("/api/sync-jobs/health").catch(() => ({ suppliers: [], generated_at: "" })),
+    ]).then(([s, h]) => {
+      setSuppliers(s);
+      setHealth(h);
+    }).finally(() => setIsLoading(false));
   }, []);
 
-  if (loading) {
+  const healthMap: Record<string, SupplierSyncHealth> = {};
+  for (const h of health?.suppliers ?? []) healthMap[h.supplier_id] = h;
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[60vh] flex-col gap-4">
         <div className="w-10 h-10 border-[3px] border-[#1e4d92] border-t-transparent rounded-full animate-spin" />
@@ -251,7 +244,7 @@ export default function SuppliersPage() {
       </div>
 
       {/* Empty State */}
-      {!loading && suppliers.length === 0 && (
+      {!isLoading && suppliers.length === 0 && (
         <div className="text-center py-20 bg-[#f9f7f4] rounded-3xl border-2 border-dashed border-[#cfccc8]">
           <div className="w-16 h-16 rounded-2xl bg-white border border-[#cfccc8] flex items-center justify-center text-3xl mx-auto mb-6 shadow-sm">📡</div>
           <h3 className="text-xl font-black text-[#1e1e24] mb-2 tracking-tight">No Suppliers Connected</h3>

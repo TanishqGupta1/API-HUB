@@ -143,7 +143,6 @@ export default function ProductDetailPage() {
       setMirrorLoading(false);
     }
   }
->>>>>>> 1b5277a (feat(images): add image mirroring module with CDN storage and bulk mirror UI)
 
   const imageTabs = useMemo(() => {
     if (!product) return [] as Array<{ key: string; available: boolean }>;

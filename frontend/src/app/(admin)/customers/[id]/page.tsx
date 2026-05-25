@@ -48,6 +48,10 @@ export default function CustomerSettingsPage() {
   const [syncingOptions, setSyncingOptions] = useState(false);
   const [syncResult, setSyncResult] = useState<{ synced: number } | null>(null);
 
+  // Delete storefront
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     if (isInvalidId) return;
     async function load() {
@@ -100,12 +104,25 @@ export default function CustomerSettingsPage() {
     }
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api(`/api/customers/${id}`, { method: "DELETE" });
+      toast.success("Storefront deleted");
+      router.push("/customers");
+    } catch (e) {
+      toast.error("Failed to delete storefront");
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
   const handleSyncOptions = async () => {
     setSyncingOptions(true);
     setSyncResult(null);
     try {
       const result = await api<{ synced: number; status: string }>(
-        `/api/master-options/sync`,
+        `/api/master-options/sync?customer_id=${id}`,
         { method: "POST" }
       );
       setSyncResult({ synced: result.synced });
@@ -393,13 +410,42 @@ export default function CustomerSettingsPage() {
           </div>
 
           <div className="bg-[#fdf2f2] border border-[#f5c6cb] rounded-2xl p-6 space-y-4">
-             <h3 className="text-[10px] font-black uppercase tracking-widest text-[#b93232]">Danger Zone</h3>
-             <p className="text-[11px] text-[#b93232] font-medium leading-relaxed">
-               Deactivating this instance will stop all product syncs immediately. Existing products on the storefront will remain but won&apos;t be updated.
-             </p>
-             <Button variant="outline" className="w-full border-[#f5c6cb] text-[#b93232] hover:bg-[#b93232] hover:text-white font-bold text-[10px] uppercase tracking-wider h-10 transition-all">
-                Terminate Node Connection
-             </Button>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-[#b93232]">Danger Zone</h3>
+            <p className="text-[11px] text-[#b93232] font-medium leading-relaxed">
+              Permanently deletes this storefront and all its credentials. This cannot be undone.
+            </p>
+            {!confirmDelete ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="w-full h-10 rounded-xl border-2 border-[#b93232] text-[#b93232] hover:bg-[#b93232] hover:text-white font-bold text-[10px] uppercase tracking-wider transition-all"
+              >
+                Delete Storefront
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-[11px] font-bold text-[#b93232]">
+                  Are you sure? This will permanently delete &quot;{customer?.name}&quot;.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex-1 h-10 rounded-xl bg-[#b93232] text-white font-bold text-[10px] uppercase tracking-wider disabled:opacity-50 transition-all"
+                  >
+                    {deleting ? "Deleting…" : "Yes, Delete"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="flex-1 h-10 rounded-xl border-2 border-[#cfccc8] text-[#888894] font-bold text-[10px] uppercase tracking-wider hover:border-[#1e1e24] hover:text-[#1e1e24] transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
