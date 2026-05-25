@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import NextImage from "next/image";
 import { api } from "@/lib/api";
 import { resolveApiBase } from "@/lib/api-base";
 import { log } from "@/lib/log";
@@ -170,10 +171,12 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                 {previewMode === 'css' ? (
                   <>
                     {/* Product Image Base */}
-                    <img 
-                        src={product.image_url || "/placeholder-product.png"} 
+                    <NextImage
+                        src={product.image_url || "/placeholder-product.png"}
                         alt="Preview Base"
-                        className="w-full h-full object-contain p-4 opacity-40 mix-blend-multiply"
+                        fill
+                        sizes="300px"
+                        className="object-contain p-4 opacity-40 mix-blend-multiply"
                     />
                     
                     {/* Decoration Overlay */}
@@ -188,19 +191,23 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                                 height: '100px',
                             }}
                         >
-                            <img 
-                                src={logoUrl} 
+                            <NextImage
+                                src={logoUrl}
                                 alt="Logo Overlay"
-                                className="w-full h-full object-contain drop-shadow-md"
+                                fill
+                                sizes="100px"
+                                className="object-contain drop-shadow-md"
                             />
                         </div>
                     )}
                   </>
                 ) : (
-                  <img 
+                  <NextImage
                     src={`${resolveApiBase()}/api/customers/${customer.id}/products/${product.id}/decorations/preview.png?t=${Date.now()}`}
                     alt="Engine Preview"
-                    className="w-full h-full object-contain"
+                    fill
+                    sizes="300px"
+                    className="object-contain"
                   />
                 )}
                 

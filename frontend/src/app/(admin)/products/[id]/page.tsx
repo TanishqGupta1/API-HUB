@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type {
@@ -81,7 +82,7 @@ export default function ProductDetailPage() {
     }
   }
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [p, preview] = await Promise.all([
         api<Product>(`/api/products/${id}`),
@@ -109,9 +110,9 @@ export default function ProductDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  useEffect(() => { fetchData(); }, [id]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const imageTabs = useMemo(() => {
     if (!product) return [] as Array<{ key: string; available: boolean }>;
@@ -281,10 +282,12 @@ export default function ProductDetailPage() {
                           flex items-center justify-center mb-3
                           shadow-[4px_5px_0_rgba(30,77,146,0.08)] overflow-hidden">
             {activeImage ? (
-              <img
+              <Image
                 src={activeImage}
                 alt={`${product.product_name} (${activeImageTab})`}
-                className="w-full h-full object-contain p-5"
+                fill
+                sizes="320px"
+                className="object-contain p-5"
               />
             ) : (
               <div className="text-center">

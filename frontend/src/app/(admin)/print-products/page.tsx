@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import type { ProductListItem, Supplier } from "@/lib/types";
 
@@ -217,10 +218,11 @@ function PrintProductRow({ product: p, index }: { product: ProductListItem; inde
           border: "1px solid var(--border)",
           borderRadius: "8px",
           overflow: "hidden",
+          position: "relative",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
           {p.image_url ? (
-            <img src={p.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: "4px" }} />
+            <Image src={p.image_url} alt="" fill sizes="56px" style={{ objectFit: "contain", padding: "4px" }} />
           ) : (
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" strokeWidth="1.5" width="22" height="22">
               <rect x="3" y="3" width="18" height="18" rx="2" />

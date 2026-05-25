@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type { Supplier } from "@/lib/types";
@@ -167,9 +168,11 @@ export default function ImportFromSupplierPage() {
             ))}
           </select>
           {categoryInfo?.preview_image_url && (
-            <img
+            <Image
               src={categoryInfo.preview_image_url}
               alt={categoryInfo.name}
+              width={128}
+              height={128}
               className="mt-3 h-32 w-32 object-cover rounded border border-[#cfccc8]"
             />
           )}

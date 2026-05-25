@@ -7,6 +7,24 @@ import { resolveApiBase } from "@/lib/api-base";
 
 const API_BASE = resolveApiBase();
 
+type ValidationError = { loc: (string | number)[]; msg: string; type: string };
+
+function formatApiError(detail: unknown, status: number): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const fieldMsg = (detail as ValidationError[])
+      .map((e) => {
+        const field = e.loc?.filter((p) => p !== "body").join(".") ?? "input";
+        return `${field}: ${e.msg}`;
+      })
+      .join("; ");
+    if (fieldMsg) return fieldMsg;
+  }
+  if (status === 401) return "Invalid credentials";
+  if (status === 422) return "Please check the email and password fields";
+  return "Login failed";
+}
+
 export default function LoginPage() {
   return (
     <Suspense fallback={null}>
@@ -39,7 +57,7 @@ function LoginForm() {
 
       if (!res.ok) {
         const json = await res.json().catch(() => null);
-        throw new Error(json?.detail ?? "Invalid credentials");
+        throw new Error(formatApiError(json?.detail, res.status));
       }
 
       // Cookie is set by the backend; just clear the cached user so the next

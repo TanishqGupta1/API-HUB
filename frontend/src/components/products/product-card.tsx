@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Image from "next/image";
 import { CheckCircle2, Plus, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
 import type { ProductListItem } from "@/lib/types";
@@ -70,10 +71,12 @@ export function ProductCard({ product, isSelected, onToggleSelection, onArchive 
       {/* Card header – image area */}
       <div className="relative h-[180px] bg-[#ebe8e3] flex items-center justify-center border-b border-[#cfccc8]">
         {product.image_url ? (
-          <img
+          <Image
             src={product.image_url}
             alt={product.product_name}
-            className="w-full h-full object-contain p-3"
+            fill
+            sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+            className="object-contain p-3"
           />
         ) : (
           <div className="px-6 pt-12 pb-10 text-center select-none pointer-events-none opacity-20 group-hover:opacity-30 transition-opacity">

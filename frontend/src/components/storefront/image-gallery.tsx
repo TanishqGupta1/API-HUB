@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import type { ProductImage } from "@/lib/types";
 
 interface ImageGalleryProps {
@@ -69,9 +70,9 @@ export function ImageGallery({ images, fallbackUrl, alt, selectedColor }: ImageG
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`Open ${alt} full size`}
-          className="flex-1 min-h-0 w-full bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] overflow-hidden flex items-center justify-center cursor-zoom-in"
+          className="relative flex-1 min-h-0 w-full bg-[#ebe8e3] border border-[#cfccc8] rounded-[10px] overflow-hidden flex items-center justify-center cursor-zoom-in"
         >
-          <img src={active.url} alt={alt} className="w-full h-full object-contain p-8" />
+          <Image src={active.url} alt={alt} fill sizes="(max-width: 768px) 100vw, 50vw" className="object-contain p-8" />
         </a>
         <div className="text-[10px] font-mono uppercase tracking-[0.1em] text-[#888894] text-center">
           {active.image_type}{active.color ? ` · ${active.color}` : ""}
@@ -91,7 +92,7 @@ export function ImageGallery({ images, fallbackUrl, alt, selectedColor }: ImageG
                   : "border-[#cfccc8] hover:border-[#1e4d92] opacity-70 hover:opacity-100"
                 }`}
             >
-              <img src={img.url} alt="" className="w-full h-full object-contain bg-[#f9f7f4] p-1" />
+              <Image src={img.url} alt="" width={60} height={60} className="w-full h-full object-contain bg-[#f9f7f4] p-1" />
             </button>
           ))}
         </div>

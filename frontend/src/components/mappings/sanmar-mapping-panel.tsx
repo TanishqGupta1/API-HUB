@@ -47,16 +47,26 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
   }, [supplierId]);
 
   // 2. Polling for Active Job
+  // Pin the interval to (jobId, jobStatus) so it isn't torn down on every
+  // poll-update; route the callback through a ref so a parent passing a fresh
+  // onSyncComplete each render can't churn the interval either.
   const pollFailures = useRef(0);
+  const onSyncCompleteRef = useRef(onSyncComplete);
   useEffect(() => {
-    if (!activeJob || activeJob.status === "completed" || activeJob.status === "failed") {
+    onSyncCompleteRef.current = onSyncComplete;
+  }, [onSyncComplete]);
+
+  const jobId = activeJob?.id;
+  const jobStatus = activeJob?.status;
+  useEffect(() => {
+    if (!jobId || jobStatus === "completed" || jobStatus === "failed") {
       pollFailures.current = 0;
       return;
     }
 
     const interval = setInterval(async () => {
       try {
-        const updated = await api<SyncJob>(`/api/sync-jobs/${activeJob.id}`);
+        const updated = await api<SyncJob>(`/api/sync-jobs/${jobId}`);
         pollFailures.current = 0;
         setActiveJob(updated);
         if (updated.status === "completed" || updated.status === "failed") {
@@ -77,7 +87,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
                 : `Import failed for ${cat}`,
             );
           }
-          if (onSyncComplete) onSyncComplete();
+          onSyncCompleteRef.current?.();
         }
       } catch (e: any) {
         pollFailures.current += 1;
@@ -90,7 +100,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [activeJob?.id, activeJob?.status]);
+  }, [jobId, jobStatus]);
 
   const defaultCategory = value["sanmar.default_category"] || "";
   const includeImages = value["sanmar.include_images"] === "true";
