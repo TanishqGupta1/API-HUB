@@ -60,12 +60,10 @@ from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
 from modules.suppliers.category_import import router as category_import_router
 from modules.auth.routes import router as auth_router
-from modules.portal.routes import router as portal_router
 from modules.auth.dependencies import get_current_user, VGAdmin
 from modules.audit_log.routes import router as audit_log_router
 from modules.audit_log.middleware import AuditLogMiddleware
 from modules.customer_catalog.routes import router as customer_catalog_router
-from modules.images.routes import router as images_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -155,7 +153,11 @@ async def lifespan(app: FastAPI):
             retries -= 1
             if retries == 0:
                 raise e
-            print(f"Database not ready... retrying in 2s ({retries} retries left)")
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "DB startup error (%s: %s) — retrying in 2s (%d retries left)",
+                type(e).__name__, e, retries,
+            )
             await asyncio.sleep(2)
 
     # Admin seeding is opt-in via SEED_ADMIN=1. Default flow: deploy with empty
@@ -247,8 +249,6 @@ app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
-app.include_router(portal_router, dependencies=_auth)
-app.include_router(images_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
 app.include_router(integrations_router)
 app.include_router(integrations_admin_router, dependencies=_auth)

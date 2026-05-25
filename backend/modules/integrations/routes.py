@@ -489,6 +489,9 @@ async def ops_connection_test(
     }
 
 
+_BATCH_PUSH_MAX = 50  # hard upper bound — prevent runaway fan-out
+
+
 @admin_router.post(
     "/admin/batch-push-requests",
     status_code=202,
@@ -507,7 +510,21 @@ async def admin_batch_push_request(
     as an independent background task — they are isolated so one failure
     does not block the others. Returns immediately with all push_log_ids so
     the frontend can poll each one individually.
+
+    Batch size is capped at ``_BATCH_PUSH_MAX`` to prevent runaway fan-out.
+    Dry-run executions are throttled by the same semaphore as live pushes.
     """
+    # Explicit size guard — Field(max_length=) on a list body parameter is
+    # not reliably enforced by FastAPI/Pydantic at the route layer.
+    if len(req.customer_ids) > _BATCH_PUSH_MAX:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "BATCH_TOO_LARGE",
+                "message": f"Batch exceeds maximum of {_BATCH_PUSH_MAX} customers per request",
+            },
+        )
+
     proxy_key = await get_or_create_admin_proxy_key(db)
 
     # Resolve supplier_slug from product if caller omitted it
@@ -548,7 +565,11 @@ async def admin_batch_push_request(
         try:
             accepted = await prepare_push_intent(push_req, proxy_key, db, idempotency_key=None)
             if req.dry_run:
-                await execute_push(accepted.push_log_id)
+                # Acquire the same semaphore as live pushes so a large batch of
+                # dry-runs doesn't saturate the DB connection pool.
+                from modules.ops_push.task_runner import _get_semaphore
+                async with _get_semaphore():
+                    await execute_push(accepted.push_log_id)
                 terminal = await db.get(ProductPushLog, accepted.push_log_id)
                 if terminal:
                     await db.refresh(terminal)

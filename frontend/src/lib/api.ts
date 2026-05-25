@@ -105,7 +105,10 @@ export async function api<T>(path: string, options?: ApiOptions): Promise<T> {
   }
 
   if (res.status === 204) {
-    return undefined as unknown as T;
+    // Return an empty object — callers that destructure the result (e.g.
+    // `const { id } = await api(...)`) won't throw on a void response,
+    // while callers that discard the result are unaffected.
+    return {} as T;
   }
 
   const contentType = res.headers.get("content-type") ?? "";

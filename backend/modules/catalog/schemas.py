@@ -92,7 +92,7 @@ class ProductSizeRead(BaseModel):
     width: Decimal
     height: Decimal
     unit: str
-    label: str
+    label: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
