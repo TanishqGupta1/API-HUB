@@ -17,7 +17,8 @@ import { PushHistory } from "@/components/products/push-history";
 import { useSelectedCustomer } from "@/lib/customer-context";
 import { BrandingPanel } from "@/components/products/BrandingPanel";
 import type { Customer as CustomerType } from "@/lib/types";
-import { AlertTriangle, CheckCircle2, Plus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ImageIcon, Layers, Plus } from "lucide-react";
+import { BatchPushModal } from "@/components/products/batch-push-modal";
 import { toast } from "sonner";
 import type { ProductPreview } from "@/lib/types";
 import Image from "next/image";
@@ -52,6 +53,9 @@ export default function ProductDetailPage() {
   const [addedThisSession, setAddedThisSession] = useState(false);
   const [customer, setCustomer] = useState<CustomerType | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [batchPushOpen, setBatchPushOpen] = useState(false);
+  const [mirrorLoading, setMirrorLoading] = useState(false);
+  const [mirrorStatus, setMirrorStatus] = useState<{ total_images: number; mirrored_images: number; pending_images: number } | null>(null);
 
   useEffect(() => {
     if (selectedCustomerId) {
@@ -112,8 +116,34 @@ export default function ProductDetailPage() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchData(); }, [id]);
+  useEffect(() => {
+    fetchData();
+    api<{ total_images: number; mirrored_images: number; pending_images: number }>(
+      `/api/images/mirror-status/${id}`
+    ).then(setMirrorStatus).catch(() => null);
+  }, [id]);
+
+  async function handleMirrorImages() {
+    if (mirrorLoading) return;
+    setMirrorLoading(true);
+    try {
+      const result = await api<{ mirrored: number; skipped: number; failed: number }>(
+        `/api/images/mirror/${id}`,
+        { method: "POST" }
+      );
+      toast.success(`Mirrored ${result.mirrored} image${result.mirrored !== 1 ? "s" : ""}${result.failed ? ` (${result.failed} failed)` : ""}`);
+      const status = await api<{ total_images: number; mirrored_images: number; pending_images: number }>(
+        `/api/images/mirror-status/${id}`
+      );
+      setMirrorStatus(status);
+      fetchData();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Mirror failed");
+    } finally {
+      setMirrorLoading(false);
+    }
+  }
+>>>>>>> 1b5277a (feat(images): add image mirroring module with CDN storage and bulk mirror UI)
 
   const imageTabs = useMemo(() => {
     if (!product) return [] as Array<{ key: string; available: boolean }>;
@@ -162,6 +192,7 @@ export default function ProductDetailPage() {
   }
 
   return (
+    <>
     <div id="s-product-detail">
 
       {/* Source badge bar */}
@@ -261,6 +292,35 @@ export default function ProductDetailPage() {
               )}
             </button>
           )}
+          <button
+            onClick={handleMirrorImages}
+            disabled={mirrorLoading}
+            title={mirrorStatus ? `${mirrorStatus.mirrored_images}/${mirrorStatus.total_images} images on CDN` : "Mirror images to CDN"}
+            className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
+                       bg-white text-[#484852] border border-[#cfccc8] shadow-[0_3px_0_rgba(30,77,146,0.08)]
+                       hover:border-[#1e4d92] disabled:opacity-50 transition-all"
+          >
+            <ImageIcon className="w-4 h-4" />
+            {mirrorLoading ? "Mirroring…" : "Mirror Images"}
+            {mirrorStatus && mirrorStatus.total_images > 0 && (
+              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                mirrorStatus.pending_images === 0
+                  ? "bg-[#f0f9f4] text-[#247a52]"
+                  : "bg-[#fff7e0] text-[#c17c00]"
+              }`}>
+                {mirrorStatus.mirrored_images}/{mirrorStatus.total_images}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setBatchPushOpen(true)}
+            className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
+                       bg-[#1e4d92] text-white shadow-[0_3px_0_rgba(30,77,146,0.25)]
+                       hover:bg-[#173d74] transition-all"
+          >
+            <Layers className="w-4 h-4" />
+            Push to All Storefronts
+          </button>
           <PublishButton
             productId={id}
             supplierSlug={supplier?.slug}
@@ -336,6 +396,26 @@ export default function ProductDetailPage() {
               );
             })}
           </div>
+
+          {/* CDN mirror status */}
+          {mirrorStatus && mirrorStatus.total_images > 0 && (
+            <div className={`mt-2 flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-semibold ${
+              mirrorStatus.pending_images === 0
+                ? "bg-[#f0f9f4] text-[#247a52] border border-[#b0ddc0]"
+                : "bg-[#fff7e0] text-[#c17c00] border border-[#f0d090]"
+            }`}>
+              {mirrorStatus.pending_images === 0 ? (
+                <CheckCircle2 className="w-3 h-3 shrink-0" />
+              ) : (
+                <ImageIcon className="w-3 h-3 shrink-0" />
+              )}
+              <span>
+                {mirrorStatus.pending_images === 0
+                  ? `All ${mirrorStatus.total_images} images on CDN`
+                  : `${mirrorStatus.mirrored_images}/${mirrorStatus.total_images} on CDN · ${mirrorStatus.pending_images} pending`}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Right — metadata */}
@@ -567,5 +647,15 @@ export default function ProductDetailPage() {
         </div>
       </div>
     </div>
+
+    {batchPushOpen && product && (
+      <BatchPushModal
+        productId={id}
+        supplierSlug={supplier?.slug}
+        supplierSku={product.supplier_sku}
+        onClose={() => setBatchPushOpen(false)}
+      />
+    )}
+    </>
   );
 }
