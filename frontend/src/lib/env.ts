@@ -10,7 +10,6 @@
  */
 
 const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL;
-const RAW_N8N_URL = process.env.NEXT_PUBLIC_N8N_URL;
 // Server-only URL — used by Next.js API routes (route handlers) that proxy to
 // the backend from inside the same Docker network. In dev compose this points
 // to http://api:8000; in the browser this var is never read (Next.js strips
@@ -29,7 +28,6 @@ if (NODE_ENV === "production" && !RAW_API_URL) {
 }
 
 export const API_BASE = RAW_API_URL ?? "http://localhost:8000";
-export const N8N_BASE = RAW_N8N_URL ?? "http://localhost:5678";
 // Server-side: prefer API_BASE_URL (e.g. http://api:8000 inside Docker),
 // fall back to the public URL, then to localhost for non-Docker dev.
 export const SERVER_API_BASE = RAW_SERVER_API_URL ?? RAW_API_URL ?? "http://127.0.0.1:8000";
