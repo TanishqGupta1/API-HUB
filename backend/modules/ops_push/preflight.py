@@ -35,11 +35,14 @@ Side-effects discipline (unchanged)
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
 from uuid import UUID
+
+log = logging.getLogger(__name__)
 
 import httpx
 from sqlalchemy import select
@@ -874,12 +877,30 @@ async def run_preflight(
         return CheckResult(name, True, "skipped — dry_run mode")
 
     checks: list[CheckResult] = []
+    warnings: list[CheckResult] = []
     # 1
     checks.append(check_base_price_set(ctx))
     # 2
     checks.append(check_markup_rule_resolves(ctx))
-    # 3
-    checks.append(check_push_mappings_present(ctx, dry_run=dry_run))
+    # 3 — soft-pass in dry_run when no mappings exist yet; log a warning so
+    #     the operator knows a live push will still need option mapping.
+    mapping_check = check_push_mappings_present(ctx, dry_run=dry_run)
+    checks.append(mapping_check)
+    if dry_run and mapping_check.ok and "skipped in dry_run" in mapping_check.detail:
+        log.warning(
+            "preflight dry_run soft-pass: push_mappings missing for "
+            "product=%s customer=%s — a live push will require option mapping.",
+            product_id,
+            customer_id,
+        )
+        warnings.append(
+            CheckResult(
+                "push_mappings_present",
+                True,
+                mapping_check.detail,
+                suggestion="Sync master options and resolve push mappings before live push.",
+            )
+        )
     # 4a (NEW — split out from 4 for precise field-level reporting)
     checks.append(check_customer_ops_creds_present(ctx))
     # 4 — skip OAuth2 network call in dry_run (FakeOpsClient needs no token)
@@ -903,7 +924,7 @@ async def run_preflight(
     else:
         checks.append(check_decoration_attached(ctx))
 
-    return PreflightResults(checks=checks)
+    return PreflightResults(checks=checks, warnings=warnings)
 
 
 __all__ = [
