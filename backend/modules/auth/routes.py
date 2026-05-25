@@ -2,7 +2,8 @@ import logging
 import os
 import uuid as uuid_mod
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from limiter import limiter
 from jose import JWTError
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -23,7 +24,10 @@ from .schemas import (
 from .security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     REMEMBER_TOKEN_EXPIRE_MINUTES,
+    REFRESH_TOKEN_EXPIRE_MINUTES,
     create_access_token,
+    create_refresh_token,
+    decode_token,
     hash_password,
     verify_password,
 )
@@ -33,6 +37,7 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _COOKIE_NAME = "auth_token"
+_REFRESH_COOKIE_NAME = "refresh_token"
 _COOKIE_SECURE = os.getenv("ENVIRONMENT", "development").lower() == "production"
 # Pre-computed bcrypt hash of a random throw-away password. Used by login when
 # the email lookup misses, so a bcrypt verify still runs and timing stays
@@ -72,13 +77,27 @@ def _set_auth_cookie(response: Response, access_token: str, max_age_minutes: int
     )
 
 
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    response.set_cookie(
+        key=_REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        max_age=REFRESH_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=_COOKIE_SECURE,
+        samesite="strict",   # stricter: refresh endpoint is same-origin only
+        path="/api/auth/refresh",
+    )
+
+
 def _clear_auth_cookie(response: Response) -> None:
     response.delete_cookie(key=_COOKIE_NAME, path="/")
+    response.delete_cookie(key=_REFRESH_COOKIE_NAME, path="/api/auth/refresh")
 
 
 @router.post("/login", response_model=UserRead)
+@limiter.limit("10/minute")
 async def login(
-    body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)
+    request: Request, body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> User:
     result = await db.execute(
         select(User).where(User.email == body.email, User.is_active.is_(True))
@@ -93,6 +112,40 @@ async def login(
     payload = _token_payload(user)
     expire = REMEMBER_TOKEN_EXPIRE_MINUTES if body.remember_me else ACCESS_TOKEN_EXPIRE_MINUTES
     _set_auth_cookie(response, create_access_token(payload, expire_minutes=expire), max_age_minutes=expire)
+    _set_refresh_cookie(response, create_refresh_token(payload))
+    return user
+
+
+@router.post("/refresh", response_model=UserRead)
+@limiter.limit("30/minute")
+async def refresh_access_token(
+    request: Request, response: Response, db: AsyncSession = Depends(get_db)
+) -> User:
+    """Exchange a valid refresh_token cookie for a new access_token cookie.
+
+    The refresh token is bound to the ``/api/auth/refresh`` path via a
+    ``SameSite=Strict`` cookie so it cannot be sent cross-origin.  On success
+    a fresh access token is issued; the refresh token itself is rotated to
+    extend its lifetime.
+    """
+    raw = request.cookies.get(_REFRESH_COOKIE_NAME)
+    if not raw:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh token missing")
+    try:
+        claims = decode_token(raw, expected_type="refresh")
+    except JWTError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token")
+
+    result = await db.execute(
+        select(User).where(User.id == claims["sub"], User.is_active.is_(True))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or deactivated")
+
+    payload = _token_payload(user)
+    _set_auth_cookie(response, create_access_token(payload))
+    _set_refresh_cookie(response, create_refresh_token(payload))  # rotate
     return user
 
 

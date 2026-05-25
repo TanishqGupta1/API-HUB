@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480        # 8 hours (default / non-remember)
 REMEMBER_TOKEN_EXPIRE_MINUTES = 1080    # 18 hours
+REFRESH_TOKEN_EXPIRE_MINUTES = 7 * 24 * 60  # 7 days
 
 
 def _resolve_jwt_secret() -> str:
@@ -60,6 +61,31 @@ def create_access_token(payload: dict[str, Any], *, expire_minutes: int | None =
     return jwt.encode(data, JWT_SECRET_KEY, algorithm=ALGORITHM)
 
 
+def create_refresh_token(payload: dict[str, Any]) -> str:
+    """Create a long-lived refresh token (7 days).
 
-def decode_token(token: str) -> dict[str, Any]:
-    return jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+    Refresh tokens carry minimal claims — only ``sub``, ``type=refresh``, and
+    ``exp``.  They are stored in a separate ``refresh_token`` HttpOnly cookie
+    so a compromised access token cannot be used to mint new access tokens.
+    """
+    data = {
+        "sub": payload["sub"],
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES),
+        "type": "refresh",
+    }
+    return jwt.encode(data, JWT_SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_token(token: str, *, expected_type: str | None = None) -> dict[str, Any]:
+    """Decode and validate a JWT.
+
+    Args:
+        token: The raw JWT string.
+        expected_type: If provided, raises JWTError when token ``type`` claim
+            does not match (e.g. ``"refresh"`` to guard the refresh endpoint).
+    """
+    claims = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+    if expected_type is not None and claims.get("type") != expected_type:
+        from jose import JWTError
+        raise JWTError(f"Expected token type '{expected_type}', got '{claims.get('type')}'")
+    return claims
