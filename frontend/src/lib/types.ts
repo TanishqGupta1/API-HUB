@@ -311,7 +311,7 @@ export interface SyncJob {
   supplier_name: string;
   job_type: JobType;
   status: SyncStatus;
-  started_at: string;
+  started_at: string | null;
   completed_at: string | null;
   total_products: number;
   success_count: number;
@@ -590,15 +590,18 @@ export interface OPSPushPayload {
 
 /** Append-only entry written by the worker to product_push_log.step_results JSONB. */
 export interface OPSStepResult {
+  /** Sequential step index (always a number — backend StepResultOut uses int). */
   step: number;
-  source_key: string;
+  source_key?: string | null;
   mutation: string;
-  request_fingerprint: string;
-  ops_ids: Record<string, unknown>;
-  attempted_at: string;
-  status: "ok" | "failed";
+  request_fingerprint?: string | null;
+  ops_ids?: Record<string, unknown> | null;
+  attempted_at?: string | null;
+  status?: "ok" | "failed" | null;
+  /** Derived boolean — true when status === "ok". */
+  ok?: boolean;
   error?: string | null;
-  latency_ms?: number;
+  latency_ms?: number | null;
 }
 
 /** Opaque JSONB shape; spec leaves the contents flexible. */
@@ -637,7 +640,7 @@ export interface PushLog {
   supplier_sku: string | null;
   status: PushStatus;
   dry_run: boolean;
-  ops_product_id: number | null;
+  ops_product_id: string | null;
   error: string | null;
   step_results: OPSStepResult[];
   cleanup_targets: CleanupTargets | null;
@@ -685,7 +688,7 @@ export interface PushTerminalResponse {
   customer_id: string;
   supplier_slug: string;
   supplier_sku: string;
-  ops_product_id: number | null;
+  ops_product_id: string | null;
   mapping_id: string | null;
   error: string | null;
   step_results: OPSStepResult[];

@@ -333,8 +333,12 @@ export function usePushStatus(pushLogId: string | null): UsePushStatusResult {
     setError(null);
 
     async function load() {
+      if (pollTimer.current) {
+        clearTimeout(pollTimer.current);
+        pollTimer.current = null;
+      }
       try {
-        if (IS_MOCK_MODE) {
+        if (IS_MOCK_MODE || !_isUuid(id)) {
           await _delay(350);
           if (cancelled) return;
           const demo = _demoFlag();
@@ -349,8 +353,10 @@ export function usePushStatus(pushLogId: string | null): UsePushStatusResult {
           return;
         }
 
-        const fresh = await api<PushLog>(pushStatusUrl(id));
+        const raw = await api<PushLog & { push_log_id?: string }>(pushStatusUrl(id));
         if (cancelled) return;
+        // Backend returns push_log_id as the primary key; normalise to `id`
+        const fresh: PushLog = raw.id ? raw : { ...raw, id: raw.push_log_id ?? id };
         setLog(fresh);
         setLoading(false);
 

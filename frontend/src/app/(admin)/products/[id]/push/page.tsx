@@ -23,7 +23,10 @@
  */
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Loader2, Wand2 } from "lucide-react";
+import { useState } from "react";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { API_BASE } from "@/lib/env";
 
 import { DryRunControls } from "@/components/push/DryRunControls";
@@ -51,6 +54,7 @@ export default function PushPreviewPage() {
   const { preflight, payload, error: dryRunError, loading, refetch } =
     usePushDryRun(customerId, productId, supplierSlugParam);
   const { push, loading: pushing, error: pushError } = usePushRequest();
+  const [resolvingMappings, setResolvingMappings] = useState(false);
 
   if (!customerId) {
     return <MissingCustomerCard productId={productId} />;
@@ -62,6 +66,7 @@ export default function PushPreviewPage() {
 
   const blockers = preflight?.blockers ?? [];
   const hasBlockers = blockers.length > 0;
+  const mappingsBlocked = blockers.includes("push_mappings_present");
   const supplierSku = payload?.supplier_sku ?? "PRODUCT";
   const supplierSlug = payload?.supplier_slug ?? supplierSlugParam ?? "sanmar";
   const realConfirmText = `PUSH ${supplierSku} TO STAGING`;
@@ -83,6 +88,33 @@ export default function PushPreviewPage() {
       URL.revokeObjectURL(url);
     } catch {
       // download failure is non-critical — push already succeeded
+    }
+  }
+
+  async function handleResolveMappings() {
+    if (!customerId) return;
+    setResolvingMappings(true);
+    try {
+      const result = await api<{
+        options_resolved: number;
+        attributes_resolved: number;
+        missing_option_keys: string[];
+      }>("/api/push-mappings/resolve", {
+        method: "POST",
+        body: JSON.stringify({ customer_id: customerId, product_id: productId }),
+      });
+      if (result.missing_option_keys.length > 0) {
+        toast.warning(
+          `Resolved ${result.options_resolved} options. Still missing: ${result.missing_option_keys.join(", ")} — sync master options first.`
+        );
+      } else {
+        toast.success(`Mapped ${result.options_resolved} options, ${result.attributes_resolved} attributes`);
+      }
+      refetch();
+    } catch {
+      toast.error("Could not resolve mappings — make sure master options are synced first.");
+    } finally {
+      setResolvingMappings(false);
     }
   }
 
@@ -190,6 +222,32 @@ export default function PushPreviewPage() {
           plan={payload?.plan ?? []}
           computedPrices={payload?.computed_prices}
         />
+      )}
+
+      {/* One-click fix for missing push mappings */}
+      {mappingsBlocked && (
+        <div className="bg-[#fff7e0] border-2 border-[#c17c00] rounded-2xl px-6 py-5 flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-[#c17c00] shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[13px] font-bold text-[#7a4900]">
+                Push mappings missing for this product
+              </div>
+              <p className="text-[12px] text-[#7a4900] mt-1">
+                Make sure you have synced master options from the storefront settings first,
+                then click Auto-Resolve to map this product&apos;s Color/Size options.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleResolveMappings}
+            disabled={resolvingMappings}
+            className="shrink-0 flex items-center gap-2 px-4 h-10 rounded-xl bg-[#c17c00] hover:bg-[#a36800] disabled:opacity-50 text-white font-bold text-[11px] uppercase tracking-wider transition-all"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            {resolvingMappings ? "Resolving…" : "Auto-Resolve"}
+          </button>
+        </div>
       )}
 
       {pushError && (

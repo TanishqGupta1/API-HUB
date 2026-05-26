@@ -4,6 +4,9 @@ import logging
 import secrets
 import uuid as uuid_mod
 from datetime import datetime, timezone
+from typing import Annotated
+
+from pydantic import Field
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
@@ -19,6 +22,7 @@ from modules.customers.models import Customer
 from modules.master_options.models import MasterOption, MasterOptionAttribute
 from modules.master_options.schemas import MasterOptionIngest
 from modules.ops_push.gateway import execute_push, prepare_push_intent
+from modules.ops_push.task_runner import run_push_task
 from modules.push_mappings import service as push_mapping_service
 from modules.push_mappings.schemas import PushMappingUpsert
 from modules.suppliers.models import Supplier
@@ -27,12 +31,18 @@ from .admin_proxy import get_or_create_admin_proxy_key
 from .auth import OrchestratorKey, check_key_scope
 from .models import IntegrationKey
 from .schemas import (
+    BatchPushItem,
+    BatchPushRequest,
+    BatchPushResponse,
     IntegrationKeyCreate,
     IntegrationKeyCreated,
     IntegrationKeyOut,
     PushRequest,
     PushRequestAccepted,
     PushRequestLinks,
+    PushRequestProductRef,
+    PushRequestSource,
+    PushRequestTarget,
     PushStatusOut,
     StepResultOut,
 )
@@ -138,7 +148,7 @@ async def create_push_request(
             )
         return accepted
 
-    background_tasks.add_task(execute_push, accepted.push_log_id)
+    background_tasks.add_task(run_push_task, accepted.push_log_id)
     return accepted
 
 
@@ -193,7 +203,7 @@ async def get_push_status(
 )
 async def ingest_supplier_products(
     supplier_slug: str,
-    batch: list[ProductIngest],
+    batch: Annotated[list[ProductIngest], Field(max_length=500)],
     key: OrchestratorKey,
     db: AsyncSession = Depends(get_db),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
@@ -314,7 +324,7 @@ async def get_supplier_schema(
     summary="Snapshot upsert of master options (option catalog)",
 )
 async def ingest_master_options(
-    batch: list[MasterOptionIngest],
+    batch: Annotated[list[MasterOptionIngest], Field(max_length=500)],
     key: OrchestratorKey,
     db: AsyncSession = Depends(get_db),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
@@ -479,6 +489,114 @@ async def ops_connection_test(
     }
 
 
+_BATCH_PUSH_MAX = 50  # hard upper bound — prevent runaway fan-out
+
+
+@admin_router.post(
+    "/admin/batch-push-requests",
+    status_code=202,
+    response_model=BatchPushResponse,
+    summary="Push one product to multiple storefronts simultaneously",
+)
+async def admin_batch_push_request(
+    req: BatchPushRequest,
+    background_tasks: BackgroundTasks,
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fan out a single product push across multiple customer storefronts.
+
+    Each (product, customer) pair gets its own ProductPushLog row and runs
+    as an independent background task — they are isolated so one failure
+    does not block the others. Returns immediately with all push_log_ids so
+    the frontend can poll each one individually.
+
+    Batch size is capped at ``_BATCH_PUSH_MAX`` to prevent runaway fan-out.
+    Dry-run executions are throttled by the same semaphore as live pushes.
+    """
+    # Explicit size guard — Field(max_length=) on a list body parameter is
+    # not reliably enforced by FastAPI/Pydantic at the route layer.
+    if len(req.customer_ids) > _BATCH_PUSH_MAX:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "BATCH_TOO_LARGE",
+                "message": f"Batch exceeds maximum of {_BATCH_PUSH_MAX} customers per request",
+            },
+        )
+
+    proxy_key = await get_or_create_admin_proxy_key(db)
+
+    # Resolve supplier_slug from product if caller omitted it
+    supplier_slug = req.supplier_slug
+    if not supplier_slug:
+        from modules.catalog.models import Product as CatalogProduct
+        product = await db.get(CatalogProduct, req.product_id)
+        if not product:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+                "code": "UNKNOWN_REF", "message": "Product not found"
+            })
+        supplier = await db.get(Supplier, product.supplier_id)
+        if not supplier:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
+                "message": "Cannot resolve supplier for product"
+            })
+        supplier_slug = supplier.slug
+
+    # Pre-fetch customer names so we can return them in the response
+    customers = (await db.execute(
+        select(Customer).where(Customer.id.in_(req.customer_ids))
+    )).scalars().all()
+    customer_map: dict[uuid_mod.UUID, str] = {c.id: c.name for c in customers}
+
+    batch_id = uuid_mod.uuid4()
+    items: list[BatchPushItem] = []
+
+    for customer_id in req.customer_ids:
+        push_req = PushRequest(
+            target=PushRequestTarget(customer_id=customer_id),
+            source=PushRequestSource(supplier_slug=supplier_slug),
+            product_ref=PushRequestProductRef(
+                product_id=req.product_id,
+                supplier_sku=req.supplier_sku,
+            ),
+            dry_run=req.dry_run,
+        )
+        try:
+            accepted = await prepare_push_intent(push_req, proxy_key, db, idempotency_key=None)
+            if req.dry_run:
+                # Acquire the same semaphore as live pushes so a large batch of
+                # dry-runs doesn't saturate the DB connection pool.
+                from modules.ops_push.task_runner import _get_semaphore
+                async with _get_semaphore():
+                    await execute_push(accepted.push_log_id)
+                terminal = await db.get(ProductPushLog, accepted.push_log_id)
+                if terminal:
+                    await db.refresh(terminal)
+                final_status = terminal.status if terminal else accepted.status
+            else:
+                background_tasks.add_task(run_push_task, accepted.push_log_id)
+                final_status = accepted.status
+
+            items.append(BatchPushItem(
+                customer_id=customer_id,
+                customer_name=customer_map.get(customer_id, str(customer_id)),
+                push_log_id=accepted.push_log_id,
+                status=final_status,
+            ))
+        except Exception as exc:  # noqa: BLE001 — isolate per-customer failure
+            logger.warning("batch_push accept failed customer=%s err=%s", customer_id, exc)
+            items.append(BatchPushItem(
+                customer_id=customer_id,
+                customer_name=customer_map.get(customer_id, str(customer_id)),
+                push_log_id=None,
+                status="error",
+                error=str(exc)[:200],
+            ))
+
+    return BatchPushResponse(batch_id=batch_id, total=len(items), items=items)
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Admin routes — integration key management (JWT, vg_admin only)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -595,6 +713,68 @@ async def admin_push_status(
 
 
 @admin_router.post(
+    "/admin/push-requests/{push_log_id}/retry",
+    status_code=202,
+    response_model=PushStatusOut,
+    summary="Retry a partial_failure or failed push (re-runs the full mutation plan)",
+)
+async def admin_retry_push(
+    push_log_id: uuid_mod.UUID,
+    background_tasks: BackgroundTasks,
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retry endpoint for cleanup_targets — when OPS was unavailable during a push
+    the push_log ends in ``partial_failure`` with ``cleanup_targets`` set.  This
+    endpoint:
+
+    1. Resets the push_log back to ``accepted`` and clears cleanup_targets so the
+       mutation plan runs from the beginning (idempotent: OPS upserts by SKU).
+    2. Queues a background re-execution.
+
+    Only push_logs in ``partial_failure`` or ``failed`` status can be retried.
+    """
+    push_log = await db.get(ProductPushLog, push_log_id)
+    if not push_log:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF", "message": "Push request not found"
+        })
+    if push_log.status not in ("partial_failure", "failed"):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={
+            "code": "NOT_RETRYABLE",
+            "message": f"Push is in '{push_log.status}' status — only partial_failure and failed can be retried",
+        })
+
+    # Record the retry lineage and reset to queued
+    push_log.retry_of = push_log.id
+    push_log.status = "accepted"
+    push_log.cleanup_targets = None
+    push_log.step_results = None
+    push_log.error = None
+    push_log.pushed_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    background_tasks.add_task(run_push_task, push_log.id)
+    logger.info("admin_retry_push: queued retry for push_log %s", push_log_id)
+
+    return PushStatusOut(
+        push_log_id=push_log.id,
+        status=push_log.status,
+        customer_id=push_log.customer_id,
+        supplier_slug=push_log.supplier_slug,
+        supplier_sku=push_log.supplier_sku,
+        ops_product_id=push_log.ops_product_id,
+        error=push_log.error,
+        step_results=[],
+        cleanup_targets=None,
+        callback_status=push_log.callback_status,
+        callback_attempts=push_log.callback_attempts,
+        finished_at=None,
+        links=PushRequestLinks(self=f"/api/integrations/admin/push-requests/{push_log_id}"),
+    )
+
+
+@admin_router.post(
     "/admin/push-requests",
     status_code=202,
     response_model=PushRequestAccepted,
@@ -632,5 +812,5 @@ async def admin_push_request(
                 ),
             )
         return accepted
-    background_tasks.add_task(execute_push, accepted.push_log_id)
+    background_tasks.add_task(run_push_task, accepted.push_log_id)
     return accepted

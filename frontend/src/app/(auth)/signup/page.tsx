@@ -42,11 +42,13 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/register`, {
+      // /api/auth/users is a VGAdmin-only endpoint — this page requires
+      // an authenticated admin session (middleware enforces it).
+      const res = await fetch(`${API_BASE}/api/auth/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, role: "vg_admin" }),
       });
 
       if (!res.ok) {

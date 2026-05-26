@@ -173,12 +173,7 @@ const NAV_ITEMS = [
         ),
       },
       {
-        // Phase 8 / Task 10 — Push preview + execute demo (works in mock mode).
-        // Lands on the preview page with a known-good fixture ID. From here:
-        //   - Click "Send Dry-Run" → bounces to /push-log/<id> with green timeline
-        //   - Click "Send LIVE"   → typed-confirm modal → push
-        //   - Append ?demo=blocked / ?demo=pushed / ?demo=failed for state variants
-        href: "/products/demo/push?customer_id=demo",
+        href: "/ops-demo",
         label: "Push to OPS (Demo)",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
