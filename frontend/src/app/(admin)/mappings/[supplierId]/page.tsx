@@ -23,8 +23,15 @@ export default function FieldMappingPage() {
       .then((s) => {
         setSupplier(s);
         const raw = s.field_mappings ?? {};
+        // Unwrap legacy {mapping: {...}} shape saved by an older frontend version
+        const unwrapped: Record<string, unknown> =
+          "mapping" in raw &&
+          typeof (raw as Record<string, unknown>).mapping === "object" &&
+          (raw as Record<string, unknown>).mapping !== null
+            ? ((raw as Record<string, unknown>).mapping as Record<string, unknown>)
+            : (raw as Record<string, unknown>);
         const specific: Record<string, string> = {};
-        for (const [k, v] of Object.entries(raw)) {
+        for (const [k, v] of Object.entries(unwrapped)) {
           if (k.includes(".")) {
             specific[k] = String(v);
           }

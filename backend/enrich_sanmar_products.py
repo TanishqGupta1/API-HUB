@@ -7,6 +7,7 @@ Fixes 3 preflight blockers across all 177 SanMar products:
   3. Inventory - trigger the SanMar inventory SOAP sync via the running API
 """
 import asyncio
+import os
 import re
 import httpx
 from datetime import datetime, timezone
@@ -19,7 +20,7 @@ from modules.suppliers.models import Supplier
 
 
 SANMAR_CODE = "SANMAR"
-API_BASE    = "http://127.0.0.1:8000"
+API_BASE    = os.getenv("API_BASE", "http://127.0.0.1:8000")
 INGEST_SECRET = None  # filled from env below
 
 
