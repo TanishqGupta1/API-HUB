@@ -111,7 +111,6 @@ async def fix_images(db, supplier_id):
 
 async def trigger_inventory_sync(supplier_id):
     """Hit the live API to kick off a SanMar inventory SOAP sync."""
-    import os
     secret = os.getenv("INGEST_SHARED_SECRET", "")
     headers = {"X-Ingest-Secret": secret} if secret else {}
 

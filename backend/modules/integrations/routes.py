@@ -116,6 +116,9 @@ async def create_push_request(
     # and the orchestrator polls GET /push-requests/{id} for the outcome.
     if req.dry_run:
         await execute_push(accepted.push_log_id)
+        # execute_push opens its own AsyncSession and commits before returning,
+        # so db.refresh() correctly reads the committed terminal state into
+        # this route's session identity map.
         terminal = await db.get(ProductPushLog, accepted.push_log_id)
         if terminal is not None:
             await db.refresh(terminal)

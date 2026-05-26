@@ -1,4 +1,5 @@
 fastapi>=0.115.0
+starlette>=0.36.0          # HTTP_422_UNPROCESSABLE_CONTENT added in 0.36; fastapi>=0.115 pulls >=0.38.4 anyway
 uvicorn[standard]>=0.30.0
 sqlalchemy[asyncio]>=2.0.30
 asyncpg>=0.30.0

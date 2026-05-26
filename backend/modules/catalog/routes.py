@@ -206,7 +206,11 @@ async def get_product(
 
 @router.get("/{product_id}/export")
 async def export_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Return a self-contained JSON snapshot of a product for local download."""
+    """Return a self-contained JSON snapshot of a product for local download.
+
+    Auth: protected by router-level ``dependencies=[Depends(get_current_user)]``
+    applied in main.py — no explicit param needed here.
+    """
     result = await db.execute(
         select(Product)
         .where(Product.id == product_id)
@@ -239,7 +243,12 @@ async def export_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
     ]
 
     sizes = [
-        {"name": s.name, "sort_order": s.sort_order}
+        {
+            "width": float(s.width),
+            "height": float(s.height),
+            "unit": s.unit,
+            "label": s.label,
+        }
         for s in (product.sizes or [])
     ]
 
