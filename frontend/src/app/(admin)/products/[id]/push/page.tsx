@@ -24,6 +24,7 @@
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { API_BASE } from "@/lib/env";
 
 import { DryRunControls } from "@/components/push/DryRunControls";
 import { PreviewPanel } from "@/components/push/PreviewPanel";
@@ -65,6 +66,26 @@ export default function PushPreviewPage() {
   const supplierSlug = payload?.supplier_slug ?? supplierSlugParam ?? "sanmar";
   const realConfirmText = `PUSH ${supplierSku} TO STAGING`;
 
+  async function downloadProductJson() {
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/products/${productId}/export`,
+        { credentials: "include" }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${data.product?.supplier_sku ?? productId}_export.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // download failure is non-critical — push already succeeded
+    }
+  }
+
   async function handlePush(dryRun: boolean) {
     if (!customerId) return;
     const resp = await push({
@@ -74,6 +95,9 @@ export default function PushPreviewPage() {
       supplierSku,
       dryRun,
     });
+    if (resp?.push_log_id) {
+      await downloadProductJson();
+    }
     if (resp?.push_log_id) {
       router.push(`/push-log/${resp.push_log_id}`);
     }

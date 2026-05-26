@@ -20,6 +20,7 @@ import type { Customer as CustomerType } from "@/lib/types";
 import { AlertTriangle, CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { ProductPreview } from "@/lib/types";
+import Image from "next/image";
 
 const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
 
@@ -111,6 +112,7 @@ export default function ProductDetailPage() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchData(); }, [id]);
 
   const imageTabs = useMemo(() => {
@@ -204,9 +206,14 @@ export default function ProductDetailPage() {
         );
       })()}
       {missingFields.length === 0 && product && (
-        <div className="mb-4 bg-[#f0f9f4] border-2 border-[#247a52] rounded-xl px-5 py-3 flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 text-[#247a52] shrink-0" />
-          <span className="text-[13px] font-semibold text-[#1a5c3a]">All required fields present — ready to push</span>
+        <div className="mb-4 bg-[#f0f9f4] border-2 border-[#247a52] rounded-xl px-5 py-3 flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-[#247a52] shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-[13px] font-semibold text-[#1a5c3a]">Product data complete</div>
+            <div className="text-[12px] text-[#247a52]/80 mt-0.5">
+              All product fields are present. Customer-side checks (OPS credentials, markup rules, master options) run when you click <span className="font-semibold">Push to OPS</span>.
+            </div>
+          </div>
         </div>
       )}
 
@@ -281,10 +288,12 @@ export default function ProductDetailPage() {
                           flex items-center justify-center mb-3
                           shadow-[4px_5px_0_rgba(30,77,146,0.08)] overflow-hidden">
             {activeImage ? (
-              <img
+              <Image
                 src={activeImage}
                 alt={`${product.product_name} (${activeImageTab})`}
-                className="w-full h-full object-contain p-5"
+                fill
+                sizes="300px"
+                className="object-contain p-5"
               />
             ) : (
               <div className="text-center">

@@ -182,6 +182,20 @@ async def persist_product(
         )
         await db.execute(image_stmt)
 
+    # 5b. If the supplier didn't return a media list but a primary image_url
+    # is set on the product, seed a single front-image row so preflight,
+    # the OPS payload builder and the preview page all find an image.
+    if not item.images and item.image_url:
+        await db.execute(
+            pg_insert(ProductImage).values(
+                product_id=product_id,
+                url=item.image_url,
+                supplier_image_url=item.image_url,
+                image_type="front",
+                sort_order=0,
+            ).on_conflict_do_nothing(index_elements=["product_id", "url"])
+        )
+
     # 6. Upsert Options (Reuse the logic from ingest.py or similar)
     if item.options:
         from .ingest import _upsert_options

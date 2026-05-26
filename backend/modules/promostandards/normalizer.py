@@ -179,6 +179,28 @@ async def upsert_products(
                     "sort_order": 0,
                 }
             )
+
+        # Fallback: SanMar category imports run with fetch_images=False, so
+        # the media list is empty even though every Product has a primary
+        # image URL. Seed a single 'front' row from primary_image_url so
+        # preflight, the OPS payload builder and the preview page all find
+        # at least one image.
+        covered_pids = {r["product_id"] for r in image_rows}
+        for p in batch:
+            pid_db = sku_to_id.get(p.product_id)
+            if pid_db and p.primary_image_url and pid_db not in covered_pids:
+                image_rows.append(
+                    {
+                        "product_id": pid_db,
+                        "url": p.primary_image_url,
+                        "supplier_image_url": p.primary_image_url,
+                        "image_type": "front",
+                        "color": None,
+                        "sort_order": 0,
+                    }
+                )
+                covered_pids.add(pid_db)
+
         if image_rows:
             # Deduplicate by URL within this batch
             seen_urls: set[str] = set()

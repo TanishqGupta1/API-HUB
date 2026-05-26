@@ -30,7 +30,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${outfit.variable} ${firaCode.variable}`}>
-      <body>
+      <body suppressHydrationWarning>
         {children}
         <Toaster position="top-right" richColors />
       </body>

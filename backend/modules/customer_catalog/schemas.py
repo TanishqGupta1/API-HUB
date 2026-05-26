@@ -36,6 +36,8 @@ class SelectionRead(BaseModel):
     ops_product_id: Optional[str] = None
     last_synced: Optional[datetime] = None
 
+    supplier_slug: Optional[str] = None
+
     # Decoration visibility (matches push_candidates payload — admins rely
     # on this on the catalog page).
     supplier_has_decoration_overlay: bool = False

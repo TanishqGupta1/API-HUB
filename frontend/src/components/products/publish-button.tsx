@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Send } from "lucide-react";
 import { api } from "@/lib/api";
 import { useSelectedCustomer } from "@/lib/customer-context";
 import type { Customer } from "@/lib/types";
@@ -53,8 +54,9 @@ export function PublishButton({ productId, supplierSlug, onDone }: Props) {
         type="button"
         onClick={go}
         disabled={!customerId}
-        className="px-5 py-2 rounded-lg bg-[#1e4d92] text-white text-[13px] font-bold hover:bg-[#163f78] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm active:scale-[0.98]"
+        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-[#1e4d92] text-white text-[13px] font-bold uppercase tracking-wide whitespace-nowrap hover:bg-[#163f78] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[0_3px_0_#143566] active:shadow-none active:translate-y-px"
       >
+        <Send className="w-4 h-4" />
         Publish to OPS
       </button>
     </div>

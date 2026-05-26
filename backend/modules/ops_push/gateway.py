@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid as uuid_mod
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -51,6 +52,7 @@ _MUTATION_DISPATCH: dict[str, tuple[str, str]] = {
     "set_additional_option":           (_m._SET_ADDITIONAL_OPTION,           "setAdditionalOption"),
     "set_additional_option_attributes": (_m._SET_ADDITIONAL_OPTION_ATTRIBUTES, "setAdditionalOptionAttributes"),
     "set_products_attribute_price":    (_m._SET_PRODUCTS_ATTRIBUTE_PRICE,    "setProductsAttributePrice"),
+    "update_product_stock":            (_m._UPDATE_PRODUCT_STOCK,            "updateProductStock"),
 }
 
 
@@ -234,7 +236,7 @@ async def prepare_push_intent(
     # must resolve a row. We don't enforce "both unset" at the Pydantic layer so
     # error shape stays consistent with the gateway envelope.
     if pref.product_id is None and not pref.supplier_sku:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail={
             "code": "INVALID_REF",
             "message": "product_ref must include product_id or supplier_sku",
         })
@@ -322,7 +324,7 @@ async def prepare_push_intent(
     if not preflight.ok:
         # Use Task 7's spec-shaped error envelope (status/code/message/details/trace_id).
         envelope = preflight.to_error_envelope()
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=envelope)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=envelope)
 
     # ── Insert push_log row ──
     now = datetime.now(timezone.utc)
@@ -413,6 +415,7 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             plan = [step.model_dump(mode="json") for step in payload.plan]
 
             step_results: list[dict] = []
+            step_responses: dict[int, dict] = {}
             ops_product_id: Optional[str] = None
             final_status = "pushed" if not push_log.dry_run else "dry_run_pushed"
             cleanup_targets: Optional[dict] = None
@@ -421,16 +424,36 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             import hashlib, json as _json
             for step_num, step in enumerate(plan, start=1):
                 mutation = step.get("mutation", "")
-                variables = step.get("variables", {})
+                raw_variables = step.get("variables", {})
+                t_start = datetime.now(timezone.utc)
+
+                # Resolve $stepN.field placeholders to real IDs returned by
+                # earlier steps before sending to OPS.
+                try:
+                    variables = _resolve_placeholders(raw_variables, step_responses)
+                except ValueError as e:
+                    step_results.append({
+                        "step": step_num,
+                        "mutation": mutation,
+                        "status": "failed",
+                        "ops_ids": {},
+                        "attempted_at": t_start.isoformat(),
+                        "request_fingerprint": "",
+                        "error": f"placeholder resolution failed: {e}",
+                    })
+                    cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
+                    final_status = "partial_failure" if ops_product_id else "failed"
+                    break
+
                 fingerprint = hashlib.sha256(
                     _json.dumps({"mutation": mutation, "variables": variables}, sort_keys=True).encode()
                 ).hexdigest()[:16]
-                t_start = datetime.now(timezone.utc)
                 try:
                     method = getattr(client, _mutation_to_method(mutation), None)
                     if method is None:
                         raise NotImplementedError(f"No client method for {mutation}")
                     resp = await method(variables)
+                    step_responses[step_num] = resp
                     if "products_id" in resp:
                         ops_product_id = str(resp["products_id"])
                     ops_ids = {k: str(v) for k, v in resp.items() if k.endswith("_id")}
@@ -552,3 +575,41 @@ def _mutation_to_method(mutation: str) -> str:
         "updateProductStock":            "update_product_stock",
     }
     return mapping.get(mutation, mutation)
+
+
+# Matches the placeholder format emitted by payload_builder._placeholder():
+# "$step1.products_id", "$step3.size_id", etc.
+_PLACEHOLDER_RE = re.compile(r"^\$step(\d+)\.(\w+)$")
+
+
+def _resolve_placeholders(value: Any, step_responses: dict[int, dict]) -> Any:
+    """Recursively replace ``$stepN.field`` strings with the value of ``field``
+    from the recorded response of step ``N``.
+
+    The payload builder emits these as forward references when a later step's
+    variable depends on an ID returned by an earlier step (e.g.
+    ``setProductSize`` needs the ``products_id`` returned by ``setProduct``).
+    The fake OPS client ignores variables entirely so dry-runs never noticed,
+    but live OPS would receive the literal string and reject it.
+    """
+    if isinstance(value, str):
+        m = _PLACEHOLDER_RE.match(value)
+        if not m:
+            return value
+        step_num = int(m.group(1))
+        field = m.group(2)
+        resp = step_responses.get(step_num)
+        if resp is None:
+            raise ValueError(
+                f"placeholder {value!r} references step {step_num} which has no recorded response"
+            )
+        if field not in resp:
+            raise ValueError(
+                f"placeholder {value!r}: step {step_num} response missing field {field!r}"
+            )
+        return resp[field]
+    if isinstance(value, dict):
+        return {k: _resolve_placeholders(v, step_responses) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_placeholders(v, step_responses) for v in value]
+    return value

@@ -58,11 +58,15 @@ export default function SupplierDetailPage() {
   const handleSave = async () => {
     if (!supplier) return;
     setSaving(true);
-    const { id: _id, created_at, product_count, has_credentials: _hc, ...updateData } = supplier;
     try {
       await api(`/api/suppliers/${id}`, {
         method: "PATCH",
-        body: JSON.stringify(updateData),
+        body: JSON.stringify({
+          name: supplier.name,
+          base_url: supplier.base_url,
+          promostandards_code: supplier.promostandards_code,
+          adapter_class: supplier.adapter_class,
+        }),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -169,6 +173,26 @@ export default function SupplierDetailPage() {
             </div>
 
             <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-[13px] font-semibold text-[#484852] mb-1.5">Supplier Name</label>
+                <Input
+                  value={supplier.name || ""}
+                  onChange={(e) => setSupplier({ ...supplier, name: e.target.value })}
+                  className="h-11 border-[#cfccc8] text-[13px]"
+                  placeholder="e.g. SanMar"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] font-semibold text-[#484852] mb-1.5">Base URL</label>
+                <Input
+                  value={supplier.base_url || ""}
+                  onChange={(e) => setSupplier({ ...supplier, base_url: e.target.value || null })}
+                  className="h-11 border-[#cfccc8] font-mono text-[13px]"
+                  placeholder="e.g. https://ws.sanmar.com/promostandards/…"
+                />
+              </div>
+
               <div>
                 <label className="block text-[13px] font-semibold text-[#484852] mb-1.5">PromoStandards Code</label>
                 <Input

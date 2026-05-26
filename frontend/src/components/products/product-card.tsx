@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import { useSelectedCustomer } from "@/lib/customer-context";
 import { PushRowAction } from "@/components/products/push-row-action";
+import Image from "next/image";
 
 interface ProductCardProps {
   product: ProductListItem;
@@ -70,10 +71,12 @@ export function ProductCard({ product, isSelected, onToggleSelection, onArchive 
       {/* Card header – image area */}
       <div className="relative h-[180px] bg-[#ebe8e3] flex items-center justify-center border-b border-[#cfccc8]">
         {product.image_url ? (
-          <img
+          <Image
             src={product.image_url}
             alt={product.product_name}
-            className="w-full h-full object-contain p-3"
+            fill
+            sizes="(max-width: 768px) 100vw, 300px"
+            className="object-contain p-3"
           />
         ) : (
           <div className="px-6 pt-12 pb-10 text-center select-none pointer-events-none opacity-20 group-hover:opacity-30 transition-opacity">
@@ -84,12 +87,12 @@ export function ProductCard({ product, isSelected, onToggleSelection, onArchive 
         )}
 
         {/* Selection Checkbox Overlay */}
-        <div 
+        <div
           onClick={handleSelect}
           className={`absolute top-3 left-3 w-6 h-6 rounded-lg border-2 z-20 flex items-center justify-center transition-all cursor-pointer ${
-            isSelected 
-              ? "bg-[#1e4d92] border-[#1e4d92] shadow-lg shadow-blue-900/20" 
-              : "bg-white/80 backdrop-blur-sm border-white/50 opacity-0 group-hover:opacity-100"
+            isSelected
+              ? "bg-[#1e4d92] border-[#1e4d92] shadow-lg shadow-blue-900/20"
+              : "bg-white/80 backdrop-blur-sm border-[#cfccc8]"
           }`}
         >
           {isSelected && <CheckSquare className="w-4 h-4 text-white" />}

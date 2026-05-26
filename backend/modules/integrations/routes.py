@@ -116,6 +116,9 @@ async def create_push_request(
     # and the orchestrator polls GET /push-requests/{id} for the outcome.
     if req.dry_run:
         await execute_push(accepted.push_log_id)
+        # execute_push opens its own AsyncSession and commits before returning,
+        # so db.refresh() correctly reads the committed terminal state into
+        # this route's session identity map.
         terminal = await db.get(ProductPushLog, accepted.push_log_id)
         if terminal is not None:
             await db.refresh(terminal)
@@ -171,6 +174,11 @@ async def get_push_status(
         cleanup_targets=push_log.cleanup_targets,
         callback_status=push_log.callback_status,
         callback_attempts=push_log.callback_attempts,
+        key_id=push_log.key_id,
+        request_id=push_log.request_id,
+        idempotency_key=push_log.idempotency_key,
+        payload_hash=push_log.payload_hash,
+        created_at=push_log.pushed_at,
         finished_at=push_log.pushed_at if terminal else None,
         links=PushRequestLinks(self=f"/api/integrations/v1/push-requests/{push_log_id}"),
     )
@@ -576,6 +584,11 @@ async def admin_push_status(
         cleanup_targets=push_log.cleanup_targets,
         callback_status=push_log.callback_status,
         callback_attempts=push_log.callback_attempts,
+        key_id=push_log.key_id,
+        request_id=push_log.request_id,
+        idempotency_key=push_log.idempotency_key,
+        payload_hash=push_log.payload_hash,
+        created_at=push_log.pushed_at,
         finished_at=push_log.pushed_at if terminal else None,
         links=PushRequestLinks(self=f"/api/integrations/admin/push-requests/{push_log_id}"),
     )
@@ -598,6 +611,26 @@ async def admin_push_request(
     proxy_key = await get_or_create_admin_proxy_key(db)
     accepted = await prepare_push_intent(req, proxy_key, db, idempotency_key=idempotency_key)
     if accepted.status not in ("accepted", "queued"):
+        return accepted
+    if req.dry_run:
+        await execute_push(accepted.push_log_id)
+        terminal = await db.get(ProductPushLog, accepted.push_log_id)
+        if terminal is not None:
+            await db.refresh(terminal)
+            accepted = PushRequestAccepted(
+                push_log_id=terminal.id,
+                status=terminal.status,
+                customer_id=terminal.customer_id,
+                supplier_slug=terminal.supplier_slug or req.source.supplier_slug,
+                supplier_sku=terminal.supplier_sku,
+                ops_product_id=terminal.ops_product_id,
+                dry_run=terminal.dry_run,
+                callback_status=terminal.callback_status,
+                created_at=terminal.pushed_at,
+                links=PushRequestLinks(
+                    self=f"/api/integrations/admin/push-requests/{terminal.id}"
+                ),
+            )
         return accepted
     background_tasks.add_task(execute_push, accepted.push_log_id)
     return accepted
