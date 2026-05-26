@@ -84,12 +84,12 @@ export function ProductCard({ product, isSelected, onToggleSelection, onArchive 
         )}
 
         {/* Selection Checkbox Overlay */}
-        <div 
+        <div
           onClick={handleSelect}
           className={`absolute top-3 left-3 w-6 h-6 rounded-lg border-2 z-20 flex items-center justify-center transition-all cursor-pointer ${
-            isSelected 
-              ? "bg-[#1e4d92] border-[#1e4d92] shadow-lg shadow-blue-900/20" 
-              : "bg-white/80 backdrop-blur-sm border-white/50 opacity-0 group-hover:opacity-100"
+            isSelected
+              ? "bg-[#1e4d92] border-[#1e4d92] shadow-lg shadow-blue-900/20"
+              : "bg-white/80 backdrop-blur-sm border-[#cfccc8]"
           }`}
         >
           {isSelected && <CheckSquare className="w-4 h-4 text-white" />}

@@ -204,6 +204,75 @@ async def get_product(
     return data
 
 
+@router.get("/{product_id}/export")
+async def export_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Return a self-contained JSON snapshot of a product for local download."""
+    result = await db.execute(
+        select(Product)
+        .where(Product.id == product_id)
+        .options(
+            selectinload(Product.variants).selectinload(ProductVariant.prices),
+            selectinload(Product.images),
+            selectinload(Product.sizes),
+            selectinload(Product.options).selectinload(ProductOption.attributes),
+        )
+    )
+    product = result.scalar_one_or_none()
+    if not product:
+        raise HTTPException(404, "Product not found")
+
+    supplier = await db.get(Supplier, product.supplier_id)
+
+    variants = [
+        {
+            "sku": v.sku,
+            "color": v.color,
+            "size": v.size,
+            "base_price": float(v.base_price) if v.base_price is not None else None,
+            "inventory": v.inventory,
+            "prices": [
+                {"quantity": p.quantity, "price": float(p.price)}
+                for p in (v.prices or [])
+            ],
+        }
+        for v in (product.variants or [])
+    ]
+
+    sizes = [
+        {"name": s.name, "sort_order": s.sort_order}
+        for s in (product.sizes or [])
+    ]
+
+    prices = [float(v["base_price"]) for v in variants if v["base_price"] is not None]
+
+    return {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "product": {
+            "id": str(product.id),
+            "supplier_sku": product.supplier_sku,
+            "product_name": product.product_name,
+            "brand": product.brand,
+            "description": product.description,
+            "product_type": product.product_type,
+            "image_url": product.image_url,
+            "supplier": {
+                "id": str(supplier.id) if supplier else None,
+                "name": supplier.name if supplier else None,
+                "slug": supplier.slug if supplier else None,
+                "protocol": supplier.protocol if supplier else None,
+            },
+        },
+        "variants": variants,
+        "sizes": sizes,
+        "pricing_summary": {
+            "variant_count": len(variants),
+            "price_min": min(prices) if prices else None,
+            "price_max": max(prices) if prices else None,
+        },
+        "images": [{"url": img.url, "sort_order": img.sort_order} for img in (product.images or [])],
+    }
+
+
 @router.get("/{product_id}/preview", response_model=ProductPreview)
 async def get_product_preview(product_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
