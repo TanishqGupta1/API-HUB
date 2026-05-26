@@ -21,6 +21,18 @@ _SERVICE_ACCOUNT_ID = uuid_mod.UUID("00000000-0000-0000-0000-000000000001")
 # X-Ingest-Secret only authorizes calls under these path prefixes. Anything
 # else (admin user management, audit logs, OPS-customer config, etc.) still
 # requires a JWT cookie. Narrows blast radius if the shared secret leaks.
+#
+# Security model (two layers):
+#   1. Path allowlist below — keeps the ingest secret away from sensitive
+#      admin routes (/api/auth, /api/customers, /api/audit-log, etc.).
+#   2. Role = "ingest_service" (not "vg_admin") — VGAdmin-gated routes
+#      reject this caller even if the secret leaks to an allowed path.
+#
+# Why /api/sync/* is listed broadly (not per-supplier):
+#   n8n calls /api/sync/{supplier_id}/products|inventory|pricing for every
+#   supplier. Locking to a single slug would require a new allowlist entry
+#   per supplier, breaking the adapter-pattern design. The role restriction
+#   above is the real guard; the path list is a coarse first filter.
 _INGEST_ALLOWED_PATH_PREFIXES: tuple[str, ...] = (
     "/api/ingest",
     "/api/sync",
