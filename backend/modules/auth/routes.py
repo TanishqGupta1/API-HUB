@@ -159,8 +159,14 @@ async def refresh_access_token(
     except JWTError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token")
 
+    # Validate sub as UUID before DB query — malformed sub would cause a 500.
+    try:
+        user_id = uuid_mod.UUID(claims["sub"])
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token claims")
+
     result = await db.execute(
-        select(User).where(User.id == claims["sub"], User.is_active.is_(True))
+        select(User).where(User.id == user_id, User.is_active.is_(True))
     )
     user = result.scalar_one_or_none()
     if not user:

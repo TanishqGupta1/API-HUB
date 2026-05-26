@@ -143,7 +143,8 @@ async def lifespan(app: FastAPI):
         sentry_sdk.init(
             dsn=_sentry_dsn,
             environment=os.getenv("ENVIRONMENT", "development"),
-            traces_sample_rate=0.2,
+            # Env-driven so ops can tune without a code deploy (default 20%)
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.2")),
             profiles_sample_rate=0.1,
             send_default_pii=False,
         )
