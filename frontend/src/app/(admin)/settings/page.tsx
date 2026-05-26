@@ -51,6 +51,7 @@ export default function SettingsPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
         {isAdmin ? <UserManagement /> : <OPSSettings customerId={user?.customer_id ?? null} />}
+        {isAdmin && <SignupToggle />}
         {isAdmin && <SystemUsers user={user} />}
       </div>
     </div>
@@ -229,6 +230,91 @@ function UserManagement() {
           </button>
         </div>
       </form>
+    </section>
+  );
+}
+
+function SignupToggle() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ enabled: boolean }>("/api/auth/settings/signup")
+      .then((r) => setEnabled(r.enabled))
+      .catch(() => setEnabled(false));
+  }, []);
+
+  async function toggle() {
+    if (enabled === null) return;
+    const next = !enabled;
+    if (next && !confirm(
+      "Enabling public signup lets anyone with the /signup URL create a vg_admin account. " +
+      "Only enable this temporarily while onboarding a co-admin, then disable it again. Continue?"
+    )) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await api<{ enabled: boolean }>("/api/auth/settings/signup", {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: next }),
+      });
+      setEnabled(r.enabled);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={{ fontSize: "14px", fontWeight: 700, color: "var(--ink)", marginBottom: "16px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        Public Signup
+      </h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxWidth: "640px" }}>
+        <p style={{ fontSize: "13px", color: "var(--ink-muted)", margin: 0 }}>
+          When enabled, anyone reaching <code style={{ fontFamily: "var(--font-mono)" }}>/signup</code> can
+          create a VG admin account. Disable when not actively onboarding.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span style={{
+            display: "inline-block",
+            padding: "3px 8px",
+            borderRadius: "3px",
+            fontSize: "11px",
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            background: enabled ? "rgba(220,38,38,0.08)" : "rgba(30,77,146,0.08)",
+            color: enabled ? "#dc2626" : "var(--blue)",
+            border: `1px solid ${enabled ? "rgba(220,38,38,0.3)" : "rgba(30,77,146,0.3)"}`,
+          }}>
+            {enabled === null ? "…" : enabled ? "Open" : "Closed"}
+          </span>
+          <button
+            type="button"
+            onClick={toggle}
+            disabled={saving || enabled === null}
+            style={{
+              padding: "8px 16px",
+              background: enabled ? "var(--blue)" : "#dc2626",
+              color: "#fff",
+              border: "none",
+              borderRadius: "3px",
+              fontSize: "13px",
+              fontWeight: 700,
+              cursor: saving || enabled === null ? "not-allowed" : "pointer",
+              opacity: saving || enabled === null ? 0.7 : 1,
+            }}
+          >
+            {saving ? "Saving…" : enabled ? "Close signup" : "Open signup"}
+          </button>
+        </div>
+        {error && <div style={{ color: "#dc2626", fontSize: "13px" }}>{error}</div>}
+      </div>
     </section>
   );
 }

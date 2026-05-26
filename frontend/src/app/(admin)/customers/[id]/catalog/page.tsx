@@ -48,32 +48,7 @@ export default function CustomerCatalogPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  useEffect(() => {
-    if (!id) return;
-    if (!isValidId) {
-      // Don't fetch — the URL contains a literal placeholder or junk.
-      // Render the "invalid id" empty state below instead.
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const url = `/api/customers/${id}/selections${supplierId ? `?supplier_id=${supplierId}` : ""}`;
-
-    Promise.all([
-      api<Customer>(`/api/customers/${id}`),
-      api<CustomerProductSelection[]>(url),
-    ])
-      .then(([cust, sels]) => {
-        setCustomer(cust);
-        setSelections(sels);
-      })
-      .catch((err) => {
-        log.error("Failed to fetch selections", err);
-        toast.error(err.message || "Failed to load customer catalog");
-      })
-      .finally(() => setLoading(false));
-  }, [id, isValidId, supplierId]);
-
+  // All useMemo calls must be unconditional — hoisted above the isValidId early return.
   const filtered = useMemo(() => {
     return selections.filter((s) => {
       if (statusFilter !== "all" && s.status !== statusFilter) return false;
@@ -110,6 +85,32 @@ export default function CustomerCatalogPage() {
     () => selections.filter((s) => s.supplier_has_decoration_overlay && !s.decoration_ready).length,
     [selections],
   );
+
+  useEffect(() => {
+    if (!id) return;
+    if (!isValidId) {
+      // Don't fetch — the URL contains a literal placeholder or junk.
+      // Render the "invalid id" empty state below instead.
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const url = `/api/customers/${id}/selections${supplierId ? `?supplier_id=${supplierId}` : ""}`;
+
+    Promise.all([
+      api<Customer>(`/api/customers/${id}`),
+      api<CustomerProductSelection[]>(url),
+    ])
+      .then(([cust, sels]) => {
+        setCustomer(cust);
+        setSelections(sels);
+      })
+      .catch((err) => {
+        log.error("Failed to fetch selections", err);
+        toast.error(err.message || "Failed to load customer catalog");
+      })
+      .finally(() => setLoading(false));
+  }, [id, isValidId, supplierId]);
 
   if (!isValidId) {
     return (

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { resolveApiBase } from "@/lib/api-base";
+import { API_BASE } from "@/lib/env";
 import { RefreshCw, Activity, Database, Server, ExternalLink } from "lucide-react";
 
 interface Stats {
@@ -96,9 +96,8 @@ export default function MonitoringPage() {
   async function load() {
     setLoading(true);
     try {
-      const apiBase = resolveApiBase();
       const [h, s] = await Promise.all([
-        fetch(`${apiBase}/health`).then((r) => r.json() as Promise<HealthStatus>),
+        fetch(`${API_BASE}/health`).then((r) => r.json() as Promise<HealthStatus>),
         api<Stats>("/api/stats"),
       ]);
       setHealth(h);

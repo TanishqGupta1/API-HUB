@@ -2,10 +2,9 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { clearCachedUser } from "@/lib/auth";
-import { resolveApiBase } from "@/lib/api-base";
-
-const API_BASE = resolveApiBase();
+import { API_BASE } from "@/lib/env";
 
 type ValidationError = { loc: (string | number)[]; msg: string; type: string };
 
@@ -234,6 +233,22 @@ function LoginForm() {
         >
           {loading ? "Signing in…" : "Sign in"}
         </button>
+
+        <div
+          style={{
+            textAlign: "center",
+            fontSize: "13px",
+            color: "var(--ink-muted)",
+          }}
+        >
+          Need an account?{" "}
+          <Link
+            href="/signup"
+            style={{ color: "var(--blue)", textDecoration: "none", fontWeight: 600 }}
+          >
+            Create one
+          </Link>
+        </div>
       </form>
     </div>
   );

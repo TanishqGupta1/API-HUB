@@ -1,6 +1,4 @@
-import { resolveApiBase } from "./api-base";
-
-const API_BASE = resolveApiBase();
+import { API_BASE } from "./env";
 
 export class ApiError extends Error {
   status: number;

@@ -49,7 +49,6 @@ from modules.auth.dependencies import get_current_user
 from modules.audit_log.routes import router as audit_log_router
 from modules.audit_log.middleware import AuditLogMiddleware
 from modules.customer_catalog.routes import router as customer_catalog_router
-from modules.n8n_proxy.routes import router as n8n_proxy_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -202,14 +201,15 @@ async def lifespan(app: FastAPI):
             print(f"Database not ready... retrying in 2s ({retries} retries left)")
             await asyncio.sleep(2)
 
-    # Seed the default admin user. Runs after Base.metadata.create_all so the
-    # `users` table exists (bootstrap.sh tried this before lifespan and silently
-    # failed — see ensure_default_admin docstring for env-vs-random behavior).
-    from modules.auth.seed import ensure_default_admin
-    async with async_session() as db:
-        await ensure_default_admin(db)
+    # Admin seeding is opt-in via SEED_ADMIN=1. Default flow: deploy with empty
+    # DB, then first visitor at /signup creates the bootstrap vg_admin (the
+    # /api/auth/register endpoint accepts the first user without auth).
+    if os.getenv("SEED_ADMIN", "0") == "1":
+        from modules.auth.seed import ensure_default_admin
+        async with async_session() as db:
+            await ensure_default_admin(db)
 
-    if ENVIRONMENT == "development":
+    if ENVIRONMENT == "development" and os.getenv("SEED_DEMO_SUPPLIER", "0") == "1":
         from modules.suppliers.demo_seed import ensure_vg_ops_supplier
 
         async with async_session() as db:
@@ -288,7 +288,6 @@ app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
-app.include_router(n8n_proxy_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
 app.include_router(integrations_router)
 app.include_router(integrations_admin_router, dependencies=_auth)

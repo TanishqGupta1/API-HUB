@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { clearCachedUser } from "@/lib/auth";
-import { resolveApiBase } from "@/lib/api-base";
-
-const API_BASE = resolveApiBase();
+import { API_BASE } from "@/lib/env";
 
 export default function SetupPage() {
   const router = useRouter();

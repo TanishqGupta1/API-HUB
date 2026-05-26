@@ -25,7 +25,6 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
 
-import { CleanupChecklist } from "@/components/push/CleanupChecklist";
 import { DryRunControls } from "@/components/push/DryRunControls";
 import { PreviewPanel } from "@/components/push/PreviewPanel";
 import {
@@ -285,6 +284,3 @@ function ErrorCard({
   );
 }
 
-// Silence unused-import linting for CleanupChecklist (used by the sibling
-// /push-log/[id] page — kept in the same module hierarchy).
-export { CleanupChecklist as _CleanupChecklist };
