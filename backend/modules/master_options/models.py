@@ -50,6 +50,7 @@ class MasterOptionAttribute(Base):
     )
     ops_attribute_id: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    attribute_key: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     default_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     raw_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)

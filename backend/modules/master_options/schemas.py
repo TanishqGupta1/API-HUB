@@ -11,6 +11,7 @@ class MasterOptionAttributeRead(BaseModel):
     id: UUID
     ops_attribute_id: int
     title: str
+    attribute_key: Optional[str] = None
     sort_order: int
     default_price: Optional[Decimal] = None
 

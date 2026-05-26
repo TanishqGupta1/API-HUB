@@ -168,6 +168,7 @@ async def sync_master_options(db: AsyncSession = Depends(get_db)):
                 master_option_id=row,
                 ops_attribute_id=int(attr_id),
                 title=attr.get("title") or "",
+                attribute_key=attr.get("attribute_key") or None,
                 sort_order=int(attr.get("sort_order") or 0),
                 default_price=attr.get("price"),
                 raw_json=attr,
