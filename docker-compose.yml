@@ -25,38 +25,13 @@ services:
     environment:
       - POSTGRES_URL=postgresql+asyncpg://${POSTGRES_USER:-vg_user}:${POSTGRES_PASSWORD:-vg_pass}@postgres:5432/${POSTGRES_DB:-vg_hub}
       - SECRET_KEY=${SECRET_KEY:-y0uR_s3cr3t_k3y_h3r3}
-      - N8N_API_BASE_URL=${N8N_API_BASE_URL:-http://n8n:5678}
-      - N8N_WEBHOOK_BASE_URL=${N8N_WEBHOOK_BASE_URL:-http://n8n:5678}
       - API_BASE_URL=${API_BASE_URL:-http://api:8000}
       - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173}
-      - AUTO_SEED=${AUTO_SEED:-1}
-      - DEMO_ADMIN_EMAIL=${DEMO_ADMIN_EMAIL:-admin@example.com}
-      - DEMO_ADMIN_PASSWORD=${DEMO_ADMIN_PASSWORD:-demo1234}
+      - AUTO_SEED=${AUTO_SEED:-0}
+      - SEED_ADMIN=${SEED_ADMIN:-0}
     volumes:
       - ./backend:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  n8n:
-    build:
-      context: .
-      dockerfile: n8n.Dockerfile
-    image: api-hub-n8n:dev
-    profiles: ["dev"]
-    ports:
-      - "5678:5678"
-    environment:
-      - N8N_HOST=0.0.0.0
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - NODE_FUNCTION_ALLOW_EXTERNAL=*
-      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
-      - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET}
-      - API_BASE_URL=${API_BASE_URL:-http://api:8000}
-    volumes:
-      - n8n_data:/home/node/.n8n
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,11 +40,15 @@ services:
     build:
       context: ./frontend
       target: deps
-    command: npm run dev
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
     ports:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # Server-side fetch from Next.js API routes (uses Docker DNS, not the
+      # browser-visible URL).
+      - API_BASE_URL=${API_BASE_URL:-http://api:8000}
+      - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET:-}
       - WATCHPACK_POLLING=true
     volumes:
       - ./frontend:/app
@@ -80,6 +59,5 @@ services:
 
 volumes:
   pgdata:
-  n8n_data:
   frontend_node_modules:
   frontend_next:

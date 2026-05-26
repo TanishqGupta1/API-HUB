@@ -24,7 +24,7 @@
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
-import { resolveApiBase } from "@/lib/api-base";
+import { API_BASE } from "@/lib/env";
 
 import { DryRunControls } from "@/components/push/DryRunControls";
 import { PreviewPanel } from "@/components/push/PreviewPanel";
@@ -69,7 +69,7 @@ export default function PushPreviewPage() {
   async function downloadProductJson() {
     try {
       const res = await fetch(
-        `${resolveApiBase()}/api/products/${productId}/export`,
+        `${API_BASE}/api/products/${productId}/export`,
         { credentials: "include" }
       );
       if (!res.ok) return;

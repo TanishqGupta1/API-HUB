@@ -1,13 +1,17 @@
+import asyncio
+import hashlib
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_db
+from database import async_session, get_db
 from modules.suppliers.models import Supplier
 from .models import SyncJob
 from .schemas import SyncJobCreate, SyncJobRead
@@ -49,6 +53,75 @@ async def list_sync_jobs(
         q = q.where(SyncJob.supplier_id == supplier_id)
     result = await db.execute(q)
     return result.scalars().all()
+
+
+@router.get("/stream")
+async def stream_sync_jobs(
+    request: Request,
+    status: Optional[str] = None,
+    job_type: Optional[str] = None,
+    supplier_id: Optional[uuid.UUID] = None,
+    limit: int = 100,
+):
+    """Server-Sent Events stream of sync jobs.
+
+    Polls the DB every 2s and pushes a `data:` event only when the result set
+    changes (hash diff). Heartbeats (`: ping\\n\\n`) every 15s keep proxies and
+    browsers from closing idle connections. Filters mirror GET /api/sync-jobs.
+    """
+
+    def _serialize(rows: list[SyncJob]) -> str:
+        return json.dumps(
+            [SyncJobRead.model_validate(r).model_dump(mode="json") for r in rows],
+            separators=(",", ":"),
+        )
+
+    async def _fetch(db: AsyncSession) -> list[SyncJob]:
+        q = select(SyncJob).order_by(SyncJob.started_at.desc()).limit(limit)
+        if status:
+            q = q.where(SyncJob.status == status)
+        if job_type:
+            q = q.where(SyncJob.job_type == job_type)
+        if supplier_id:
+            q = q.where(SyncJob.supplier_id == supplier_id)
+        return list((await db.execute(q)).scalars().all())
+
+    async def event_stream():
+        last_hash: Optional[str] = None
+        ticks_since_push = 0
+        while True:
+            if await request.is_disconnected():
+                return
+
+            # Each tick opens its own short-lived session so we never reuse a
+            # session past commits/rollbacks elsewhere in the request lifecycle.
+            async with async_session() as db:
+                rows = await _fetch(db)
+
+            payload = _serialize(rows)
+            digest = hashlib.md5(payload.encode()).hexdigest()
+            if digest != last_hash:
+                yield f"data: {payload}\n\n"
+                last_hash = digest
+                ticks_since_push = 0
+            else:
+                ticks_since_push += 1
+                # Heartbeat every ~14s so the connection survives idle proxies.
+                if ticks_since_push >= 7:
+                    yield ": ping\n\n"
+                    ticks_since_push = 0
+
+            await asyncio.sleep(2)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.post("", response_model=SyncJobRead, status_code=201)

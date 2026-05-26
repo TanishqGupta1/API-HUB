@@ -1,0 +1,13 @@
+export declare const setProductMutation = "\n  mutation setProduct($input: ProductInput!) {\n    setProduct(input: $input) {\n      id\n      title\n      status\n    }\n  }\n";
+export declare const setProductPriceMutation = "\n  mutation setProductPrice($input: ProductPriceInput!) {\n    setProductPrice(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setProductSizeMutation = "\n  mutation setProductSize($input: ProductSizeInput!) {\n    setProductSize(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setProductPagesMutation = "\n  mutation setProductPages($input: ProductPagesInput!) {\n    setProductPages(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setProductCategoryMutation = "\n  mutation setProductCategory($input: ProductCategoryInput!) {\n    setProductCategory(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setProductDesignMutation = "\n  mutation setProductDesign($input: ProductDesignInput!) {\n    setProductDesign(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setAssignOptionsMutation = "\n  mutation setAssignOptions($input: AssignOptionsInput!) {\n    setAssignOptions(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setProductOptionRulesMutation = "\n  mutation setProductOptionRules($input: ProductOptionRulesInput!) {\n    setProductOptionRules(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setCustomFormulaMutation = "\n  mutation setCustomFormula($input: CustomFormulaInput!) {\n    setCustomFormula(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setOptionGroupMutation = "\n  mutation setOptionGroup($input: OptionGroupInput!) {\n    setOptionGroup(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setMasterOptionTagMutation = "\n  mutation setMasterOptionTag($input: MasterOptionTagInput!) {\n    setMasterOptionTag(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setMasterOptionAttributesMutation = "\n  mutation setMasterOptionAttributes($input: MasterOptionAttributesInput!) {\n    setMasterOptionAttributes(input: $input) {\n      status\n      message\n    }\n  }\n";
+export declare const setMasterOptionAttributePriceMutation = "\n  mutation setMasterOptionAttributePrice($input: MasterOptionAttributePriceInput!) {\n    setMasterOptionAttributePrice(input: $input) {\n      status\n      message\n    }\n  }\n";

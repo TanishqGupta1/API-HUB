@@ -3,9 +3,9 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clearCachedUser } from "@/lib/auth";
-import { resolveApiBase } from "@/lib/api-base";
+import { API_BASE } from "@/lib/env";
 
-const API_BASE = resolveApiBase();
+
 
 export default function LoginPage() {
   return (
