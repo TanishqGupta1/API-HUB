@@ -745,8 +745,10 @@ async def admin_retry_push(
             "message": f"Push is in '{push_log.status}' status — only partial_failure and failed can be retried",
         })
 
-    # Record the retry lineage and reset to queued
-    push_log.retry_of = push_log.id
+    # Reset to queued for re-execution.
+    # NOTE: retry_of is intentionally left unchanged — setting it to push_log.id
+    # would be a self-reference. A proper lineage chain requires a new row per
+    # retry; this in-place reset approach tracks retries via status history only.
     push_log.status = "accepted"
     push_log.cleanup_targets = None
     push_log.step_results = None

@@ -27,6 +27,7 @@ from modules.ops_push.preflight import run_preflight
 from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
 from modules.suppliers.models import Supplier
+from modules.webhooks.service import fire_webhooks
 
 logger = logging.getLogger(__name__)
 
@@ -558,6 +559,24 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 push_log.callback_status = "sent" if success else "failed"
                 push_log.callback_attempts = 1
                 await db.commit()
+
+            # ── Fire outbound webhooks ──
+            _webhook_event = (
+                "push.completed" if final_status in ("pushed", "dry_run_pushed")
+                else "push.partial_failure" if final_status == "partial_failure"
+                else "push.failed"
+            )
+            await fire_webhooks(
+                customer_id=push_log.customer_id,
+                event=_webhook_event,
+                payload={
+                    "push_log_id": str(push_log_id),
+                    "status": final_status,
+                    "ops_product_id": ops_product_id,
+                    "supplier_sku": push_log.supplier_sku,
+                    "dry_run": push_log.dry_run,
+                },
+            )
         finally:
             await client.aclose()
 
