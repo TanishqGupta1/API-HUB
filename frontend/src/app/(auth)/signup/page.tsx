@@ -42,14 +42,11 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      // POST to /api/auth/users — requires an authenticated vg_admin session.
-      // role must be sent explicitly; backend UserCreate.model_validator enforces
-      // that customer_admin also requires a customer_id.
-      const res = await fetch(`${API_BASE}/api/auth/users`, {
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, password, role: "vg_admin" }),
+        body: JSON.stringify({ email, password }),
       });
 
       if (!res.ok) {

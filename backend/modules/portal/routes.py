@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -185,17 +185,31 @@ async def portal_catalog(
         .where(CustomerProductSelection.customer_id == cid)
     )).scalar() or 0
 
-    # Latest push status per product
-    push_status_rows = (await db.execute(
-        select(ProductPushLog.product_id, ProductPushLog.status, ProductPushLog.ops_product_id)
-        .where(
-            ProductPushLog.customer_id == cid,
-            # sel=CustomerProductSelection, prod=Product — use sel.product_id (not prod.id via wrong alias)
-            ProductPushLog.product_id.in_([sel.product_id for sel, _ in selections] if selections else [])
+    # Latest push status per product — deterministic via max(pushed_at) subquery
+    product_ids = [sel.product_id for sel, _ in selections] if selections else []
+    push_status_rows: list = []
+    if product_ids:
+        latest_push_subq = (
+            select(
+                ProductPushLog.product_id,
+                func.max(ProductPushLog.pushed_at).label("max_pushed_at"),
+            )
+            .where(
+                ProductPushLog.customer_id == cid,
+                ProductPushLog.product_id.in_(product_ids),
+            )
+            .group_by(ProductPushLog.product_id)
+            .subquery()
         )
-        .distinct(ProductPushLog.product_id)
-        .order_by(ProductPushLog.product_id, ProductPushLog.pushed_at.desc())
-    )).all()
+        push_status_rows = (await db.execute(
+            select(ProductPushLog.product_id, ProductPushLog.status, ProductPushLog.ops_product_id)
+            .join(
+                latest_push_subq,
+                (ProductPushLog.product_id == latest_push_subq.c.product_id)
+                & (ProductPushLog.pushed_at == latest_push_subq.c.max_pushed_at),
+            )
+            .where(ProductPushLog.customer_id == cid)
+        )).all()
     push_map = {str(r.product_id): {"status": r.status, "ops_product_id": r.ops_product_id} for r in push_status_rows}
 
     return {
@@ -250,10 +264,16 @@ class PortalAccountUpdate(BaseModel):
     """Strictly-typed schema for self-service account updates.
 
     Only ops_client_secret is permitted — all other customer fields are
-    admin-only.  Rejecting extra fields at the schema layer is safer than
-    iterating body.keys() over a raw dict.
+    admin-only.  extra="forbid" rejects unknown keys at the schema layer.
+    Credential rotations are audited automatically by AuditLogMiddleware.
     """
-    ops_client_secret: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    ops_client_secret: Optional[str] = Field(
+        default=None,
+        min_length=16,
+        description="OPS OAuth2 client secret — minimum 16 characters",
+    )
 
 
 @router.patch("/account")

@@ -249,8 +249,9 @@ async def update_signup_settings(
 
 
 @router.post("/register", response_model=UserRead, status_code=201)
+@limiter.limit("5/minute")
 async def register(
-    body: SetupRequest, response: Response, db: AsyncSession = Depends(get_db)
+    request: Request, body: SetupRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> User:
     """Public registration.
 
