@@ -1,7 +1,7 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 
-import sentry_sdk
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -9,15 +9,6 @@ from slowapi.errors import RateLimitExceeded
 
 from limiter import limiter
 
-_SENTRY_DSN = os.getenv("SENTRY_DSN", "")
-if _SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=_SENTRY_DSN,
-        environment=os.getenv("ENVIRONMENT", "development"),
-        traces_sample_rate=0.2,   # 20% of requests traced
-        profiles_sample_rate=0.1,
-        send_default_pii=False,
-    )
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -139,6 +130,21 @@ def _run_alembic_upgrade() -> None:
 async def lifespan(app: FastAPI):
     _require_prod_env()
     import asyncio
+
+    # Sentry must be initialised inside lifespan so that logging is already
+    # configured — initialising at module import time means startup errors can
+    # be silently swallowed before the SDK has a chance to flush them.
+    _sentry_dsn = os.getenv("SENTRY_DSN", "")
+    if _sentry_dsn:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            environment=os.getenv("ENVIRONMENT", "development"),
+            traces_sample_rate=0.2,
+            profiles_sample_rate=0.1,
+            send_default_pii=False,
+        )
+        logging.getLogger(__name__).info("Sentry SDK initialised")
     retries = 5
     while retries > 0:
         try:
@@ -153,8 +159,7 @@ async def lifespan(app: FastAPI):
             retries -= 1
             if retries == 0:
                 raise e
-            import logging as _logging
-            _logging.getLogger(__name__).warning(
+            logging.getLogger(__name__).warning(
                 "DB startup error (%s: %s) — retrying in 2s (%d retries left)",
                 type(e).__name__, e, retries,
             )

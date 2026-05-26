@@ -590,7 +590,8 @@ export interface OPSPushPayload {
 
 /** Append-only entry written by the worker to product_push_log.step_results JSONB. */
 export interface OPSStepResult {
-  step: number | string;
+  /** Sequential step index (always a number — backend StepResultOut uses int). */
+  step: number;
   source_key?: string | null;
   mutation: string;
   request_fingerprint?: string | null;
