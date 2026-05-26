@@ -18,7 +18,10 @@ from typing import Optional
 log = logging.getLogger(__name__)
 
 S3_BUCKET = os.getenv("S3_PRODUCT_IMAGES_BUCKET", "product-images-dev")
-CDN_BASE_URL = os.getenv("CDN_BASE_URL", "https://cdn.example.com").rstrip("/")
+# CDN_BASE_URL must be explicitly set — no default so that is_own_cdn() never
+# accidentally matches in dev/test environments (avoids treating every mock-upload
+# as "already mirrored" when CDN_BASE_URL is unset).
+CDN_BASE_URL = os.getenv("CDN_BASE_URL", "").rstrip("/")
 
 _IS_CONFIGURED = bool(
     os.getenv("S3_ACCESS_KEY_ID") and os.getenv("S3_SECRET_ACCESS_KEY")
@@ -94,5 +97,11 @@ def cdn_url(key: str) -> str:
 
 
 def is_own_cdn(url: Optional[str]) -> bool:
-    """Return True if a URL is already hosted on our CDN (already mirrored)."""
+    """Return True if a URL is already hosted on our CDN (already mirrored).
+
+    Returns False when CDN_BASE_URL is unset (empty string sentinel) so that
+    dev environments with no S3 configured never treat any URL as mirrored.
+    """
+    if not CDN_BASE_URL:
+        return False
     return bool(url and url.startswith(CDN_BASE_URL + "/"))
