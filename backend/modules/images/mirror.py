@@ -11,6 +11,7 @@ Entry points:
 
 import hashlib
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from io import BytesIO
@@ -27,10 +28,11 @@ from modules.images.storage import is_own_cdn, upload_image
 log = logging.getLogger(__name__)
 
 # Configurable image processing settings
-import os
-
 _MAX_DIM = int(os.getenv("IMAGE_MAX_DIMENSION", "1200"))
 _WEBP_Q = int(os.getenv("IMAGE_WEBP_QUALITY", "85"))
+# Hard download size cap — prevents a malicious/broken supplier URL from
+# streaming multi-GB into process memory.  Default 20 MB.
+_MAX_DOWNLOAD_BYTES = int(os.getenv("IMAGE_MAX_DOWNLOAD_BYTES", str(20 * 1024 * 1024)))
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -54,15 +56,44 @@ def _s3_key(supplier_slug: str, sku: str, image_type: str, color: Optional[str],
 
 
 async def _fetch_and_process(url: str) -> tuple[bytes, str]:
-    """Download image, resize to _MAX_DIM, convert to WebP. Returns (bytes, sha256)."""
+    """Download image, resize to _MAX_DIM, convert to WebP. Returns (bytes, sha256).
+
+    Size-caps the download at _MAX_DOWNLOAD_BYTES to prevent runaway memory
+    usage from oversized/adversarial supplier URLs.
+
+    Preserves alpha channel — logos and transparent PNGs are saved as WebP
+    with RGBA so the transparency survives the format conversion.
+    """
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-        r = await client.get(url)
-        r.raise_for_status()
-        raw = r.content
+        async with client.stream("GET", url) as r:
+            r.raise_for_status()
+            chunks: list[bytes] = []
+            received = 0
+            async for chunk in r.aiter_bytes(chunk_size=65536):
+                received += len(chunk)
+                if received > _MAX_DOWNLOAD_BYTES:
+                    raise ValueError(
+                        f"Image at {url} exceeds size cap "
+                        f"({_MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB)"
+                    )
+                chunks.append(chunk)
+            raw = b"".join(chunks)
 
     checksum = hashlib.sha256(raw).hexdigest()
 
-    img = Image.open(BytesIO(raw)).convert("RGB")
+    img = Image.open(BytesIO(raw))
+
+    # Preserve alpha for formats that carry it (PNG, WebP with alpha, GIF).
+    # Converting RGB→RGBA is safe; RGBA WebP fully supported by all modern browsers.
+    # Only flatten to RGB when the source is already opaque (no alpha channel).
+    if img.mode in ("RGBA", "LA", "PA"):
+        img = img.convert("RGBA")
+    elif img.mode == "P":
+        # Paletted — may have transparency; convert via RGBA to preserve it
+        img = img.convert("RGBA")
+    else:
+        img = img.convert("RGB")
+
     img.thumbnail((_MAX_DIM, _MAX_DIM), Image.Resampling.LANCZOS)
 
     out = BytesIO()

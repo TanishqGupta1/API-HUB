@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from modules.auth.dependencies import VGAdmin
 from modules.images.mirror import mirror_product_images, mirror_products_batch
-from modules.images.storage import is_own_cdn  # noqa: F401 (used below)
+from modules.images.storage import is_own_cdn
 
 router = APIRouter(prefix="/api/images", tags=["images"])
 

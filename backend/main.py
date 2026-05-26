@@ -1,7 +1,7 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 
-import sentry_sdk
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -9,15 +9,6 @@ from slowapi.errors import RateLimitExceeded
 
 from limiter import limiter
 
-_SENTRY_DSN = os.getenv("SENTRY_DSN", "")
-if _SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=_SENTRY_DSN,
-        environment=os.getenv("ENVIRONMENT", "development"),
-        traces_sample_rate=0.2,   # 20% of requests traced
-        profiles_sample_rate=0.1,
-        send_default_pii=False,
-    )
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,6 +91,7 @@ import modules.promostandards.alphabroder_adapter  # noqa: F401  registers Alpha
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
 from modules.decorations.routes import router as decorations_router
+from modules.images.routes import router as images_router
 
 
 def _run_alembic_upgrade() -> None:
@@ -139,6 +131,22 @@ def _run_alembic_upgrade() -> None:
 async def lifespan(app: FastAPI):
     _require_prod_env()
     import asyncio
+
+    # Sentry must be initialised inside lifespan so that logging is already
+    # configured (structlog / uvicorn configure handlers before lifespan runs).
+    # Initialising at module import time means errors during startup can be
+    # silently swallowed before the SDK has a chance to flush them.
+    _sentry_dsn = os.getenv("SENTRY_DSN", "")
+    if _sentry_dsn:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            environment=os.getenv("ENVIRONMENT", "development"),
+            traces_sample_rate=0.2,   # 20% of requests traced
+            profiles_sample_rate=0.1,
+            send_default_pii=False,
+        )
+        logging.getLogger(__name__).info("Sentry SDK initialised")
     retries = 5
     while retries > 0:
         try:
@@ -153,8 +161,7 @@ async def lifespan(app: FastAPI):
             retries -= 1
             if retries == 0:
                 raise e
-            import logging as _logging
-            _logging.getLogger(__name__).warning(
+            logging.getLogger(__name__).warning(
                 "DB startup error (%s: %s) — retrying in 2s (%d retries left)",
                 type(e).__name__, e, retries,
             )
@@ -247,6 +254,7 @@ app.include_router(import_jobs_router, dependencies=_auth)
 app.include_router(pricing_router, dependencies=_auth)
 app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
+app.include_router(images_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
