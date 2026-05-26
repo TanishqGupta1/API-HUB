@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { API_BASE } from "@/lib/env";
 import type { SyncJob } from "@/lib/types";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -99,46 +100,44 @@ export default function SyncJobsPage() {
   const [filterJobType,  setFilterJobType]  = useState("");
   const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  async function fetchJobs(quiet = false) {
-    if (!quiet) setLoading(true);
-    setFetchError(null);
+  // Live updates via Server-Sent Events. Backend polls the DB at 2s ticks and
+  // only emits when the result set changes, so this is cheaper than the old
+  // setInterval polling and the UI updates within ~2s of any DB write.
+  // Supplier filter is applied client-side, so it does not need to reopen the
+  // stream — only status and job_type change the server-side query.
+  useEffect(() => {
     const params = new URLSearchParams();
-    if (filterStatus)   params.set("status",   filterStatus);
-    if (filterJobType)  params.set("job_type", filterJobType);
-    if (filterSupplier) params.set("supplier_name", filterSupplier);
-    try {
-      const data = await api<SyncJob[]>(`/api/sync-jobs${params.size ? `?${params}` : ""}`);
-      setJobs(data);
-    } catch (e: any) {
-      setFetchError(e.message ?? "Failed to load");
-    } finally {
-      if (!quiet) setLoading(false);
-    }
-  }
+    if (filterStatus) params.set("status", filterStatus);
+    if (filterJobType) params.set("job_type", filterJobType);
+    const url = `${API_BASE}/api/sync-jobs/stream${params.size ? `?${params}` : ""}`;
 
-  useEffect(() => { fetchJobs(); }, [filterStatus, filterJobType, filterSupplier]); // eslint-disable-line
+    setLoading(true);
+    setFetchError(null);
+    const es = new EventSource(url, { withCredentials: true });
 
-  // Poll every 5 s while any job is running
-  useEffect(() => {
-    const anyRunning = jobs.some((j) => j.status === "running");
-    if (anyRunning && !pollRef.current) {
-      pollRef.current = setInterval(() => fetchJobs(true), 5000);
-    }
-    if (!anyRunning && pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
-  }, [jobs]); // eslint-disable-line
+    es.onmessage = (e) => {
+      try {
+        setJobs(JSON.parse(e.data) as SyncJob[]);
+        setFetchError(null);
+      } catch (err) {
+        setFetchError(err instanceof Error ? err.message : "Stream parse error");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Background auto-refresh every 30s (independent of running-job poll)
-  useEffect(() => {
-    refreshRef.current = setInterval(() => fetchJobs(true), 30000);
-    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
-  }, [filterStatus, filterJobType, filterSupplier]); // eslint-disable-line
+    es.onerror = () => {
+      // EventSource auto-reconnects on transient errors. Surface persistent
+      // failures (e.g. closed by server / auth) so the user knows the table
+      // is stale.
+      if (es.readyState === EventSource.CLOSED) {
+        setFetchError("Live connection closed — refresh to reconnect.");
+        setLoading(false);
+      }
+    };
+
+    return () => es.close();
+  }, [filterStatus, filterJobType]);
 
   // Supplier options derived from data
   const supplierNames = Array.from(new Set(jobs.map((j) => j.supplier_name))).sort();

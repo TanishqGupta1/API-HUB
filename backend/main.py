@@ -201,14 +201,15 @@ async def lifespan(app: FastAPI):
             print(f"Database not ready... retrying in 2s ({retries} retries left)")
             await asyncio.sleep(2)
 
-    # Seed the default admin user. Runs after Base.metadata.create_all so the
-    # `users` table exists (bootstrap.sh tried this before lifespan and silently
-    # failed — see ensure_default_admin docstring for env-vs-random behavior).
-    from modules.auth.seed import ensure_default_admin
-    async with async_session() as db:
-        await ensure_default_admin(db)
+    # Admin seeding is opt-in via SEED_ADMIN=1. Default flow: deploy with empty
+    # DB, then first visitor at /signup creates the bootstrap vg_admin (the
+    # /api/auth/register endpoint accepts the first user without auth).
+    if os.getenv("SEED_ADMIN", "0") == "1":
+        from modules.auth.seed import ensure_default_admin
+        async with async_session() as db:
+            await ensure_default_admin(db)
 
-    if ENVIRONMENT == "development":
+    if ENVIRONMENT == "development" and os.getenv("SEED_DEMO_SUPPLIER", "0") == "1":
         from modules.suppliers.demo_seed import ensure_vg_ops_supplier
 
         async with async_session() as db:

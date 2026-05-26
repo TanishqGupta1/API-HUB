@@ -1,0 +1,12 @@
+[
+  {"ParameterKey": "EnvironmentName", "ParameterValue": "dev"},
+  {"ParameterKey": "DomainName", "ParameterValue": "dev-apihub.visualgraphx.com"},
+  {"ParameterKey": "HostedZoneId", "ParameterValue": "REPLACE_ME"},
+  {"ParameterKey": "AcmCertificateArn", "ParameterValue": "REPLACE_ME"},
+  {"ParameterKey": "VpcId", "ParameterValue": "REPLACE_ME"},
+  {"ParameterKey": "PublicSubnetIds", "ParameterValue": "REPLACE_ME"},
+  {"ParameterKey": "PrivateSubnetIds", "ParameterValue": "REPLACE_ME"},
+  {"ParameterKey": "BackendImageUri", "ParameterValue": "PLACEHOLDER_REPLACED_BY_CI"},
+  {"ParameterKey": "FrontendImageUri", "ParameterValue": "PLACEHOLDER_REPLACED_BY_CI"},
+  {"ParameterKey": "N8nImageUri", "ParameterValue": "PLACEHOLDER_REPLACED_BY_CI"}
+]

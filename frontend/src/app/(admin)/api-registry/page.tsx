@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { API_BASE } from "@/lib/env";
 import { log } from "@/lib/log";
 
 // --- Components ---
@@ -42,10 +43,6 @@ function APIEntry({ method, path, desc, blueprint }: { method: string; path: str
       if (err.body) {
         setResponse(`Error ${err.status}:\n${JSON.stringify(err.body, null, 2)}`);
       } else if (err.status === 401) {
-        const apiBase =
-          typeof window !== "undefined"
-            ? window.location.origin.replace(":3000", ":8000")
-            : "http://localhost:8000";
         setResponse(
           `Error 401: Unauthorized.\n\n` +
           `This endpoint requires different credentials than your admin session.\n` +
@@ -53,7 +50,7 @@ function APIEntry({ method, path, desc, blueprint }: { method: string; path: str
           `Try this from the command line:\n` +
           `  curl -X ${method} \\\n` +
           `    -H "X-Ingest-Secret: <your-secret>" \\\n` +
-          `    ${apiBase}${finalPath}`
+          `    ${API_BASE}${finalPath}`
         );
       } else {
         setResponse(`Error: ${err.message || String(err)}`);
@@ -130,7 +127,7 @@ export default function APIRegistryPage() {
             color: "var(--blue)", 
             fontSize: "11px" 
           }}>
-            API_HOST: {process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}
+            API_HOST: {API_BASE}
           </span>
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { resolveApiBase } from "@/lib/api-base";
+import { API_BASE } from "@/lib/env";
 import { log } from "@/lib/log";
 import type { Customer, Product, ProductDecoration, DecorationOption } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -198,7 +198,7 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                   </>
                 ) : (
                   <img 
-                    src={`${resolveApiBase()}/api/customers/${customer.id}/products/${product.id}/decorations/preview.png?t=${Date.now()}`}
+                    src={`${API_BASE}/api/customers/${customer.id}/products/${product.id}/decorations/preview.png?t=${Date.now()}`}
                     alt="Engine Preview"
                     className="w-full h-full object-contain"
                   />

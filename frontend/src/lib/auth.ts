@@ -9,9 +9,9 @@ export interface AuthUser {
   customer_id: string | null;
 }
 
-import { resolveApiBase } from "./api-base";
+import { API_BASE } from "./env";
 
-const API_BASE = resolveApiBase();
+
 
 let cachedUser: AuthUser | null | undefined = undefined;
 
