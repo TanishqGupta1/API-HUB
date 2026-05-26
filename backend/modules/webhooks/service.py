@@ -1,4 +1,4 @@
-"""Webhook dispatch service — fire registered endpoints on push events."""
+﻿"""Webhook dispatch service â€” fire registered endpoints on push events."""
 from __future__ import annotations
 
 import asyncio
@@ -34,7 +34,7 @@ def _sign_payload(secret: str, body: bytes) -> str:
 
 
 def _validate_webhook_url(url: str) -> str:
-    """Lightweight SSRF guard — runs at registration time (no DNS lookup here).
+    """Lightweight SSRF guard â€” runs at registration time (no DNS lookup here).
 
     Blocks loopback/link-local by hostname string and literal private IPs.
     Full DNS resolution is deferred to _resolve_and_check() at fire time so
@@ -55,12 +55,12 @@ def _validate_webhook_url(url: str) -> str:
     except ValueError as exc:
         if "Webhook URL" in str(exc):
             raise
-        # Not a bare IP literal — DNS check deferred to fire time
+        # Not a bare IP literal â€” DNS check deferred to fire time
     return url
 
 
 def _resolve_and_check(hostname: str) -> None:
-    """Resolve hostname → IP and block private/reserved ranges (SSRF at fire time).
+    """Resolve hostname â†’ IP and block private/reserved ranges (SSRF at fire time).
 
     Called via asyncio.to_thread so DNS resolution never blocks the event loop.
     Raises ValueError when the resolved IP is private/reserved (DNS rebinding
@@ -73,7 +73,7 @@ def _resolve_and_check(hostname: str) -> None:
     addr = ipaddress.ip_address(ip_str)
     if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_unspecified:
         raise ValueError(
-            f"Webhook target resolves to a private/reserved IP ({ip_str}) — "
+            f"Webhook target resolves to a private/reserved IP ({ip_str}) â€” "
             "SSRF protection blocked the request"
         )
 
@@ -103,7 +103,7 @@ async def _fire_one(
 
     success = False
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
             r = await client.post(ep.url, content=body, headers=headers)
             success = r.status_code < 300
             if not success:
@@ -135,7 +135,7 @@ async def fire_webhooks(
 ) -> None:
     """Fire all active webhooks for a customer that subscribe to `event`.
 
-    Called from execute_push after the push completes.  Never raises —
+    Called from execute_push after the push completes.  Never raises â€”
     failures are logged and counted but do not affect the push result.
 
     Uses asyncio.gather with a bounded semaphore (_WEBHOOK_CONCURRENCY) so a
@@ -224,7 +224,7 @@ async def fire_test(endpoint: WebhookEndpoint) -> dict:
         return {"success": False, "status_code": None, "error": str(exc)}
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
             r = await client.post(endpoint.url, content=body, headers=headers)
             return {"success": r.status_code < 300, "status_code": r.status_code, "error": None}
     except Exception as exc:
