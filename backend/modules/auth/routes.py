@@ -90,8 +90,23 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 
 
 def _clear_auth_cookie(response: Response) -> None:
-    response.delete_cookie(key=_COOKIE_NAME, path="/")
-    response.delete_cookie(key=_REFRESH_COOKIE_NAME, path="/api/auth/refresh")
+    # RFC 6265 / browser compat: delete_cookie must echo the same path,
+    # samesite, and secure flags used on set_cookie. Without them Safari
+    # and Firefox strict-mode won't clear cross-site cookies on logout.
+    response.delete_cookie(
+        key=_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=_COOKIE_SECURE,
+        samesite="lax",
+    )
+    response.delete_cookie(
+        key=_REFRESH_COOKIE_NAME,
+        path="/api/auth/refresh",
+        httponly=True,
+        secure=_COOKIE_SECURE,
+        samesite="strict",
+    )
 
 
 @router.post("/login", response_model=UserRead)
