@@ -63,3 +63,50 @@ async def read_all(db: AsyncSession = Depends(get_db)) -> dict:
     )
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/demo", status_code=201)
+async def create_demo_notifications(db: AsyncSession = Depends(get_db)) -> dict:
+    """Create one sample notification of each type so the UI can be demoed
+    without waiting for a real failure. Safe to call multiple times."""
+    from .service import create_notification
+
+    await create_notification(
+        db,
+        type="push_failed",
+        severity="error",
+        title="Push failed — PC61 for full_catalog_push",
+        body=(
+            "Customer: full_catalog_push\n"
+            "Error: OPS returned HTTP 500 — internal server error\n"
+            "Time: just now"
+        ),
+        link="/push-log",
+    )
+    await create_notification(
+        db,
+        type="sync_failed",
+        severity="error",
+        title="Sync failed — SanMar (inventory)",
+        body=(
+            "Records processed: 8412\n"
+            "Failed: 23\n"
+            "Error: SOAP fault: Authentication token expired\n"
+            "Started: just now"
+        ),
+        link="/sync",
+    )
+    await create_notification(
+        db,
+        type="scheduler_down",
+        severity="warning",
+        title="Scheduler may be down",
+        body=(
+            "Last successful run was 3.2 hour(s) ago.\n"
+            "Expected every 1 hour(s).\n"
+            "If DISABLE_SCHEDULER=true this alert can be ignored."
+        ),
+        link="/system-health",
+    )
+    await db.commit()
+    return {"created": 3}

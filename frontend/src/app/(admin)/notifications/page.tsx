@@ -92,6 +92,20 @@ export default function NotificationsPage() {
           >
             {showRead ? "Hide dismissed" : "Show all"}
           </button>
+          <button
+            onClick={async () => {
+              try {
+                await api("/api/notifications/demo", { method: "POST" });
+                await load(showRead);
+                toast.success("3 demo alerts created");
+              } catch {
+                toast.error("Failed to create demo alerts");
+              }
+            }}
+            className="px-4 h-9 bg-white border-2 border-dashed border-[#888894] text-[#888894] rounded-full font-bold text-[11px] uppercase tracking-wide hover:border-[#1e1e24] hover:text-[#1e1e24] transition-colors"
+          >
+            Generate demo alerts
+          </button>
           {unreadCount > 0 && (
             <button
               onClick={dismissAll}
