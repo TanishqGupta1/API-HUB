@@ -94,6 +94,7 @@ from modules.decorations.routes import router as decorations_router
 from modules.webhooks.routes import router as webhooks_router
 import modules.webhooks.models  # noqa: F401 — registers WebhookEndpoint with Base
 from modules.analytics.routes import router as analytics_router
+from modules.images.routes import router as images_router
 
 
 def _run_alembic_upgrade() -> None:
@@ -255,6 +256,7 @@ app.include_router(import_jobs_router, dependencies=_auth)
 app.include_router(pricing_router, dependencies=_auth)
 app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
+app.include_router(images_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
 app.include_router(webhooks_router, dependencies=_auth)

@@ -2,8 +2,10 @@
 
 import { useSelectedCustomer } from "@/lib/customer-context";
 import { Button } from "@/components/ui/button";
-import { X, Plus, Trash2, CheckSquare } from "lucide-react";
+import { X, Plus, Trash2, CheckSquare, ImageIcon } from "lucide-react";
 import { useState } from "react";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 interface SelectionBarProps {
   selectedIds: string[];
@@ -14,8 +16,25 @@ interface SelectionBarProps {
 export function SelectionBar({ selectedIds, onClear, onSuccess }: SelectionBarProps) {
   const { selectedCustomerId, selectedCustomerName, bulkAdd } = useSelectedCustomer();
   const [loading, setLoading] = useState(false);
+  const [mirroring, setMirroring] = useState(false);
 
   if (selectedIds.length === 0) return null;
+
+  async function handleBulkMirror() {
+    if (mirroring) return;
+    setMirroring(true);
+    try {
+      await api("/api/images/mirror-batch", {
+        method: "POST",
+        body: JSON.stringify({ product_ids: selectedIds }),
+      });
+      toast.success(`Queued ${selectedIds.length} product${selectedIds.length !== 1 ? "s" : ""} for image mirroring`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Mirror batch failed");
+    } finally {
+      setMirroring(false);
+    }
+  }
 
   async function handleBulkAdd() {
     if (!selectedCustomerId || loading) return;
@@ -59,8 +78,19 @@ export function SelectionBar({ selectedIds, onClear, onSuccess }: SelectionBarPr
             </div>
           )}
           
-          <Button 
-            variant="ghost" 
+          <Button
+            onClick={handleBulkMirror}
+            disabled={mirroring}
+            variant="ghost"
+            className="text-white/70 hover:text-white hover:bg-white/10 font-bold text-xs uppercase tracking-wider h-10 px-4 rounded-xl"
+            title="Mirror images to CDN for selected products"
+          >
+            <ImageIcon className="w-4 h-4 mr-1.5" />
+            {mirroring ? "Queuing…" : "Mirror Images"}
+          </Button>
+
+          <Button
+            variant="ghost"
             className="text-white/60 hover:text-white hover:bg-white/10 font-bold text-xs uppercase tracking-wider h-10 px-6 rounded-xl"
             onClick={onClear}
           >
