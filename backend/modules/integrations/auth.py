@@ -86,7 +86,7 @@ async def get_orchestrator_key(
         })
 
     # Enforce per-minute rate limit
-    _check_rate_limit(key)
+    await _check_rate_limit(key)
 
     # Fire-and-forget last_used_at update — doesn't block the request
     # NOTE: we do NOT pass `db` here — the request-scoped session will be

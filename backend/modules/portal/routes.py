@@ -7,8 +7,10 @@ in the URL, no risk of horizontal data access.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -188,7 +190,8 @@ async def portal_catalog(
         select(ProductPushLog.product_id, ProductPushLog.status, ProductPushLog.ops_product_id)
         .where(
             ProductPushLog.customer_id == cid,
-            ProductPushLog.product_id.in_([s.product_id for _, s in selections] if selections else [])  # type: ignore[union-attr]
+            # sel=CustomerProductSelection, prod=Product — use sel.product_id (not prod.id via wrong alias)
+            ProductPushLog.product_id.in_([sel.product_id for sel, _ in selections] if selections else [])
         )
         .distinct(ProductPushLog.product_id)
         .order_by(ProductPushLog.product_id, ProductPushLog.pushed_at.desc())
@@ -243,9 +246,19 @@ async def portal_markup_rules(current_user: CustomerAdmin, db: AsyncSession = De
 
 # ── PATCH /api/portal/account ─────────────────────────────────────────
 
+class PortalAccountUpdate(BaseModel):
+    """Strictly-typed schema for self-service account updates.
+
+    Only ops_client_secret is permitted — all other customer fields are
+    admin-only.  Rejecting extra fields at the schema layer is safer than
+    iterating body.keys() over a raw dict.
+    """
+    ops_client_secret: Optional[str] = None
+
+
 @router.patch("/account")
 async def portal_update_account(
-    body: dict,
+    body: PortalAccountUpdate,
     current_user: CustomerAdmin,
     db: AsyncSession = Depends(get_db),
 ):
@@ -254,13 +267,9 @@ async def portal_update_account(
     if not customer:
         raise HTTPException(404, "Storefront not found")
 
-    forbidden = set(body.keys()) - {"ops_client_secret"}
-    if forbidden:
-        raise HTTPException(403, f"Cannot modify: {sorted(forbidden)}")
-
-    if body.get("ops_client_secret"):
+    if body.ops_client_secret:
         existing = customer.ops_auth_config or {}
-        customer.ops_auth_config = {**existing, "client_secret": body["ops_client_secret"]}
+        customer.ops_auth_config = {**existing, "client_secret": body.ops_client_secret}
         await db.commit()
 
     return {"updated": True}
