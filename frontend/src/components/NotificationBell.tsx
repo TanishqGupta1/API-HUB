@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 
 const POLL_INTERVAL_MS = 30_000;
 
+/** Renders as a sidebar nav-item row — drop it inside a nav-group. */
 export function NotificationBell() {
   const [count, setCount] = useState(0);
+  const pathname = usePathname();
+  const isActive = pathname === "/notifications";
 
   const load = async () => {
     try {
@@ -28,15 +31,45 @@ export function NotificationBell() {
   return (
     <Link
       href="/notifications"
-      className="relative flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[#ebe8e3] transition-colors"
-      aria-label={`Notifications${count > 0 ? ` (${count} unread)` : ""}`}
+      className={`nav-item${isActive ? " active" : ""}`}
     >
-      <Bell className="w-4 h-4 text-[#484852]" />
-      {count > 0 && (
-        <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 bg-[#b93232] text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
-          {count > 9 ? "9+" : count}
-        </span>
-      )}
+      {/* Bell icon — matches the SVG style of all other nav icons */}
+      <svg
+        className="nav-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      </svg>
+
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+        Notifications
+        {count > 0 && (
+          <span
+            style={{
+              minWidth: "18px",
+              height: "18px",
+              padding: "0 4px",
+              background: "#b93232",
+              color: "#fff",
+              fontSize: "9px",
+              fontWeight: 700,
+              borderRadius: "9px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1,
+            }}
+          >
+            {count > 9 ? "9+" : count}
+          </span>
+        )}
+      </span>
     </Link>
   );
 }

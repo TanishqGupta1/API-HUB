@@ -307,6 +307,8 @@ export default function SidebarNav() {
               </span>
             </Link>
           ))}
+          {/* Notifications — rendered separately so it can show a live badge */}
+          {group.section === "Actions" && <NotificationBell />}
           {/* Dynamic Customer Catalog Link */}
           {group.section === "Products" && selectedCustomerId && (
             <Link
@@ -347,24 +349,21 @@ export default function SidebarNav() {
               Online
             </span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            <NotificationBell />
-            <button
-              onClick={handleLogout}
-              style={{
-                fontSize: "11px",
-                fontWeight: 600,
-                color: "var(--ink-muted)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: "2px 6px",
-                borderRadius: "3px",
-              }}
-            >
-              Sign out
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            style={{
+              fontSize: "11px",
+              fontWeight: 600,
+              color: "var(--ink-muted)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "2px 6px",
+              borderRadius: "3px",
+            }}
+          >
+            Sign out
+          </button>
         </div>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--ink-faint)", marginTop: "4px" }}>
           v0.3.0-alpha
