@@ -21,6 +21,7 @@ import modules.ops_config.models  # noqa: F401
 import modules.decorations.models  # noqa: F401
 import modules.auth.models  # noqa: F401
 import modules.audit_log.models  # noqa: F401
+import modules.alerting.models  # noqa: F401  — registers Notification + SchedulerHeartbeat with Base
 # customer_catalog re-exports CustomerProductSelection from catalog.models
 # so no separate import is needed here.
 
@@ -85,6 +86,8 @@ import modules.promostandards.alphabroder_adapter  # noqa: F401  registers Alpha
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
 from modules.decorations.routes import router as decorations_router
+from modules.alerting.routes import router as alerting_router
+from modules.alerting.checker import run_checker, run_startup_check
 
 
 # Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
@@ -179,6 +182,9 @@ _SCHEMA_UPGRADES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_push_log_idempotency ON product_push_log(key_id, idempotency_key)",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_in_flight ON product_push_log(customer_id, product_id) WHERE status = 'processing'",
     "ALTER TABLE integration_keys ADD COLUMN IF NOT EXISTS is_synthetic BOOLEAN NOT NULL DEFAULT FALSE",
+    # Alerting — idempotency flags so the checker never double-alerts the same failure
+    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS alerted BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS alerted BOOLEAN NOT NULL DEFAULT FALSE",
 ]
 
 
@@ -215,17 +221,23 @@ async def lifespan(app: FastAPI):
         async with async_session() as db:
             await ensure_vg_ops_supplier(db)
 
-    # Start the background scheduler (sleeps first; no-op if DISABLE_SCHEDULER=true)
-    _scheduler_task = asyncio.create_task(start_scheduler(interval_hours=24))
+    # Start background tasks
+    # Scheduler sleeps first to avoid restart storms (no-op if DISABLE_SCHEDULER=true)
+    _scheduler_task = asyncio.create_task(start_scheduler())
+    # Alerting checker runs every 5 min (ALERT_CHECK_INTERVAL_SECONDS)
+    _checker_task = asyncio.create_task(run_checker())
+    # Run one immediate check on boot to catch anything that failed during downtime
+    asyncio.create_task(run_startup_check())
 
     yield
 
-    # Graceful shutdown: cancel scheduler before closing DB pool
-    _scheduler_task.cancel()
-    try:
-        await _scheduler_task
-    except asyncio.CancelledError:
-        pass
+    # Graceful shutdown: cancel background tasks before closing DB pool
+    for task in (_scheduler_task, _checker_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     await engine.dispose()
 
 
@@ -287,6 +299,7 @@ app.include_router(pricing_router, dependencies=_auth)
 app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
+app.include_router(alerting_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
 app.include_router(integrations_router)
