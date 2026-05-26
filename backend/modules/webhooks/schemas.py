@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, HttpUrl, field_validator
+from pydantic import BaseModel, field_validator
 
 
 class WebhookCreate(BaseModel):
@@ -13,10 +13,14 @@ class WebhookCreate(BaseModel):
 
     @field_validator("url")
     @classmethod
-    def url_must_be_https_or_http(cls, v: str) -> str:
-        if not v.startswith(("http://", "https://")):
-            raise ValueError("URL must start with http:// or https://")
-        return v
+    def url_must_be_valid(cls, v: str) -> str:
+        # Full registration-time SSRF guard (no DNS lookup — deferred to fire time).
+        # Reuses the same logic as service._validate_webhook_url.
+        from .service import _validate_webhook_url
+        try:
+            return _validate_webhook_url(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 
     @field_validator("events")
     @classmethod

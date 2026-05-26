@@ -16,7 +16,7 @@ from modules.auth.models import User
 
 from .models import WebhookEndpoint
 from .schemas import WebhookCreate, WebhookRead, WebhookTestResult
-from .service import fire_test
+from .service import _validate_webhook_url, fire_test
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
@@ -66,7 +66,8 @@ async def create_webhook(
         customer_id=customer_id,
         url=body.url,
         events=",".join(body.events),
-        secret=body.secret or None,
+        # Store secret as {"value": raw_secret} dict for EncryptedJSON (impl=Text, Fernet-encrypted)
+        secret={"value": body.secret} if body.secret else None,
         is_active=True,
         failure_count=0,
     )
@@ -102,11 +103,10 @@ async def update_webhook(
     _check_ownership(ep, user)
 
     if body.url is not None:
-        if not body.url.startswith(("http://", "https://")):
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-                "URL must start with http:// or https://",
-            )
+        try:
+            _validate_webhook_url(body.url)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
         ep.url = body.url
 
     if body.events is not None:
@@ -119,8 +119,8 @@ async def update_webhook(
         ep.events = ",".join(body.events)
 
     if body.secret is not None:
-        # Empty string clears the secret
-        ep.secret = body.secret if body.secret else None
+        # Empty string clears the secret; non-empty stored as {"value": raw} for EncryptedJSON
+        ep.secret = {"value": body.secret} if body.secret else None
 
     if body.is_active is not None:
         ep.is_active = body.is_active

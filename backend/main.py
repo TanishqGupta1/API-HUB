@@ -91,6 +91,9 @@ import modules.promostandards.alphabroder_adapter  # noqa: F401  registers Alpha
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
 from modules.decorations.routes import router as decorations_router
+from modules.webhooks.routes import router as webhooks_router
+import modules.webhooks.models  # noqa: F401 — registers WebhookEndpoint with Base
+from modules.analytics.routes import router as analytics_router
 
 
 def _run_alembic_upgrade() -> None:
@@ -254,6 +257,8 @@ app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
+app.include_router(webhooks_router, dependencies=_auth)
+app.include_router(analytics_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
 app.include_router(integrations_router)
 app.include_router(integrations_admin_router, dependencies=_auth)

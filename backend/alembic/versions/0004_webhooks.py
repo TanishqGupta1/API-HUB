@@ -23,7 +23,7 @@ def upgrade() -> None:
             customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
             url         TEXT NOT NULL,
             events      VARCHAR(500) NOT NULL DEFAULT 'push.completed,push.failed',
-            secret      VARCHAR(128),
+            secret      TEXT,
             is_active   BOOLEAN NOT NULL DEFAULT TRUE,
             failure_count  INTEGER NOT NULL DEFAULT 0,
             last_fired_at  TIMESTAMP WITH TIME ZONE,
