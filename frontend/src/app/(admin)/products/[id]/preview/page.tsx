@@ -7,6 +7,7 @@ import { log } from "@/lib/log";
 import type { ProductPreview, ProductImage, Supplier } from "@/lib/types";
 import { useSelectedCustomer } from "@/lib/customer-context";
 import { AlertTriangle, CheckCircle2, ArrowLeft, Send, Package } from "lucide-react";
+import Image from "next/image";
 
 const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
 
@@ -165,10 +166,12 @@ export default function ProductPreviewPage() {
         <div>
           <div className="relative bg-[#ebe8e3] border border-[#cfccc8] rounded-xl h-[280px] flex items-center justify-center overflow-hidden shadow-[3px_4px_0_rgba(30,77,146,0.08)]">
             {activeImage ? (
-              <img
+              <Image
                 src={activeImage}
                 alt={`${preview.title} ${activeTab}`}
-                className="w-full h-full object-contain p-4"
+                fill
+                sizes="300px"
+                className="object-contain p-4"
               />
             ) : (
               <div className="text-center">

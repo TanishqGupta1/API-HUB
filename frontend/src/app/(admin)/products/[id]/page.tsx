@@ -20,6 +20,7 @@ import type { Customer as CustomerType } from "@/lib/types";
 import { AlertTriangle, CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { ProductPreview } from "@/lib/types";
+import Image from "next/image";
 
 const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
 
@@ -111,6 +112,7 @@ export default function ProductDetailPage() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchData(); }, [id]);
 
   const imageTabs = useMemo(() => {
@@ -286,10 +288,12 @@ export default function ProductDetailPage() {
                           flex items-center justify-center mb-3
                           shadow-[4px_5px_0_rgba(30,77,146,0.08)] overflow-hidden">
             {activeImage ? (
-              <img
+              <Image
                 src={activeImage}
                 alt={`${product.product_name} (${activeImageTab})`}
-                className="w-full h-full object-contain p-5"
+                fill
+                sizes="300px"
+                className="object-contain p-5"
               />
             ) : (
               <div className="text-center">

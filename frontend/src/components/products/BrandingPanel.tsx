@@ -8,6 +8,7 @@ import type { Customer, Product, ProductDecoration, DecorationOption } from "@/l
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2, Palette, Image as ImageIcon, Move, Maximize, RefreshCw, Trash2 } from "lucide-react";
+import Image from "next/image";
 
 interface Props {
   product: Product;
@@ -170,16 +171,18 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                 {previewMode === 'css' ? (
                   <>
                     {/* Product Image Base */}
-                    <img 
-                        src={product.image_url || "/placeholder-product.png"} 
+                    <Image
+                        src={product.image_url || "/placeholder-product.png"}
                         alt="Preview Base"
-                        className="w-full h-full object-contain p-4 opacity-40 mix-blend-multiply"
+                        fill
+                        sizes="300px"
+                        className="object-contain p-4 opacity-40 mix-blend-multiply"
                     />
                     
                     {/* Decoration Overlay */}
                     {logoUrl && (
-                        <div 
-                            className="absolute pointer-events-none transition-all duration-200"
+                        <div
+                            className="absolute pointer-events-none transition-all duration-200 relative"
                             style={{
                                 left: `${posX}%`,
                                 top: `${posY}%`,
@@ -188,19 +191,23 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                                 height: '100px',
                             }}
                         >
-                            <img 
-                                src={logoUrl} 
+                            <Image
+                                src={logoUrl}
                                 alt="Logo Overlay"
-                                className="w-full h-full object-contain drop-shadow-md"
+                                fill
+                                sizes="100px"
+                                className="object-contain drop-shadow-md"
                             />
                         </div>
                     )}
                   </>
                 ) : (
-                  <img 
+                  <Image
                     src={`${resolveApiBase()}/api/customers/${customer.id}/products/${product.id}/decorations/preview.png?t=${Date.now()}`}
                     alt="Engine Preview"
-                    className="w-full h-full object-contain"
+                    fill
+                    sizes="300px"
+                    className="object-contain"
                   />
                 )}
                 

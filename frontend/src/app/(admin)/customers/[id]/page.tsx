@@ -46,7 +46,7 @@ export default function CustomerSettingsPage() {
       }
     }
     load();
-  }, [id]);
+  }, [id, isInvalidId]);
 
   const handleSave = async () => {
     if (!customer) return;
