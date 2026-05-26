@@ -583,8 +583,8 @@ async def check_ops_oauth2_reachable(
             f"OAuth2 endpoint unreachable: {exc.__class__.__name__}: {exc}",
             field="customer.ops_token_url",
             suggestion=(
-                f"Confirm {token_url} is reachable from API-HUB and that "
-                f"the OPS storefront is up."
+                f"The OPS token URL ({token_url!r}) is not reachable. "
+                f"Update ops_token_url to the real OPS OAuth2 endpoint in Customer Settings."
             ),
         )
 

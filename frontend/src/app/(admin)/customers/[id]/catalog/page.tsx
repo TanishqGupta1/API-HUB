@@ -171,15 +171,26 @@ export default function CustomerCatalogPage() {
           }>;
           const failed = checks.filter((c) => c && !c.ok);
           const names = failed.map((c) => c.name.replace(/_/g, " ")).join(", ");
-          // Surface the first actionable suggestion the backend provides
-          // (e.g. "Create a global 'all' markup rule for this customer").
-          const suggestion = failed.find((c) => c.suggestion)?.suggestion ?? null;
-          toast.error(`Push blocked: ${names}`, {
-            description:
-              suggestion ??
-              "Open the product's Push preview page for full details and a retry option.",
-            duration: 8000,
-          });
+
+          // For credential-related blockers, point directly to customer settings.
+          const hasCredsBlocker = failed.some((c) =>
+            c.name === "ops_oauth2_reachable" || c.name === "customer_ops_creds_present"
+          );
+          const hasMarkupBlocker = failed.some((c) => c.name === "markup_rule_resolves");
+
+          let description: string;
+          if (hasCredsBlocker) {
+            description = `OPS credentials for this customer are missing or the token URL is unreachable — go to Customer Settings to update them.`;
+          } else if (hasMarkupBlocker) {
+            description = `No markup rule covers this product — go to Markup Rules and create a global or sanmar-scoped rule for this customer.`;
+          } else {
+            // Surface the first actionable suggestion the backend provides.
+            description =
+              failed.find((c) => c.suggestion)?.suggestion ??
+              "Open the product's Push preview page for full details.";
+          }
+
+          toast.error(`Push blocked: ${names}`, { description, duration: 8000 });
           return;
         }
       }
