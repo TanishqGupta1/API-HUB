@@ -35,11 +35,14 @@ Side-effects discipline (unchanged)
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
 from uuid import UUID
+
+log = logging.getLogger(__name__)
 
 import httpx
 from sqlalchemy import select
@@ -403,7 +406,9 @@ def check_markup_rule_resolves(ctx: _PreflightContext) -> CheckResult:
     )
 
 
-def check_push_mappings_present(ctx: _PreflightContext) -> CheckResult:
+def check_push_mappings_present(
+    ctx: _PreflightContext, *, dry_run: bool = False
+) -> CheckResult:
     """3. Every ProductOption (and attribute) has a push_mapping_options row.
 
     Block when:
@@ -413,12 +418,27 @@ def check_push_mappings_present(ctx: _PreflightContext) -> CheckResult:
     Pass when:
       - product has no options (nothing to map)
       - every option has a non-null target_ops_option_id
+
+    Soft-pass (dry_run only) when:
+      - product has options but NO mapping rows exist yet (first-time push).
+        The product will be pushed without option mapping — acceptable for a
+        dry-run / demo. A live push still requires full mapping.
     """
     if not ctx.options:
         return CheckResult(
             "push_mappings_present",
             True,
             "product has no options — nothing to map",
+        )
+
+    # Soft-pass for dry_run when this is a brand-new product with no mapping yet
+    if dry_run and not ctx.push_mapping_options:
+        return CheckResult(
+            "push_mappings_present",
+            True,
+            f"no mapping yet for {len(ctx.options)} option(s) — "
+            "skipped in dry_run (product will push without option mapping). "
+            "Sync master options + resolve before live push.",
         )
 
     expected_keys = {opt.option_key for opt in ctx.options}
@@ -623,7 +643,7 @@ async def check_ops_oauth2_reachable(
 
 
 async def check_image_urls_reachable(
-    ctx: _PreflightContext, *, timeout_seconds: float = 5.0
+    ctx: _PreflightContext, *, timeout_seconds: float = 5.0, dry_run: bool = False
 ) -> CheckResult:
     """5. HEAD request per image URL returns 2xx.
 
@@ -642,6 +662,13 @@ async def check_image_urls_reachable(
                 "Run the supplier media sync, or attach at least one image "
                 "to this product."
             ),
+        )
+
+    if dry_run:
+        return CheckResult(
+            "image_urls_reachable",
+            True,
+            f"{len(urls)} image(s) present — HTTP HEAD check skipped in dry_run mode",
         )
 
     sem = asyncio.Semaphore(5)
@@ -850,12 +877,30 @@ async def run_preflight(
         return CheckResult(name, True, "skipped — dry_run mode")
 
     checks: list[CheckResult] = []
+    warnings: list[CheckResult] = []
     # 1
     checks.append(check_base_price_set(ctx))
     # 2
     checks.append(check_markup_rule_resolves(ctx))
-    # 3
-    checks.append(check_push_mappings_present(ctx))
+    # 3 — soft-pass in dry_run when no mappings exist yet; log a warning so
+    #     the operator knows a live push will still need option mapping.
+    mapping_check = check_push_mappings_present(ctx, dry_run=dry_run)
+    checks.append(mapping_check)
+    if dry_run and mapping_check.ok and "skipped in dry_run" in mapping_check.detail:
+        log.warning(
+            "preflight dry_run soft-pass: push_mappings missing for "
+            "product=%s customer=%s — a live push will require option mapping.",
+            product_id,
+            customer_id,
+        )
+        warnings.append(
+            CheckResult(
+                "push_mappings_present",
+                True,
+                mapping_check.detail,
+                suggestion="Sync master options and resolve push mappings before live push.",
+            )
+        )
     # 4a (NEW — split out from 4 for precise field-level reporting)
     checks.append(check_customer_ops_creds_present(ctx))
     # 4 — skip OAuth2 network call in dry_run (FakeOpsClient needs no token)
@@ -866,7 +911,7 @@ async def run_preflight(
     # 5
     checks.append(
         await check_image_urls_reachable(
-            ctx, timeout_seconds=image_head_timeout_seconds
+            ctx, timeout_seconds=image_head_timeout_seconds, dry_run=dry_run
         )
     )
     # 6
@@ -879,7 +924,7 @@ async def run_preflight(
     else:
         checks.append(check_decoration_attached(ctx))
 
-    return PreflightResults(checks=checks)
+    return PreflightResults(checks=checks, warnings=warnings)
 
 
 __all__ = [

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/setup", "/signup", "/storefront"];
+// "/signup" is intentionally NOT public — creating users requires an
+// authenticated admin session.  The page posts to /api/auth/users which is
+// a VGAdmin-only endpoint.
+const PUBLIC_PATHS = ["/login", "/setup", "/storefront"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

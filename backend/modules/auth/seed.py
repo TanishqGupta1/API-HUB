@@ -1,6 +1,7 @@
 import logging
 import os
 import secrets
+import sys
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,15 +51,25 @@ async def ensure_default_admin(db: AsyncSession) -> None:
     await db.commit()
 
     if is_prod:
+        # In production stderr flows to log aggregators (CloudWatch, Datadog,
+        # etc.) — never print plaintext credentials there.  The operator must
+        # use the /api/auth/setup or admin-reset flow to set a known password.
         logger.warning(
-            "[auth] Created default admin %s — generated random password; reset via admin flow",
+            "[auth] Created default admin %s with a random password. "
+            "Use the admin-reset flow to set a known password before first login.",
             email,
         )
     else:
-        logger.warning(
-            "[auth] Created default admin (%s) — email: %s  password: %s",
-            source,
-            email,
-            password,
+        logger.warning("[auth] Created default admin (%s) — see startup stderr for credentials.", source)
+        # Write credentials to stderr ONLY in non-production — never to
+        # structured loggers that ship to log aggregators.
+        print(
+            f"\n[API-HUB] {'=' * 52}\n"
+            f"[API-HUB] Default admin created ({source})\n"
+            f"[API-HUB]   email:    {email}\n"
+            f"[API-HUB]   password: {password}\n"
+            f"[API-HUB] Change this password immediately after first login.\n"
+            f"[API-HUB] {'=' * 52}\n",
+            file=sys.stderr,
+            flush=True,
         )
-        logger.warning("[auth] IMPORTANT: Change this password immediately after first login.")

@@ -132,14 +132,14 @@ export default function SyncJobsPage() {
     const attemptMap = new Map<string, SyncJob>();
 
     jobs.forEach((j) => {
-      const jTime = new Date(j.completed_at ?? j.started_at).getTime();
+      const jTime = new Date(j.completed_at ?? j.started_at ?? 0).getTime();
       const prevAttempt = attemptMap.get(j.supplier_id);
-      if (!prevAttempt || jTime > new Date(prevAttempt.completed_at ?? prevAttempt.started_at).getTime()) {
+      if (!prevAttempt || jTime > new Date(prevAttempt.completed_at ?? prevAttempt.started_at ?? 0).getTime()) {
         attemptMap.set(j.supplier_id, j);
       }
       if (j.status !== "completed") return;
       const prevSuccess = successMap.get(j.supplier_id);
-      if (!prevSuccess || jTime > new Date(prevSuccess.completed_at ?? prevSuccess.started_at).getTime()) {
+      if (!prevSuccess || jTime > new Date(prevSuccess.completed_at ?? prevSuccess.started_at ?? 0).getTime()) {
         successMap.set(j.supplier_id, j);
       }
     });
@@ -240,7 +240,7 @@ export default function SyncJobsPage() {
               const displayTime = lastSuccessIso
                 ? timeAgo(lastSuccessIso)
                 : lastAttempt
-                ? timeAgo(lastAttempt.completed_at ?? lastAttempt.started_at)
+                ? timeAgo(lastAttempt.completed_at ?? lastAttempt.started_at ?? "")
                 : null;
               return (
                 <div
@@ -338,12 +338,12 @@ export default function SyncJobsPage() {
 
                   {/* Duration */}
                   <td className="px-5 py-4 font-mono text-[#484852]">
-                    {fmtDuration(j.started_at, j.completed_at)}
+                    {fmtDuration(j.started_at ?? "", j.completed_at)}
                   </td>
 
                   {/* Started */}
                   <td className="px-5 py-4 text-xs text-[#484852] font-mono">
-                    {fmtStarted(j.started_at)}
+                    {fmtStarted(j.started_at ?? "")}
                   </td>
 
                   {/* Actions */}

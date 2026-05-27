@@ -129,4 +129,18 @@ def _require_vg_admin(current_user: CurrentUser) -> User:
     return current_user
 
 
+def _require_customer_admin(current_user: CurrentUser) -> User:
+    if current_user.role != "customer_admin" or current_user.customer_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Customer admin access required")
+    return current_user
+
+
+def _require_any_admin(current_user: CurrentUser) -> User:
+    if current_user.role not in ("vg_admin", "customer_admin"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin access required")
+    return current_user
+
+
 VGAdmin = Annotated[User, Depends(_require_vg_admin)]
+CustomerAdmin = Annotated[User, Depends(_require_customer_admin)]
+AnyAdmin = Annotated[User, Depends(_require_any_admin)]
