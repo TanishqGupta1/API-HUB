@@ -12,7 +12,7 @@ checker never fires duplicate notifications for the same failure.
 from alembic import op
 
 revision = "0005_alerting"
-down_revision = "0004_webhooks"
+down_revision = "0002_add_attribute_key"
 branch_labels = None
 depends_on = None
 

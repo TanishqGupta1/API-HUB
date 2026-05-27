@@ -121,7 +121,8 @@ def _run_alembic_upgrade() -> None:
     cfg.set_main_option("sqlalchemy.url", _sync_url)
 
     # Auto-stamp: if alembic_version doesn't exist, the DB was created before
-    # Alembic was introduced.  Stamp at baseline so only delta migrations run.
+    # Alembic was introduced.  Stamp at baseline so only delta migrations run
+    # (0003 and later will then be applied by the upgrade call below).
     _eng = _create_engine(_sync_url)
     try:
         _insp = _inspect(_eng)
@@ -191,8 +192,9 @@ async def lifespan(app: FastAPI):
     _scheduler_task = asyncio.create_task(start_scheduler())
     # Alerting checker runs every 5 min (ALERT_CHECK_INTERVAL_SECONDS)
     _checker_task = asyncio.create_task(run_checker())
-    # Run one immediate check on boot to catch anything that failed during downtime
-    asyncio.create_task(run_startup_check())
+    # Run one immediate check on boot to catch anything that failed during downtime.
+    # Keep a reference so the task isn't garbage-collected mid-flight.
+    _startup_check_task = asyncio.create_task(run_startup_check())
 
     yield
 

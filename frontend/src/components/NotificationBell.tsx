@@ -38,7 +38,8 @@ export function NotificationBell() {
         if (seenIds.current.has(n.id)) continue;
         seenIds.current.add(n.id);
 
-        const link = n.link;
+        // Only follow internal paths — never navigate to absolute or javascript: URLs.
+        const link = n.link && n.link.startsWith("/") ? n.link : null;
         const action = link
           ? { label: "View", onClick: () => router.push(link) }
           : undefined;

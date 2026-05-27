@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_db
+from database import get_db, ENVIRONMENT
 from .models import Notification
 from .schemas import NotificationRead, UnreadCount
 
@@ -68,7 +68,12 @@ async def read_all(db: AsyncSession = Depends(get_db)) -> dict:
 @router.post("/demo", status_code=201)
 async def create_demo_notifications(db: AsyncSession = Depends(get_db)) -> dict:
     """Create one sample notification of each type so the UI can be demoed
-    without waiting for a real failure. Safe to call multiple times."""
+    without waiting for a real failure. Non-production only."""
+    if ENVIRONMENT == "production":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Demo endpoint is not available in production.",
+        )
     from .service import create_notification
 
     await create_notification(

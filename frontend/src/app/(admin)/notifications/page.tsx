@@ -190,7 +190,7 @@ export default function NotificationsPage() {
                   </pre>
 
                   <div className="flex items-center gap-4 mt-3">
-                    {n.link && (
+                    {n.link && n.link.startsWith("/") && (
                       <Link
                         href={n.link}
                         className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#1e4d92] hover:underline"

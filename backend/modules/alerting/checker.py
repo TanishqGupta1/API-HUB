@@ -15,9 +15,9 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+import re
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from database import async_session
 from modules.alerting.models import Notification, SchedulerHeartbeat
@@ -28,6 +28,19 @@ from modules.sync_jobs.models import SyncJob
 log = logging.getLogger("alerting.checker")
 
 CHECK_INTERVAL_SECONDS = int(os.getenv("ALERT_CHECK_INTERVAL_SECONDS", "300"))  # 5 min
+
+_URL_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)
+_TOKEN_PATTERN = re.compile(r"(token|key|secret|password|auth|bearer)[=:\s]+\S+", re.IGNORECASE)
+
+
+def _sanitize_error(raw: str | None, max_len: int = 200) -> str:
+    """Strip URLs and credential-like strings from error messages before
+    embedding them in broadly-visible notification bodies."""
+    if not raw:
+        return "No error detail recorded"
+    cleaned = _URL_PATTERN.sub("[url redacted]", raw)
+    cleaned = _TOKEN_PATTERN.sub(r"\1=[redacted]", cleaned)
+    return cleaned[:max_len]
 
 
 # ---------------------------------------------------------------------------
@@ -50,8 +63,11 @@ async def _check_push_failures() -> None:
 
         for entry in rows:
             sku = entry.supplier_sku or "unknown SKU"
-            customer = str(entry.customer_id)
-            error_detail = (entry.error or "No error detail recorded")[:300]
+            # Show only the last 8 chars of the UUID — enough to correlate
+            # in logs without leaking the full customer identifier.
+            cid = str(entry.customer_id)
+            customer = f"…{cid[-8:]}" if entry.customer_id else "unknown"
+            error_detail = _sanitize_error(entry.error)
             pushed_at = (
                 entry.pushed_at.strftime("%Y-%m-%d %H:%M UTC")
                 if entry.pushed_at
@@ -95,7 +111,7 @@ async def _check_sync_failures() -> None:
             return
 
         for job in rows:
-            error_detail = (job.error_log or "No error detail recorded")[:300]
+            error_detail = _sanitize_error(job.error_log)
             started = (
                 job.started_at.strftime("%Y-%m-%d %H:%M UTC")
                 if job.started_at

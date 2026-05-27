@@ -1,7 +1,7 @@
 """add attribute_key to master_option_attributes
 
 Revision ID: 0002_add_attribute_key
-Revises: 0001_baseline
+Revises: 0004_webhooks
 Create Date: 2026-05-26
 
 The attribute_key field is returned by OPS GraphQL (getMasterOptions) and
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0002_add_attribute_key"
-down_revision: Union[str, None] = "0001_baseline"
+down_revision: Union[str, None] = "0004_webhooks"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
