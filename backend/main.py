@@ -56,7 +56,8 @@ from modules.auth.dependencies import get_current_user, VGAdmin
 from modules.audit_log.routes import router as audit_log_router
 from modules.audit_log.middleware import AuditLogMiddleware
 from modules.customer_catalog.routes import router as customer_catalog_router
-from modules.portal.routes import router as portal_router
+# NOTE: modules/portal does not exist on this branch — it lives on feat/customer-portal
+# (PR #136).  Import removed to prevent ModuleNotFoundError at startup.
 from modules.images.routes import router as images_router
 from modules.webhooks.routes import router as webhooks_router
 import modules.webhooks.models  # noqa: F401 — registers WebhookEndpoint with Base
@@ -100,7 +101,6 @@ from modules.decorations.routes import router as decorations_router
 from modules.webhooks.routes import router as webhooks_router
 import modules.webhooks.models  # noqa: F401 — registers WebhookEndpoint with Base
 from modules.analytics.routes import router as analytics_router
-from modules.images.routes import router as images_router
 
 
 def _run_alembic_upgrade(*, stamp_baseline: bool = False) -> None:

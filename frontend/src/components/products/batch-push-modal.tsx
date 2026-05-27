@@ -107,39 +107,50 @@ export function BatchPushModal({ productId, supplierSlug, supplierSku, onClose }
   useEffect(() => {
     if (phase !== "running") return;
 
-    pollRef.current = setInterval(async () => {
-      setItems((prev) => {
-        const inFlight = prev.filter((i) => i.push_log_id && !isTerminal(i.status));
-        if (inFlight.length === 0) {
-          clearInterval(pollRef.current!);
-          setPhase("done");
-        }
-        return prev;
-      });
+    // Guard: prevent concurrent tick executions if a previous fetch is still
+    // in-flight when the next interval fires (slow responses can overlap).
+    let polling = false;
 
-      // Fetch status for each in-flight item
-      setItems((prev) => {
-        const inFlight = prev.filter((i) => i.push_log_id && !isTerminal(i.status));
-        inFlight.forEach(async (item) => {
-          try {
-            const poll = await api<PushStatusPoll>(
-              `/api/integrations/admin/push-requests/${item.push_log_id}`
-            );
-            setItems((cur) =>
-              cur.map((i) =>
-                i.push_log_id === item.push_log_id
-                  ? { ...i, status: poll.status, ops_product_id: poll.ops_product_id, error: poll.error }
-                  : i
-              )
-            );
-          } catch {
-            // keep polling, transient error
+    async function tick() {
+      if (polling) return;
+      polling = true;
+      try {
+        // Read current items synchronously outside of the setState updater so
+        // we don't spawn async work inside a state update function.
+        setItems((prev) => {
+          const inFlight = prev.filter((i) => i.push_log_id && !isTerminal(i.status));
+          if (inFlight.length === 0) {
+            clearInterval(pollRef.current!);
+            setPhase("done");
           }
+          // Fire fetches for in-flight items outside this updater via a microtask.
+          Promise.resolve().then(() => {
+            inFlight.forEach((item) => {
+              api<PushStatusPoll>(
+                `/api/integrations/admin/push-requests/${item.push_log_id}`
+              )
+                .then((poll) => {
+                  setItems((cur) =>
+                    cur.map((i) =>
+                      i.push_log_id === item.push_log_id
+                        ? { ...i, status: poll.status, ops_product_id: poll.ops_product_id, error: poll.error }
+                        : i
+                    )
+                  );
+                })
+                .catch(() => {
+                  // Transient error — keep polling, result will arrive next tick.
+                });
+            });
+          });
+          return prev;
         });
-        return prev;
-      });
-    }, 2000);
+      } finally {
+        polling = false;
+      }
+    }
 
+    pollRef.current = setInterval(tick, 2000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [phase]);
 

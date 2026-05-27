@@ -87,15 +87,26 @@ export default function AdminDashboard() {
 
     async function load() {
       try {
-        const [s, j, sup] = await Promise.all([
+        // allSettled so one failing endpoint doesn't blank the whole dashboard.
+        const [sRes, jRes, supRes] = await Promise.allSettled([
           api<Stats>("/api/stats", { signal: controller.signal }),
           api<SyncJob[]>("/api/sync-jobs?limit=5", { signal: controller.signal }),
           api<Supplier[]>("/api/suppliers", { signal: controller.signal }),
         ]);
-        setStats(s);
-        setRecentJobs(j);
-        setSuppliers(sup);
-        setLoadError(null);
+        if (sRes.status === "fulfilled") setStats(sRes.value);
+        if (jRes.status === "fulfilled") setRecentJobs(jRes.value);
+        if (supRes.status === "fulfilled") setSuppliers(supRes.value);
+
+        const anyFailed = [sRes, jRes, supRes].some((r) => r.status === "rejected");
+        if (anyFailed) {
+          // Log quietly — partial data is still shown, no full error state.
+          const errors = [sRes, jRes, supRes]
+            .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+            .map((r) => r.reason);
+          log.error("Dashboard partial load failure", errors);
+        } else {
+          setLoadError(null);
+        }
       } catch (e: unknown) {
         if (e instanceof DOMException && e.name === "AbortError") {
           setLoadError("Dashboard timed out — backend may be unavailable. Refresh to try again.");
