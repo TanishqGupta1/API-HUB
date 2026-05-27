@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// "/signup" is intentionally NOT public — creating users requires an
-// authenticated admin session.  The page posts to /api/auth/users which is
-// a VGAdmin-only endpoint.
-const PUBLIC_PATHS = ["/login", "/setup", "/storefront"];
+// Public paths — no auth_token required.
+// "/signup" is public because it POSTs to /api/auth/register which is a
+// public bootstrap/open-signup endpoint (not /api/auth/users which is vg_admin-only).
+// "/portal" sub-routes are protected by the server-side CustomerAdmin dep,
+// but the Next.js middleware must not gate them here because the customer_admin
+// JWT is a valid auth_token — they just can't reach /(admin) routes.
+const PUBLIC_PATHS = ["/login", "/setup", "/signup", "/storefront"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

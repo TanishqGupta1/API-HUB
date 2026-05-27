@@ -55,15 +55,30 @@ export default function PortalDashboard() {
   }, []);
 
   useEffect(() => {
-    function fetchDashboard() {
-      api<DashboardData>("/api/portal/dashboard")
-        .then(setData)
-        .catch(() => {})
-        .finally(() => setIsLoading(false));
+    let stopped = false;
+    let timerId: ReturnType<typeof setInterval>;
+
+    async function fetchDashboard() {
+      try {
+        const result = await api<DashboardData>("/api/portal/dashboard");
+        setData(result);
+      } catch (err: unknown) {
+        // Stop polling on 401 — session has expired; further polls are useless.
+        const status = (err as { status?: number })?.status;
+        if (status === 401 && timerId) {
+          clearInterval(timerId);
+          stopped = true;
+        }
+      } finally {
+        setIsLoading(false);
+      }
     }
+
     fetchDashboard();
-    const id = setInterval(fetchDashboard, 30_000);
-    return () => clearInterval(id);
+    if (!stopped) {
+      timerId = setInterval(fetchDashboard, 30_000);
+    }
+    return () => clearInterval(timerId);
   }, []);
 
   if (isLoading) {

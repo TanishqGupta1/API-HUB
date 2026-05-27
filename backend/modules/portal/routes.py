@@ -189,10 +189,13 @@ async def portal_catalog(
     product_ids = [sel.product_id for sel, _ in selections] if selections else []
     push_status_rows: list = []
     if product_ids:
+        # Tie-break on id (UUID, monotonically increasing insert order) so that
+        # when two rows share the same pushed_at timestamp the join is deterministic.
         latest_push_subq = (
             select(
                 ProductPushLog.product_id,
                 func.max(ProductPushLog.pushed_at).label("max_pushed_at"),
+                func.max(ProductPushLog.id).label("max_id"),
             )
             .where(
                 ProductPushLog.customer_id == cid,
@@ -206,7 +209,8 @@ async def portal_catalog(
             .join(
                 latest_push_subq,
                 (ProductPushLog.product_id == latest_push_subq.c.product_id)
-                & (ProductPushLog.pushed_at == latest_push_subq.c.max_pushed_at),
+                & (ProductPushLog.pushed_at == latest_push_subq.c.max_pushed_at)
+                & (ProductPushLog.id == latest_push_subq.c.max_id),
             )
             .where(ProductPushLog.customer_id == cid)
         )).all()
@@ -291,5 +295,8 @@ async def portal_update_account(
         existing = customer.ops_auth_config or {}
         customer.ops_auth_config = {**existing, "client_secret": body.ops_client_secret}
         await db.commit()
+        return {"updated": True}
 
-    return {"updated": True}
+    # Nothing changed — return False so the frontend can distinguish a
+    # real save from a no-op (avoids a misleading "credentials updated" toast).
+    return {"updated": False}

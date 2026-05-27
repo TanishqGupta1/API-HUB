@@ -255,11 +255,13 @@ async def register(
 ) -> User:
     """Public registration.
 
-    Two paths are accepted:
-      - bootstrap: no users exist yet → creates the first vg_admin.
-      - admin-opened: an admin has toggled `signup_enabled = true` from the
-        settings page. Subsequent registrations also create vg_admin until
-        the admin disables the flag.
+    Two paths:
+      - bootstrap: no users exist yet → creates the first vg_admin (owner).
+      - admin-opened: an admin has toggled signup_enabled = true.
+        Subsequent open registrations create customer_admin (least-privilege).
+        Portal users need a VG admin to assign customer_id before they can
+        use the portal — self-registration intentionally produces an unpaired
+        account that cannot access tenant data until provisioned.
 
     Returns 409 otherwise. The error message is intentionally generic so it
     does not leak whether the email is already in use vs. registration being
@@ -269,12 +271,17 @@ async def register(
     if count > 0 and not await _is_signup_enabled(db):
         raise HTTPException(status.HTTP_409_CONFLICT, "Registration is closed")
 
+    # Bootstrap: first ever user becomes vg_admin (platform owner).
+    # Subsequent open-signup users get the least-privileged role (customer_admin)
+    # so a registration-form exploit cannot mint a vg_admin account.
+    assigned_role = "vg_admin" if count == 0 else "customer_admin"
+
     stmt = (
         pg_insert(User)
         .values(
             email=body.email,
             hashed_password=hash_password(body.password),
-            role="vg_admin",
+            role=assigned_role,
         )
         .on_conflict_do_nothing(index_elements=[User.email])
         .returning(User)

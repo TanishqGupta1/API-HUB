@@ -37,15 +37,24 @@ export default function PortalAccount() {
 
   async function handleSaveSecret() {
     if (!newSecret.trim()) return;
+    // Mirror the server-side min_length=16 constraint client-side so we get a
+    // friendly error instead of a 422 from the backend.
+    if (newSecret.trim().length < 16) {
+      toast.error("Secret must be at least 16 characters");
+      return;
+    }
     setSaving(true);
     try {
-      await api("/api/portal/account", {
+      const data = await api<{ updated: boolean }>("/api/portal/account", {
         method: "PATCH",
         body: JSON.stringify({ ops_client_secret: newSecret }),
       });
-      toast.success("OPS credentials updated");
-      setNewSecret("");
-      loadMe();
+      if (data.updated) {
+        toast.success("OPS credentials updated");
+        setNewSecret("");
+        loadMe();
+      }
+      // data.updated === false means nothing changed — no toast, no side-effects.
     } catch {
       toast.error("Failed to update credentials");
     } finally {
@@ -128,7 +137,7 @@ export default function PortalAccount() {
           </div>
           <Button
             onClick={handleSaveSecret}
-            disabled={saving || !newSecret.trim()}
+            disabled={saving || newSecret.trim().length < 16}
             className="bg-[#1e4d92] hover:bg-[#173d74] text-white font-black text-xs uppercase tracking-wider"
           >
             {saving ? (
