@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
+import type { Notification } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -11,12 +13,43 @@ const POLL_INTERVAL_MS = 30_000;
 export function NotificationBell() {
   const [count, setCount] = useState(0);
   const pathname = usePathname();
+  const router = useRouter();
   const isActive = pathname === "/notifications";
+
+  // Track which notification IDs have already been toasted so we never
+  // duplicate a popup across poll ticks.
+  const seenIds = useRef<Set<string>>(new Set());
+  const initialized = useRef(false);
 
   const load = async () => {
     try {
-      const data = await api<{ count: number }>("/api/notifications/unread-count");
-      setCount(data.count);
+      const notifications = await api<Notification[]>("/api/notifications");
+      setCount(notifications.filter((n) => !n.is_read).length);
+
+      if (!initialized.current) {
+        // First load — seed seen set silently, no popups for existing alerts.
+        notifications.forEach((n) => seenIds.current.add(n.id));
+        initialized.current = true;
+        return;
+      }
+
+      // Subsequent polls — toast anything we haven't seen yet.
+      for (const n of notifications) {
+        if (seenIds.current.has(n.id)) continue;
+        seenIds.current.add(n.id);
+
+        const link = n.link;
+        const action = link
+          ? { label: "View", onClick: () => router.push(link) }
+          : undefined;
+        const description = n.body.split("\n")[0];
+
+        if (n.severity === "error") {
+          toast.error(n.title, { description, action, duration: 8000 });
+        } else {
+          toast.warning(n.title, { description, action, duration: 8000 });
+        }
+      }
     } catch {
       // never break the sidebar
     }
@@ -26,6 +59,7 @@ export function NotificationBell() {
     load();
     const id = setInterval(load, POLL_INTERVAL_MS);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -33,7 +67,6 @@ export function NotificationBell() {
       href="/notifications"
       className={`nav-item${isActive ? " active" : ""}`}
     >
-      {/* Bell icon — matches the SVG style of all other nav icons */}
       <svg
         className="nav-icon"
         viewBox="0 0 24 24"

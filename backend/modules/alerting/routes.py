@@ -106,7 +106,7 @@ async def create_demo_notifications(db: AsyncSession = Depends(get_db)) -> dict:
             "Expected every 1 hour(s).\n"
             "If DISABLE_SCHEDULER=true this alert can be ignored."
         ),
-        link="/system-health",
+        link="/monitoring",
     )
     await db.commit()
     return {"created": 3}

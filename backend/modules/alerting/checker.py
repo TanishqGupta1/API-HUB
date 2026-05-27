@@ -165,7 +165,7 @@ async def _check_scheduler_heartbeat() -> None:
                 f"Expected every {interval_hours} hour(s).\n"
                 f"If DISABLE_SCHEDULER=true this alert can be ignored."
             ),
-            link="/system-health",
+            link="/monitoring",
         )
         await db.commit()
         log.warning("Scheduler heartbeat stale (%.1f hours ago) — notification created", hours_ago)

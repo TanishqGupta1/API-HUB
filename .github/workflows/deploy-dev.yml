@@ -148,10 +148,41 @@ jobs:
           cluster:                   ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
 
-  # ─── 5. Deploy n8n ───────────────────────────────────────────────────────────
+  # ─── 5. Provision admin user ─────────────────────────────────────────────────
+  provision-admin:
+    runs-on: ubuntu-latest
+    needs: deploy-fastapi
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::690816807846:role/github-actions-apihub-dev
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create admin user (idempotent)
+        run: |
+          aws ecs run-task \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --task-definition apihub-dev-fastapi \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.ECS_SUBNET_IDS }}],securityGroups=[${{ secrets.ECS_SECURITY_GROUP_ID }}],assignPublicIp=DISABLED}" \
+            --overrides '{
+              "containerOverrides": [{
+                "name": "fastapi",
+                "command": ["python", "create_admin.py"],
+                "environment": [
+                  {"name": "ADMIN_EMAIL",    "value": "${{ secrets.ADMIN_EMAIL }}"},
+                  {"name": "ADMIN_PASSWORD", "value": "${{ secrets.ADMIN_PASSWORD }}"}
+                ]
+              }]
+            }'
+
+  # ─── 6. Deploy n8n ───────────────────────────────────────────────────────────
   deploy-n8n:
     runs-on: ubuntu-latest
-    needs: [build-and-push, deploy-fastapi]   # n8n deploys after API is stable
+    needs: [build-and-push, provision-admin]   # n8n deploys after API is stable and admin is provisioned
     steps:
       - uses: actions/checkout@v4
 
