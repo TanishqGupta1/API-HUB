@@ -81,7 +81,7 @@ async def create_demo_notifications(
 ) -> dict:
     """Create one sample notification of each type so the UI can be demoed
     without waiting for a real failure. Non-production only."""
-    if ENVIRONMENT == "production":
+    if ENVIRONMENT.lower() == "production":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Demo endpoint is not available in production.",
