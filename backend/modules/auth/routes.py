@@ -264,8 +264,8 @@ async def register(
     Creates the first vg_admin only when the instance has zero users. Once any
     user exists this endpoint always returns 409; it never mints a second
     account. All later users are created by an admin via POST /api/auth/users.
-    Self-service signup was removed: it used to mint vg_admin/customer_admin
-    whenever signup_enabled was on (privilege escalation risk). Equivalent to
+    Self-service signup was removed: it used to mint vg_admin whenever
+    signup_enabled was on (cross-tenant privilege escalation). Equivalent to
     /setup; consolidate the two bootstrap paths in a follow-up.
     """
     count = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
