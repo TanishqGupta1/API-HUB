@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from modules.auth.dependencies import require_customer_access
 from modules.catalog.models import ProductImage
 from modules.push_log.models import ProductPushLog
 
@@ -45,7 +46,7 @@ async def get_processed_image(
         headers={"Cache-Control": "public, max-age=86400"},
     )
 
-@router.post("/{customer_id}/{product_id}", deprecated=True)
+@router.post("/{customer_id}/{product_id}", deprecated=True, dependencies=[Depends(require_customer_access)])
 async def push_product_route(
     customer_id: UUID,
     product_id: UUID,
@@ -65,7 +66,7 @@ async def push_product_route(
     except ValueError as e:
         raise HTTPException(404, str(e))
 
-@router.get("/history/{customer_id}/{product_id}")
+@router.get("/history/{customer_id}/{product_id}", dependencies=[Depends(require_customer_access)])
 async def get_push_history(
     customer_id: UUID,
     product_id: UUID,
