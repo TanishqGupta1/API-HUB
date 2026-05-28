@@ -180,7 +180,9 @@ async def get_me(current_user: CurrentUser):
 
 
 @router.post("/setup", response_model=UserRead, status_code=201)
+@limiter.limit("5/minute")
 async def setup_first_admin(
+    request: Request,  # required by slowapi — do not remove
     body: SetupRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> User:
     """Create the first vg_admin. Returns 409 if ANY user already exists.
