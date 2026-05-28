@@ -4,16 +4,21 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from modules.auth.dependencies import require_customer_access
 from .models import ProductStorefrontConfig
 from .schemas import ProductStorefrontConfigRead, ProductStorefrontConfigUpsert
 
 router = APIRouter(prefix="/api/ops-config", tags=["ops_config"])
 
-@router.get("/{customer_id}/product/{product_id}", response_model=ProductStorefrontConfigRead)
+@router.get(
+    "/{customer_id}/product/{product_id}",
+    response_model=ProductStorefrontConfigRead,
+    dependencies=[Depends(require_customer_access)],
+)
 async def get_config(
-    customer_id: UUID, 
-    product_id: UUID, 
-    db: AsyncSession = Depends(get_db)
+    customer_id: UUID,
+    product_id: UUID,
+    db: AsyncSession = Depends(get_db),
 ):
     """Fetch the storefront-specific configuration for a product."""
     result = await db.execute(
