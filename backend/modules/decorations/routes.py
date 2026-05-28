@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from modules.auth.dependencies import require_customer_access
 from modules.catalog.models import Product
 from modules.customers.models import Customer
 
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/api/customers", tags=["decorations"])
 @router.put(
     "/{customer_id}/products/{product_id}/decorations",
     response_model=DecorationRead,
+    dependencies=[Depends(require_customer_access)],
 )
 async def upsert_decoration(
     customer_id: uuid.UUID,
@@ -61,6 +63,7 @@ async def upsert_decoration(
 @router.get(
     "/{customer_id}/products/{product_id}/decorations",
     response_model=DecorationRead,
+    dependencies=[Depends(require_customer_access)],
 )
 async def get_decoration(
     customer_id: uuid.UUID,
@@ -77,6 +80,7 @@ async def get_decoration(
     "/{customer_id}/products/{product_id}/decorations",
     status_code=204,
     response_model=None,
+    dependencies=[Depends(require_customer_access)],
 )
 async def delete_decoration(
     customer_id: uuid.UUID,
@@ -94,6 +98,7 @@ from .engine import generate_decorated_image
 @router.get(
     "/{customer_id}/products/{product_id}/decorations/preview.png",
     response_class=Response,
+    dependencies=[Depends(require_customer_access)],
 )
 async def get_decoration_preview(
     customer_id: uuid.UUID,
