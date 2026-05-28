@@ -290,12 +290,14 @@ async def prepare_push_intent(
                 ),
                 timeout=30.0,
             )
-            # Re-load product with fresh DB data after sync
-            fresh = (await db.execute(
-                select(Product)
-                .where(Product.id == product.id)
-                .options(selectinload(Product.variants), selectinload(Product.images))
-            )).scalar_one_or_none()
+            # Re-load in own session so the request-scoped db connection
+            # is not held across the full sync duration.
+            async with async_session() as own_db:
+                fresh = (await own_db.execute(
+                    select(Product)
+                    .where(Product.id == product.id)
+                    .options(selectinload(Product.variants), selectinload(Product.images))
+                )).scalar_one_or_none()
             if fresh:
                 product = fresh
             logger.info("sync_before_push: sync complete for %s", supplier_sku)

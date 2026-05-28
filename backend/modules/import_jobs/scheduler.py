@@ -140,9 +140,7 @@ async def start_scheduler(interval_hours: int = SCHEDULER_INTERVAL_HOURS):
         await asyncio.sleep(interval_hours * 3600)
         try:
             log.info("Triggering scheduled imports at %s", datetime.now(timezone.utc))
-            # Write heartbeat at cycle START so a long-running sync doesn't
-            # trigger a false "scheduler may be down" alert before it finishes.
-            await _write_heartbeat(interval_hours)
             await run_all_active_imports()
+            await _write_heartbeat(interval_hours)
         except Exception as e:
             log.error("Error in scheduler loop: %s", e)

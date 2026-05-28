@@ -156,12 +156,10 @@ async def lifespan(app: FastAPI):
     retries = 5
     while retries > 0:
         try:
-            # Step 1: create any brand-new tables (idempotent via IF NOT EXISTS).
+            # Create any brand-new tables (idempotent via IF NOT EXISTS).
+            # Alembic migrations are handled by entrypoint.sh before uvicorn starts.
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-            # Step 2: apply Alembic migrations (column additions, index changes, etc.).
-            # Runs in a thread pool since Alembic uses a synchronous SQLAlchemy engine.
-            await asyncio.to_thread(_run_alembic_upgrade)
             break
         except Exception as e:
             retries -= 1
@@ -201,7 +199,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Graceful shutdown: cancel background tasks before closing DB pool
-    for task in (_scheduler_task, _inventory_task, _checker_task):
+    for task in (_scheduler_task, _inventory_task, _checker_task, _startup_check_task):
         task.cancel()
         try:
             await task

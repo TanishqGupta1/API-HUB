@@ -847,6 +847,7 @@ class OnPrintShop {
                         { name: 'Set Product Design', value: 'setProductDesign', action: 'Update product design links' },
                         { name: 'Set Product Price', value: 'setProductPrice', action: 'Create or update product price' },
                         { name: 'Set Product Category', value: 'setProductCategory', action: 'Create or update a product category' },
+                        { name: 'Set Product Image Gallery', value: 'setProductsImageGallery', action: 'Create or update product image gallery' },
                         { name: 'Set Product Pages', value: 'setProductPages', action: 'Create or update product pages' },
                         { name: 'Set Product Option Rules', value: 'setProductOptionRules', action: 'Create or update product option rules' },
                         { name: 'Set Product Size', value: 'setProductSize', action: 'Create or update product size variant' },
@@ -1315,6 +1316,32 @@ class OnPrintShop {
                     displayOptions: { show: { resource: ['mutation'], operation: ['setProductPages'] } },
                     default: '{\n  \"pages_id\": 0,\n  \"products_id\": 0,\n  \"page_title\": \"\",\n  \"sort_order\": 0,\n  \"visible\": \"1\"\n}',
                     description: 'ProductPagesInput JSON object',
+                },
+                // Mutation: Set Product Image Gallery
+                {
+                    displayName: 'Products ID',
+                    name: 'setProductsImageGallery_products_id',
+                    type: 'number',
+                    required: true,
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setProductsImageGallery'] } },
+                    default: 0,
+                },
+                {
+                    displayName: 'Optimize Image',
+                    name: 'setProductsImageGallery_optimizeimg',
+                    type: 'number',
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setProductsImageGallery'] } },
+                    default: 0,
+                    description: 'Set to 1 to run OPS image optimization on upload',
+                },
+                {
+                    displayName: 'Input (JSON)',
+                    name: 'setProductsImageGallery_input',
+                    type: 'json',
+                    required: true,
+                    displayOptions: { show: { resource: ['mutation'], operation: ['setProductsImageGallery'] } },
+                    default: '{\n  "image_arr": [\n    {\n      "products_image_gallery_id": 0,\n      "delete": 0,\n      "corporate_id": 0,\n      "title": "",\n      "products_large_image_name": "",\n      "option_id": 0,\n      "attribute_id": 0,\n      "option_ids": "",\n      "attribute_ids": "",\n      "sort_order": 0,\n      "status": "1"\n    }\n  ]\n}',
+                    description: 'ProductsImageGalleryBulkInput JSON — image_arr list',
                 },
                 // Mutation: Set Store Address
                 {
@@ -6933,6 +6960,20 @@ class OnPrintShop {
                         const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables: { input } }, json: true });
                         if (responseData && responseData.data && responseData.data.setProductPages)
                             returnData.push(responseData.data.setProductPages);
+                        else if (responseData && responseData.errors)
+                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
+                    }
+                    if (operation === 'setProductsImageGallery') {
+                        const products_id = this.getNodeParameter('setProductsImageGallery_products_id', i);
+                        const optimizeimg = this.getNodeParameter('setProductsImageGallery_optimizeimg', i, 0);
+                        const input = getJsonParameter('setProductsImageGallery_input', i);
+                        const variables = { products_id, input };
+                        if (optimizeimg !== undefined && optimizeimg !== null)
+                            variables.optimizeimg = optimizeimg;
+                        const mutation = `mutation setProductsImageGallery($products_id: Int!, $optimizeimg: Int, $input: ProductsImageGalleryBulkInput!) { setProductsImageGallery(products_id: $products_id, optimizeimg: $optimizeimg, input: $input) { result message { id status message } } }`;
+                        const responseData = await this.helpers.request({ method: 'POST', url: `${baseUrl}/api/`, headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: { query: mutation, variables }, json: true });
+                        if (responseData && responseData.data && responseData.data.setProductsImageGallery)
+                            returnData.push(responseData.data.setProductsImageGallery);
                         else if (responseData && responseData.errors)
                             throw new n8n_workflow_1.NodeOperationError(this.getNode(), `GraphQL Error: ${JSON.stringify(responseData.errors)}`);
                     }

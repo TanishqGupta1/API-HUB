@@ -241,6 +241,12 @@ async def _run_inventory_only(
                                 update(ProductVariant)
                                 .where(
                                     ProductVariant.part_id == part_id,
+                                    ProductVariant.product_id.in_(
+                                        select(Product.id).where(
+                                            Product.supplier_id == supplier.id,
+                                            Product.supplier_sku == sku,
+                                        )
+                                    ),
                                 )
                                 .values(inventory=qty)
                             )
