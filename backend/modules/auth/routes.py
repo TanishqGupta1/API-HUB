@@ -48,6 +48,9 @@ _SIGNUP_SETTING_KEY = "signup_enabled"
 
 
 async def _is_signup_enabled(db: AsyncSession) -> bool:
+    """DEPRECATED — no longer gates registration (bootstrap-only now). Read
+    only by the legacy /settings/signup endpoints; grants no access. Remove
+    with those endpoints + their frontend toggle in a follow-up PR."""
     setting = await db.get(AppSetting, _SIGNUP_SETTING_KEY)
     if setting is None:
         return False
@@ -221,12 +224,12 @@ async def setup_first_admin(
 
 @router.get("/signup-status")
 async def signup_status(db: AsyncSession = Depends(get_db)) -> dict:
-    """Public — frontend uses this to decide whether to render the signup form."""
+    """Open exactly when the instance has no users yet (bootstrap). Closed
+    forever after — later accounts are provisioned by an admin. The retired
+    signup_enabled flag no longer opens public registration."""
     count = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
     if count == 0:
         return {"open": True, "reason": "bootstrap"}
-    if await _is_signup_enabled(db):
-        return {"open": True, "reason": "enabled"}
     return {"open": False, "reason": "closed"}
 
 
