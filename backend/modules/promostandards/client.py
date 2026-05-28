@@ -5,8 +5,17 @@ cooperates with FastAPI's event loop. A single ``PromoStandardsClient`` instance
 is tied to one WSDL (one service type). The caller constructs a new client per
 service — product_data / inventory / ppc / media each have their own WSDL.
 
-The WSDL is parse-cached on disk via ``zeep.cache.SqliteCache`` so subsequent
-instances for the same URL skip re-parsing.
+WSDL caching strategy
+---------------------
+* Default: ``zeep.cache.InMemoryCache`` — survives within a process restart but
+  not across container restarts.  Zero filesystem dependency, safe in Docker.
+* Optional: set ``WSDL_CACHE_DIR`` env var to a directory mounted as a Docker
+  volume.  The client then uses ``zeep.cache.SqliteCache(path=…)`` so the
+  parsed WSDL survives container restarts.
+
+The previous default of ``SqliteCache()`` (no path → ``/tmp`` inside the
+container) was lost on every container restart, giving the worst of both
+worlds: slow on every cold start AND no persistence.
 
 Response parsing is **deliberately defensive**. PromoStandards implementations
 in the wild deviate from the spec (different casing, optional wrappers,
@@ -19,10 +28,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any, Iterable
 
 from zeep import Client as ZeepClient
-from zeep.cache import SqliteCache
 from zeep.transports import Transport
 
 from .schemas import (
@@ -54,6 +63,34 @@ SANMAR_CATEGORIES = [
 ]
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# WSDL cache factory
+
+def _build_wsdl_cache():
+    """Return the best available zeep cache object.
+
+    Checks ``WSDL_CACHE_DIR`` env var:
+    - Set → SqliteCache stored in that directory (mount a Docker volume there
+      for persistence across container restarts).
+    - Unset → InMemoryCache (process-lifetime cache; no filesystem dependency).
+    """
+    cache_dir = os.getenv("WSDL_CACHE_DIR", "").strip()
+    if cache_dir:
+        from zeep.cache import SqliteCache
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_path = os.path.join(cache_dir, "wsdl.db")
+        log.debug("WSDL cache: SqliteCache at %s", cache_path)
+        return SqliteCache(path=cache_path)
+    from zeep.cache import InMemoryCache
+    log.debug("WSDL cache: InMemoryCache (process-lifetime)")
+    return InMemoryCache()
+
+
+# Module-level singleton — one cache shared across all client instances so
+# a WSDL fetched by one supplier request benefits all subsequent ones.
+_WSDL_CACHE = _build_wsdl_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +186,7 @@ class PromoStandardsClient:
         from zeep.plugins import HistoryPlugin
         settings = Settings(strict=False, xml_huge_tree=True)
         transport = Transport(
-            cache=SqliteCache(), timeout=30, operation_timeout=120
+            cache=_WSDL_CACHE, timeout=30, operation_timeout=120
         )
         self._history = HistoryPlugin()
 
@@ -416,7 +453,7 @@ class PromoStandardsClient:
             # on this client stay pointed at the original PS service.
             try:
                 transport = Transport(
-                    cache=SqliteCache(), timeout=60, operation_timeout=300
+                    cache=_WSDL_CACHE, timeout=60, operation_timeout=300
                 )
                 svc = ZeepClient(extension_wsdl_url, transport=transport).service
             except Exception as exc:  # noqa: BLE001
@@ -556,7 +593,11 @@ class PromoStandardsClient:
             if style not in grouped:
                 if limit and len(grouped) >= limit:
                     continue
-                cat_name = _text(_attr(basic, "category"))
+                # SanMar's response usually omits 'category' on each product
+                # even when we filtered by category. Fall back to the
+                # category_name argument we asked SanMar for — every product
+                # in this response is, by definition, in that category.
+                cat_name = _text(_attr(basic, "category")) or category_name
                 grouped[style] = PSProductData(
                     product_id=style,
                     product_name=_text(_attr(basic, "productTitle")),

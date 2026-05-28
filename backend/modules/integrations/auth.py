@@ -1,13 +1,53 @@
 """X-Orchestrator-Key authentication dependency for the Integration Gateway."""
+import asyncio
 import hashlib
+import time
 from typing import Annotated, Optional
 
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_db
+from database import async_session, get_db
 from .models import IntegrationKey
+
+# ── In-process rate limiter (token bucket, per key id) ───────────────────────
+# Keyed by IntegrationKey.id (UUID str) → (tokens_remaining, window_start_ts)
+# Bounded to _RATE_BUCKETS_MAX entries to prevent memory leak per integration key.
+_RATE_BUCKETS: dict[str, tuple[int, float]] = {}
+_RATE_BUCKETS_MAX = 10_000
+_rate_lock = asyncio.Lock()
+# Strong refs to in-flight fire-and-forget tasks so the event loop doesn't
+# GC them mid-run (asyncio holds only weak refs to tasks).
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+async def _check_rate_limit(key: IntegrationKey) -> None:
+    """Raise 429 if the key has exceeded its rate_limit_per_minute.
+
+    Uses an asyncio.Lock so concurrent coroutines don't race the dict write.
+    """
+    limit = key.rate_limit_per_minute
+    if not limit or limit <= 0:
+        return
+    key_str = str(key.id)
+    now = time.monotonic()
+    async with _rate_lock:
+        tokens, window_start = _RATE_BUCKETS.get(key_str, (limit, now))
+        if now - window_start >= 60:
+            # New window — reset bucket
+            tokens = limit
+            window_start = now
+        if tokens <= 0:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={"code": "RATE_LIMITED", "message": "Request rate limit exceeded"},
+            )
+        _RATE_BUCKETS[key_str] = (tokens - 1, window_start)
+        # Evict oldest entries when the dict grows too large
+        if len(_RATE_BUCKETS) > _RATE_BUCKETS_MAX:
+            oldest = min(_RATE_BUCKETS, key=lambda k: _RATE_BUCKETS[k][1])
+            del _RATE_BUCKETS[oldest]
 
 
 def _hash_key(raw_key: str) -> str:
@@ -48,7 +88,35 @@ async def get_orchestrator_key(
             "code": "KEY_REVOKED", "message": "This API key is inactive"
         })
 
+    # Enforce per-minute rate limit
+    await _check_rate_limit(key)
+
+    # Fire-and-forget last_used_at update — doesn't block the request.
+    # Keep a strong ref so the loop doesn't GC the task before it runs.
+    task = asyncio.create_task(_update_last_used(key.id))
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+
     return key
+
+
+async def _update_last_used(key_id) -> None:
+    """Update last_used_at on the integration key (background, best-effort).
+
+    Opens its own session so it is not affected by the request session's
+    lifetime (the request-scoped session is closed before this task runs).
+    """
+    from datetime import datetime, timezone
+    try:
+        async with async_session() as db:
+            await db.execute(
+                update(IntegrationKey)
+                .where(IntegrationKey.id == key_id)
+                .values(last_used_at=datetime.now(timezone.utc))
+            )
+            await db.commit()
+    except Exception:
+        pass  # Non-critical — never fail a request over this
 
 
 def check_key_scope(

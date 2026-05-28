@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from modules.auth.dependencies import get_current_user
+from modules.auth.dependencies import get_current_user, require_customer_access
 from modules.auth.models import User
 from modules.catalog.models import CustomerProductSelection, Product
 from modules.customers.models import Customer
@@ -44,6 +44,7 @@ def _to_read(
     *,
     supplier_has_decoration_overlay: bool = False,
     decoration_ready: bool = False,
+    supplier_slug: str | None = None,
 ) -> SelectionRead:
     return SelectionRead(
         id=sel.id,
@@ -54,6 +55,7 @@ def _to_read(
         pushed_at=sel.pushed_at,
         supplier_id=product.supplier_id,
         supplier_sku=product.supplier_sku,
+        supplier_slug=supplier_slug,
         product_name=product.product_name,
         product_type=product.product_type,
         image_url=product.image_url,
@@ -93,7 +95,9 @@ async def _latest_failed_pids(
 
 
 @router.get(
-    "/{customer_id}/selections", response_model=list[SelectionRead]
+    "/{customer_id}/selections",
+    response_model=list[SelectionRead],
+    dependencies=[Depends(require_customer_access)],
 )
 async def list_selections(
     customer_id: UUID,
@@ -140,14 +144,15 @@ async def list_selections(
             )
         )).scalars().all()
     )
-    overlay_by_supplier: dict[UUID, bool] = {
-        row.id: bool(row.has_decoration_overlay)
-        for row in (await db.execute(
-            select(Supplier.id, Supplier.has_decoration_overlay).where(
-                Supplier.id.in_(supplier_ids)
-            )
-        ))
-    }
+    overlay_by_supplier: dict[UUID, bool] = {}
+    slug_by_supplier: dict[UUID, str] = {}
+    for row in (await db.execute(
+        select(Supplier.id, Supplier.has_decoration_overlay, Supplier.slug).where(
+            Supplier.id.in_(supplier_ids)
+        )
+    )):
+        overlay_by_supplier[row.id] = bool(row.has_decoration_overlay)
+        slug_by_supplier[row.id] = row.slug
 
     out: list[SelectionRead] = []
     for sel, product in rows:
@@ -160,6 +165,7 @@ async def list_selections(
             sel, product, status_str,
             supplier_has_decoration_overlay=overlay_by_supplier.get(product.supplier_id, False),
             decoration_ready=product.id in decorated_ids,
+            supplier_slug=slug_by_supplier.get(product.supplier_id),
         ))
     return out
 
@@ -168,6 +174,7 @@ async def list_selections(
     "/{customer_id}/selections/bulk",
     response_model=SelectionBulkResponse,
     status_code=201,
+    dependencies=[Depends(require_customer_access)],
 )
 async def bulk_add_selections(
     customer_id: UUID,
@@ -234,6 +241,7 @@ async def bulk_add_selections(
     "/{customer_id}/selections/{product_id}",
     response_model=SelectionRead,
     status_code=201,
+    dependencies=[Depends(require_customer_access)],
 )
 async def add_selection(
     customer_id: UUID,
@@ -275,7 +283,9 @@ async def add_selection(
 
 
 @router.delete(
-    "/{customer_id}/selections/{product_id}", status_code=204
+    "/{customer_id}/selections/{product_id}",
+    status_code=204,
+    dependencies=[Depends(require_customer_access)],
 )
 async def remove_selection(
     customer_id: UUID,

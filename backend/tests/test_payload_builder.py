@@ -674,6 +674,101 @@ class TestPC61Smoke:
 
 
 # ===========================================================================
+# B6 — Payload variable shape assertions
+# (Spec: non-zero vendor_price, correct internal_title, integer option IDs)
+# ===========================================================================
+
+
+class TestSetProductVariables:
+    """Assert the exact variable shape of the setProduct step.
+
+    These tests nail down fields that the OPS API requires to be present
+    and correctly typed — bugs here only surface on a live push, which is
+    expensive to debug.  They codify the verified mapping table from
+    docs/memory/sanmar_to_ops_field_mapping.md.
+    """
+
+    def test_products_internal_title_is_supplier_sku(self):
+        """B6: products_internal_title must equal supplier_sku.
+
+        OPS uses this as a stable deduplication key. If it's missing or
+        wrong, re-pushing the same product creates a duplicate instead of
+        updating the existing one.
+        """
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            product=_product(sku="PC61"),
+        )
+        payload = _synthesize_payload(ctx)
+        set_product = payload.plan[0]
+        assert set_product.variables["input"]["products_internal_title"] == "PC61"
+
+    def test_set_product_price_vendor_price_nonzero(self):
+        """B6: vendor_price (wholesale cost) must be > 0.
+
+        If base_price is not set in the DB, the preflight check_base_price_set
+        should block the push.  When it does reach the builder, it must pass
+        the real value through — not silently send 0 to OPS.
+        """
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M", base_price=Decimal("8.32"))],
+            markup_rules=[_markup_rule(pct=Decimal("20.0"))],
+        )
+        payload = _synthesize_payload(ctx)
+        price_step = next(s for s in payload.plan if s.mutation == "setProductPrice")
+        assert price_step.variables["input"]["vendor_price"] > 0, (
+            "vendor_price must be non-zero — check that base_price is written "
+            "by ps_normalizer_v2.merge_pricing (Bug 1 fix)"
+        )
+
+    def test_master_option_id_is_integer(self):
+        """B6: setAssignOptions.master_option_id must be an int, not a string.
+
+        OPS GraphQL rejects the mutation if master_option_id is passed as
+        a string.  push_mapping_options.target_ops_option_id is stored as
+        INTEGER in the DB; this test verifies no accidental str() coercion
+        happens in the builder.
+        """
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            push_mapping_options=[
+                _push_mapping_option("size", target_ops_option_id=7),
+            ],
+        )
+        payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
+        assign_step = next(s for s in payload.plan if s.mutation == "setAssignOptions")
+        mid = assign_step.variables["input"]["master_option_id"]
+        assert isinstance(mid, int), (
+            f"master_option_id must be int, got {type(mid).__name__!r} — "
+            "do not cast to str in _build_setAssignOptions_step"
+        )
+
+    def test_category_name_present_in_set_product(self):
+        """setProduct.category_name must be non-empty.
+
+        OPS requires a valid category to create a product. The builder uses
+        product.category or falls back to 'Uncategorized'.
+        """
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            product=_product(category="T-Shirts"),
+        )
+        payload = _synthesize_payload(ctx)
+        cat = payload.plan[0].variables["input"]["category_name"]
+        assert cat and cat.strip(), "category_name must be non-empty in setProduct"
+
+    def test_category_falls_back_to_uncategorized(self):
+        """No category on the product → builder sends 'Uncategorized', not None."""
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            product=_product(category=None),
+        )
+        payload = _synthesize_payload(ctx)
+        cat = payload.plan[0].variables["input"]["category_name"]
+        assert cat == "Uncategorized"
+
+
+# ===========================================================================
 # Request fingerprint (used by worker step_results)
 # ===========================================================================
 

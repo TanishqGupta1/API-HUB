@@ -23,6 +23,7 @@ from modules.catalog.models import (
 )
 from modules.customers.models import Customer
 from modules.master_options.models import MasterOption, MasterOptionAttribute
+from modules.markup.models import MarkupRule
 from modules.push_log.models import ProductPushLog
 from modules.suppliers.models import Supplier
 
@@ -171,6 +172,34 @@ SUPPLIERS = [
         },
         "is_active": False,
     },
+    {
+        "name": "AlphaBroder",
+        "slug": "alphabroder",
+        "protocol": "soap",
+        "promostandards_code": "ALPHABRODER",
+        "base_url": "",
+        "adapter_class": "AlphabroderAdapter",
+        "auth_config": {"id": "", "password": "", "customer_number": ""},
+        "is_active": False,
+    },
+    {
+        "name": "S&S Activewear",
+        "slug": "ss-activewear",
+        "protocol": "rest",
+        "base_url": "https://api.ssactivewear.com/v2",
+        "adapter_class": "SSAdapter",
+        "auth_config": {"account_number": "", "api_key": ""},
+        "is_active": False,
+    },
+    {
+        "name": "4Over",
+        "slug": "fourover",
+        "protocol": "rest",
+        "base_url": "https://sandbox-api.4over.com",
+        "adapter_class": "FourOverAdapter",
+        "auth_config": {"api_key": "", "private_key": ""},
+        "is_active": False,
+    },
 ]
 
 DEMO_PRODUCTS = [
@@ -210,7 +239,7 @@ DEMO_PRODUCTS = [
         "brand": "VG Signature",
         "description": "High-quality cotton polo with reinforced stitching.",
         "product_type": "apparel",
-        "image_url": "https://placehold.co/400x400/png?text=Polo",
+        "image_url": "https://cdnm.sanmar.com/catalog/images/K500.jpg",
         "variants": [
             {"color": "Royal Blue", "size": "M", "sku": "VG-101-RB-M", "base_price": "19.99", "inventory": 50},
             {"color": "Royal Blue", "size": "L", "sku": "VG-101-RB-L", "base_price": "19.99", "inventory": 45},
@@ -223,7 +252,7 @@ DEMO_PRODUCTS = [
         "brand": "VG Active",
         "description": "Moisture-wicking tech hoodie for all-day comfort.",
         "product_type": "apparel",
-        "image_url": "https://placehold.co/400x400/png?text=Hoodie",
+        "image_url": "https://cdnm.sanmar.com/catalog/images/F244.jpg",
         "variants": [
             {"color": "Charcoal", "size": "L", "sku": "VG-202-CH-L", "base_price": "45.00", "inventory": 120},
         ],
@@ -506,6 +535,25 @@ async def seed():
             db.add(demo_customer)
             await db.flush()
             print(f"  [add]  Customer: {DEMO_CUSTOMER_NAME}")
+
+        # Ensure a global markup rule exists for the demo customer so Push to OPS preflight passes.
+        existing_rule = (await db.execute(
+            select(MarkupRule).where(
+                MarkupRule.customer_id == demo_customer.id,
+                MarkupRule.scope == "all",
+            )
+        )).scalar_one_or_none()
+        if not existing_rule:
+            db.add(MarkupRule(
+                customer_id=demo_customer.id,
+                scope="all",
+                markup_pct=30.0,
+                rounding="nearest_99",
+                priority=0,
+                is_active=True,
+            ))
+            await db.flush()
+            print(f"  [add]  Default markup rule (30%, nearest_99) for {DEMO_CUSTOMER_NAME}")
 
         existing_links = set(
             (await db.execute(

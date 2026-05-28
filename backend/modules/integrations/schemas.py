@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Any, Literal, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ── Push request envelope ──
@@ -43,9 +43,47 @@ class PushRequestProductRef(BaseModel):
     supplier_sku: Optional[str] = None
 
 
+def _validate_callback_url(url: str) -> str:
+    """Lightweight SSRF guard: checks scheme and well-known loopback hostnames.
+
+    NOTE: Blocking DNS resolution (socket.gethostbyname) inside a Pydantic
+    validator runs synchronously on the event loop and is bypassable via DNS
+    rebinding (validate-time IP ≠ fire-time IP).  Full SSRF enforcement
+    (resolve + pin) must be done at HTTP-client level inside the webhook
+    fire task, not here.
+    """
+    import ipaddress
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError("callback url must use http or https scheme")
+    hostname = parsed.hostname or ""
+    # Block loopback and link-local by hostname string only (no DNS here)
+    if hostname in ("localhost", "127.0.0.1", "::1") or hostname.startswith("169.254."):
+        raise ValueError("callback url must not target loopback or link-local addresses")
+    # Block literal private-range IPs (no DNS lookup — avoids event-loop stall)
+    try:
+        addr = ipaddress.ip_address(hostname)
+        if addr.is_private or addr.is_loopback or addr.is_link_local:
+            raise ValueError(
+                f"callback url is a private/loopback IP address ({hostname})"
+            )
+    except ValueError as exc:
+        if "callback url" in str(exc):
+            raise
+        # hostname is not a bare IP literal — that's fine; DNS check deferred
+    return url
+
+
 class PushRequestCallback(BaseModel):
     url: str
     secret: Optional[str] = None
+
+    @field_validator("url")
+    @classmethod
+    def url_must_be_safe(cls, v: str) -> str:
+        return _validate_callback_url(v)
 
 
 class PushRequest(BaseModel):
@@ -112,6 +150,12 @@ class PushRequestStatus(BaseModel):
     cleanup_targets: Optional[dict[str, Any]] = None
     callback_status: str = "not_requested"
     callback_attempts: int = 0
+    # Gateway metadata — shown on push-log detail page
+    key_id: Optional[str] = None
+    request_id: Optional[UUID] = None
+    idempotency_key: Optional[str] = None
+    payload_hash: Optional[str] = None
+    created_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     links: Optional[PushRequestLinks] = None
 
@@ -160,6 +204,31 @@ class IntegrationKeyOut(BaseModel):
 
 class IntegrationKeyCreated(IntegrationKeyOut):
     raw_key: str = Field(..., description="Shown once — not stored. Copy immediately.")
+
+
+# ── Batch push ──
+
+class BatchPushRequest(BaseModel):
+    """Fan out a single product to multiple customer storefronts."""
+    product_id: Optional[UUID] = None
+    supplier_sku: Optional[str] = None
+    supplier_slug: Optional[str] = None
+    customer_ids: list[UUID]
+    dry_run: bool = False
+
+
+class BatchPushItem(BaseModel):
+    customer_id: UUID
+    customer_name: str
+    push_log_id: Optional[UUID] = None
+    status: str
+    error: Optional[str] = None
+
+
+class BatchPushResponse(BaseModel):
+    batch_id: UUID
+    total: int
+    items: list[BatchPushItem]
 
 
 # ── Backwards-compat aliases (do not remove without sweeping call sites) ──

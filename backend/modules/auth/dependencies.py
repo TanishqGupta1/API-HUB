@@ -21,8 +21,21 @@ _SERVICE_ACCOUNT_ID = uuid_mod.UUID("00000000-0000-0000-0000-000000000001")
 # X-Ingest-Secret only authorizes calls under these path prefixes. Anything
 # else (admin user management, audit logs, OPS-customer config, etc.) still
 # requires a JWT cookie. Narrows blast radius if the shared secret leaks.
+#
+# Security model (two layers):
+#   1. Path allowlist below — keeps the ingest secret away from sensitive
+#      admin routes (/api/auth, /api/customers, /api/audit-log, etc.).
+#   2. Role = "ingest_service" (not "vg_admin") — VGAdmin-gated routes
+#      reject this caller even if the secret leaks to an allowed path.
+#
+# Why /api/sync/* is listed broadly (not per-supplier):
+#   n8n calls /api/sync/{supplier_id}/products|inventory|pricing for every
+#   supplier. Locking to a single slug would require a new allowlist entry
+#   per supplier, breaking the adapter-pattern design. The role restriction
+#   above is the real guard; the path list is a coarse first filter.
 _INGEST_ALLOWED_PATH_PREFIXES: tuple[str, ...] = (
     "/api/ingest",
+    "/api/sync",
     "/api/sync-jobs",
     "/api/suppliers",
     "/api/push-log",
@@ -116,4 +129,35 @@ def _require_vg_admin(current_user: CurrentUser) -> User:
     return current_user
 
 
+def _require_customer_admin(current_user: CurrentUser) -> User:
+    if current_user.role != "customer_admin" or current_user.customer_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Customer admin access required")
+    return current_user
+
+
+def _require_any_admin(current_user: CurrentUser) -> User:
+    if current_user.role not in ("vg_admin", "customer_admin"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin access required")
+    return current_user
+
+
 VGAdmin = Annotated[User, Depends(_require_vg_admin)]
+CustomerAdmin = Annotated[User, Depends(_require_customer_admin)]
+AnyAdmin = Annotated[User, Depends(_require_any_admin)]
+
+
+def require_customer_access(
+    customer_id: uuid_mod.UUID,
+    current_user: CurrentUser,
+) -> uuid_mod.UUID:
+    """Authorize access to one customer's data. Use as a route dependency on
+    any path with a ``customer_id`` path param.
+
+    vg_admin and the trusted ingest service may act on any customer;
+    customer_admin only on their own; everyone else is forbidden.
+    """
+    if current_user.role in ("vg_admin", "ingest_service"):
+        return customer_id
+    if current_user.role == "customer_admin" and current_user.customer_id == customer_id:
+        return customer_id
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized for this customer")
