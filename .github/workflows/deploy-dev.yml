@@ -29,12 +29,30 @@ jobs:
         working-directory: backend
         run: |
           pip install -r requirements.txt
-          pytest --tb=short -q || true   # non-blocking until test suite is complete
+          pytest --tb=short -q
+
+  # ─── 1b. Frontend lint + build ───────────────────────────────────────────────
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install + lint + build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run build
 
   # ─── 2. Build & push images ──────────────────────────────────────────────────
   build-and-push:
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, frontend-check]
     outputs:
       image-tag: ${{ steps.meta.outputs.tag }}
     steps:
