@@ -1,4 +1,5 @@
 """Phase A auth-foundation hardening tests."""
+import asyncio
 import types
 
 import pytest
@@ -46,10 +47,15 @@ async def test_rate_limiter_keys_independent():
 
 
 async def _delete_all_users():
+    """Remove only the emails this test file creates — keep the suite hermetic."""
     from tests.conftest import async_session
     from modules.auth.models import User
     async with async_session() as s:
-        await s.execute(delete(User))
+        await s.execute(
+            delete(User).where(
+                User.email.in_(["first-admin@vg.test", "second@vg.test", "admin@vg.test"])
+            )
+        )
         await s.commit()
 
 
@@ -94,4 +100,24 @@ async def test_signup_status_open_only_during_bootstrap(client):
         r2 = await client.get("/api/auth/signup-status")
         assert r2.json() == {"open": False, "reason": "closed"}
     finally:
+        await _delete_all_users()
+
+
+@pytest.mark.asyncio
+async def test_register_bootstrap_is_race_safe(client):
+    await _delete_all_users()
+    try:
+        r1, r2 = await asyncio.gather(
+            client.post("/api/auth/register", json={"email": "race-a@vg.test", "password": "s3cret-pw-123"}),
+            client.post("/api/auth/register", json={"email": "race-b@vg.test", "password": "s3cret-pw-123"}),
+        )
+        statuses = sorted([r1.status_code, r2.status_code])
+        assert statuses == [201, 409], f"expected one 201 + one 409, got {statuses}"
+        assert await _user_count() == 1
+    finally:
+        from tests.conftest import async_session
+        from modules.auth.models import User
+        async with async_session() as s:
+            await s.execute(delete(User).where(User.email.in_(["race-a@vg.test", "race-b@vg.test"])))
+            await s.commit()
         await _delete_all_users()
