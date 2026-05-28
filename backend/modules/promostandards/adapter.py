@@ -177,6 +177,41 @@ class PromoStandardsAdapter(BaseAdapter):
 
         return ingest
 
+    async def hydrate_inventory_only(self, ref: ProductRef) -> dict[str, int]:
+        """Fetch only inventory levels — skips product/pricing/media SOAP calls.
+
+        Queries the local DB for existing variant part_ids so we can use
+        getFilteredInventoryLevels (SanMar v200 requires filtered call).
+        Returns {part_id: quantity_available}.
+        """
+        self._require_auth()
+        try:
+            from sqlalchemy import select as sa_select
+            from modules.catalog.models import Product, ProductVariant
+            part_ids = (await self.db.execute(
+                sa_select(ProductVariant.part_id)
+                .join(Product, Product.id == ProductVariant.product_id)
+                .where(
+                    Product.supplier_sku == ref.supplier_sku,
+                    Product.supplier_id == self.supplier.id,
+                    ProductVariant.part_id.isnot(None),
+                )
+            )).scalars().all()
+            if not part_ids:
+                return {}
+            inv_client = self._get_client("INVENTORY")
+            inv_levels = await inv_client.get_inventory(
+                [ref.supplier_sku], part_ids=list(part_ids)
+            )
+            return {
+                level.part_id: level.quantity_available
+                for level in inv_levels
+                if level.part_id is not None
+            }
+        except Exception as exc:
+            log.warning("Inventory-only fetch failed for %s: %s", ref.supplier_sku, exc)
+            return {}
+
     async def discover_changed(self, since: datetime) -> list[ProductRef]:
         self._require_auth()
         return await self._call_get_product_date_modified(since)

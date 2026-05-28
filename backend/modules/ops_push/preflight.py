@@ -799,6 +799,37 @@ def check_required_fields(ctx: _PreflightContext) -> CheckResult:
     )
 
 
+def check_data_freshness(ctx: _PreflightContext) -> CheckResult:
+    """Warning-only: flag if product data is older than 30 minutes.
+
+    Not a blocker — you can still push stale data. The warning surfaces on
+    the push preview page so operators know to run Sync Now first if needed.
+    """
+    last_synced = ctx.product.last_synced
+    if last_synced is None:
+        return CheckResult(
+            "data_freshness",
+            False,
+            "product has never been synced — data may be incomplete",
+            suggestion="Run Sync Now on the product detail page before pushing.",
+        )
+    age_seconds = (datetime.now(timezone.utc) - last_synced).total_seconds()
+    age_minutes = int(age_seconds / 60)
+    if age_minutes > 30:
+        age_str = f"{age_minutes}m" if age_minutes < 120 else f"{age_minutes // 60}h {age_minutes % 60}m"
+        return CheckResult(
+            "data_freshness",
+            False,
+            f"product data is {age_str} old — inventory/pricing may be stale",
+            suggestion="Click Sync Now on the product page to fetch fresh data before pushing.",
+        )
+    return CheckResult(
+        "data_freshness",
+        True,
+        f"data is fresh ({age_minutes}m old)",
+    )
+
+
 def check_decoration_attached(ctx: _PreflightContext) -> CheckResult:
     """8. If supplier.has_decoration_overlay = true, require non-empty
     customer_product_decorations.decoration_options for (customer, product)."""
@@ -924,6 +955,13 @@ async def run_preflight(
     else:
         checks.append(check_decoration_attached(ctx))
 
+    # W1 — data freshness: warning only, never a blocker
+    freshness = check_data_freshness(ctx)
+    if not freshness.ok:
+        warnings.append(freshness)
+    else:
+        checks.append(freshness)
+
     return PreflightResults(checks=checks, warnings=warnings)
 
 
@@ -937,6 +975,7 @@ __all__ = [
     "check_customer_ops_creds_present",
     "check_ops_oauth2_reachable",
     "check_image_urls_reachable",
+    "check_data_freshness",
     "check_prefix_collision",
     "check_required_fields",
     "check_decoration_attached",

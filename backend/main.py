@@ -90,7 +90,7 @@ import modules.rest_connector.ss_adapter  # noqa: F401  registers SSAdapter
 import modules.promostandards.sanmar_adapter  # noqa: F401  registers SanMarAdapter
 import modules.promostandards.alphabroder_adapter  # noqa: F401  registers AlphabroderAdapter
 from modules.import_jobs.routes import router as import_jobs_router
-from modules.import_jobs.scheduler import start_scheduler
+from modules.import_jobs.scheduler import start_scheduler, start_inventory_scheduler
 from modules.decorations.routes import router as decorations_router
 from modules.alerting.routes import router as alerting_router
 from modules.alerting.checker import run_checker, run_startup_check
@@ -190,6 +190,8 @@ async def lifespan(app: FastAPI):
     # Start background tasks
     # Scheduler sleeps first to avoid restart storms (no-op if DISABLE_SCHEDULER=true)
     _scheduler_task = asyncio.create_task(start_scheduler())
+    # Inventory-only sync runs every 15 min (INVENTORY_SYNC_INTERVAL_MINUTES)
+    _inventory_task = asyncio.create_task(start_inventory_scheduler())
     # Alerting checker runs every 5 min (ALERT_CHECK_INTERVAL_SECONDS)
     _checker_task = asyncio.create_task(run_checker())
     # Run one immediate check on boot to catch anything that failed during downtime.
@@ -199,7 +201,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Graceful shutdown: cancel background tasks before closing DB pool
-    for task in (_scheduler_task, _checker_task):
+    for task in (_scheduler_task, _inventory_task, _checker_task):
         task.cancel()
         try:
             await task

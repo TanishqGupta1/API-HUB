@@ -235,7 +235,12 @@ async def export_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
             "base_price": float(v.base_price) if v.base_price is not None else None,
             "inventory": v.inventory,
             "prices": [
-                {"quantity": p.quantity, "price": float(p.price)}
+                {
+                    "price_type": p.price_type,
+                    "quantity_min": p.quantity_min,
+                    "quantity_max": p.quantity_max,
+                    "price": float(p.price),
+                }
                 for p in (v.prices or [])
             ],
         }
