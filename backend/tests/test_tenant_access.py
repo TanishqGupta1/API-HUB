@@ -24,10 +24,12 @@ def as_user():
     """Override get_current_user for one test, then restore."""
     def _set(user):
         app.dependency_overrides[get_current_user] = lambda: user
-    yield _set
-    # conftest installs a vg_admin override at import — restore it.
-    from tests.conftest import _TEST_ADMIN
-    app.dependency_overrides[get_current_user] = lambda: _TEST_ADMIN
+    try:
+        yield _set
+    finally:
+        # conftest installs a vg_admin override at import — restore it.
+        from tests.conftest import _TEST_ADMIN
+        app.dependency_overrides[get_current_user] = lambda: _TEST_ADMIN
 
 
 @pytest.mark.asyncio
