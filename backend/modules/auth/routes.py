@@ -249,23 +249,22 @@ async def update_signup_settings(
 
 
 @router.post("/register", response_model=UserRead, status_code=201)
+@limiter.limit("5/minute")
 async def register(
+    request: Request,  # required by slowapi — do not remove
     body: SetupRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> User:
-    """Public registration.
+    """Public registration — bootstrap only.
 
-    Two paths are accepted:
-      - bootstrap: no users exist yet → creates the first vg_admin.
-      - admin-opened: an admin has toggled `signup_enabled = true` from the
-        settings page. Subsequent registrations also create vg_admin until
-        the admin disables the flag.
-
-    Returns 409 otherwise. The error message is intentionally generic so it
-    does not leak whether the email is already in use vs. registration being
-    closed.
+    Creates the first vg_admin only when the instance has zero users. Once any
+    user exists this endpoint always returns 409; it never mints a second
+    account. All later users are created by an admin via POST /api/auth/users.
+    Self-service signup was removed: it used to mint vg_admin whenever
+    signup_enabled was on (cross-tenant privilege escalation). Equivalent to
+    /setup; consolidate the two bootstrap paths in a follow-up.
     """
     count = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
-    if count > 0 and not await _is_signup_enabled(db):
+    if count > 0:
         raise HTTPException(status.HTTP_409_CONFLICT, "Registration is closed")
 
     stmt = (
