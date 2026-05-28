@@ -12,6 +12,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db, ENVIRONMENT
+from modules.auth.dependencies import VGAdmin
 from .models import Notification
 from .schemas import NotificationRead, UnreadCount
 
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/api/notifications", tags=["alerting"])
 @router.get("", response_model=list[NotificationRead])
 async def list_notifications(
     include_read: bool = False,
+    _: VGAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> list[Notification]:
     q = select(Notification).order_by(Notification.created_at.desc())
@@ -30,7 +32,10 @@ async def list_notifications(
 
 
 @router.get("/unread-count", response_model=UnreadCount)
-async def unread_count(db: AsyncSession = Depends(get_db)) -> dict:
+async def unread_count(
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     count = (
         await db.execute(
             select(func.count(Notification.id)).where(
@@ -44,6 +49,7 @@ async def unread_count(db: AsyncSession = Depends(get_db)) -> dict:
 @router.patch("/{notification_id}/read", status_code=200)
 async def mark_read(
     notification_id: UUID,
+    _: VGAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     n = await db.get(Notification, notification_id)
@@ -55,7 +61,10 @@ async def mark_read(
 
 
 @router.post("/read-all", status_code=200)
-async def read_all(db: AsyncSession = Depends(get_db)) -> dict:
+async def read_all(
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     await db.execute(
         update(Notification)
         .where(Notification.is_read == False)  # noqa: E712
@@ -66,7 +75,10 @@ async def read_all(db: AsyncSession = Depends(get_db)) -> dict:
 
 
 @router.post("/demo", status_code=201)
-async def create_demo_notifications(db: AsyncSession = Depends(get_db)) -> dict:
+async def create_demo_notifications(
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     """Create one sample notification of each type so the UI can be demoed
     without waiting for a real failure. Non-production only."""
     if ENVIRONMENT == "production":

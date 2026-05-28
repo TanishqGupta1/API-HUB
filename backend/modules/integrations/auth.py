@@ -18,6 +18,10 @@ _RATE_BUCKETS: dict[str, tuple[int, float]] = {}
 _RATE_BUCKETS_MAX = 10_000
 _rate_lock = asyncio.Lock()
 
+# Strong refs to in-flight fire-and-forget tasks so the event loop doesn't
+# GC them mid-run (asyncio holds only weak refs to tasks).
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
 
 async def _check_rate_limit(key: IntegrationKey) -> None:
     """Raise 429 if the key has exceeded its rate_limit_per_minute.
@@ -86,13 +90,15 @@ async def get_orchestrator_key(
         })
 
     # Enforce per-minute rate limit
-    _check_rate_limit(key)
+    await _check_rate_limit(key)
 
     # Fire-and-forget last_used_at update — doesn't block the request
     # NOTE: we do NOT pass `db` here — the request-scoped session will be
     # closed by the time the task runs.  _update_last_used opens its own
     # session via async_session().
-    asyncio.create_task(_update_last_used(key.id))
+    task = asyncio.create_task(_update_last_used(key.id))
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
     return key
 
