@@ -55,6 +55,7 @@ from modules.auth.dependencies import get_current_user, VGAdmin
 from modules.audit_log.routes import router as audit_log_router
 from modules.audit_log.middleware import AuditLogMiddleware
 from modules.customer_catalog.routes import router as customer_catalog_router
+from modules.portal.routes import router as portal_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -261,6 +262,8 @@ app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
 app.include_router(webhooks_router, dependencies=_auth)
 app.include_router(analytics_router, dependencies=_auth)
+# Customer self-service portal — requires customer_admin role (enforced inside routes)
+app.include_router(portal_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
 app.include_router(integrations_router)
 app.include_router(integrations_admin_router, dependencies=_auth)
