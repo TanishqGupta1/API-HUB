@@ -17,6 +17,9 @@ from .models import IntegrationKey
 _RATE_BUCKETS: dict[str, tuple[int, float]] = {}
 _RATE_BUCKETS_MAX = 10_000
 _rate_lock = asyncio.Lock()
+# Strong refs to in-flight fire-and-forget tasks so the event loop doesn't
+# GC them mid-run (asyncio holds only weak refs to tasks).
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
 async def _check_rate_limit(key: IntegrationKey) -> None:
@@ -88,11 +91,11 @@ async def get_orchestrator_key(
     # Enforce per-minute rate limit
     await _check_rate_limit(key)
 
-    # Fire-and-forget last_used_at update — doesn't block the request
-    # NOTE: we do NOT pass `db` here — the request-scoped session will be
-    # closed by the time the task runs.  _update_last_used opens its own
-    # session via async_session().
-    asyncio.create_task(_update_last_used(key.id))
+    # Fire-and-forget last_used_at update — doesn't block the request.
+    # Keep a strong ref so the loop doesn't GC the task before it runs.
+    task = asyncio.create_task(_update_last_used(key.id))
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
     return key
 

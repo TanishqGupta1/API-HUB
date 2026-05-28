@@ -48,6 +48,9 @@ _SIGNUP_SETTING_KEY = "signup_enabled"
 
 
 async def _is_signup_enabled(db: AsyncSession) -> bool:
+    """DEPRECATED — no longer gates registration (bootstrap-only now). Read
+    only by the legacy /settings/signup endpoints; grants no access. Remove
+    with those endpoints + their frontend toggle in a follow-up PR."""
     setting = await db.get(AppSetting, _SIGNUP_SETTING_KEY)
     if setting is None:
         return False
@@ -180,7 +183,9 @@ async def get_me(current_user: CurrentUser):
 
 
 @router.post("/setup", response_model=UserRead, status_code=201)
+@limiter.limit("5/minute")
 async def setup_first_admin(
+    request: Request,  # required by slowapi — do not remove
     body: SetupRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> User:
     """Create the first vg_admin. Returns 409 if ANY user already exists.
@@ -219,12 +224,12 @@ async def setup_first_admin(
 
 @router.get("/signup-status")
 async def signup_status(db: AsyncSession = Depends(get_db)) -> dict:
-    """Public — frontend uses this to decide whether to render the signup form."""
+    """Open exactly when the instance has no users yet (bootstrap). Closed
+    forever after — later accounts are provisioned by an admin. The retired
+    signup_enabled flag no longer opens public registration."""
     count = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
     if count == 0:
         return {"open": True, "reason": "bootstrap"}
-    if await _is_signup_enabled(db):
-        return {"open": True, "reason": "enabled"}
     return {"open": False, "reason": "closed"}
 
 
@@ -251,37 +256,28 @@ async def update_signup_settings(
 @router.post("/register", response_model=UserRead, status_code=201)
 @limiter.limit("5/minute")
 async def register(
-    request: Request, body: SetupRequest, response: Response, db: AsyncSession = Depends(get_db)
+    request: Request,  # required by slowapi — do not remove
+    body: SetupRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> User:
-    """Public registration.
+    """Public registration — bootstrap only.
 
-    Two paths:
-      - bootstrap: no users exist yet → creates the first vg_admin (owner).
-      - admin-opened: an admin has toggled signup_enabled = true.
-        Subsequent open registrations create customer_admin (least-privilege).
-        Portal users need a VG admin to assign customer_id before they can
-        use the portal — self-registration intentionally produces an unpaired
-        account that cannot access tenant data until provisioned.
-
-    Returns 409 otherwise. The error message is intentionally generic so it
-    does not leak whether the email is already in use vs. registration being
-    closed.
+    Creates the first vg_admin only when the instance has zero users. Once any
+    user exists this endpoint always returns 409; it never mints a second
+    account. All later users are created by an admin via POST /api/auth/users.
+    Self-service signup was removed: it used to mint vg_admin/customer_admin
+    whenever signup_enabled was on (privilege escalation risk). Equivalent to
+    /setup; consolidate the two bootstrap paths in a follow-up.
     """
     count = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
-    if count > 0 and not await _is_signup_enabled(db):
+    if count > 0:
         raise HTTPException(status.HTTP_409_CONFLICT, "Registration is closed")
-
-    # Bootstrap: first ever user becomes vg_admin (platform owner).
-    # Subsequent open-signup users get the least-privileged role (customer_admin)
-    # so a registration-form exploit cannot mint a vg_admin account.
-    assigned_role = "vg_admin" if count == 0 else "customer_admin"
 
     stmt = (
         pg_insert(User)
         .values(
             email=body.email,
             hashed_password=hash_password(body.password),
-            role=assigned_role,
+            role="vg_admin",
         )
         .on_conflict_do_nothing(index_elements=[User.email])
         .returning(User)
