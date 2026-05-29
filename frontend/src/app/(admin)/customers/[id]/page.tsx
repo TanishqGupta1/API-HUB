@@ -425,7 +425,7 @@ export default function CustomerSettingsPage() {
             ) : (
               <div className="space-y-3">
                 <p className="text-[11px] font-bold text-[#b93232]">
-                  Are you sure? This will permanently delete &quot;{customer?.name}&quot;.
+                  Are you sure? This will permanently delete &quot;{customer?.name}&quot; along with all associated markup rules, push logs, and catalog selections. This cannot be undone.
                 </p>
                 <div className="flex gap-2">
                   <button

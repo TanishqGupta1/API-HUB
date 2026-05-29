@@ -59,7 +59,6 @@ from modules.customer_catalog.routes import router as customer_catalog_router
 from modules.portal.routes import router as portal_router
 from modules.images.routes import router as images_router
 from modules.webhooks.routes import router as webhooks_router
-import modules.webhooks.models  # noqa: F401 — registers WebhookEndpoint with Base
 from modules.analytics.routes import router as analytics_router
 
 _PROD_REQUIRED_ENV_VARS = (
@@ -140,7 +139,7 @@ async def lifespan(app: FastAPI):
             dsn=_sentry_dsn,
             environment=os.getenv("ENVIRONMENT", "development"),
             # Env-driven so ops can tune without a code deploy (default 20%)
-            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.2")),
+            traces_sample_rate=min(1.0, max(0.0, float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.2")))),
             profiles_sample_rate=0.1,
             send_default_pii=False,
         )

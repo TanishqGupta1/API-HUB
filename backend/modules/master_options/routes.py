@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
+from modules.auth.dependencies import VGAdmin
 
 from .models import MasterOption, MasterOptionAttribute
 from .schemas import MasterOptionRead, OptionConfigItem, SyncStatus
@@ -70,6 +71,7 @@ async def sync_status(db: AsyncSession = Depends(get_db)):
 
 @router.post("/sync", status_code=202)
 async def sync_master_options(
+    _: VGAdmin,
     customer_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ):
