@@ -1,4 +1,5 @@
 """Integration Gateway — endpoints under /api/integrations/v1/"""
+import asyncio
 import hashlib
 import logging
 import secrets
@@ -584,14 +585,22 @@ async def admin_batch_push_request(
                 push_log_id=accepted.push_log_id,
                 status=final_status,
             ))
+        except asyncio.CancelledError:
+            raise  # never swallow task cancellation
         except Exception as exc:  # noqa: BLE001 — isolate per-customer failure
             logger.warning("batch_push accept failed customer=%s err=%s", customer_id, exc)
+            # Expose only the HTTPException detail to the caller; all other errors
+            # are reduced to a generic message to avoid leaking internals.
+            if isinstance(exc, HTTPException):
+                user_msg = str(exc.detail)[:200]
+            else:
+                user_msg = "Push acceptance failed"
             items.append(BatchPushItem(
                 customer_id=customer_id,
                 customer_name=customer_map.get(customer_id, str(customer_id)),
                 push_log_id=None,
                 status="error",
-                error=str(exc)[:200],
+                error=user_msg,
             ))
 
     return BatchPushResponse(batch_id=batch_id, total=len(items), items=items)

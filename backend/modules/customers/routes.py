@@ -41,7 +41,7 @@ async def _with_counts(db: AsyncSession, customer: Customer) -> CustomerRead:
 
 
 @router.get("", response_model=list[CustomerRead])
-async def list_customers(db: AsyncSession = Depends(get_db)):
+async def list_customers(_: VGAdmin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Customer).order_by(Customer.created_at.desc()))
     customers = result.scalars().all()
     return [await _with_counts(db, c) for c in customers]

@@ -59,12 +59,18 @@ function LoginForm() {
         throw new Error(formatApiError(json?.detail, res.status));
       }
 
-      // Cookie is set by the backend; just clear the cached user so the next
-      // fetchUser() pulls fresh data.
+      const user = await res.json().catch(() => null);
       clearCachedUser();
 
-      const next = searchParams.get("next") ?? "/";
-      router.push(next);
+      // Role-based redirect
+      const next = searchParams.get("next");
+      if (next) {
+        router.push(next);
+      } else if (user?.role === "customer_admin") {
+        router.push("/dashboard");
+      } else {
+        router.push("/");
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -74,182 +80,147 @@ function LoginForm() {
   }
 
   return (
-    <div
-      style={{
-        width: "100%",
-        maxWidth: "400px",
-        padding: "40px",
-        background: "var(--paper)",
-        border: "1px solid var(--border)",
-        borderRadius: "4px",
-      }}
-    >
-      <div style={{ marginBottom: "32px" }}>
-        <div
-          style={{
+    <div style={{
+      width: "100%",
+      maxWidth: "400px",
+      background: "var(--paper)",
+      border: "1px solid var(--border)",
+      borderRadius: "4px",
+      overflow: "hidden",
+    }}>
+      <div style={{ padding: "32px 40px 40px" }}>
+        {/* Header */}
+        <div style={{ marginBottom: "28px" }}>
+          <div style={{
             fontFamily: "var(--font-mono)",
-            fontSize: "11px",
+            fontSize: "10px",
             fontWeight: 700,
             color: "var(--blue)",
             textTransform: "uppercase",
             letterSpacing: "0.1em",
-            marginBottom: "8px",
-          }}
-        >
-          API-HUB
+            marginBottom: "6px",
+          }}>
+            API-HUB
+          </div>
+          <h1 style={{ fontSize: "20px", fontWeight: 700, color: "var(--ink)", margin: "0 0 4px" }}>
+            Sign in
+          </h1>
+          <p style={{ fontSize: "12px", color: "var(--ink-muted)", margin: 0 }}>
+            Manage suppliers, catalog, storefronts and OPS push pipeline.
+          </p>
         </div>
-        <h1
-          style={{
-            fontSize: "20px",
-            fontWeight: 700,
-            color: "var(--ink)",
-            margin: 0,
-          }}
-        >
-          Sign in
-        </h1>
-      </div>
 
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <div>
-          <label
-            htmlFor="email"
-            style={{
-              display: "block",
-              fontSize: "11px",
-              fontWeight: 700,
-              color: "var(--ink-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "6px",
-            }}
-          >
-            Email
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
+          <div>
+            <label htmlFor="email" style={labelStyle}>Email</label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" style={labelStyle}>Password</label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
+          <label style={{
+            display: "flex", alignItems: "center", gap: "8px",
+            fontSize: "13px", color: "var(--ink-muted)", cursor: "pointer", userSelect: "none",
+          }}>
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              style={{ width: "14px", height: "14px", cursor: "pointer" }}
+            />
+            Keep me signed in for 18 hours
           </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid var(--border)",
-              borderRadius: "3px",
-              background: "#fff",
-              color: "var(--ink)",
-              fontSize: "14px",
-              boxSizing: "border-box",
-            }}
-          />
-        </div>
 
-        <div>
-          <label
-            htmlFor="password"
-            style={{
-              display: "block",
-              fontSize: "11px",
-              fontWeight: 700,
-              color: "var(--ink-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "6px",
-            }}
-          >
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid var(--border)",
-              borderRadius: "3px",
-              background: "#fff",
-              color: "var(--ink)",
-              fontSize: "14px",
-              boxSizing: "border-box",
-            }}
-          />
-        </div>
-
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            fontSize: "13px",
-            color: "var(--ink-muted)",
-            cursor: "pointer",
-            userSelect: "none",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-            style={{ width: "14px", height: "14px", cursor: "pointer" }}
-          />
-          Keep me signed in for 18 hours
-        </label>
-
-        {error && (
-          <div
-            style={{
+          {error && (
+            <div style={{
               padding: "10px 12px",
               background: "rgba(220,38,38,0.08)",
               border: "1px solid rgba(220,38,38,0.3)",
               borderRadius: "3px",
               fontSize: "13px",
               color: "#dc2626",
+            }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              padding: "10px 16px",
+              background: "var(--blue)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "3px",
+              fontSize: "13px",
+              fontWeight: 700,
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.7 : 1,
+              transition: "background 0.15s",
             }}
           >
-            {error}
-          </div>
-        )}
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: "10px 16px",
-            background: "var(--blue)",
-            color: "#fff",
-            border: "none",
-            borderRadius: "3px",
-            fontSize: "13px",
-            fontWeight: 700,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.7 : 1,
-          }}
-        >
-          {loading ? "Signing in…" : "Sign in"}
-        </button>
-
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: "13px",
-            color: "var(--ink-muted)",
-          }}
-        >
-          Need an account?{" "}
-          <Link
-            href="/signup"
-            style={{ color: "var(--blue)", textDecoration: "none", fontWeight: 600 }}
+          <div
+            style={{
+              textAlign: "center",
+              fontSize: "13px",
+              color: "var(--ink-muted)",
+            }}
           >
-            Create one
-          </Link>
-        </div>
-      </form>
+            Need an account?{" "}
+            <Link
+              href="/signup"
+              style={{ color: "var(--blue)", textDecoration: "none", fontWeight: 600 }}
+            >
+              Create one
+            </Link>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: "11px",
+  fontWeight: 700,
+  color: "var(--ink-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  marginBottom: "6px",
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "8px 12px",
+  border: "1px solid var(--border)",
+  borderRadius: "3px",
+  background: "#fff",
+  color: "var(--ink)",
+  fontSize: "14px",
+  boxSizing: "border-box",
+};

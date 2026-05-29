@@ -355,6 +355,7 @@ export interface MasterOptionAttribute {
   id: string;
   ops_attribute_id: number;
   title: string;
+  attribute_key: string | null;
   sort_order: number;
   default_price: number | null;
 }

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
+from modules.auth.dependencies import VGAdmin
 
 from .models import MasterOption, MasterOptionAttribute
 from .schemas import MasterOptionRead, OptionConfigItem, SyncStatus
@@ -69,16 +70,32 @@ async def sync_status(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/sync", status_code=202)
-async def sync_master_options(db: AsyncSession = Depends(get_db)):
-    """Pull master options from the first configured OPS customer and upsert them."""
+async def sync_master_options(
+    _: VGAdmin,
+    customer_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Pull master options from an OPS customer and upsert them.
+
+    Pass ?customer_id=<uuid> to target a specific storefront; omit to use the
+    first active customer (legacy behaviour, non-deterministic with multiple
+    storefronts).
+    """
     from modules.customers.models import Customer
     from modules.ops_client.client import OpsAuth, OpsGraphQLClient
 
-    # Find first active customer with full OPS credentials
-    result = await db.execute(
-        select(Customer).where(Customer.is_active.is_(True))
-    )
-    customer = result.scalars().first()
+    if customer_id is not None:
+        result = await db.execute(
+            select(Customer).where(Customer.id == customer_id)
+        )
+        customer = result.scalars().first()
+        if not customer:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found.")
+    else:
+        result = await db.execute(
+            select(Customer).where(Customer.is_active.is_(True))
+        )
+        customer = result.scalars().first()
 
     if not customer:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No active OPS customer configured.")
@@ -168,6 +185,7 @@ async def sync_master_options(db: AsyncSession = Depends(get_db)):
                 master_option_id=row,
                 ops_attribute_id=int(attr_id),
                 title=attr.get("title") or "",
+                attribute_key=attr.get("attribute_key") or None,
                 sort_order=int(attr.get("sort_order") or 0),
                 default_price=attr.get("price"),
                 raw_json=attr,
