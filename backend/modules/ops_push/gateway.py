@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid as uuid_mod
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -26,6 +27,7 @@ from modules.ops_push.preflight import run_preflight
 from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
 from modules.suppliers.models import Supplier
+from modules.webhooks.service import fire_webhooks
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,7 @@ _MUTATION_DISPATCH: dict[str, tuple[str, str]] = {
     "set_additional_option":           (_m._SET_ADDITIONAL_OPTION,           "setAdditionalOption"),
     "set_additional_option_attributes": (_m._SET_ADDITIONAL_OPTION_ATTRIBUTES, "setAdditionalOptionAttributes"),
     "set_products_attribute_price":    (_m._SET_PRODUCTS_ATTRIBUTE_PRICE,    "setProductsAttributePrice"),
+    "update_product_stock":            (_m._UPDATE_PRODUCT_STOCK,            "updateProductStock"),
 }
 
 
@@ -135,6 +138,11 @@ class FakeOpsClient:
     async def set_products_attribute_price(self, variables: dict) -> dict:
         r = {"products_attributes_id": self._next_id()}
         self._record("set_products_attribute_price", variables, r)
+        return r
+
+    async def update_product_stock(self, variables: dict) -> dict:
+        r = {"products_id": variables.get("products_id", self._counter)}
+        self._record("update_product_stock", variables, r)
         return r
 
 
@@ -313,7 +321,7 @@ async def prepare_push_intent(
         })
 
     # ── Preflight (Task 7: 8 real checks + token cache) ──
-    preflight = await run_preflight(db, customer_id, product.id)
+    preflight = await run_preflight(db, customer_id, product.id, dry_run=req.dry_run)
     if not preflight.ok:
         # Use Task 7's spec-shaped error envelope (status/code/message/details/trace_id).
         envelope = preflight.to_error_envelope()
@@ -408,38 +416,65 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             plan = [step.model_dump(mode="json") for step in payload.plan]
 
             step_results: list[dict] = []
+            step_responses: dict[int, dict] = {}
             ops_product_id: Optional[str] = None
             final_status = "pushed" if not push_log.dry_run else "dry_run_pushed"
             cleanup_targets: Optional[dict] = None
 
             # ── Execute plan sequentially ──
-            for step in plan:
+            import hashlib, json as _json
+            for step_num, step in enumerate(plan, start=1):
                 mutation = step.get("mutation", "")
-                variables = step.get("variables", {})
+                raw_variables = step.get("variables", {})
                 t_start = datetime.now(timezone.utc)
+
+                # Resolve $stepN.field placeholders to real IDs returned by
+                # earlier steps before sending to OPS.
+                try:
+                    variables = _resolve_placeholders(raw_variables, step_responses)
+                except ValueError as e:
+                    step_results.append({
+                        "step": step_num,
+                        "mutation": mutation,
+                        "status": "failed",
+                        "ops_ids": {},
+                        "attempted_at": t_start.isoformat(),
+                        "request_fingerprint": "",
+                        "error": f"placeholder resolution failed: {e}",
+                    })
+                    cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
+                    final_status = "partial_failure" if ops_product_id else "failed"
+                    break
+
+                fingerprint = hashlib.sha256(
+                    _json.dumps({"mutation": mutation, "variables": variables}, sort_keys=True).encode()
+                ).hexdigest()[:16]
                 try:
                     method = getattr(client, _mutation_to_method(mutation), None)
                     if method is None:
                         raise NotImplementedError(f"No client method for {mutation}")
                     resp = await method(variables)
-                    latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
+                    step_responses[step_num] = resp
                     if "products_id" in resp:
                         ops_product_id = str(resp["products_id"])
+                    ops_ids = {k: str(v) for k, v in resp.items() if k.endswith("_id")}
                     step_results.append({
-                        "step": mutation,
-                        "ok": True,
-                        "ops_id": ops_product_id,
-                        "latency_ms": latency,
-                        "called_at": t_start.isoformat(),
+                        "step": step_num,
+                        "mutation": mutation,
+                        "status": "ok",
+                        "ops_ids": ops_ids,
+                        "attempted_at": t_start.isoformat(),
+                        "request_fingerprint": fingerprint,
                     })
                 except Exception as e:
-                    latency = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
                     step_results.append({
-                        "step": mutation,
-                        "ok": False,
+                        "step": step_num,
+                        "mutation": mutation,
+                        "status": "failed",
+                        "ops_ids": {},
+                        "attempted_at": t_start.isoformat(),
+                        "request_fingerprint": fingerprint,
                         "error": str(e),
-                        "latency_ms": latency,
-                        "called_at": t_start.isoformat(),
                     })
                     cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
                     final_status = "partial_failure" if ops_product_id else "failed"
@@ -524,6 +559,24 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 push_log.callback_status = "sent" if success else "failed"
                 push_log.callback_attempts = 1
                 await db.commit()
+
+            # ── Fire outbound webhooks ──
+            _webhook_event = (
+                "push.completed" if final_status in ("pushed", "dry_run_pushed")
+                else "push.partial_failure" if final_status == "partial_failure"
+                else "push.failed"
+            )
+            await fire_webhooks(
+                customer_id=push_log.customer_id,
+                event=_webhook_event,
+                payload={
+                    "push_log_id": str(push_log_id),
+                    "status": final_status,
+                    "ops_product_id": ops_product_id,
+                    "supplier_sku": push_log.supplier_sku,
+                    "dry_run": push_log.dry_run,
+                },
+            )
         finally:
             await client.aclose()
 
@@ -538,5 +591,44 @@ def _mutation_to_method(mutation: str) -> str:
         "setAdditionalOption":           "set_additional_option",
         "setAdditionalOptionAttributes": "set_additional_option_attributes",
         "setProductsAttributePrice":     "set_products_attribute_price",
+        "updateProductStock":            "update_product_stock",
     }
     return mapping.get(mutation, mutation)
+
+
+# Matches the placeholder format emitted by payload_builder._placeholder():
+# "$step1.products_id", "$step3.size_id", etc.
+_PLACEHOLDER_RE = re.compile(r"^\$step(\d+)\.(\w+)$")
+
+
+def _resolve_placeholders(value: Any, step_responses: dict[int, dict]) -> Any:
+    """Recursively replace ``$stepN.field`` strings with the value of ``field``
+    from the recorded response of step ``N``.
+
+    The payload builder emits these as forward references when a later step's
+    variable depends on an ID returned by an earlier step (e.g.
+    ``setProductSize`` needs the ``products_id`` returned by ``setProduct``).
+    The fake OPS client ignores variables entirely so dry-runs never noticed,
+    but live OPS would receive the literal string and reject it.
+    """
+    if isinstance(value, str):
+        m = _PLACEHOLDER_RE.match(value)
+        if not m:
+            return value
+        step_num = int(m.group(1))
+        field = m.group(2)
+        resp = step_responses.get(step_num)
+        if resp is None:
+            raise ValueError(
+                f"placeholder {value!r} references step {step_num} which has no recorded response"
+            )
+        if field not in resp:
+            raise ValueError(
+                f"placeholder {value!r}: step {step_num} response missing field {field!r}"
+            )
+        return resp[field]
+    if isinstance(value, dict):
+        return {k: _resolve_placeholders(v, step_responses) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_placeholders(v, step_responses) for v in value]
+    return value

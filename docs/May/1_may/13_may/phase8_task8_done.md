@@ -2,9 +2,9 @@
 
 **Owner:** Vidhi
 **Status:** Done
-**Date completed:** 2026-05-13
+**Date completed:** 2026-05-15 (initial: 2026-05-13, finalized: 2026-05-15)
 **Spec:** `docs/superpowers/specs/2026-05-11-integration-gateway-design.md`
-**Commit:** `f72b932`
+**Commit:** `29b7308`
 
 ---
 
@@ -23,7 +23,7 @@ This is the brain of the entire Phase 8 push pipeline.
 
 ### 1. It replaces the n8n push path entirely
 
-Before Phase 8, pushing a product to OPS meant calling `trigger_n8n_push()` — a fire-and-forget POST to an n8n webhook. FastAPI had no visibility into what happened after that. The push either worked or it didn't.
+Before Phase 8, pushing a product to OPS meant calling `trigger_n8n_push()` — a fire-and-forget POST to an n8n webhook. FastAPI had no visibility into what happened after that.
 
 This task replaces that with a fully observable, fault-tolerant pipeline that FastAPI owns end-to-end. n8n becomes one possible consumer of the gateway, not the gatekeeper.
 
@@ -33,55 +33,50 @@ This task replaces that with a fully observable, fault-tolerant pipeline that Fa
 |------|------------------------|
 | No duplicate pushes | Idempotency-Key ledger — same key + same body → returns existing push_log_id, no new work |
 | No concurrent pushes | `IN_FLIGHT` 409 if `processing` row exists for same `(customer, product)` |
-| No silent data drift | `payload_hash` computed at prepare time — replay with different body → 409 `IDEMPOTENCY_CONFLICT` |
+| No silent data drift | `payload_hash` at prepare time — replay with different body → 409 `IDEMPOTENCY_CONFLICT` |
 | Halt-no-rollback | On any mutation failure: stop, record `cleanup_targets`, set `partial_failure`. No auto-cleanup. |
-| Auth headers never logged | `_redact_auth()` replaces `Authorization` header values with `"Bearer ***"` before writing to `step_results` |
-
-### 3. It is designed to work before Tasks 4/5/6/7 are ready
-
-All four parallel tasks (OpsClient mutations, FakeOpsClient, payload_builder, preflight) are stubbed with clear `TODO` comments. When Urvashi and Shinchana merge their work, each stub is replaced with a single import line. Zero rework to the gateway logic itself.
+| Auth headers never logged | `_redact_auth()` replaces `Authorization` values with `"Bearer ***"` before writing to `step_results` |
 
 ---
 
 ## What was done
 
-### File created: `backend/modules/ops_push/gateway.py`
-
-#### Stubs (temporary — swap when parallel tasks merge)
-
-| Stub | Replaces when | One-line swap |
-|------|--------------|---------------|
-| `_stub_run_preflight()` | Task 7 merges | `from .preflight import run_preflight` |
-| `_stub_build_push_payload()` | Task 6 merges | `from .payload_builder import build_push_payload` |
-| `_StubOpsClient` | Task 4 merges | Real `OPSClient` with mutation methods |
-| `_StubFakeOpsClient` | Task 5 merges | `from .fake_ops_client import FakeOpsClient` |
+### File: `backend/modules/ops_push/gateway.py`
 
 #### `prepare_push_intent(req, key, db) -> PushRequestAccepted`
 
 Flow:
-1. Resolve customer + supplier + product from DB (never trusted from request body)
-2. Compute `payload_hash` via `build_push_payload`
+1. Resolve customer + supplier + product from DB
+2. Compute `payload_hash` via `compute_payload_hash(req.model_dump())`
 3. Check idempotency ledger on `(key_id, idempotency_key)`:
-   - Same key + same hash → return existing `push_log_id` (200, no new work)
+   - Same key + same hash → return existing `push_log_id` (no new work)
    - Same key + different hash → 409 `IDEMPOTENCY_CONFLICT`
 4. Check `IN_FLIGHT` — 409 if `processing` row exists for `(customer_id, product_id)`
-5. Run preflight → 422 `PREFLIGHT_BLOCKER` if blockers (no push_log row created)
-6. Insert `ProductPushLog` row with `status=accepted`, hash, key context, callback info
+5. Run preflight via `run_preflight(db, customer_id, product_id)` → 422 `PREFLIGHT_BLOCKER` if blockers
+6. Insert `ProductPushLog` row with `status=accepted`
 7. Return `{push_log_id, status: "accepted", links}`
 
 #### `execute_push(push_log_id) -> None`
 
 Flow:
-1. Atomic UPDATE: `accepted → processing` (prevents double-execution)
-2. Load product + customer from DB
-3. Select client: `dry_run=True` → `FakeOpsClient`, `dry_run=False` → real `OpsClient`
-4. Build mutation plan via `build_push_payload`
-5. Execute mutations sequentially. After each step: append to `step_results` with latency
-6. On failure: halt, populate `cleanup_targets`, set `partial_failure` or `failed`
-7. On success: upsert `push_mappings`, update `CustomerProductSelection`, set `pushed` or `dry_run_pushed`
-8. Fire callback if `callback_url` set. Update `callback_status` + `callback_attempts`
+1. Atomic UPDATE: `accepted → processing`
+2. Select client: `dry_run=True` → `_StubFakeOpsClient`, `dry_run=False` → `_StubOpsClient`
+3. Build mutation plan via `build_push_payload(db, customer_id, product_id)`
+4. Execute mutations sequentially; append to `step_results` with latency
+5. On failure: halt, populate `cleanup_targets`, set `partial_failure` or `failed`
+6. On success: upsert `push_mappings`, update `CustomerProductSelection`, set `pushed` or `dry_run_pushed`
+7. Fire callback if `callback_url` set; update `callback_status` + `callback_attempts`
 
 Uses its own `async_session` — safe to run as a `BackgroundTask` detached from the request session.
+
+#### Active stubs (Tasks 4 & 5 — Urvashi)
+
+| Stub | Replaces when | One-line swap |
+|------|--------------|---------------|
+| `_StubOpsClient` | Task 4 merges | Real `OpsClient` with mutation methods |
+| `_StubFakeOpsClient` | Task 5 merges | `from .fake_ops_client import FakeOpsClient` |
+
+**Removed on 2026-05-15:** `_PreflightStub`, `_stub_run_preflight`, `_PushPayloadStub`, `_stub_build_push_payload` — these were dead code after Task 6 (payload_builder) and Task 7 (preflight) merged from main.
 
 #### Helper functions
 
@@ -91,21 +86,36 @@ Uses its own `async_session` — safe to run as a `BackgroundTask` detached from
 
 ---
 
-## Verification
+## Tests
 
-```bash
-python -c "
-from modules.ops_push.gateway import prepare_push_intent, execute_push
-print('imports OK')
-"
-# → imports OK
+**File:** `backend/tests/test_gateway_push_request.py`
 
-curl http://127.0.0.1:8000/health
-# → {"status":"ok","service":"api-hub"}
+All tests use an autouse `_mock_preflight_ok` fixture that patches `run_preflight` to return `ok=True` — so test products don't need markup rules, images, or OPS credentials to reach the push stage. Tests that verify preflight behaviour apply their own inner patch.
+
+| Test | What it verifies |
+|------|-----------------|
+| `test_push_without_orchestrator_key_returns_401` | Missing key → 401 |
+| `test_push_with_bad_orchestrator_key_returns_401` | Bad key → 401 |
+| `test_push_resolves_product_by_supplier_sku` | Lookup by supplier_sku |
+| `test_push_resolves_product_by_product_id` | Lookup by product UUID |
+| `test_push_rejects_when_product_ref_empty` | No product_ref → 422 |
+| `test_push_dry_run_returns_terminal_status_inline` | dry_run=True → `dry_run_pushed` inline |
+| `test_push_idempotent_replay_returns_same_push_log` | Same key + body → same push_log_id |
+| `test_push_idempotency_conflict_on_different_body` | Same key + different body → 409 |
+| `test_push_in_flight_returns_409` | Processing row exists → 409 IN_FLIGHT |
+| `test_push_preflight_blocker_returns_422` | Preflight blocks → 422 PREFLIGHT_BLOCKER |
+| `test_execute_push_partial_failure_records_cleanup_targets` | Step fails → partial_failure + cleanup_targets |
+| `test_execute_push_fires_callback_on_success` | Successful push → callback POSTed, `callback_status=sent` |
+
+Also added missing schema migration in `main.py`:
+```python
+"ALTER TABLE integration_keys ADD COLUMN IF NOT EXISTS is_synthetic BOOLEAN NOT NULL DEFAULT FALSE"
 ```
 
 ---
 
 ## What's next
 
-When Urvashi finishes Task 4 (OpsClient mutations) and Task 5 (FakeOpsClient), and Shinchana finishes Task 6 (payload_builder) and Task 7 (preflight) — replace the 4 stubs in `gateway.py` with real imports. Then run Task 11 E2E tests.
+Waiting on:
+- Urvashi: Task 4 (OpsClient mutations) + Task 5 (FakeOpsClient) → swap 2 stubs in `gateway.py`
+- Urvashi: Task 11 E2E test against VG OPS staging

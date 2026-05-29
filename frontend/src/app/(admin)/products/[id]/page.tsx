@@ -17,8 +17,11 @@ import { PushHistory } from "@/components/products/push-history";
 import { useSelectedCustomer } from "@/lib/customer-context";
 import { BrandingPanel } from "@/components/products/BrandingPanel";
 import type { Customer as CustomerType } from "@/lib/types";
-import { CheckCircle2, Plus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ImageIcon, Layers, Plus } from "lucide-react";
+import { BatchPushModal } from "@/components/products/batch-push-modal";
 import { toast } from "sonner";
+import type { ProductPreview } from "@/lib/types";
+import Image from "next/image";
 
 const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
 
@@ -49,6 +52,10 @@ export default function ProductDetailPage() {
   const [adding, setAdding] = useState(false);
   const [addedThisSession, setAddedThisSession] = useState(false);
   const [customer, setCustomer] = useState<CustomerType | null>(null);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [batchPushOpen, setBatchPushOpen] = useState(false);
+  const [mirrorLoading, setMirrorLoading] = useState(false);
+  const [mirrorStatus, setMirrorStatus] = useState<{ total_images: number; mirrored_images: number; pending_images: number } | null>(null);
 
   useEffect(() => {
     if (selectedCustomerId) {
@@ -81,10 +88,12 @@ export default function ProductDetailPage() {
 
   const fetchData = async () => {
     try {
-      const [p] = await Promise.all([
+      const [p, preview] = await Promise.all([
         api<Product>(`/api/products/${id}`),
+        api<ProductPreview>(`/api/products/${id}/preview`).catch(() => null),
       ]);
       setProduct(p);
+      setMissingFields(preview?.missing_fields ?? []);
       try {
         const sup = await api<Supplier>(`/api/suppliers/${p.supplier_id}`);
         setSupplier(sup);
@@ -107,7 +116,33 @@ export default function ProductDetailPage() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [id]);
+  useEffect(() => {
+    fetchData();
+    api<{ total_images: number; mirrored_images: number; pending_images: number }>(
+      `/api/images/mirror-status/${id}`
+    ).then(setMirrorStatus).catch(() => null);
+  }, [id]);
+
+  async function handleMirrorImages() {
+    if (mirrorLoading) return;
+    setMirrorLoading(true);
+    try {
+      const result = await api<{ mirrored: number; skipped: number; failed: number }>(
+        `/api/images/mirror/${id}`,
+        { method: "POST" }
+      );
+      toast.success(`Mirrored ${result.mirrored} image${result.mirrored !== 1 ? "s" : ""}${result.failed ? ` (${result.failed} failed)` : ""}`);
+      const status = await api<{ total_images: number; mirrored_images: number; pending_images: number }>(
+        `/api/images/mirror-status/${id}`
+      );
+      setMirrorStatus(status);
+      fetchData();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Mirror failed");
+    } finally {
+      setMirrorLoading(false);
+    }
+  }
 
   const imageTabs = useMemo(() => {
     if (!product) return [] as Array<{ key: string; available: boolean }>;
@@ -128,10 +163,13 @@ export default function ProductDetailPage() {
   const dataSourceRows: Array<[string, string]> = useMemo(() => {
     const mappings = supplier?.field_mappings;
     if (!mappings || Object.keys(mappings).length === 0) return DEFAULT_DATA_SOURCES;
-    return Object.entries(mappings).map(([source, target]) => [
-      String(target),
-      `${supplier?.protocol ?? "source"} → ${source}`,
-    ]);
+    const rows = Object.entries(mappings)
+      .filter(([, target]) => typeof target === "string" || typeof target === "number")
+      .map(([source, target]) => [
+        String(target),
+        `${supplier?.protocol ?? "source"} → ${source}`,
+      ] as [string, string]);
+    return rows.length > 0 ? rows : DEFAULT_DATA_SOURCES;
   }, [supplier]);
 
 
@@ -153,6 +191,7 @@ export default function ProductDetailPage() {
   }
 
   return (
+    <>
     <div id="s-product-detail">
 
       {/* Source badge bar */}
@@ -167,6 +206,46 @@ export default function ProductDetailPage() {
           </span>
         )}
       </div>
+
+      {/* Missing fields banner */}
+      {missingFields.length > 0 && (() => {
+        const inventoryCount = missingFields.filter((f) => f.startsWith("inventory (variant")).length;
+        const priceCount = missingFields.filter((f) => f.startsWith("price (variant")).length;
+        const otherFields = missingFields.filter(
+          (f) => !f.startsWith("inventory (variant") && !f.startsWith("price (variant")
+        );
+        const displayFields = [
+          ...otherFields,
+          ...(priceCount > 0 ? [`price missing on ${priceCount} variant${priceCount !== 1 ? "s" : ""}`] : []),
+          ...(inventoryCount > 0 ? [`inventory missing on ${inventoryCount} variant${inventoryCount !== 1 ? "s" : ""} — run a sync`] : []),
+        ];
+        return (
+          <div className="mb-4 bg-[#fffbf0] border border-[#e8c840] rounded-lg px-5 py-3 flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-[#b8860b] shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[12px] font-semibold text-[#7a6000] mb-1.5">
+                {displayFields.length} field{displayFields.length !== 1 ? "s" : ""} incomplete — push may be blocked by preflight
+              </div>
+              <ul className="flex flex-wrap gap-x-6 gap-y-0.5">
+                {displayFields.map((f) => (
+                  <li key={f} className="text-[11px] text-[#8a7000] font-mono">· {f}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        );
+      })()}
+      {missingFields.length === 0 && product && (
+        <div className="mb-4 bg-[#f0f9f4] border-2 border-[#247a52] rounded-xl px-5 py-3 flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-[#247a52] shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-[13px] font-semibold text-[#1a5c3a]">Product data complete</div>
+            <div className="text-[12px] text-[#247a52]/80 mt-0.5">
+              All product fields are present. Customer-side checks (OPS credentials, markup rules, master options) run when you click <span className="font-semibold">Push to OPS</span>.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Page header ─────────────────────────────────── */}
       <div className="flex items-end justify-between mb-10 pb-5 border-b-2 border-[#1e1e24]">
@@ -212,11 +291,39 @@ export default function ProductDetailPage() {
               )}
             </button>
           )}
+          <button
+            onClick={handleMirrorImages}
+            disabled={mirrorLoading}
+            title={mirrorStatus ? `${mirrorStatus.mirrored_images}/${mirrorStatus.total_images} images on CDN` : "Mirror images to CDN"}
+            className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
+                       bg-white text-[#484852] border border-[#cfccc8] shadow-[0_3px_0_rgba(30,77,146,0.08)]
+                       hover:border-[#1e4d92] disabled:opacity-50 transition-all"
+          >
+            <ImageIcon className="w-4 h-4" />
+            {mirrorLoading ? "Mirroring…" : "Mirror Images"}
+            {mirrorStatus && mirrorStatus.total_images > 0 && (
+              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                mirrorStatus.pending_images === 0
+                  ? "bg-[#f0f9f4] text-[#247a52]"
+                  : "bg-[#fff7e0] text-[#c17c00]"
+              }`}>
+                {mirrorStatus.mirrored_images}/{mirrorStatus.total_images}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setBatchPushOpen(true)}
+            className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
+                       bg-[#1e4d92] text-white shadow-[0_3px_0_rgba(30,77,146,0.25)]
+                       hover:bg-[#173d74] transition-all"
+          >
+            <Layers className="w-4 h-4" />
+            Push to All Storefronts
+          </button>
           <PublishButton
             productId={id}
+            supplierSlug={supplier?.slug}
             onDone={() => {
-              // History will auto-refresh due to its own effect if we trigger a state change,
-              // but a full fetch is safer for now.
               setTimeout(fetchData, 2000);
             }}
           />
@@ -240,10 +347,12 @@ export default function ProductDetailPage() {
                           flex items-center justify-center mb-3
                           shadow-[4px_5px_0_rgba(30,77,146,0.08)] overflow-hidden">
             {activeImage ? (
-              <img
+              <Image
                 src={activeImage}
                 alt={`${product.product_name} (${activeImageTab})`}
-                className="w-full h-full object-contain p-5"
+                fill
+                sizes="300px"
+                className="object-contain p-5"
               />
             ) : (
               <div className="text-center">
@@ -286,6 +395,26 @@ export default function ProductDetailPage() {
               );
             })}
           </div>
+
+          {/* CDN mirror status */}
+          {mirrorStatus && mirrorStatus.total_images > 0 && (
+            <div className={`mt-2 flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-semibold ${
+              mirrorStatus.pending_images === 0
+                ? "bg-[#f0f9f4] text-[#247a52] border border-[#b0ddc0]"
+                : "bg-[#fff7e0] text-[#c17c00] border border-[#f0d090]"
+            }`}>
+              {mirrorStatus.pending_images === 0 ? (
+                <CheckCircle2 className="w-3 h-3 shrink-0" />
+              ) : (
+                <ImageIcon className="w-3 h-3 shrink-0" />
+              )}
+              <span>
+                {mirrorStatus.pending_images === 0
+                  ? `All ${mirrorStatus.total_images} images on CDN`
+                  : `${mirrorStatus.mirrored_images}/${mirrorStatus.total_images} on CDN · ${mirrorStatus.pending_images} pending`}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Right — metadata */}
@@ -517,5 +646,15 @@ export default function ProductDetailPage() {
         </div>
       </div>
     </div>
+
+    {batchPushOpen && product && (
+      <BatchPushModal
+        productId={id}
+        supplierSlug={supplier?.slug}
+        supplierSku={product.supplier_sku}
+        onClose={() => setBatchPushOpen(false)}
+      />
+    )}
+    </>
   );
 }

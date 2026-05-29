@@ -21,6 +21,7 @@ from modules.integrations.schemas import (
 from modules.push_log.models import ProductPushLog
 from modules.markup.engine import calculate_price
 from .gateway import execute_push, prepare_push_intent
+from .task_runner import run_push_task
 from .merge import merge_product_with_decorations
 
 logger = logging.getLogger(__name__)
@@ -105,7 +106,7 @@ async def push_product(
     # invoked from a non-FastAPI context), fall back to awaiting inline so
     # the row doesn't stay in 'accepted' forever.
     if background_tasks is not None:
-        background_tasks.add_task(execute_push, accepted.push_log_id)
+        background_tasks.add_task(run_push_task, accepted.push_log_id)
     else:
         await execute_push(accepted.push_log_id)
         await db.refresh(

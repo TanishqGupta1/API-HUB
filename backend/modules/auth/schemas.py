@@ -23,6 +23,7 @@ def _validate_password_strength(value: str) -> str:
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    remember_me: bool = False
 
     @field_validator("email")
     @classmethod

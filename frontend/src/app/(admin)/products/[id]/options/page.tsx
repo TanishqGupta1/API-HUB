@@ -34,6 +34,7 @@ export default function ProductOptionsPage() {
 
   useEffect(() => {
     fetchOptions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const updateAttr = (optionId: string, attrId: string, field: string, value: any) => {

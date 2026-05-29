@@ -16,6 +16,7 @@ import {
   type ReactNode,
 } from "react";
 import { api } from "./api";
+import { log } from "./log";
 import { toast } from "sonner";
 
 const ID_KEY = "apiHub.selectedCustomerId";
@@ -37,17 +38,49 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
   const [selectedCustomerName, setNameState] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate from localStorage exactly once on mount (client-only).
+  // Hydrate from localStorage, then auto-select first active customer if nothing stored.
   useEffect(() => {
+    let storedId: string | null = null;
+    let storedName: string | null = null;
     try {
-      const storedId = window.localStorage.getItem(ID_KEY);
-      const storedName = window.localStorage.getItem(NAME_KEY);
+      storedId = window.localStorage.getItem(ID_KEY);
+      storedName = window.localStorage.getItem(NAME_KEY);
       if (storedId) setIdState(storedId);
       if (storedName) setNameState(storedName);
     } catch {
       // localStorage may be blocked in some contexts — fail silent.
     }
     setHydrated(true);
+
+    // Always validate stored ID against the API — if it no longer exists
+    // (e.g. after a DB reset), clear it and fall back to the first customer.
+    api<{ id: string; name: string }[]>("/api/customers")
+      .then((cs) => {
+        const validIds = new Set(cs.map((c) => c.id));
+        const isValid = storedId && validIds.has(storedId);
+
+        if (!isValid) {
+          // Stale ID — clear localStorage and pick first available customer
+          try {
+            window.localStorage.removeItem(ID_KEY);
+            window.localStorage.removeItem(NAME_KEY);
+          } catch { /* ignore */ }
+
+          const first = cs.find((c) => (c as { is_active?: boolean }).is_active !== false) ?? cs[0];
+          if (first) {
+            setIdState(first.id);
+            setNameState(first.name);
+            try {
+              window.localStorage.setItem(ID_KEY, first.id);
+              window.localStorage.setItem(NAME_KEY, first.name);
+            } catch { /* ignore */ }
+          } else {
+            setIdState(null);
+            setNameState(null);
+          }
+        }
+      })
+      .catch(log.error);
   }, []);
 
   const setSelectedCustomer = useCallback((id: string | null, name: string | null) => {

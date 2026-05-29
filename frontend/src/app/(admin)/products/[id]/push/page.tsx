@@ -23,7 +23,11 @@
  */
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Loader2, Wand2 } from "lucide-react";
+import { useState } from "react";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { API_BASE } from "@/lib/env";
 
 import { DryRunControls } from "@/components/push/DryRunControls";
 import { PreviewPanel } from "@/components/push/PreviewPanel";
@@ -45,10 +49,12 @@ export default function PushPreviewPage() {
   const searchParams = useSearchParams();
   const productId = params.id;
   const customerId = searchParams.get("customer_id");
+  const supplierSlugParam = searchParams.get("supplier_slug");
 
   const { preflight, payload, error: dryRunError, loading, refetch } =
-    usePushDryRun(customerId, productId);
+    usePushDryRun(customerId, productId, supplierSlugParam);
   const { push, loading: pushing, error: pushError } = usePushRequest();
+  const [resolvingMappings, setResolvingMappings] = useState(false);
 
   if (!customerId) {
     return <MissingCustomerCard productId={productId} />;
@@ -58,26 +64,59 @@ export default function PushPreviewPage() {
     return <LoadingCard />;
   }
 
-  if (dryRunError && !payload) {
-    return (
-      <ErrorCard
-        message={dryRunError.message}
-        details={
-          (dryRunError.details?.field as string | undefined) ?? null
-        }
-        suggestion={
-          (dryRunError.details?.suggestion as string | undefined) ?? null
-        }
-        onRetry={refetch}
-      />
-    );
-  }
-
   const blockers = preflight?.blockers ?? [];
   const hasBlockers = blockers.length > 0;
+  const mappingsBlocked = blockers.includes("push_mappings_present");
   const supplierSku = payload?.supplier_sku ?? "PRODUCT";
-  const supplierSlug = payload?.supplier_slug ?? "sanmar";
+  const supplierSlug = payload?.supplier_slug ?? supplierSlugParam ?? "sanmar";
   const realConfirmText = `PUSH ${supplierSku} TO STAGING`;
+
+  async function downloadProductJson() {
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/products/${productId}/export`,
+        { credentials: "include" }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${data.product?.supplier_sku ?? productId}_export.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // download failure is non-critical — push already succeeded
+    }
+  }
+
+  async function handleResolveMappings() {
+    if (!customerId) return;
+    setResolvingMappings(true);
+    try {
+      const result = await api<{
+        options_resolved: number;
+        attributes_resolved: number;
+        missing_option_keys: string[];
+      }>("/api/push-mappings/resolve", {
+        method: "POST",
+        body: JSON.stringify({ customer_id: customerId, product_id: productId }),
+      });
+      if (result.missing_option_keys.length > 0) {
+        toast.warning(
+          `Resolved ${result.options_resolved} options. Still missing: ${result.missing_option_keys.join(", ")} — sync master options first.`
+        );
+      } else {
+        toast.success(`Mapped ${result.options_resolved} options, ${result.attributes_resolved} attributes`);
+      }
+      refetch();
+    } catch {
+      toast.error("Could not resolve mappings — make sure master options are synced first.");
+    } finally {
+      setResolvingMappings(false);
+    }
+  }
 
   async function handlePush(dryRun: boolean) {
     if (!customerId) return;
@@ -89,6 +128,9 @@ export default function PushPreviewPage() {
       dryRun,
     });
     if (resp?.push_log_id) {
+      await downloadProductJson();
+    }
+    if (resp?.push_log_id) {
       router.push(`/push-log/${resp.push_log_id}`);
     }
   }
@@ -99,8 +141,6 @@ export default function PushPreviewPage() {
       <header className="flex items-end justify-between pb-5 border-b-2 border-[#1e1e24]">
         <div>
           <Link
-            // Use the catalog list in mock/demo mode — the legacy /products/[id]
-            // detail page requires a real UUID and 500s on demo strings like "abc-123".
             href={_isUuid(productId) ? `/products/${productId}` : "/products"}
             className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-[#888894] hover:text-[#1e4d92] transition-colors mb-3"
           >
@@ -131,6 +171,35 @@ export default function PushPreviewPage() {
         )}
       </header>
 
+      {/* Preflight error — shown inline so the page still has context */}
+      {dryRunError && !payload && (
+        <div className="bg-[#fdf2f2] border-2 border-[#b93232] rounded-2xl px-6 py-5 flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-[#b93232] shrink-0" />
+            <span className="text-[14px] font-bold text-[#b93232]">Preflight blocked</span>
+          </div>
+          <p className="text-[13px] text-[#7b1d1d]">{dryRunError.message}</p>
+          {(dryRunError.details?.field as string | undefined) && (
+            <p className="font-mono text-[11px] text-[#7b1d1d] opacity-70">
+              field: {dryRunError.details.field as string}
+            </p>
+          )}
+          {(dryRunError.details?.suggestion as string | undefined) && (
+            <p className="text-[12px] text-[#7b1d1d] italic">
+              {dryRunError.details.suggestion as string}
+            </p>
+          )}
+          <div>
+            <button
+              onClick={refetch}
+              className="mt-1 px-4 h-9 bg-white border-2 border-[#b93232] text-[#b93232] rounded-full font-bold text-[11px] uppercase tracking-wide hover:bg-[#fdf2f2] transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Image policy warnings — if any */}
       {payload?.image_warnings && payload.image_warnings.length > 0 && (
         <div className="bg-[#fff7e0] border-2 border-[#c17c00] rounded-2xl px-4 py-3 text-[12px] text-[#7a4900] flex items-start gap-2">
@@ -146,12 +215,40 @@ export default function PushPreviewPage() {
         </div>
       )}
 
-      {/* Preflight + computed prices + plan */}
-      <PreviewPanel
-        preflight={preflight}
-        plan={payload?.plan ?? []}
-        computedPrices={payload?.computed_prices}
-      />
+      {/* Preflight + computed prices + plan — only when we have data */}
+      {!dryRunError && (
+        <PreviewPanel
+          preflight={preflight}
+          plan={payload?.plan ?? []}
+          computedPrices={payload?.computed_prices}
+        />
+      )}
+
+      {/* One-click fix for missing push mappings */}
+      {mappingsBlocked && (
+        <div className="bg-[#fff7e0] border-2 border-[#c17c00] rounded-2xl px-6 py-5 flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-[#c17c00] shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[13px] font-bold text-[#7a4900]">
+                Push mappings missing for this product
+              </div>
+              <p className="text-[12px] text-[#7a4900] mt-1">
+                Make sure you have synced master options from the storefront settings first,
+                then click Auto-Resolve to map this product&apos;s Color/Size options.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleResolveMappings}
+            disabled={resolvingMappings}
+            className="shrink-0 flex items-center gap-2 px-4 h-10 rounded-xl bg-[#c17c00] hover:bg-[#a36800] disabled:opacity-50 text-white font-bold text-[11px] uppercase tracking-wider transition-all"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            {resolvingMappings ? "Resolving…" : "Auto-Resolve"}
+          </button>
+        </div>
+      )}
 
       {pushError && (
         <div className="bg-[#fdf2f2] border-2 border-[#b93232] rounded-2xl px-4 py-3 text-[12px] text-[#b93232] flex items-center gap-2">
@@ -162,21 +259,23 @@ export default function PushPreviewPage() {
         </div>
       )}
 
-      {/* Dry-run + live controls */}
-      <DryRunControls
-        liveConfirmText={realConfirmText}
-        disabled={hasBlockers || pushing}
-        disabledReason={
-          hasBlockers
-            ? `Push blocked: ${blockers.join(", ")}`
-            : pushing
-              ? "A push is already in flight"
-              : undefined
-        }
-        mockMode={IS_MOCK_MODE}
-        onDryRun={() => handlePush(true)}
-        onLive={() => handlePush(false)}
-      />
+      {/* Dry-run + live controls — hidden when preflight blocked */}
+      {!dryRunError && (
+        <DryRunControls
+          liveConfirmText={realConfirmText}
+          disabled={hasBlockers || pushing}
+          disabledReason={
+            hasBlockers
+              ? `Push blocked: ${blockers.join(", ")}`
+              : pushing
+                ? "A push is already in flight"
+                : undefined
+          }
+          mockMode={IS_MOCK_MODE}
+          onDryRun={() => handlePush(true)}
+          onLive={() => handlePush(false)}
+        />
+      )}
     </div>
   );
 }

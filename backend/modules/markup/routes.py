@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
+from modules.auth.dependencies import require_customer_access
 from modules.catalog.ingest import require_ingest_secret
 from modules.catalog.models import ProductOption
 from modules.master_options.models import MasterOption, MasterOptionAttribute
@@ -153,7 +154,11 @@ async def _build_ops_product_options(
     return out
 
 
-@router.get("/{customer_id}", response_model=list[MarkupRuleRead])
+@router.get(
+    "/{customer_id}",
+    response_model=list[MarkupRuleRead],
+    dependencies=[Depends(require_customer_access)],
+)
 async def list_markup_rules(customer_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(MarkupRule)

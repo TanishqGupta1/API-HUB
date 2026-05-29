@@ -96,8 +96,9 @@ export default function MonitoringPage() {
   async function load() {
     setLoading(true);
     try {
+      const apiBase = API_BASE;
       const [h, s] = await Promise.all([
-        fetch(`${API_BASE}/health`).then((r) => r.json() as Promise<HealthStatus>),
+        fetch(`${apiBase}/health`).then((r) => r.json() as Promise<HealthStatus>),
         api<Stats>("/api/stats"),
       ]);
       setHealth(h);

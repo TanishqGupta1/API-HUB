@@ -5,8 +5,17 @@ cooperates with FastAPI's event loop. A single ``PromoStandardsClient`` instance
 is tied to one WSDL (one service type). The caller constructs a new client per
 service — product_data / inventory / ppc / media each have their own WSDL.
 
-The WSDL is parse-cached on disk via ``zeep.cache.SqliteCache`` so subsequent
-instances for the same URL skip re-parsing.
+WSDL caching strategy
+---------------------
+* Default: ``zeep.cache.InMemoryCache`` — survives within a process restart but
+  not across container restarts.  Zero filesystem dependency, safe in Docker.
+* Optional: set ``WSDL_CACHE_DIR`` env var to a directory mounted as a Docker
+  volume.  The client then uses ``zeep.cache.SqliteCache(path=…)`` so the
+  parsed WSDL survives container restarts.
+
+The previous default of ``SqliteCache()`` (no path → ``/tmp`` inside the
+container) was lost on every container restart, giving the worst of both
+worlds: slow on every cold start AND no persistence.
 
 Response parsing is **deliberately defensive**. PromoStandards implementations
 in the wild deviate from the spec (different casing, optional wrappers,
@@ -19,10 +28,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any, Iterable
 
 from zeep import Client as ZeepClient
-from zeep.cache import SqliteCache
 from zeep.transports import Transport
 
 from .schemas import (
@@ -54,6 +63,34 @@ SANMAR_CATEGORIES = [
 ]
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# WSDL cache factory
+
+def _build_wsdl_cache():
+    """Return the best available zeep cache object.
+
+    Checks ``WSDL_CACHE_DIR`` env var:
+    - Set → SqliteCache stored in that directory (mount a Docker volume there
+      for persistence across container restarts).
+    - Unset → InMemoryCache (process-lifetime cache; no filesystem dependency).
+    """
+    cache_dir = os.getenv("WSDL_CACHE_DIR", "").strip()
+    if cache_dir:
+        from zeep.cache import SqliteCache
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_path = os.path.join(cache_dir, "wsdl.db")
+        log.debug("WSDL cache: SqliteCache at %s", cache_path)
+        return SqliteCache(path=cache_path)
+    from zeep.cache import InMemoryCache
+    log.debug("WSDL cache: InMemoryCache (process-lifetime)")
+    return InMemoryCache()
+
+
+# Module-level singleton — one cache shared across all client instances so
+# a WSDL fetched by one supplier request benefits all subsequent ones.
+_WSDL_CACHE = _build_wsdl_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +186,7 @@ class PromoStandardsClient:
         from zeep.plugins import HistoryPlugin
         settings = Settings(strict=False, xml_huge_tree=True)
         transport = Transport(
-            cache=SqliteCache(), timeout=30, operation_timeout=120
+            cache=_WSDL_CACHE, timeout=30, operation_timeout=120
         )
         self._history = HistoryPlugin()
 
@@ -416,7 +453,7 @@ class PromoStandardsClient:
             # on this client stay pointed at the original PS service.
             try:
                 transport = Transport(
-                    cache=SqliteCache(), timeout=60, operation_timeout=300
+                    cache=_WSDL_CACHE, timeout=60, operation_timeout=300
                 )
                 svc = ZeepClient(extension_wsdl_url, transport=transport).service
             except Exception as exc:  # noqa: BLE001
@@ -556,7 +593,11 @@ class PromoStandardsClient:
             if style not in grouped:
                 if limit and len(grouped) >= limit:
                     continue
-                cat_name = _text(_attr(basic, "category"))
+                # SanMar's response usually omits 'category' on each product
+                # even when we filtered by category. Fall back to the
+                # category_name argument we asked SanMar for — every product
+                # in this response is, by definition, in that category.
+                cat_name = _text(_attr(basic, "category")) or category_name
                 grouped[style] = PSProductData(
                     product_id=style,
                     product_name=_text(_attr(basic, "productTitle")),
@@ -615,27 +656,74 @@ class PromoStandardsClient:
     # -- Inventory ---------------------------------------------------------
 
     async def get_inventory(
-        self, product_ids: list[str], ws_version: str = "2.0.0"
+        self,
+        product_ids: list[str],
+        ws_version: str = "2.0.0",
+        part_ids: list[str] | None = None,
     ) -> list[PSInventoryLevel]:
+        """Fetch inventory for ``product_ids``.
+
+        When ``part_ids`` is provided we call ``getFilteredInventoryLevels``
+        (PromoStandards Inventory 2.0.0) — SanMar's v200 endpoint returns empty
+        or times out on the unfiltered ``getInventoryLevels`` for catalogs
+        with many SKUs, but always responds correctly to the filtered variant.
+
+        Without ``part_ids`` we fall back to ``getInventoryLevels`` for
+        suppliers whose implementation supports the simpler call.
+        """
         return await asyncio.to_thread(
-            self._sync_get_inventory, product_ids, ws_version
+            self._sync_get_inventory, product_ids, ws_version, part_ids
         )
 
     def _sync_get_inventory(
-        self, product_ids: list[str], ws_version: str
+        self,
+        product_ids: list[str],
+        ws_version: str,
+        part_ids: list[str] | None = None,
     ) -> list[PSInventoryLevel]:
         svc = self._get_service()
         out: list[PSInventoryLevel] = []
         for pid in product_ids:
-            try:
-                response = svc.getInventoryLevels(
-                    productId=pid, **self._auth(ws_version)
-                )
-            except Exception as exc:  # noqa: BLE001
-                log.warning("getInventoryLevels(%s) failed: %s", pid, exc)
+            response = self._call_inventory(svc, pid, ws_version, part_ids)
+            if response is None:
                 continue
             out.extend(self._parse_inventory(response, pid))
         return out
+
+    def _call_inventory(
+        self,
+        svc: Any,
+        product_id: str,
+        ws_version: str,
+        part_ids: list[str] | None,
+    ) -> Any:
+        """Try filtered first when part_ids are known; fall back to unfiltered.
+
+        SanMar v200 reliably answers ``getFilteredInventoryLevels`` and often
+        rejects/empties ``getInventoryLevels`` for full-catalog queries; other
+        PromoStandards implementations (S&S, Alphabroder) are the opposite.
+        Calling filtered-first when we have part IDs covers both worlds.
+        """
+        if part_ids:
+            try:
+                return svc.getFilteredInventoryLevels(
+                    productId=product_id,
+                    partIdArray={"partId": part_ids},
+                    **self._auth(ws_version),
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "getFilteredInventoryLevels(%s) failed, falling back: %s",
+                    product_id,
+                    exc,
+                )
+        try:
+            return svc.getInventoryLevels(
+                productId=product_id, **self._auth(ws_version)
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("getInventoryLevels(%s) failed: %s", product_id, exc)
+            return None
 
     def _parse_inventory(self, response: Any, product_id: str) -> Iterable[PSInventoryLevel]:
         inv_root = _attr(response, "Inventory", "inventory") or response

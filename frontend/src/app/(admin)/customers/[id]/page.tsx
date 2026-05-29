@@ -18,6 +18,12 @@ import {
   ExternalLink,
   ChevronRight,
   LayoutGrid,
+  KeyRound,
+  Pencil,
+  X,
+  CheckCircle2,
+  RefreshCw,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,6 +37,20 @@ export default function CustomerSettingsPage() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(!isInvalidId);
   const [saving, setSaving] = useState(false);
+
+  // Client Secret inline update
+  const [showSecretUpdate, setShowSecretUpdate] = useState(false);
+  const [newSecret, setNewSecret] = useState("");
+  const [savingSecret, setSavingSecret] = useState(false);
+  const [savedSecret, setSavedSecret] = useState(false);
+
+  // Master options sync
+  const [syncingOptions, setSyncingOptions] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ synced: number } | null>(null);
+
+  // Delete storefront
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (isInvalidId) return;
@@ -46,7 +66,7 @@ export default function CustomerSettingsPage() {
       }
     }
     load();
-  }, [id]);
+  }, [id, isInvalidId]);
 
   const handleSave = async () => {
     if (!customer) return;
@@ -61,6 +81,56 @@ export default function CustomerSettingsPage() {
       toast.error("Failed to save settings");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveSecret = async () => {
+    if (!newSecret.trim()) return;
+    setSavingSecret(true);
+    try {
+      await api(`/api/customers/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ ops_client_secret: newSecret.trim() }),
+      });
+      setSavedSecret(true);
+      setShowSecretUpdate(false);
+      setNewSecret("");
+      toast.success("Client Secret updated");
+      setTimeout(() => setSavedSecret(false), 3000);
+    } catch (e) {
+      toast.error("Failed to update Client Secret");
+    } finally {
+      setSavingSecret(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api(`/api/customers/${id}`, { method: "DELETE" });
+      toast.success("Storefront deleted");
+      router.push("/customers");
+    } catch (e) {
+      toast.error("Failed to delete storefront");
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
+  const handleSyncOptions = async () => {
+    setSyncingOptions(true);
+    setSyncResult(null);
+    try {
+      const result = await api<{ synced: number; status: string }>(
+        `/api/master-options/sync?customer_id=${id}`,
+        { method: "POST" }
+      );
+      setSyncResult({ synced: result.synced });
+      toast.success(`Synced ${result.synced} master options from OPS`);
+    } catch (e) {
+      toast.error("Failed to sync master options — check OPS credentials");
+    } finally {
+      setSyncingOptions(false);
     }
   };
 
@@ -201,13 +271,75 @@ export default function CustomerSettingsPage() {
                 <label className="text-[10px] font-black uppercase tracking-widest text-[#888894]">Token Endpoint</label>
                 <div className="relative">
                   <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888894]" />
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={currentCustomer.ops_token_url}
                     onChange={(e) => setCustomer(prev => prev ? {...prev, ops_token_url: e.target.value} : null)}
                     className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#cfccc8] text-sm font-bold font-mono focus:border-[#1e4d92] outline-none transition-all"
                   />
                 </div>
+              </div>
+
+              {/* Client Secret — stored encrypted; never returned by API */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-[#888894]">OAuth Client Secret</label>
+                  {!showSecretUpdate && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowSecretUpdate(true); setSavedSecret(false); }}
+                      className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#1e4d92] hover:text-[#173d74] transition-colors"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      {savedSecret ? "Updated ✓" : "Update Secret"}
+                    </button>
+                  )}
+                </div>
+
+                {!showSecretUpdate ? (
+                  <div className="flex items-center gap-3 h-12 px-4 rounded-xl border border-[#cfccc8] bg-[#f9f7f4]">
+                    <KeyRound className="w-4 h-4 text-[#888894]" />
+                    {savedSecret ? (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-[#247a52]" />
+                        <span className="text-xs font-bold text-[#247a52]">Secret updated successfully</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-bold text-[#888894] tracking-widest">••••••••••••••••</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888894]" />
+                      <input
+                        type="password"
+                        value={newSecret}
+                        onChange={(e) => setNewSecret(e.target.value)}
+                        placeholder="Enter new client secret"
+                        autoFocus
+                        className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#1e4d92] text-sm font-mono focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveSecret}
+                        disabled={savingSecret || !newSecret.trim()}
+                        className="flex-1 h-10 rounded-xl bg-[#1e4d92] hover:bg-[#173d74] disabled:opacity-50 text-white font-bold text-[10px] uppercase tracking-widest transition-all"
+                      >
+                        {savingSecret ? "Saving…" : "Save Secret"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowSecretUpdate(false); setNewSecret(""); }}
+                        className="w-10 h-10 rounded-xl border border-[#cfccc8] flex items-center justify-center text-[#888894] hover:text-[#b93232] hover:border-[#b93232] transition-all"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
             </div>
@@ -249,14 +381,71 @@ export default function CustomerSettingsPage() {
             </div>
           </div>
 
+          {/* Sync Master Options */}
+          <div className="bg-white border border-[#cfccc8] rounded-2xl p-6 space-y-4 shadow-sm">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-[#1e4d92]" />
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-[#1e1e24]">Push Mappings</h3>
+            </div>
+            <p className="text-[11px] text-[#888894] leading-relaxed">
+              Pull Color, Size and other option IDs from this OPS instance so PC61 variants can be mapped before pushing.
+            </p>
+            {syncResult && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-[#f0f9f4] border border-[#247a52] rounded-lg">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#247a52] shrink-0" />
+                <span className="text-[11px] font-bold text-[#247a52]">
+                  {syncResult.synced} master options synced from OPS
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleSyncOptions}
+              disabled={syncingOptions}
+              className="w-full h-10 rounded-xl border-2 border-[#1e4d92] text-[#1e4d92] hover:bg-[#1e4d92] hover:text-white disabled:opacity-50 font-bold text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncingOptions ? "animate-spin" : ""}`} />
+              {syncingOptions ? "Syncing…" : "Sync Master Options"}
+            </button>
+          </div>
+
           <div className="bg-[#fdf2f2] border border-[#f5c6cb] rounded-2xl p-6 space-y-4">
-             <h3 className="text-[10px] font-black uppercase tracking-widest text-[#b93232]">Danger Zone</h3>
-             <p className="text-[11px] text-[#b93232] font-medium leading-relaxed">
-               Deactivating this instance will stop all product syncs immediately. Existing products on the storefront will remain but won&apos;t be updated.
-             </p>
-             <Button variant="outline" className="w-full border-[#f5c6cb] text-[#b93232] hover:bg-[#b93232] hover:text-white font-bold text-[10px] uppercase tracking-wider h-10 transition-all">
-                Terminate Node Connection
-             </Button>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-[#b93232]">Danger Zone</h3>
+            <p className="text-[11px] text-[#b93232] font-medium leading-relaxed">
+              Permanently deletes this storefront and all its credentials. This cannot be undone.
+            </p>
+            {!confirmDelete ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="w-full h-10 rounded-xl border-2 border-[#b93232] text-[#b93232] hover:bg-[#b93232] hover:text-white font-bold text-[10px] uppercase tracking-wider transition-all"
+              >
+                Delete Storefront
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-[11px] font-bold text-[#b93232]">
+                  Are you sure? This will permanently delete &quot;{customer?.name}&quot; along with all associated markup rules, push logs, and catalog selections. This cannot be undone.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex-1 h-10 rounded-xl bg-[#b93232] text-white font-bold text-[10px] uppercase tracking-wider disabled:opacity-50 transition-all"
+                  >
+                    {deleting ? "Deleting…" : "Yes, Delete"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="flex-1 h-10 rounded-xl border-2 border-[#cfccc8] text-[#888894] font-bold text-[10px] uppercase tracking-wider hover:border-[#1e1e24] hover:text-[#1e1e24] transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>

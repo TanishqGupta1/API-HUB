@@ -12,7 +12,7 @@ export interface Supplier {
   promostandards_code: string | null;
   base_url: string | null;
   adapter_class: string | null;
-  auth_config: Record<string, string>;
+  has_credentials: boolean;
   field_mappings: Record<string, string> | null;
   is_active: boolean;
   created_at: string;
@@ -142,6 +142,7 @@ export interface Product {
   id: string;
   supplier_id: string;
   supplier_name: string;
+  supplier_slug: string | null;
   supplier_has_decoration_overlay: boolean;
   supplier_sku: string;
   product_name: string;
@@ -162,6 +163,25 @@ export interface Product {
   apparel_details: ApparelDetails | null;
   print_details: PrintDetails | null;
   sizes: ProductSize[];
+}
+
+export interface VariantPreview {
+  sku: string | null;
+  size: string | null;
+  color: string | null;
+  price: number | null;
+  inventory: number | null;
+}
+
+export interface ProductPreview {
+  id: string;
+  title: string;
+  description: string | null;
+  brand: string | null;
+  category: string | null;
+  images: ProductImage[];
+  variants: VariantPreview[];
+  missing_fields: string[];
 }
 
 export interface ProductPushStatus {
@@ -291,7 +311,7 @@ export interface SyncJob {
   supplier_name: string;
   job_type: JobType;
   status: SyncStatus;
-  started_at: string;
+  started_at: string | null;
   completed_at: string | null;
   total_products: number;
   success_count: number;
@@ -335,6 +355,7 @@ export interface MasterOptionAttribute {
   id: string;
   ops_attribute_id: number;
   title: string;
+  attribute_key: string | null;
   sort_order: number;
   default_price: number | null;
 }
@@ -399,6 +420,7 @@ export interface CustomerProductSelection {
 
   // Embedded product fields (saves an extra fetch on the catalog page)
   supplier_id: string;
+  supplier_slug: string | null;
   supplier_sku: string;
   product_name: string;
   product_type: string;
@@ -569,14 +591,18 @@ export interface OPSPushPayload {
 
 /** Append-only entry written by the worker to product_push_log.step_results JSONB. */
 export interface OPSStepResult {
+  /** Sequential step index (always a number — backend StepResultOut uses int). */
   step: number;
-  source_key: string;
+  source_key?: string | null;
   mutation: string;
-  request_fingerprint: string;
-  ops_ids: Record<string, unknown>;
-  attempted_at: string;
-  /** Synthetic field added by the UI when rendering — not on the wire. */
-  status?: "ok" | "failed";
+  request_fingerprint?: string | null;
+  ops_ids?: Record<string, unknown> | null;
+  attempted_at?: string | null;
+  status?: "ok" | "failed" | null;
+  /** Derived boolean — true when status === "ok". */
+  ok?: boolean;
+  error?: string | null;
+  latency_ms?: number | null;
 }
 
 /** Opaque JSONB shape; spec leaves the contents flexible. */
@@ -615,7 +641,7 @@ export interface PushLog {
   supplier_sku: string | null;
   status: PushStatus;
   dry_run: boolean;
-  ops_product_id: number | null;
+  ops_product_id: string | null;
   error: string | null;
   step_results: OPSStepResult[];
   cleanup_targets: CleanupTargets | null;
@@ -641,9 +667,7 @@ export interface PushLog {
 export interface PushRequestBody {
   target: { system: "ops"; customer_id: string };
   source: { supplier_slug: string };
-  /** Either product_ref OR product inline; never both.
-   *  product_ref identifies a product by internal UUID OR supplier_sku — backend
-   *  resolves whichever is supplied (see modules/integrations/schemas.py:PushRequestProductRef). */
+  /** Either product_ref OR product inline; never both. Supply product_id OR supplier_sku. */
   product_ref?: { product_id?: string; supplier_sku?: string };
   product?: Record<string, unknown>; // ProductIngest shape
   decorations?: Array<{
@@ -665,7 +689,7 @@ export interface PushTerminalResponse {
   customer_id: string;
   supplier_slug: string;
   supplier_sku: string;
-  ops_product_id: number | null;
+  ops_product_id: string | null;
   mapping_id: string | null;
   error: string | null;
   step_results: OPSStepResult[];

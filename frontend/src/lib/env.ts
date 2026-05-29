@@ -27,7 +27,25 @@ if (NODE_ENV === "production" && !RAW_API_URL) {
   );
 }
 
-export const API_BASE = RAW_API_URL ?? "http://localhost:8000";
+/**
+ * Auto-upgrade `http://` to `https://` when the page is loaded over HTTPS.
+ *
+ * Why: in some deployments `NEXT_PUBLIC_API_URL` is baked at build time to
+ * a raw ALB hostname over HTTP. When the frontend is served over HTTPS,
+ * the browser blocks those fetches as Mixed Content and login fails with
+ * "Failed to fetch". Forcing HTTPS client-side keeps login working even
+ * when the env var is misconfigured.
+ *
+ * No-op on the server (window is undefined) and in plain-HTTP local dev.
+ */
+function upgradeToHttpsIfNeeded(url: string): string {
+  if (typeof window === "undefined") return url;
+  if (window.location.protocol !== "https:") return url;
+  if (!url.startsWith("http://")) return url;
+  return "https://" + url.slice("http://".length);
+}
+
+export const API_BASE = upgradeToHttpsIfNeeded(RAW_API_URL ?? "http://localhost:8000");
 // Server-side: prefer API_BASE_URL (e.g. http://api:8000 inside Docker),
 // fall back to the public URL, then to localhost for non-Docker dev.
 export const SERVER_API_BASE = RAW_SERVER_API_URL ?? RAW_API_URL ?? "http://127.0.0.1:8000";

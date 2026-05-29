@@ -27,8 +27,9 @@ class AuditLogRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-@router.get("", response_model=list[AuditLogRead], dependencies=[Depends(VGAdmin)])
+@router.get("", response_model=list[AuditLogRead])
 async def list_audit_logs(
+    _: VGAdmin,
     limit: int = Query(default=100, le=500),
     user_email: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),

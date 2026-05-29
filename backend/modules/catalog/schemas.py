@@ -92,7 +92,7 @@ class ProductSizeRead(BaseModel):
     width: Decimal
     height: Decimal
     unit: str
-    label: str
+    label: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -101,6 +101,7 @@ class ProductRead(BaseModel):
     id: UUID
     supplier_id: UUID
     supplier_name: Optional[str] = None
+    supplier_slug: Optional[str] = None
     supplier_has_decoration_overlay: bool = False
     supplier_sku: str
     product_name: str
@@ -325,3 +326,22 @@ class OptionUpdate(BaseModel):
 
 class OptionBulkSave(BaseModel):
     options: list[OptionIngest]
+
+
+class VariantPreview(BaseModel):
+    sku: Optional[str]
+    size: Optional[str]
+    color: Optional[str]
+    price: Optional[float]
+    inventory: Optional[int]
+
+
+class ProductPreview(BaseModel):
+    id: UUID
+    title: str
+    description: Optional[str]
+    brand: Optional[str]
+    category: Optional[str]
+    images: list[ProductImageRead]
+    variants: list[VariantPreview]
+    missing_fields: list[str]

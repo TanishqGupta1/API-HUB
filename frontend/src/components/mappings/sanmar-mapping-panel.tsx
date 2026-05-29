@@ -48,6 +48,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
 
   // 2. Polling for Active Job
   const pollFailures = useRef(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!activeJob || activeJob.status === "completed" || activeJob.status === "failed") {
       pollFailures.current = 0;
@@ -90,6 +91,7 @@ export function SanMarMappingPanel({ supplierId, value, onChange, onSyncComplete
     }, 2000);
 
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob?.id, activeJob?.status]);
 
   const defaultCategory = value["sanmar.default_category"] || "";

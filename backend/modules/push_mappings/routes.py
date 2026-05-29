@@ -1,9 +1,11 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from modules.auth.dependencies import _require_vg_admin
 from modules.catalog.ingest import require_ingest_secret
 
 from . import service
@@ -39,3 +41,52 @@ async def delete_mapping(
     if not success:
         raise HTTPException(status_code=404, detail="Mapping not found")
     return {"status": "ok"}
+
+
+# ─── Bug 5 fix: auto-resolve push_mapping_options ────────────────────────────
+
+
+class ResolveRequest(BaseModel):
+    customer_id: UUID
+    product_id: UUID
+
+
+class ResolveResponse(BaseModel):
+    push_mapping_id: UUID
+    options_resolved: int
+    attributes_resolved: int
+    missing_option_keys: list[str]
+    missing_attribute_keys: list[str]
+
+
+@router.post("/resolve", response_model=ResolveResponse, dependencies=[Depends(_require_vg_admin)])
+async def resolve_mappings(
+    body: ResolveRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Auto-populate push_mapping_options for one (customer, product) pair.
+
+    Reads ops_option_id and ops_attribute_id off the product's existing
+    ProductOption / ProductOptionAttribute rows (populated at import time
+    when master_options matched) and writes one PushMappingOption row per
+    resolvable attribute.
+
+    Operators only need to manually seed mappings for options where the
+    ImportJob couldn't match a master_option — those show up in the
+    response's missing_option_keys / missing_attribute_keys lists.
+
+    Idempotent — running twice replaces the existing rows.
+    """
+    try:
+        summary = await service.resolve_push_mappings(
+            db, body.customer_id, body.product_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return ResolveResponse(
+        push_mapping_id=summary.push_mapping_id,
+        options_resolved=summary.options_resolved,
+        attributes_resolved=summary.attributes_resolved,
+        missing_option_keys=summary.missing_option_keys,
+        missing_attribute_keys=summary.missing_attribute_keys,
+    )

@@ -142,6 +142,17 @@ const NAV_ITEMS = [
     section: "Actions",
     items: [
       {
+        href: "/analytics",
+        label: "Margin Analytics",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+        ),
+      },
+      {
         href: "/monitoring",
         label: "System Health",
         icon: (
@@ -173,12 +184,7 @@ const NAV_ITEMS = [
         ),
       },
       {
-        // Phase 8 / Task 10 — Push preview + execute demo (works in mock mode).
-        // Lands on the preview page with a known-good fixture ID. From here:
-        //   - Click "Send Dry-Run" → bounces to /push-log/<id> with green timeline
-        //   - Click "Send LIVE"   → typed-confirm modal → push
-        //   - Append ?demo=blocked / ?demo=pushed / ?demo=failed for state variants
-        href: "/products/demo/push?customer_id=demo",
+        href: "/ops-demo",
         label: "Push to OPS (Demo)",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -193,6 +199,15 @@ const NAV_ITEMS = [
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+          </svg>
+        ),
+      },
+      {
+        href: "/webhooks",
+        label: "Webhooks",
+        icon: (
+          <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z" />
           </svg>
         ),
       },

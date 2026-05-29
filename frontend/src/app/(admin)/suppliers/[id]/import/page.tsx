@@ -7,6 +7,7 @@ import { log } from "@/lib/log";
 import type { Supplier } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import Image from "next/image";
 
 interface Category {
   name: string;
@@ -167,10 +168,12 @@ export default function ImportFromSupplierPage() {
             ))}
           </select>
           {categoryInfo?.preview_image_url && (
-            <img
+            <Image
               src={categoryInfo.preview_image_url}
               alt={categoryInfo.name}
-              className="mt-3 h-32 w-32 object-cover rounded border border-[#cfccc8]"
+              width={128}
+              height={128}
+              className="mt-3 object-cover rounded border border-[#cfccc8]"
             />
           )}
         </div>

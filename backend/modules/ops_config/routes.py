@@ -1,19 +1,24 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from modules.auth.dependencies import CurrentUser, require_customer_access
 from .models import ProductStorefrontConfig
 from .schemas import ProductStorefrontConfigRead, ProductStorefrontConfigUpsert
 
 router = APIRouter(prefix="/api/ops-config", tags=["ops_config"])
 
-@router.get("/{customer_id}/product/{product_id}", response_model=ProductStorefrontConfigRead)
+@router.get(
+    "/{customer_id}/product/{product_id}",
+    response_model=ProductStorefrontConfigRead,
+    dependencies=[Depends(require_customer_access)],
+)
 async def get_config(
-    customer_id: UUID, 
-    product_id: UUID, 
-    db: AsyncSession = Depends(get_db)
+    customer_id: UUID,
+    product_id: UUID,
+    db: AsyncSession = Depends(get_db),
 ):
     """Fetch the storefront-specific configuration for a product."""
     result = await db.execute(
@@ -37,10 +42,16 @@ async def get_config(
 
 @router.post("", response_model=ProductStorefrontConfigRead)
 async def upsert_config(
-    data: ProductStorefrontConfigUpsert, 
-    db: AsyncSession = Depends(get_db)
+    data: ProductStorefrontConfigUpsert,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
 ):
     """Create or update a storefront configuration mapping."""
+    if current_user.role not in ("vg_admin", "ingest_service") and (
+        current_user.role != "customer_admin"
+        or current_user.customer_id != data.customer_id
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized for this customer")
     result = await db.execute(
         select(ProductStorefrontConfig).where(
             ProductStorefrontConfig.product_id == data.product_id,

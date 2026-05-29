@@ -14,20 +14,22 @@ from uuid import uuid4
 from modules.markup.engine import apply_markup, resolve_rule
 
 
-def rule(scope, markup_pct, *, priority=0, min_margin=None, rounding="none"):
+def rule(scope, markup_pct=None, *, priority=0, min_margin=None, rounding="none",
+         markup_amount=None, min_price=None, max_price=None,
+         is_active=True, effective_from=None, effective_until=None):
     return SimpleNamespace(
         id=uuid4(),
         scope=scope,
         markup_pct=markup_pct,
-        markup_amount=None,
+        markup_amount=markup_amount,
         priority=priority,
         min_margin=min_margin,
+        min_price=min_price,
+        max_price=max_price,
         rounding=rounding,
-        is_active=True,
-        effective_from=None,
-        effective_until=None,
-        min_price=None,
-        max_price=None,
+        is_active=is_active,
+        effective_from=effective_from,
+        effective_until=effective_until,
     )
 
 

@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
-  // isomorphic-dompurify uses jsdom on the server, which reads CSS files via
-  // __dirname. Webpack loses the real __dirname when bundling, causing ENOENT.
-  // Marking both as external keeps them out of the bundle so __dirname resolves correctly.
   serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
   images: {
     remotePatterns: [
@@ -12,6 +10,25 @@ const nextConfig: NextConfig = {
     ],
   },
   output: "standalone",
+  async redirects() {
+    return [
+      // Typo guard: /privew → /preview
+      {
+        source: "/products/:id/privew",
+        destination: "/products/:id/preview",
+        permanent: false,
+      },
+    ];
+  },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  // Sentry is opt-in — if SENTRY_DSN / NEXT_PUBLIC_SENTRY_DSN are unset
+  // the SDK initialises as a no-op so local dev is unaffected.
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
+});

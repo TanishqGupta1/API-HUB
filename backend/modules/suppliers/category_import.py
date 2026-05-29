@@ -103,6 +103,8 @@ async def _run_category_import(
     limit: int,
     extension_wsdl_url: str | None = None,
     fetch_images: bool = False,
+    wsdl_pricing: str | None = None,
+    wsdl_inventory: str | None = None,
 ) -> None:
     """Fetch N products by category via PS SOAP and upsert into hub."""
     from modules.promostandards.client import PromoStandardsClient
@@ -158,13 +160,43 @@ async def _run_category_import(
                 session.add(db_cat)
                 await session.flush()
 
-            # 1. Save products immediately (Catalog Data)
+            # 1. Fetch pricing and inventory in parallel before upserting
+            product_ids = [p.product_id for p in products]
+
+            pricing_data = None
+            inventory_data = None
+
+            if wsdl_pricing:
+                try:
+                    if job:
+                        job.error_log = f"Fetching pricing for {len(product_ids)} products..."
+                        await session.commit()
+                    pricing_client = PromoStandardsClient(wsdl_pricing, auth_config)
+                    pricing_data = await pricing_client.get_pricing(product_ids)
+                except Exception as exc:  # noqa: BLE001
+                    import_log.warning("Pricing fetch failed: %s", exc)
+
+            if wsdl_inventory:
+                try:
+                    if job:
+                        job.error_log = f"Fetching inventory for {len(product_ids)} products..."
+                        await session.commit()
+                    inventory_client = PromoStandardsClient(wsdl_inventory, auth_config)
+                    inventory_data = await inventory_client.get_inventory(product_ids)
+                except Exception as exc:  # noqa: BLE001
+                    import_log.warning("Inventory fetch failed: %s", exc)
+
+            if job:
+                job.error_log = None
+                await session.commit()
+
+            # 2. Save products with pricing and inventory
             await upsert_products(
                 session,
                 supplier_id,
                 products,
-                inventory=None,
-                pricing=None,
+                inventory=inventory_data,
+                pricing=pricing_data,
                 media=None,
                 category_id=db_cat.id
             )
@@ -174,7 +206,7 @@ async def _run_category_import(
                 await session.commit()
                 await session.refresh(job)
 
-            # 2. Enrich images if requested.
+            # 3. Enrich images if requested.
             #
             # PERF: `PromoStandardsClient.get_media` already has an internal
             # semaphore that runs up to 5 SOAP calls in parallel. The old
@@ -334,6 +366,8 @@ async def import_category(
             "Run the endpoint sync first.",
         )
     wsdl_media = resolve_wsdl_url(endpoints, "media_content") if body.fetch_images else None
+    wsdl_pricing = resolve_wsdl_url(endpoints, "ppc")
+    wsdl_inventory = resolve_wsdl_url(endpoints, "inventory")
 
     job = SyncJob(
         supplier_id=supplier.id,
@@ -367,6 +401,8 @@ async def import_category(
         body.limit,
         extension_wsdl_url,
         body.fetch_images,
+        wsdl_pricing,
+        wsdl_inventory,
     )
 
     return ImportCategoryResponse(

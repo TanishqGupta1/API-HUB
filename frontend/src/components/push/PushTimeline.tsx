@@ -80,7 +80,7 @@ function TimelineRow({
   isLast: boolean;
   pulse?: boolean;
 }) {
-  const isOk = step.status !== "failed";
+  const isOk = step.status === "ok";
   const [open, setOpen] = useState(!isOk);
   const pill = STATUS_PILL[isOk ? "pushed" : "failed"];
 
@@ -142,7 +142,7 @@ function TimelineRow({
               </span>
             )}
             <span className="ml-auto font-mono text-[10px] text-[#888894]">
-              {new Date(step.attempted_at).toLocaleTimeString()}
+              {step.attempted_at ? new Date(step.attempted_at).toLocaleTimeString() : "—"}
             </span>
             {open ? (
               <ChevronDown className="w-4 h-4 text-[#888894]" />
@@ -154,13 +154,24 @@ function TimelineRow({
       </button>
 
       {open && (
-        <div className="ml-[3.25rem] mr-6 mb-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <JsonPanel label="OPS IDs returned" data={step.ops_ids} />
-          <JsonPanel
-            label="Request fingerprint"
-            data={{ fingerprint: step.request_fingerprint, attempted_at: step.attempted_at }}
-            tone={isOk ? "default" : "error"}
-          />
+        <div className="ml-[3.25rem] mr-6 mb-4 space-y-3">
+          {!isOk && step.error && (
+            <div className="bg-[#fdf2f2] border border-[#b93232] rounded-lg px-4 py-3 font-mono text-[12px] text-[#7b1d1d]">
+              <span className="font-bold text-[#b93232]">Error: </span>{step.error}
+            </div>
+          )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <JsonPanel label="OPS IDs returned" data={step.ops_ids ?? {}} />
+            <JsonPanel
+              label="Request fingerprint"
+              data={{
+                fingerprint: step.request_fingerprint,
+                attempted_at: step.attempted_at,
+                latency_ms: step.latency_ms ?? "—",
+              }}
+              tone={isOk ? "default" : "error"}
+            />
+          </div>
         </div>
       )}
     </li>

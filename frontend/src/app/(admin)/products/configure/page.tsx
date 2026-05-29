@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
+import { toast } from "sonner";
 import type { MasterOption, MasterOptionsSyncStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,9 @@ export default function MasterOptionsCatalogPage() {
       ]);
       setOptions(opts);
       setStatus(st);
+    } catch (e) {
+      log.warn("Failed to load master options", e);
+      // Don't crash the page — leave options empty and show the empty state
     } finally {
       setLoading(false);
     }
@@ -42,8 +46,9 @@ export default function MasterOptionsCatalogPage() {
       await new Promise((r) => setTimeout(r, 3000));
       await load();
     } catch (e) {
-      log.error("Sync failed", e);
-      alert("Sync failed. Check the FastAPI server logs.");
+      log.warn("Sync failed", e);
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      toast.error("Sync failed", { description: msg, duration: 8000 });
     } finally {
       setSyncing(false);
     }
@@ -68,7 +73,7 @@ export default function MasterOptionsCatalogPage() {
       const key = (mo.option_key || "").toLowerCase();
       if (title.includes(q) || key.includes(q)) return true;
       return mo.attributes.some((a) =>
-        humanizeAttributeName(a.title, (a as any).attribute_key ?? null)
+        humanizeAttributeName(a.title, a.attribute_key ?? null)
           .toLowerCase()
           .includes(q),
       );
@@ -145,7 +150,7 @@ export default function MasterOptionsCatalogPage() {
           {filtered.map((mo) => {
             const isOpen = expanded.has(mo.id);
             const displayName = humanizeOptionName(mo.title, mo.option_key);
-            const activeAttrs = mo.attributes.filter((a) => (a as any).status === undefined || (a as any).status === 1);
+            const activeAttrs = mo.attributes;
             return (
               <div
                 key={mo.id}
@@ -206,7 +211,7 @@ export default function MasterOptionsCatalogPage() {
                           key={a.id}
                           className="text-[10px] px-2 py-0.5 bg-white border border-[#cfccc8] rounded text-[#484852]"
                         >
-                          {humanizeAttributeName(a.title, (a as any).attribute_key ?? null)}
+                          {humanizeAttributeName(a.title, a.attribute_key ?? null)}
                         </span>
                       ))}
                       {mo.attributes.length > 6 && (
@@ -256,7 +261,7 @@ export default function MasterOptionsCatalogPage() {
                             {[...mo.attributes]
                               .sort((a, b) => a.sort_order - b.sort_order)
                               .map((a) => {
-                                const attrKey = (a as any).attribute_key ?? null;
+                                const attrKey = a.attribute_key ?? null;
                                 return (
                                   <tr
                                     key={a.id}

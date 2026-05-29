@@ -1,12 +1,18 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from limiter import limiter
+
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import Base, ENVIRONMENT, async_session, engine, get_db
+from database import Base, DATABASE_URL, ENVIRONMENT, async_session, engine, get_db
 
 # Import all models so SQLAlchemy registers them before create_all
 import modules.suppliers.models  # noqa: F401
@@ -21,6 +27,7 @@ import modules.ops_config.models  # noqa: F401
 import modules.decorations.models  # noqa: F401
 import modules.auth.models  # noqa: F401
 import modules.audit_log.models  # noqa: F401
+import modules.webhooks.models  # noqa: F401
 # customer_catalog re-exports CustomerProductSelection from catalog.models
 # so no separate import is needed here.
 
@@ -45,10 +52,14 @@ from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
 from modules.suppliers.category_import import router as category_import_router
 from modules.auth.routes import router as auth_router
-from modules.auth.dependencies import get_current_user
+from modules.auth.dependencies import get_current_user, VGAdmin
 from modules.audit_log.routes import router as audit_log_router
 from modules.audit_log.middleware import AuditLogMiddleware
 from modules.customer_catalog.routes import router as customer_catalog_router
+from modules.portal.routes import router as portal_router
+from modules.images.routes import router as images_router
+from modules.webhooks.routes import router as webhooks_router
+from modules.analytics.routes import router as analytics_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -75,7 +86,6 @@ def _require_prod_env() -> None:
             + ", ".join(missing)
             + ". Set them in the task definition / ECS secrets / Secrets Manager."
         )
-from modules.pricing.routes import router as pricing_router, customer_router as pricing_customer_router
 
 import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
 import modules.rest_connector.fourover_adapter  # noqa: F401  registers FourOverAdapter
@@ -85,120 +95,83 @@ import modules.promostandards.alphabroder_adapter  # noqa: F401  registers Alpha
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
 from modules.decorations.routes import router as decorations_router
+from modules.pricing.routes import router as pricing_router, customer_router as pricing_customer_router
 
 
-# Idempotent schema upgrades. `Base.metadata.create_all` creates new tables
-# but never alters existing ones, so ADD COLUMN steps ship here. Each statement
-# must be idempotent (IF NOT EXISTS) so restarts are safe.
-_SCHEMA_UPGRADES: list[str] = [
-    "ALTER TABLE product_options ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT false NOT NULL",
-    "ALTER TABLE product_options ADD COLUMN IF NOT EXISTS overridden_sort INTEGER",
-    "ALTER TABLE product_option_attributes ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT false NOT NULL",
-    "ALTER TABLE product_option_attributes ADD COLUMN IF NOT EXISTS price NUMERIC(10,2)",
-    "ALTER TABLE product_option_attributes ADD COLUMN IF NOT EXISTS numeric_value NUMERIC(10,2)",
-    "ALTER TABLE product_option_attributes ADD COLUMN IF NOT EXISTS overridden_sort INTEGER",
-    "ALTER TABLE products ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE NULL",
-    "CREATE INDEX IF NOT EXISTS idx_products_archived_at ON products(archived_at)",
-    "CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)",
-    "CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images(product_id)",
-    "CREATE INDEX IF NOT EXISTS idx_product_options_product_id ON product_options(product_id)",
-    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS adapter_class VARCHAR(64)",
-    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS last_full_sync TIMESTAMP WITH TIME ZONE",
-    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS last_delta_sync TIMESTAMP WITH TIME ZONE",
-    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS errors JSONB",
-    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS protocol_config JSONB",
-    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS discovery_mode VARCHAR(32)",
-    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS total_products INTEGER DEFAULT 0",
-    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS success_count INTEGER DEFAULT 0",
-    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS push_name_prefix VARCHAR(32)",
-    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS failed_count INTEGER DEFAULT 0",
-    "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE",
-    "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sync_jobs' AND column_name='finished_at') THEN UPDATE sync_jobs SET completed_at = finished_at WHERE completed_at IS NULL AND finished_at IS NOT NULL; ALTER TABLE sync_jobs DROP COLUMN finished_at; END IF; END $$",
-    "UPDATE sync_jobs SET status = 'pending' WHERE status = 'queued'",
-    "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS has_decoration_overlay BOOLEAN NOT NULL DEFAULT FALSE",
-    """CREATE TABLE IF NOT EXISTS customer_product_decorations (
-        customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-        product_id  UUID NOT NULL REFERENCES products(id)  ON DELETE CASCADE,
-        decoration_options JSONB NOT NULL DEFAULT '[]',
-        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        PRIMARY KEY (customer_id, product_id)
-    )""",
-    # Fix SanMar MultipleResultsFound: old (product_id, color, size) constraint breaks with NULL values.
-    # Drop it and add a clean (product_id, sku) unique constraint instead.
-    "ALTER TABLE product_variants DROP CONSTRAINT IF EXISTS uq_variant_product_color_size",
-    # Inline dedup before adding unique constraint (Blocker 3)
-    """DO $$ BEGIN
-    DELETE FROM product_variants
-    WHERE id IN (
-        SELECT id FROM (
-            SELECT id, ROW_NUMBER() OVER (PARTITION BY product_id, sku ORDER BY id) as rn
-            FROM product_variants
-            WHERE sku IS NOT NULL
-        ) sub
-        WHERE rn > 1
-    );
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_variants_product_sku') THEN
-        ALTER TABLE product_variants ADD CONSTRAINT uq_product_variants_product_sku UNIQUE (product_id, sku);
-    END IF;
-    END $$""",
-    "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS supplier_image_url TEXT",
-    "ALTER TABLE product_images ADD COLUMN IF NOT EXISTS checksum VARCHAR(64)",
-    "CREATE INDEX IF NOT EXISTS idx_product_images_checksum ON product_images(checksum)",
-    # New image tracking columns (Blocker 2 & 6)
-    "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_image_fetch_at TIMESTAMP WITH TIME ZONE NULL",
-    "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_image_fetch_attempt_at TIMESTAMP WITH TIME ZONE NULL",
-    # Fix ProductImage upsert key (Moderate 7)
-    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_product_images_supplier_url') THEN ALTER TABLE product_images ADD CONSTRAINT uq_product_images_supplier_url UNIQUE (product_id, supplier_image_url); END IF; END $$",
-    # Pricing Rules Tier-1 enhancements
-    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE",
-    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS effective_from TIMESTAMP WITH TIME ZONE",
-    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS effective_until TIMESTAMP WITH TIME ZONE",
-    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS markup_amount NUMERIC(10,2)",
-    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS min_price NUMERIC(10,2)",
-    "ALTER TABLE markup_rules ADD COLUMN IF NOT EXISTS max_price NUMERIC(10,2)",
-    # Allow markup_pct to be NULL (rules may use markup_amount instead)
-    "ALTER TABLE markup_rules ALTER COLUMN markup_pct DROP NOT NULL",
-    "ALTER TABLE customers ADD COLUMN IF NOT EXISTS logo_url TEXT",
-    # Phase 8 Integration Gateway — product_push_log columns.
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS request_id UUID",
-    "UPDATE product_push_log SET request_id = gen_random_uuid() WHERE request_id IS NULL",
-    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_push_log_request_id') THEN ALTER TABLE product_push_log ADD CONSTRAINT uq_push_log_request_id UNIQUE (request_id); END IF; END $$",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS key_id VARCHAR(64)",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128)",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS payload_hash VARCHAR(64)",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS supplier_slug VARCHAR(64)",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS supplier_sku VARCHAR(255)",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS callback_url TEXT",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS callback_status VARCHAR(32) NOT NULL DEFAULT 'not_requested'",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS callback_attempts INTEGER NOT NULL DEFAULT 0",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS step_results JSONB",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS cleanup_targets JSONB",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS dry_run BOOLEAN NOT NULL DEFAULT FALSE",
-    "ALTER TABLE product_push_log ADD COLUMN IF NOT EXISTS retry_of UUID",
-    "CREATE INDEX IF NOT EXISTS idx_push_log_payload_hash ON product_push_log(payload_hash)",
-    "CREATE INDEX IF NOT EXISTS idx_push_log_idempotency ON product_push_log(key_id, idempotency_key)",
-    "CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_in_flight ON product_push_log(customer_id, product_id) WHERE status = 'processing'",
-    "ALTER TABLE integration_keys ADD COLUMN IF NOT EXISTS is_synthetic BOOLEAN NOT NULL DEFAULT FALSE",
-]
+def _run_alembic_upgrade(*, stamp_baseline: bool = False) -> None:
+    """Run ``alembic upgrade head`` using the Python API (sync, called via asyncio.to_thread).
+
+    Args:
+        stamp_baseline: When True the DB pre-dates Alembic adoption — stamp it
+            as 0001_baseline before upgrading so only delta migrations run.
+            The caller checks for the alembic_version table using the existing
+            async engine (avoids opening a second sync engine here).
+    """
+    import os as _os
+    from alembic.config import Config as _AlembicConfig
+    from alembic import command as _alembic_cmd
+
+    _ini = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "alembic.ini")
+    cfg = _AlembicConfig(_ini)
+
+    # Override URL — Alembic needs a *sync* driver (psycopg2, not asyncpg).
+    _sync_url = DATABASE_URL.replace("+asyncpg", "")
+    cfg.set_main_option("sqlalchemy.url", _sync_url)
+
+    if stamp_baseline:
+        _alembic_cmd.stamp(cfg, "0001_baseline")
+
+    _alembic_cmd.upgrade(cfg, "head")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _require_prod_env()
     import asyncio
+
+    # Sentry must be initialised inside lifespan so that logging is already
+    # configured — initialising at module import time means startup errors can
+    # be silently swallowed before the SDK has a chance to flush them.
+    _sentry_dsn = os.getenv("SENTRY_DSN", "")
+    if _sentry_dsn:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            environment=os.getenv("ENVIRONMENT", "development"),
+            # Env-driven so ops can tune without a code deploy (default 20%)
+            traces_sample_rate=min(1.0, max(0.0, float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.2")))),
+            profiles_sample_rate=0.1,
+            send_default_pii=False,
+        )
+        logging.getLogger(__name__).info("Sentry SDK initialised")
     retries = 5
     while retries > 0:
         try:
+            # Step 1: create any brand-new tables (idempotent via IF NOT EXISTS).
+            # Also check whether alembic_version exists using the async engine
+            # so we don't need a second sync engine inside _run_alembic_upgrade.
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-                for stmt in _SCHEMA_UPGRADES:
-                    await conn.execute(text(stmt))
+                result = await conn.execute(
+                    text("SELECT to_regclass('public.alembic_version')")
+                )
+                _has_alembic_table = result.scalar() is not None
+
+            # Step 2: apply Alembic migrations (column additions, index changes, etc.).
+            # Runs in a thread pool since Alembic uses a synchronous SQLAlchemy engine.
+            await asyncio.to_thread(
+                _run_alembic_upgrade,
+                stamp_baseline=not _has_alembic_table,
+            )
             break
         except Exception as e:
             retries -= 1
             if retries == 0:
                 raise e
-            print(f"Database not ready... retrying in 2s ({retries} retries left)")
+            logging.getLogger(__name__).warning(
+                "DB startup error (%s: %s) — retrying in 2s (%d retries left)",
+                type(e).__name__, e, retries,
+            )
             await asyncio.sleep(2)
 
     # Admin seeding is opt-in via SEED_ADMIN=1. Default flow: deploy with empty
@@ -234,6 +207,8 @@ import os
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173").split(",")
 
 app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 _IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
 _CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
@@ -286,8 +261,13 @@ app.include_router(import_jobs_router, dependencies=_auth)
 app.include_router(pricing_router, dependencies=_auth)
 app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
+app.include_router(images_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
+app.include_router(webhooks_router, dependencies=_auth)
+app.include_router(analytics_router, dependencies=_auth)
+# Customer self-service portal — requires customer_admin role (enforced inside routes)
+app.include_router(portal_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
 app.include_router(integrations_router)
 app.include_router(integrations_admin_router, dependencies=_auth)
@@ -299,7 +279,7 @@ async def health():
 
 
 @app.get("/api/stats")
-async def get_stats(db: AsyncSession = Depends(get_db)):
+async def get_stats(_: VGAdmin, db: AsyncSession = Depends(get_db)):
     suppliers = (await db.execute(select(func.count()).select_from(Supplier))).scalar()
     # Dashboard "total catalog" should reflect live products only — archived
     # rows would inflate the counter and confuse admins about why category
@@ -323,14 +303,14 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     
     total_jobs = len(jobs_24h)
     success_jobs = len([j for j in jobs_24h if j.status in ("success", "completed", "partial_success")])
-    health = (success_jobs / total_jobs * 100) if total_jobs > 0 else 100.0
-    
+    health = round(success_jobs / total_jobs * 100, 1) if total_jobs > 0 else None
+
     total_processed = sum(j.records_processed for j in jobs_24h)
-    
+
     return {
         "suppliers": suppliers,
         "products": products,
         "variants": variants,
-        "health": round(health, 1),
+        "health": health,
         "total_processed": total_processed,
     }
