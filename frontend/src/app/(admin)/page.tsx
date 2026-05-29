@@ -99,11 +99,15 @@ export default function AdminDashboard() {
 
         const anyFailed = [sRes, jRes, supRes].some((r) => r.status === "rejected");
         if (anyFailed) {
-          // Log quietly — partial data is still shown, no full error state.
-          const errors = [sRes, jRes, supRes]
+          // Filter out AbortErrors — these are expected in React StrictMode dev
+          // (effect cleanup aborts the first fetch; the second mount succeeds).
+          const realErrors = [sRes, jRes, supRes]
             .filter((r): r is PromiseRejectedResult => r.status === "rejected")
-            .map((r) => r.reason);
-          log.error("Dashboard partial load failure", errors);
+            .map((r) => r.reason)
+            .filter((e) => !(e instanceof DOMException && e.name === "AbortError"));
+          if (realErrors.length > 0) {
+            log.error("Dashboard partial load failure", realErrors);
+          }
         } else {
           setLoadError(null);
         }
