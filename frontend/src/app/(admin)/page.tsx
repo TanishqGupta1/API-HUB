@@ -67,35 +67,60 @@ function timeAgo(iso: string): string {
 }
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<Stats>({ 
-    suppliers: 0, 
-    products: 0, 
-    variants: 0, 
+  const [stats, setStats] = useState<Stats>({
+    suppliers: 0,
+    products: 0,
+    variants: 0,
     health: null,
-    total_processed: 0 
+    total_processed: 0
   });
   const [recentJobs, setRecentJobs] = useState<SyncJob[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    // 12-second hard timeout — prevents the spinner from hanging forever when
+    // the backend is slow to respond (TCP accepted but no HTTP reply yet).
+    const timer = setTimeout(() => controller.abort(), 12_000);
+
     async function load() {
       try {
-        const [s, j, sup] = await Promise.all([
-          api<Stats>("/api/stats"),
-          api<SyncJob[]>("/api/sync-jobs?limit=5"),
-          api<Supplier[]>("/api/suppliers"),
+        // allSettled so one failing endpoint doesn't blank the whole dashboard.
+        const [sRes, jRes, supRes] = await Promise.allSettled([
+          api<Stats>("/api/stats", { signal: controller.signal }),
+          api<SyncJob[]>("/api/sync-jobs?limit=5", { signal: controller.signal }),
+          api<Supplier[]>("/api/suppliers", { signal: controller.signal }),
         ]);
-        setStats(s);
-        setRecentJobs(j);
-        setSuppliers(sup);
-      } catch (e) {
+        if (sRes.status === "fulfilled") setStats(sRes.value);
+        if (jRes.status === "fulfilled") setRecentJobs(jRes.value);
+        if (supRes.status === "fulfilled") setSuppliers(supRes.value);
+
+        const anyFailed = [sRes, jRes, supRes].some((r) => r.status === "rejected");
+        if (anyFailed) {
+          // Log quietly — partial data is still shown, no full error state.
+          const errors = [sRes, jRes, supRes]
+            .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+            .map((r) => r.reason);
+          log.error("Dashboard partial load failure", errors);
+        } else {
+          setLoadError(null);
+        }
+      } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === "AbortError") {
+          setLoadError("Dashboard timed out — backend may be unavailable. Refresh to try again.");
+        } else {
+          setLoadError("Failed to load dashboard data. Check backend connectivity.");
+        }
         log.error("Failed to load dashboard stats", e);
       } finally {
+        clearTimeout(timer);
         setLoading(false);
       }
     }
     load();
+    return () => { controller.abort(); clearTimeout(timer); };
   }, []);
 
   if (loading) {
@@ -103,6 +128,21 @@ export default function AdminDashboard() {
       <div className="flex items-center justify-center h-[60vh] flex-col gap-4">
         <div className="w-10 h-10 border-[3px] border-[#1e4d92] border-t-transparent rounded-full animate-spin" />
         <p className="text-sm text-[#888894] font-medium animate-pulse">Initializing Dashboard...</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex items-center justify-center h-[60vh] flex-col gap-4">
+        <AlertCircle className="w-10 h-10 text-rose-500" />
+        <p className="text-sm text-[#888894] font-medium text-center max-w-sm">{loadError}</p>
+        <button
+          onClick={() => { setLoading(true); setLoadError(null); window.location.reload(); }}
+          className="px-4 py-2 text-xs font-bold uppercase tracking-wider bg-[#1e4d92] text-white rounded-sm"
+        >
+          Retry
+        </button>
       </div>
     );
   }

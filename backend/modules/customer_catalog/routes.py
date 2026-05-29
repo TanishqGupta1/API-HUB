@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from modules.auth.dependencies import get_current_user
+from modules.auth.dependencies import get_current_user, require_customer_access
 from modules.auth.models import User
 from modules.catalog.models import CustomerProductSelection, Product
 from modules.customers.models import Customer
@@ -95,7 +95,9 @@ async def _latest_failed_pids(
 
 
 @router.get(
-    "/{customer_id}/selections", response_model=list[SelectionRead]
+    "/{customer_id}/selections",
+    response_model=list[SelectionRead],
+    dependencies=[Depends(require_customer_access)],
 )
 async def list_selections(
     customer_id: UUID,
@@ -172,6 +174,7 @@ async def list_selections(
     "/{customer_id}/selections/bulk",
     response_model=SelectionBulkResponse,
     status_code=201,
+    dependencies=[Depends(require_customer_access)],
 )
 async def bulk_add_selections(
     customer_id: UUID,
@@ -238,6 +241,7 @@ async def bulk_add_selections(
     "/{customer_id}/selections/{product_id}",
     response_model=SelectionRead,
     status_code=201,
+    dependencies=[Depends(require_customer_access)],
 )
 async def add_selection(
     customer_id: UUID,
@@ -279,7 +283,9 @@ async def add_selection(
 
 
 @router.delete(
-    "/{customer_id}/selections/{product_id}", status_code=204
+    "/{customer_id}/selections/{product_id}",
+    status_code=204,
+    dependencies=[Depends(require_customer_access)],
 )
 async def remove_selection(
     customer_id: UUID,

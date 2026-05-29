@@ -144,3 +144,20 @@ def _require_any_admin(current_user: CurrentUser) -> User:
 VGAdmin = Annotated[User, Depends(_require_vg_admin)]
 CustomerAdmin = Annotated[User, Depends(_require_customer_admin)]
 AnyAdmin = Annotated[User, Depends(_require_any_admin)]
+
+
+def require_customer_access(
+    customer_id: uuid_mod.UUID,
+    current_user: CurrentUser,
+) -> uuid_mod.UUID:
+    """Authorize access to one customer's data. Use as a route dependency on
+    any path with a ``customer_id`` path param.
+
+    vg_admin and the trusted ingest service may act on any customer;
+    customer_admin only on their own; everyone else is forbidden.
+    """
+    if current_user.role in ("vg_admin", "ingest_service"):
+        return customer_id
+    if current_user.role == "customer_admin" and current_user.customer_id == customer_id:
+        return customer_id
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized for this customer")

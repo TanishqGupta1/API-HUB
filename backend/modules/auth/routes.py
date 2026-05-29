@@ -5,7 +5,7 @@ import uuid as uuid_mod
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from limiter import limiter
 from jose import JWTError
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, literal, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -159,8 +159,14 @@ async def refresh_access_token(
     except JWTError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token")
 
+    # Validate sub as UUID before DB query — malformed sub would cause a 500.
+    try:
+        user_id = uuid_mod.UUID(claims["sub"])
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token claims")
+
     result = await db.execute(
-        select(User).where(User.id == claims["sub"], User.is_active.is_(True))
+        select(User).where(User.id == user_id, User.is_active.is_(True))
     )
     user = result.scalar_one_or_none()
     if not user:
@@ -190,23 +196,19 @@ async def setup_first_admin(
 ) -> User:
     """Create the first vg_admin. Returns 409 if ANY user already exists.
 
-    The count guard is the primary protection — it blocks a second caller
-    from registering with a *different* email (which ON CONFLICT alone
-    would not catch).  ON CONFLICT DO NOTHING is a belt-and-suspenders
-    guard against a narrow TOCTOU race between two simultaneous /setup
-    requests.
+    INSERT ... SELECT ... WHERE NOT EXISTS is atomic — the count check and
+    insert happen in one statement, eliminating the TOCTOU race where two
+    concurrent requests both see count==0 and both succeed.
     """
-    # Primary guard: refuse if even one user exists (any email, any role).
-    count = (await db.execute(select(func.count()).select_from(User))).scalar()
-    if count and count > 0:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Setup already complete")
-
     stmt = (
         pg_insert(User)
-        .values(
-            email=body.email,
-            hashed_password=hash_password(body.password),
-            role="vg_admin",
+        .from_select(
+            ["email", "hashed_password", "role"],
+            select(
+                literal(body.email).label("email"),
+                literal(hash_password(body.password)).label("hashed_password"),
+                literal("vg_admin").label("role"),
+            ).where(~exists(select(User.id))),
         )
         .on_conflict_do_nothing(index_elements=[User.email])
         .returning(User)
@@ -215,7 +217,7 @@ async def setup_first_admin(
     user = result.scalar_one_or_none()
     await db.commit()
     if not user:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Setup already complete")
 
     payload = _token_payload(user)
     _set_auth_cookie(response, create_access_token(payload))
@@ -264,20 +266,19 @@ async def register(
     Creates the first vg_admin only when the instance has zero users. Once any
     user exists this endpoint always returns 409; it never mints a second
     account. All later users are created by an admin via POST /api/auth/users.
-    Self-service signup was removed: it used to mint vg_admin/customer_admin
-    whenever signup_enabled was on (privilege escalation risk). Equivalent to
+    Self-service signup was removed: it used to mint vg_admin whenever
+    signup_enabled was on (cross-tenant privilege escalation). Equivalent to
     /setup; consolidate the two bootstrap paths in a follow-up.
     """
-    count = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
-    if count > 0:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Registration is closed")
-
     stmt = (
         pg_insert(User)
-        .values(
-            email=body.email,
-            hashed_password=hash_password(body.password),
-            role="vg_admin",
+        .from_select(
+            ["email", "hashed_password", "role"],
+            select(
+                literal(body.email).label("email"),
+                literal(hash_password(body.password)).label("hashed_password"),
+                literal("vg_admin").label("role"),
+            ).where(~exists(select(User.id))),
         )
         .on_conflict_do_nothing(index_elements=[User.email])
         .returning(User)

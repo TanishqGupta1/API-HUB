@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 
 from limiter import limiter
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import Base, DATABASE_URL, ENVIRONMENT, async_session, engine, get_db
@@ -27,6 +27,7 @@ import modules.ops_config.models  # noqa: F401
 import modules.decorations.models  # noqa: F401
 import modules.auth.models  # noqa: F401
 import modules.audit_log.models  # noqa: F401
+import modules.webhooks.models  # noqa: F401
 # customer_catalog re-exports CustomerProductSelection from catalog.models
 # so no separate import is needed here.
 
@@ -56,6 +57,9 @@ from modules.audit_log.routes import router as audit_log_router
 from modules.audit_log.middleware import AuditLogMiddleware
 from modules.customer_catalog.routes import router as customer_catalog_router
 from modules.portal.routes import router as portal_router
+from modules.images.routes import router as images_router
+from modules.webhooks.routes import router as webhooks_router
+from modules.analytics.routes import router as analytics_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -82,7 +86,6 @@ def _require_prod_env() -> None:
             + ", ".join(missing)
             + ". Set them in the task definition / ECS secrets / Secrets Manager."
         )
-from modules.pricing.routes import router as pricing_router, customer_router as pricing_customer_router
 
 import modules.ops_inbound.ops_adapter  # noqa: F401  registers OPSAdapter
 import modules.rest_connector.fourover_adapter  # noqa: F401  registers FourOverAdapter
@@ -92,41 +95,31 @@ import modules.promostandards.alphabroder_adapter  # noqa: F401  registers Alpha
 from modules.import_jobs.routes import router as import_jobs_router
 from modules.import_jobs.scheduler import start_scheduler
 from modules.decorations.routes import router as decorations_router
-from modules.webhooks.routes import router as webhooks_router
-import modules.webhooks.models  # noqa: F401 — registers WebhookEndpoint with Base
-from modules.analytics.routes import router as analytics_router
-from modules.images.routes import router as images_router
+from modules.pricing.routes import router as pricing_router, customer_router as pricing_customer_router
 
 
-def _run_alembic_upgrade() -> None:
+def _run_alembic_upgrade(*, stamp_baseline: bool = False) -> None:
     """Run ``alembic upgrade head`` using the Python API (sync, called via asyncio.to_thread).
 
-    Auto-stamps existing databases that pre-date Alembic adoption: if the
-    alembic_version table is missing the DB was bootstrapped via create_all +
-    the old _SCHEMA_UPGRADES list, so we stamp it as 0001_baseline and then
-    apply any newer migrations (currently 0002 and 0003).
+    Args:
+        stamp_baseline: When True the DB pre-dates Alembic adoption — stamp it
+            as 0001_baseline before upgrading so only delta migrations run.
+            The caller checks for the alembic_version table using the existing
+            async engine (avoids opening a second sync engine here).
     """
     import os as _os
     from alembic.config import Config as _AlembicConfig
     from alembic import command as _alembic_cmd
-    from sqlalchemy import create_engine as _create_engine, inspect as _inspect
 
     _ini = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "alembic.ini")
     cfg = _AlembicConfig(_ini)
 
-    # Override URL — Alembic needs a *sync* driver (no +asyncpg).
+    # Override URL — Alembic needs a *sync* driver (psycopg2, not asyncpg).
     _sync_url = DATABASE_URL.replace("+asyncpg", "")
     cfg.set_main_option("sqlalchemy.url", _sync_url)
 
-    # Auto-stamp: if alembic_version doesn't exist, the DB was created before
-    # Alembic was introduced.  Stamp at baseline so only delta migrations run.
-    _eng = _create_engine(_sync_url)
-    try:
-        _insp = _inspect(_eng)
-        if not _insp.has_table("alembic_version"):
-            _alembic_cmd.stamp(cfg, "0001_baseline")
-    finally:
-        _eng.dispose()
+    if stamp_baseline:
+        _alembic_cmd.stamp(cfg, "0001_baseline")
 
     _alembic_cmd.upgrade(cfg, "head")
 
@@ -145,7 +138,8 @@ async def lifespan(app: FastAPI):
         sentry_sdk.init(
             dsn=_sentry_dsn,
             environment=os.getenv("ENVIRONMENT", "development"),
-            traces_sample_rate=0.2,
+            # Env-driven so ops can tune without a code deploy (default 20%)
+            traces_sample_rate=min(1.0, max(0.0, float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.2")))),
             profiles_sample_rate=0.1,
             send_default_pii=False,
         )
@@ -154,11 +148,21 @@ async def lifespan(app: FastAPI):
     while retries > 0:
         try:
             # Step 1: create any brand-new tables (idempotent via IF NOT EXISTS).
+            # Also check whether alembic_version exists using the async engine
+            # so we don't need a second sync engine inside _run_alembic_upgrade.
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                result = await conn.execute(
+                    text("SELECT to_regclass('public.alembic_version')")
+                )
+                _has_alembic_table = result.scalar() is not None
+
             # Step 2: apply Alembic migrations (column additions, index changes, etc.).
             # Runs in a thread pool since Alembic uses a synchronous SQLAlchemy engine.
-            await asyncio.to_thread(_run_alembic_upgrade)
+            await asyncio.to_thread(
+                _run_alembic_upgrade,
+                stamp_baseline=not _has_alembic_table,
+            )
             break
         except Exception as e:
             retries -= 1
