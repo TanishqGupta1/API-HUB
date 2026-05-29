@@ -60,6 +60,7 @@ from modules.portal.routes import router as portal_router
 from modules.images.routes import router as images_router
 from modules.webhooks.routes import router as webhooks_router
 from modules.analytics.routes import router as analytics_router
+from modules.n8n_proxy.routes import router as n8n_proxy_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -266,6 +267,7 @@ app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
 app.include_router(webhooks_router, dependencies=_auth)
 app.include_router(analytics_router, dependencies=_auth)
+app.include_router(n8n_proxy_router, dependencies=_auth)  # C2: was defined but never mounted
 # Customer self-service portal — requires customer_admin role (enforced inside routes)
 app.include_router(portal_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)
