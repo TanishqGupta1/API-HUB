@@ -18,7 +18,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from limiter import limiter
 
 from database import get_db
 from modules.auth.dependencies import require_customer_access
@@ -35,7 +36,8 @@ customer_router = APIRouter(prefix="/api/customers", tags=["pricing"])
 
 
 @router.post("/quote", response_model=QuoteResult)
-async def quote(req: QuoteRequest, db: AsyncSession = Depends(get_db)) -> QuoteResult:
+@limiter.limit("60/minute")
+async def quote(request: Request, req: QuoteRequest, db: AsyncSession = Depends(get_db)) -> QuoteResult:
     try:
         return await resolve_quote(req, db)
     except BoundsError as exc:

@@ -115,6 +115,7 @@ class ProductImage(Base):
     color: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     checksum: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    mirrored_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     product: Mapped["Product"] = relationship(back_populates="images")
 
