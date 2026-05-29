@@ -21,6 +21,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from database import get_db
+from modules.auth.dependencies import require_customer_access
 from modules.catalog.ingest import require_ingest_secret
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,7 +50,7 @@ async def quote(req: QuoteRequest, db: AsyncSession = Depends(get_db)) -> QuoteR
 @customer_router.post(
     "/{customer_id}/pricing/quote",
     response_model=CustomerQuoteResult,
-    dependencies=[Depends(require_ingest_secret)],
+    dependencies=[Depends(require_ingest_secret), Depends(require_customer_access)],
 )
 async def customer_quote(
     customer_id: UUID,

@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from modules.auth.dependencies import AnyAdmin, CurrentUser, VGAdmin
+from modules.auth.dependencies import CurrentUser, VGAdmin, require_customer_access
 from modules.markup.models import MarkupRule
 from modules.push_log.models import ProductPushLog
 
@@ -62,14 +62,12 @@ async def create_customer(body: CustomerCreate, _: VGAdmin, db: AsyncSession = D
     return await _with_counts(db, customer)
 
 
-@router.get("/{customer_id}", response_model=CustomerRead)
-async def get_customer(
-    customer_id: UUID,
-    current_user: AnyAdmin,
-    db: AsyncSession = Depends(get_db),
-):
-    if current_user.role == "customer_admin" and str(current_user.customer_id) != str(customer_id):
-        raise HTTPException(403, "Cannot view a different customer")
+@router.get(
+    "/{customer_id}",
+    response_model=CustomerRead,
+    dependencies=[Depends(require_customer_access)],
+)
+async def get_customer(customer_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Customer).where(Customer.id == customer_id))
     customer = result.scalar_one_or_none()
     if not customer:
