@@ -1,16 +1,23 @@
 """Phase 8 push-log columns, pricing rule enhancements, integration keys.
 
-Revision ID: 0002_phase8_and_pricing_enhancements
-Revises: 0001_baseline
+Revision ID: 0008_phase8_pricing
+Revises: 0007_customers_logo_url
 Create Date: 2026-05-22
 
-All statements use IF NOT EXISTS / IF EXISTS so they are safe to re-run.
+Re-chained 2026-05-29: originally authored as 0002 off 0001_baseline, which
+left it a dangling second alembic head (the 0001->0003->...->0007 spine never
+reached it), so `alembic upgrade head` errored "multiple heads" and the
+unique columns here (markup_rules enhancements, product_push_log gateway
+columns) were only ever created by Base.metadata.create_all -- never by a
+migration. Re-pointed to run after 0007. All statements use IF NOT EXISTS /
+IF EXISTS, so the parts that overlap with 0005_integration_keys /
+0007_customers_logo_url no-op safely.
 """
 
 from alembic import op
 
-revision = "0002_phase8_pricing"
-down_revision = "0001_baseline"
+revision = "0008_phase8_pricing"
+down_revision = "0007_customers_logo_url"
 branch_labels = None
 depends_on = None
 
