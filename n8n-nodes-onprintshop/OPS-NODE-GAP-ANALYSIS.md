@@ -1,12 +1,26 @@
 # OPS Node Gap Analysis
 
 **Generated:** 2026-04-04
-**Node file:** `nodes/OnPrintShop.node.ts` (7535 lines)
+**Updated:** 2026-05-30
+**Node file:** `nodes/OnPrintShop.node.ts` (9873 lines)
 **Knowledge pack:** `VisualGraphxLLC/ops-automation-knowledge-pack` (`OPS_OPERATION_CATALOG.md` + `OPS_MASTER_REFERENCE.md`)
 
 ---
 
-## Executive Summary
+## ✅ Status Update (2026-05-30)
+
+**All 40/40 mutations are now implemented.** The gaps documented below have been resolved:
+
+- `setProductsImageGallery` — implemented (commit `1537976`, merged to main 2026-05-29)
+- `updateOrderStatus` — contract corrected: now uses `type`, `orders_id`, `orders_products_id`, `input` ✅
+- `updateProductStock` — canonical `stock_id`/`product_sku`/`action`/`input` contract confirmed; legacy duplicate removed ✅
+- All P1/P2 mutations from the original roadmap implemented between 2026-04-23 and 2026-05-29
+
+Build passes (`npm run build`). The original gap analysis below is preserved as historical context.
+
+---
+
+## Executive Summary (Historical — 2026-04-04)
 
 The n8n node implements **~22 distinct operations** across 10 resources. The knowledge pack catalogs **30 approved queries** and **35 approved mutations** (65 total approved operations). The node is missing the vast majority of mutations and a significant number of queries. Two implemented mutations use incorrect GraphQL contracts compared to the knowledge pack. Several node-only convenience operations (Get/Get Many splits, legacy resource stubs) have no direct knowledge pack equivalent but are not problematic.
 
@@ -253,12 +267,20 @@ These are documented in the knowledge pack but are currently blocked/failed at t
 
 ## 8. COVERAGE STATISTICS
 
+### Current (2026-05-30)
+
+| Category | Knowledge Pack (Approved) | Node Implements | Coverage |
+|----------|--------------------------|-----------------|----------|
+| Mutations | 40 | **40** | **100%** ✅ |
+
+### Historical (2026-04-04)
+
 | Category | Knowledge Pack (Approved) | Node Implements | Coverage |
 |----------|--------------------------|-----------------|----------|
 | Queries | 30 | 16 | **53%** |
 | Mutations | 35 | 8* | **23%** |
 | **Total** | **65** | **24** | **37%** |
 
-*Mutations counted: updateOrderStatus (broken contract), updateProductStock (correct via product resource, broken via mutation resource), createShipment (unverified contract), setCustomer (via customer create/update -- different contract), setProduct ✅, setProductPrice ✅, setProductSize ✅, setProductCategory ✅.
+*Original mutations counted: updateOrderStatus (broken contract), updateProductStock (correct via product resource, broken via mutation resource), createShipment (unverified contract), setCustomer (via customer create/update -- different contract), setProduct ✅, setProductPrice ✅, setProductSize ✅, setProductCategory ✅.
 
 **Node-only operations not in knowledge pack:** Product Get Simple/Detailed split, Customer Get by email, legacy status operations -- these are UI conveniences that map to knowledge pack queries with different parameterization.
