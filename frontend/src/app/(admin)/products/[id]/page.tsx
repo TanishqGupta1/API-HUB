@@ -144,6 +144,29 @@ export default function ProductDetailPage() {
     fetchData();
   }, [id]);
 
+
+  async function handleMirrorImages() {
+    if (mirrorLoading) return;
+    setMirrorLoading(true);
+    try {
+      const result = await api<{ mirrored: number; skipped: number; failed: number }>(
+        `/api/images/mirror/${id}`,
+        { method: "POST" }
+      );
+      toast.success(`Mirrored ${result.mirrored} image${result.mirrored !== 1 ? "s" : ""}${result.failed ? ` (${result.failed} failed)` : ""}`);
+      const status = await api<{ total_images: number; mirrored_images: number; pending_images: number }>(
+        `/api/images/mirror-status/${id}`
+      );
+      setMirrorStatus(status);
+      fetchData();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Mirror failed");
+    } finally {
+      setMirrorLoading(false);
+    }
+  }
+
+
   const imageTabs = useMemo(() => {
     if (!product) return [] as Array<{ key: string; available: boolean }>;
     const present = new Set(

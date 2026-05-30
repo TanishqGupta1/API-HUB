@@ -218,17 +218,17 @@ class IntegrationKeyCreated(IntegrationKeyOut):
 
 class BatchPushRequest(BaseModel):
     """Fan out a single product to multiple customer storefronts."""
-    product_id: Optional[UUID] = None
+    product_id: UUID
+    supplier_slug: Optional[str] = None  # derived from product if omitted
     supplier_sku: Optional[str] = None
-    supplier_slug: Optional[str] = None
-    customer_ids: list[UUID]
+    customer_ids: list[UUID] = Field(..., min_length=1, max_length=50)
     dry_run: bool = False
 
 
 class BatchPushItem(BaseModel):
     customer_id: UUID
     customer_name: str
-    push_log_id: Optional[UUID] = None
+    push_log_id: Optional[UUID] = None  # None only when accept itself failed
     status: str
     error: Optional[str] = None
 

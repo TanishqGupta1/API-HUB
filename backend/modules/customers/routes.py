@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from modules.auth.dependencies import CurrentUser, VGAdmin
+from modules.auth.dependencies import CurrentUser, VGAdmin, require_customer_access
 from modules.markup.models import MarkupRule
 from modules.push_log.models import ProductPushLog
 
@@ -41,7 +41,7 @@ async def _with_counts(db: AsyncSession, customer: Customer) -> CustomerRead:
 
 
 @router.get("", response_model=list[CustomerRead])
-async def list_customers(db: AsyncSession = Depends(get_db)):
+async def list_customers(_: VGAdmin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Customer).order_by(Customer.created_at.desc()))
     customers = result.scalars().all()
     return [await _with_counts(db, c) for c in customers]
@@ -62,7 +62,11 @@ async def create_customer(body: CustomerCreate, _: VGAdmin, db: AsyncSession = D
     return await _with_counts(db, customer)
 
 
-@router.get("/{customer_id}", response_model=CustomerRead)
+@router.get(
+    "/{customer_id}",
+    response_model=CustomerRead,
+    dependencies=[Depends(require_customer_access)],
+)
 async def get_customer(customer_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Customer).where(Customer.id == customer_id))
     customer = result.scalar_one_or_none()

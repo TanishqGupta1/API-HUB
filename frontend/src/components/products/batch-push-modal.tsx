@@ -40,6 +40,11 @@ const TERMINAL = new Set([
   "pushed", "failed", "partial_failure", "rejected", "canceled", "dry_run_pushed", "error"
 ]);
 
+
+const MAX_POLL_ATTEMPTS = 150; // 5 min @ 2 s/tick
+const MAX_CONSECUTIVE_FAILURES = 5;
+
+
 function isTerminal(s: string) { return TERMINAL.has(s); }
 
 function StatusIcon({ status, polling }: { status: string; polling: boolean }) {
@@ -91,6 +96,15 @@ export function BatchPushModal({ productId, supplierSlug, supplierSku, onClose }
   const [items, setItems] = useState<ItemState[]>([]);
   const [pushing, setPushing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(true);
+  const pollAttemptsRef = useRef(0);
+  const pollFailuresRef = useRef(0);
+
+  // Mark unmounted so async callbacks don't setState after the modal closes.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     api<Customer[]>("/api/customers")
@@ -107,39 +121,68 @@ export function BatchPushModal({ productId, supplierSlug, supplierSku, onClose }
   useEffect(() => {
     if (phase !== "running") return;
 
-    pollRef.current = setInterval(async () => {
-      setItems((prev) => {
-        const inFlight = prev.filter((i) => i.push_log_id && !isTerminal(i.status));
-        if (inFlight.length === 0) {
-          clearInterval(pollRef.current!);
-          setPhase("done");
-        }
-        return prev;
-      });
+    // Reset counters each time a new polling cycle begins.
+    pollAttemptsRef.current = 0;
+    pollFailuresRef.current = 0;
 
-      // Fetch status for each in-flight item
-      setItems((prev) => {
-        const inFlight = prev.filter((i) => i.push_log_id && !isTerminal(i.status));
-        inFlight.forEach(async (item) => {
-          try {
-            const poll = await api<PushStatusPoll>(
-              `/api/integrations/admin/push-requests/${item.push_log_id}`
-            );
-            setItems((cur) =>
-              cur.map((i) =>
-                i.push_log_id === item.push_log_id
-                  ? { ...i, status: poll.status, ops_product_id: poll.ops_product_id, error: poll.error }
-                  : i
-              )
-            );
-          } catch {
-            // keep polling, transient error
+    // Guard: prevent concurrent tick executions if a previous fetch is still
+    // in-flight when the next interval fires (slow responses can overlap).
+    let polling = false;
+
+    function stopPolling() {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (mountedRef.current) setPhase("done");
+    }
+
+    async function tick() {
+      if (polling) return;
+
+      // Hard cap: bail after MAX_POLL_ATTEMPTS ticks (≈5 min).
+      pollAttemptsRef.current += 1;
+      if (pollAttemptsRef.current > MAX_POLL_ATTEMPTS) {
+        stopPolling();
+        return;
+      }
+
+      polling = true;
+      try {
+        setItems((prev) => {
+          const inFlight = prev.filter((i) => i.push_log_id && !isTerminal(i.status));
+          if (inFlight.length === 0) {
+            stopPolling();
           }
+          Promise.resolve().then(() => {
+            inFlight.forEach((item) => {
+              api<PushStatusPoll>(
+                `/api/integrations/admin/push-requests/${item.push_log_id}`
+              )
+                .then((poll) => {
+                  pollFailuresRef.current = 0;
+                  if (!mountedRef.current) return;
+                  setItems((cur) =>
+                    cur.map((i) =>
+                      i.push_log_id === item.push_log_id
+                        ? { ...i, status: poll.status, ops_product_id: poll.ops_product_id, error: poll.error }
+                        : i
+                    )
+                  );
+                })
+                .catch(() => {
+                  pollFailuresRef.current += 1;
+                  if (pollFailuresRef.current >= MAX_CONSECUTIVE_FAILURES) {
+                    stopPolling();
+                  }
+                });
+            });
+          });
+          return prev;
         });
-        return prev;
-      });
-    }, 2000);
+      } finally {
+        polling = false;
+      }
+    }
 
+    pollRef.current = setInterval(tick, 2000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [phase]);
 

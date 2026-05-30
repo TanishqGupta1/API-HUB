@@ -42,13 +42,11 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      // /api/auth/users is a VGAdmin-only endpoint — this page requires
-      // an authenticated admin session (middleware enforces it).
-      const res = await fetch(`${API_BASE}/api/auth/users`, {
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, password, role: "vg_admin" }),
+        body: JSON.stringify({ email, password }),
       });
 
       if (!res.ok) {
@@ -110,55 +108,19 @@ export default function SignupPage() {
   }
 
   return (
-    <div
-      style={{
-        width: "100%",
-        maxWidth: "400px",
-        padding: "40px",
-        background: "var(--paper)",
-        border: "1px solid var(--border)",
-        borderRadius: "4px",
-      }}
-    >
-      <div style={{ marginBottom: "32px" }}>
-        <div
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "11px",
-            fontWeight: 700,
-            color: "var(--blue)",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            marginBottom: "8px",
-          }}
-        >
+    <div className="w-full max-w-sm p-10 bg-[var(--paper)] border border-[var(--border)] rounded">
+      <div className="mb-8">
+        <p className="font-mono text-[11px] font-bold text-[var(--blue)] uppercase tracking-widest mb-2">
           API-HUB
-        </div>
-        <h1
-          style={{
-            fontSize: "20px",
-            fontWeight: 700,
-            color: "var(--ink)",
-            margin: 0,
-          }}
-        >
-          Create account
-        </h1>
+        </p>
+        <h1 className="text-xl font-bold text-[var(--ink)] m-0">Create account</h1>
       </div>
 
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
           <label
             htmlFor="email"
-            style={{
-              display: "block",
-              fontSize: "11px",
-              fontWeight: 700,
-              color: "var(--ink-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "6px",
-            }}
+            className="block text-[11px] font-bold text-[var(--ink-muted)] uppercase tracking-wide mb-1.5"
           >
             Email
           </label>
@@ -169,31 +131,14 @@ export default function SignupPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid var(--border)",
-              borderRadius: "3px",
-              background: "#fff",
-              color: "var(--ink)",
-              fontSize: "14px",
-              boxSizing: "border-box",
-            }}
+            className="w-full px-3 py-2 border border-[var(--border)] rounded-sm bg-white text-[var(--ink)] text-sm"
           />
         </div>
 
         <div>
           <label
             htmlFor="password"
-            style={{
-              display: "block",
-              fontSize: "11px",
-              fontWeight: 700,
-              color: "var(--ink-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "6px",
-            }}
+            className="block text-[11px] font-bold text-[var(--ink-muted)] uppercase tracking-wide mb-1.5"
           >
             Password
           </label>
@@ -204,40 +149,15 @@ export default function SignupPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid var(--border)",
-              borderRadius: "3px",
-              background: "#fff",
-              color: "var(--ink)",
-              fontSize: "14px",
-              boxSizing: "border-box",
-            }}
+            className="w-full px-3 py-2 border border-[var(--border)] rounded-sm bg-white text-[var(--ink)] text-sm"
           />
-          <div
-            style={{
-              fontSize: "11px",
-              color: "var(--ink-muted)",
-              marginTop: "4px",
-            }}
-          >
-            Minimum 12 characters
-          </div>
+          <p className="text-[11px] text-[var(--ink-muted)] mt-1">Minimum 12 characters</p>
         </div>
 
         <div>
           <label
             htmlFor="confirm"
-            style={{
-              display: "block",
-              fontSize: "11px",
-              fontWeight: 700,
-              color: "var(--ink-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "6px",
-            }}
+            className="block text-[11px] font-bold text-[var(--ink-muted)] uppercase tracking-wide mb-1.5"
           >
             Confirm Password
           </label>
@@ -248,30 +168,12 @@ export default function SignupPage() {
             required
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid var(--border)",
-              borderRadius: "3px",
-              background: "#fff",
-              color: "var(--ink)",
-              fontSize: "14px",
-              boxSizing: "border-box",
-            }}
+            className="w-full px-3 py-2 border border-[var(--border)] rounded-sm bg-white text-[var(--ink)] text-sm"
           />
         </div>
 
         {error && (
-          <div
-            style={{
-              padding: "10px 12px",
-              background: "rgba(220,38,38,0.08)",
-              border: "1px solid rgba(220,38,38,0.3)",
-              borderRadius: "3px",
-              fontSize: "13px",
-              color: "#dc2626",
-            }}
-          >
+          <div className="px-3 py-2.5 bg-red-50 border border-red-200 rounded-sm text-sm text-red-600">
             {error}
           </div>
         )}
@@ -279,36 +181,17 @@ export default function SignupPage() {
         <button
           type="submit"
           disabled={loading}
-          style={{
-            padding: "10px 16px",
-            background: "var(--blue)",
-            color: "#fff",
-            border: "none",
-            borderRadius: "3px",
-            fontSize: "13px",
-            fontWeight: 700,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.7 : 1,
-          }}
+          className="px-4 py-2.5 bg-[var(--blue)] text-white border-none rounded-sm text-sm font-bold cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {loading ? "Creating account…" : "Create account"}
         </button>
 
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: "13px",
-            color: "var(--ink-muted)",
-          }}
-        >
+        <p className="text-center text-sm text-[var(--ink-muted)]">
           Already have an account?{" "}
-          <Link
-            href="/login"
-            style={{ color: "var(--blue)", textDecoration: "none", fontWeight: 600 }}
-          >
+          <Link href="/login" className="text-[var(--blue)] no-underline font-semibold">
             Sign in
           </Link>
-        </div>
+        </p>
       </form>
     </div>
   );

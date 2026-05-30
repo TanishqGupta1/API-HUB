@@ -5,13 +5,14 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from modules.auth.dependencies import require_customer_access
 
 from .service import list_candidates
 
 router = APIRouter(prefix="/api/push", tags=["push_candidates"])
 
 
-@router.get("/candidates/{customer_id}")
+@router.get("/candidates/{customer_id}", dependencies=[Depends(require_customer_access)])
 async def get_push_candidates(
     customer_id: UUID,
     supplier_id: Optional[UUID] = Query(None),
