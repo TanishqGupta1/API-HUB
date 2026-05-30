@@ -225,7 +225,8 @@ async def setup_first_admin(
 
 
 @router.get("/signup-status")
-async def signup_status(db: AsyncSession = Depends(get_db)) -> dict:
+@limiter.limit("20/minute")
+async def signup_status(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     """Open exactly when the instance has no users yet (bootstrap). Closed
     forever after — later accounts are provisioned by an admin. The retired
     signup_enabled flag no longer opens public registration."""

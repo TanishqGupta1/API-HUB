@@ -15,7 +15,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     # vg_admin sees all customers; customer_admin is scoped to their customer
-    role: Mapped[str] = mapped_column(String(32), default="vg_admin")
+    role: Mapped[str] = mapped_column(String(32), default="customer_admin")
     customer_id: Mapped[uuid_mod.UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("customers.id", ondelete="CASCADE"),
