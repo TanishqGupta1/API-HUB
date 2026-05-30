@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import time
 from dataclasses import dataclass
@@ -9,6 +10,16 @@ from typing import Any
 import httpx
 
 log = logging.getLogger("ops_client")
+
+
+def _token_cache_key(auth: "OpsAuth") -> str:
+    """Stable Redis key for a given OPS credential pair.
+
+    Derived from client_id + token_url so different storefronts
+    get independent cache slots.
+    """
+    raw = f"{auth.client_id}:{auth.token_url}"
+    return f"ops_token:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
 
 
 @dataclass(frozen=True)
@@ -55,6 +66,18 @@ class OpsGraphQLClient:
     async def _get_token(self) -> str:
         async with self._token_lock:
             now = time.time()
+
+            # ── Try Redis cache first ─────────────────────────────────────────
+            from cache import get_redis
+            redis = get_redis()
+            if redis is not None:
+                cached = await redis.get(_token_cache_key(self.auth))
+                if cached:
+                    self._token = cached          # keep local copy for 401-retry
+                    self._token_expires_at = now + 3600  # approximate; Redis TTL is authoritative
+                    return cached
+
+            # ── Fall back to per-instance cache ───────────────────────────────
             if self._token and now < self._token_expires_at - 30:
                 return self._token
 
@@ -75,14 +98,31 @@ class OpsGraphQLClient:
                 raise RuntimeError(
                     f"OPS token endpoint returned no access_token: {str(body)[:200]}"
                 )
-            self._token = token
             ttl = int(body.get("expires_in", 3600))
+
+            # Store in Redis (expire 60s early to avoid using a near-expired token)
+            if redis is not None:
+                await redis.set(_token_cache_key(self.auth), token, ex=max(ttl - 60, 60))
+
+            self._token = token
             self._token_expires_at = now + ttl
             return self._token
 
     def _invalidate_token(self) -> None:
+        """Invalidate both the per-instance and Redis-cached token."""
         self._token = None
         self._token_expires_at = 0.0
+        # Best-effort Redis eviction so the next request doesn't reuse a
+        # revoked token. Fire-and-forget — don't block the caller.
+        try:
+            from cache import get_redis
+            import asyncio
+            redis = get_redis()
+            if redis is not None:
+                task = asyncio.create_task(redis.delete(_token_cache_key(self.auth)))
+                task.add_done_callback(lambda _: None)  # silence "task never awaited"
+        except Exception:
+            pass
 
     async def execute(self, query: str, *, variables: dict[str, Any]) -> OpsResult:
         """POST a GraphQL mutation/query. Returns OpsResult (never raises)."""

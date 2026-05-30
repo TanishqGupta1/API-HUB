@@ -11,31 +11,75 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import async_session, get_db
 from .models import IntegrationKey
 
-# ── In-process rate limiter (token bucket, per key id) ───────────────────────
-# Keyed by IntegrationKey.id (UUID str) → (tokens_remaining, window_start_ts)
-# Bounded to _RATE_BUCKETS_MAX entries to prevent memory leak per integration key.
+# ── Rate limiter ─────────────────────────────────────────────────────────────
+# When Redis is available (REDIS_URL set) → sliding-window via sorted sets,
+# shared across all server instances.
+# When Redis is unavailable → in-process token-bucket fallback (single instance
+# only; breaks under horizontal scale but keeps dev/staging working without Redis).
+
+# In-process fallback state
 _RATE_BUCKETS: dict[str, tuple[int, float]] = {}
 _RATE_BUCKETS_MAX = 10_000
 _rate_lock = asyncio.Lock()
+
 # Strong refs to in-flight fire-and-forget tasks so the event loop doesn't
 # GC them mid-run (asyncio holds only weak refs to tasks).
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
+async def _check_rate_limit_redis(key_str: str, limit: int) -> bool:
+    """Sliding-window rate check via Redis sorted sets.
+
+    Returns True if the request is allowed, False if rate-limited.
+    Uses a pipeline so the check is atomic within one round-trip.
+    """
+    from cache import get_redis
+    redis = get_redis()
+    if redis is None:
+        return True  # Redis unavailable — defer to in-process fallback
+
+    rkey = f"rl:{key_str}"
+    now = time.time()
+    window_start = now - 60.0
+
+    pipe = redis.pipeline()
+    pipe.zremrangebyscore(rkey, "-inf", window_start)   # drop old entries
+    pipe.zadd(rkey, {f"{now:.6f}": now})                # record this request
+    pipe.zcard(rkey)                                     # count in window
+    pipe.expire(rkey, 65)                                # TTL slightly > window
+    results = await pipe.execute()
+    count: int = results[2]
+    return count <= limit
+
+
 async def _check_rate_limit(key: IntegrationKey) -> None:
     """Raise 429 if the key has exceeded its rate_limit_per_minute.
 
-    Uses an asyncio.Lock so concurrent coroutines don't race the dict write.
+    Tries Redis first (cross-instance, accurate under horizontal scale).
+    Falls back to the in-process token-bucket when Redis is unavailable.
     """
     limit = key.rate_limit_per_minute
     if not limit or limit <= 0:
         return
+
     key_str = str(key.id)
+
+    # ── Redis path ────────────────────────────────────────────────────────────
+    from cache import get_redis
+    if get_redis() is not None:
+        allowed = await _check_rate_limit_redis(key_str, limit)
+        if not allowed:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={"code": "RATE_LIMITED", "message": "Request rate limit exceeded"},
+            )
+        return
+
+    # ── In-process fallback (single-instance only) ────────────────────────────
     now = time.monotonic()
     async with _rate_lock:
         tokens, window_start = _RATE_BUCKETS.get(key_str, (limit, now))
         if now - window_start >= 60:
-            # New window — reset bucket
             tokens = limit
             window_start = now
         if tokens <= 0:
@@ -44,7 +88,6 @@ async def _check_rate_limit(key: IntegrationKey) -> None:
                 detail={"code": "RATE_LIMITED", "message": "Request rate limit exceeded"},
             )
         _RATE_BUCKETS[key_str] = (tokens - 1, window_start)
-        # Evict oldest entries when the dict grows too large
         if len(_RATE_BUCKETS) > _RATE_BUCKETS_MAX:
             oldest = min(_RATE_BUCKETS, key=lambda k: _RATE_BUCKETS[k][1])
             del _RATE_BUCKETS[oldest]
