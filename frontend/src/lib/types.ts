@@ -603,7 +603,7 @@ export interface OPSStepResult {
 
 /** Opaque JSONB shape; spec leaves the contents flexible. */
 export interface CleanupTargets {
-  ops_product_id?: number | null;
+  ops_product_id?: string | null;
   product_size_ids?: number[];
   option_ids?: number[];
   attribute_ids?: number[];
@@ -637,7 +637,7 @@ export interface PushLog {
   supplier_sku: string | null;
   status: PushStatus;
   dry_run: boolean;
-  ops_product_id: number | null;
+  ops_product_id: string | null;
   error: string | null;
   step_results: OPSStepResult[];
   cleanup_targets: CleanupTargets | null;
@@ -687,7 +687,7 @@ export interface PushTerminalResponse {
   customer_id: string;
   supplier_slug: string;
   supplier_sku: string;
-  ops_product_id: number | null;
+  ops_product_id: string | null;
   mapping_id: string | null;
   error: string | null;
   step_results: OPSStepResult[];

@@ -220,7 +220,6 @@ function PrintProductRow({ product: p, index }: { product: ProductListItem; inde
           overflow: "hidden",
           position: "relative",
           display: "flex", alignItems: "center", justifyContent: "center",
-          position: "relative",
         }}>
           {p.image_url ? (
             <Image src={p.image_url} alt="" fill sizes="56px" style={{ objectFit: "contain", padding: "4px" }} />
