@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from modules.auth.dependencies import _require_vg_admin
+from modules.auth.dependencies import _require_vg_admin, CurrentUser
 from modules.catalog.ingest import require_ingest_secret
 
 from . import service
@@ -25,10 +25,16 @@ async def upsert_mapping(
 
 @router.get("", response_model=list[PushMappingRead])
 async def list_mappings(
+    current_user: CurrentUser,
     customer_id: UUID = Query(None),
     source_product_id: UUID = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
+    # customer_admin may only read their own tenant; reject a foreign customer_id.
+    if current_user.role == "customer_admin":
+        if customer_id is not None and customer_id != current_user.customer_id:
+            raise HTTPException(403, "Not authorized for this customer")
+        customer_id = current_user.customer_id
     return await service.get_push_mappings(db, customer_id, source_product_id)
 
 

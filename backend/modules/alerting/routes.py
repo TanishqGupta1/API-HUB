@@ -21,8 +21,8 @@ router = APIRouter(prefix="/api/notifications", tags=["alerting"])
 
 @router.get("", response_model=list[NotificationRead])
 async def list_notifications(
-    include_read: bool = False,
     _: VGAdmin,
+    include_read: bool = False,
     db: AsyncSession = Depends(get_db),
 ) -> list[Notification]:
     q = select(Notification).order_by(Notification.created_at.desc())

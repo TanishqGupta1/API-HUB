@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from modules.auth.dependencies import VGAdmin
 from modules.customers.models import Customer
 
 from .models import ProductPushLog
@@ -16,6 +17,7 @@ push_status_router = APIRouter(prefix="/api/products", tags=["push_log"])
 
 @router.get("", response_model=list[PushLogRead])
 async def list_push_logs(
+    _: VGAdmin,
     product_id: UUID | None = None,
     customer_id: UUID | None = None,
     limit: int = Query(default=20, le=200),
@@ -56,7 +58,7 @@ async def list_push_logs(
 
 
 @router.post("", response_model=PushLogRead, status_code=201)
-async def create_push_log(body: PushLogCreate, db: AsyncSession = Depends(get_db)):
+async def create_push_log(body: PushLogCreate, _: VGAdmin, db: AsyncSession = Depends(get_db)):
     from modules.catalog.models import Product
     from modules.suppliers.models import Supplier
 
@@ -90,7 +92,7 @@ async def create_push_log(body: PushLogCreate, db: AsyncSession = Depends(get_db
 
 
 @push_status_router.get("/{product_id}/push-status", response_model=list[ProductPushStatus])
-async def get_push_status(product_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_push_status(product_id: UUID, _: VGAdmin, db: AsyncSession = Depends(get_db)):
     # Single query: latest log per customer for this product using subquery
     subq = (
         select(
