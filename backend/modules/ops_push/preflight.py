@@ -49,6 +49,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from modules.common.ssrf import assert_safe_url
 from modules.catalog.models import (
     Product,
     ProductImage,
@@ -675,9 +676,16 @@ async def check_image_urls_reachable(
 
     async def _head(url: str) -> tuple[str, bool, str]:
         async with sem:
+            # SSRF guard: block link-local (169.254/16 incl. cloud metadata),
+            # loopback, RFC-1918, reserved. Must run before httpx touches the
+            # URL. follow_redirects=False prevents a 30x → metadata pivot.
+            try:
+                assert_safe_url(url)
+            except ValueError as exc:
+                return url, False, f"BlockedURL: {exc}"
             try:
                 async with httpx.AsyncClient(timeout=timeout_seconds) as client:
-                    resp = await client.head(url, follow_redirects=True)
+                    resp = await client.head(url, follow_redirects=False)
                 ok = 200 <= resp.status_code < 300
                 return url, ok, f"HTTP {resp.status_code}"
             except Exception as exc:  # noqa: BLE001
