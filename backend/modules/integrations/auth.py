@@ -202,8 +202,8 @@ async def _update_last_used(key_id) -> None:
                 .values(last_used_at=datetime.now(timezone.utc))
             )
             await db.commit()
-    except Exception:
-        pass  # Non-critical — never fail a request over this
+    except Exception:  # noqa: BLE001 — intentionally broad; last_used is non-critical
+        pass
 
 
 def check_key_scope(
