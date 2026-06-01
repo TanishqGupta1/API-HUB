@@ -35,7 +35,16 @@ async def resolve_customer_quote(
             select(MarkupRule).where(MarkupRule.customer_id == customer_id)
         )
     ).scalars().all()
-    rule = resolve_rule(rules, product.supplier_sku, product.category)
+
+    # Derive supplier slug so `supplier:{slug}`-scoped rules resolve here too.
+    # Without this, supplier-scoped rules match in the push payload
+    # (markup/engine.calculate_price passes supplier_slug) but were silently
+    # ignored in the customer quote — making the two pricing paths disagree.
+    from modules.suppliers.models import Supplier
+    supplier = await db.get(Supplier, product.supplier_id)
+    supplier_slug = supplier.slug if supplier else None
+
+    rule = resolve_rule(rules, product.supplier_sku, product.category, supplier_slug)
 
     marked_up_unit = apply_markup(base_result.unit_price, rule)
 
