@@ -4,6 +4,7 @@ slowapi>=0.1.9
 uvicorn[standard]>=0.30.0
 sqlalchemy[asyncio]>=2.0.30
 asyncpg>=0.30.0
+psycopg2-binary>=2.9.0         # sync driver required by Alembic (strips +asyncpg from URL)
 pydantic>=2.9.0
 httpx>=0.27.0
 zeep>=4.3.0

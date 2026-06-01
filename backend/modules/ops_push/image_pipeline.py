@@ -9,6 +9,8 @@ from io import BytesIO
 import httpx
 from PIL import Image
 
+from modules.common.ssrf import assert_safe_url
+
 
 async def process_image(source_url: str) -> bytes:
     """Download, resize to 800x800, convert to WebP q85.
@@ -23,8 +25,11 @@ async def process_image(source_url: str) -> bytes:
         httpx.HTTPError: if the download fails.
         PIL.UnidentifiedImageError: if the response is not a valid image.
     """
-    # Download
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+    # SSRF guard — source_url comes from supplier ingest (untrusted). Block
+    # cloud-metadata / loopback / private targets, and do NOT follow redirects
+    # (a public URL could 30x into an internal one).
+    assert_safe_url(source_url)
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
         r = await client.get(source_url)
         r.raise_for_status()
 

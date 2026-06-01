@@ -51,6 +51,19 @@ export function ProductCard({ product, isSelected, onToggleSelection, onArchive 
     }
   }
 
+  function getMissingFields(p: typeof product) {
+    const missing: string[] = [];
+    if (!p.brand) missing.push("brand");
+    if (!p.category_id) missing.push("category");
+    if (p.price_min == null) missing.push("price");
+    if ((p.total_inventory ?? 0) === 0) missing.push("inventory");
+    if (!p.image_url) missing.push("image");
+    return missing;
+  }
+
+  const missingFields = getMissingFields(product);
+  const isReady = missingFields.length === 0;
+
   const badge =
     product.supplier_name?.split(" ")[0].toUpperCase() ||
     product.brand?.substring(0, 5).toUpperCase() ||
@@ -133,6 +146,11 @@ export function ProductCard({ product, isSelected, onToggleSelection, onArchive 
       {/* Card footer */}
       <div className="flex items-center justify-between px-5 py-3 bg-[#f9f7f4] border-t border-dashed border-[#cfccc8]">
         <div className="flex items-center gap-2">
+          {/* Readiness dot — green = ready, amber = missing fields */}
+          <span
+            className={`inline-block w-[7px] h-[7px] rounded-full flex-shrink-0 ${isReady ? "bg-emerald-400" : "bg-amber-400"}`}
+            title={isReady ? "Push ready" : `Missing: ${missingFields.join(", ")}`}
+          />
           <span className="text-[10px] font-bold uppercase text-[#484852]">
             {product.product_type}
           </span>

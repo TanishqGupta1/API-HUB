@@ -5,8 +5,13 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "**" },
-      { protocol: "http", hostname: "**" },
+      { protocol: "https", hostname: "*.sanmar.com" },
+      { protocol: "https", hostname: "cdn.ssactivewear.com" },
+      { protocol: "https", hostname: "*.alphabroder.com" },
+      { protocol: "https", hostname: "images.alphabroder.com" },
+      { protocol: "https", hostname: "*.4over.com" },
+      { protocol: "https", hostname: "*.cloudfront.net" },
+      // Add project CDN/S3/R2 host here when configured
     ],
   },
   output: "standalone",

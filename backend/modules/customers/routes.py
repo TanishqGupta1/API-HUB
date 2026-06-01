@@ -1,6 +1,9 @@
+import logging
 from uuid import UUID
 
 import httpx
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -156,17 +159,20 @@ async def test_customer(customer_id: UUID, _: VGAdmin, db: AsyncSession = Depend
                 "customer_id": str(customer_id),
                 "token_endpoint": customer.ops_token_url,
             }
+        logger.warning("ops token test non-200 customer=%s status=%s body=%s",
+                       customer_id, resp.status_code, resp.text[:500])
         return {
             "ok": False,
             "customer_id": str(customer_id),
             "token_endpoint": customer.ops_token_url,
             "http_status": resp.status_code,
-            "error": resp.text[:200],
+            "error_code": "TOKEN_ENDPOINT_REJECTED",
         }
-    except Exception as exc:
+    except Exception:
+        logger.exception("ops token test failed customer=%s", customer_id)
         return {
             "ok": False,
             "customer_id": str(customer_id),
             "token_endpoint": customer.ops_token_url,
-            "error": str(exc)[:200],
+            "error_code": "TOKEN_REQUEST_FAILED",
         }

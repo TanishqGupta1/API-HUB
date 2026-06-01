@@ -88,7 +88,8 @@ async def _ops_graphql_ping(base_url: str, auth_token: str) -> bool:
             },
         )
     if resp.status_code >= 400:
-        raise RuntimeError(f"OPS GraphQL returned {resp.status_code}: {resp.text[:200]}")
+        logger.warning("OPS GraphQL ping non-200 status=%s body=%s", resp.status_code, resp.text[:500])
+        raise RuntimeError(f"OPS GraphQL returned {resp.status_code}")
     payload = resp.json()
     if payload.get("errors"):
         raise RuntimeError(f"OPS GraphQL errors: {payload['errors'][0].get('message', '')}")
@@ -167,6 +168,14 @@ async def get_push_status(
 ):
     push_log = await db.get(ProductPushLog, push_log_id)
     if not push_log:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
+            "code": "UNKNOWN_REF", "message": "Push request not found"
+        })
+    # Enforce same key scope as write paths — return 404 (not 403) so a
+    # foreign key cannot confirm existence of another tenant's push log.
+    try:
+        check_key_scope(key, str(push_log.customer_id), push_log.supplier_slug or "*")
+    except HTTPException:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
             "code": "UNKNOWN_REF", "message": "Push request not found"
         })
@@ -473,15 +482,17 @@ async def ops_connection_test(
         token = await _fetch_oauth_token(
             customer.ops_token_url, customer.ops_client_id, client_secret
         )
-    except Exception as exc:  # noqa: BLE001 — surface upstream auth detail
+    except Exception:  # noqa: BLE001
         logger.exception("ops_connection_test OAuth failed customer=%s", customer.id)
-        return {"ok": False, "error": f"OAuth failed: {exc}"}
+        return {"ok": False, "error_code": "OAUTH_FAILED",
+                "error": "Could not authenticate against the OPS token endpoint."}
 
     try:
         await _ops_graphql_ping(customer.ops_base_url, token)
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         logger.exception("ops_connection_test GraphQL ping failed customer=%s", customer.id)
-        return {"ok": False, "error": f"GraphQL ping failed: {exc}"}
+        return {"ok": False, "error_code": "GRAPHQL_PING_FAILED",
+                "error": "OPS token is valid but GraphQL endpoint is unreachable."}
 
     return {
         "ok": True,

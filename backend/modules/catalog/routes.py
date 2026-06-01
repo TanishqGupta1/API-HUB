@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
+from modules.auth.dependencies import CurrentUser
 from modules.suppliers.models import Supplier
 
 from modules.push_log.models import ProductPushLog
@@ -45,6 +46,7 @@ async def _category_descendants(db: AsyncSession, root_id: UUID) -> list[UUID]:
 
 @router.get("", response_model=list[ProductListRead])
 async def list_products(
+    current_user: CurrentUser,
     supplier_id: Optional[UUID] = None,
     category_id: Optional[UUID] = None,
     customer_id: Optional[UUID] = None,
@@ -87,6 +89,9 @@ async def list_products(
     if category_id:
         descendants = await _category_descendants(db, category_id)
         query = query.where(Product.category_id.in_(descendants))
+    if customer_id is not None and current_user.role == "customer_admin":
+        if customer_id != current_user.customer_id:
+            raise HTTPException(403, "Not authorized for this customer")
     if customer_id:
         pushed_ids = (
             await db.execute(
@@ -235,7 +240,12 @@ async def export_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
             "base_price": float(v.base_price) if v.base_price is not None else None,
             "inventory": v.inventory,
             "prices": [
-                {"quantity": p.quantity, "price": float(p.price)}
+                {
+                    "price_type": p.price_type,
+                    "quantity_min": p.quantity_min,
+                    "quantity_max": p.quantity_max,
+                    "price": float(p.price),
+                }
                 for p in (v.prices or [])
             ],
         }

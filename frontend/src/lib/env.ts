@@ -31,10 +31,10 @@ if (NODE_ENV === "production" && !RAW_API_URL) {
  * Auto-upgrade `http://` to `https://` when the page is loaded over HTTPS.
  *
  * Why: in some deployments `NEXT_PUBLIC_API_URL` is baked at build time to
- * a raw ALB hostname over HTTP. When the frontend is served over HTTPS,
- * the browser blocks those fetches as Mixed Content and login fails with
- * "Failed to fetch". Forcing HTTPS client-side keeps login working even
- * when the env var is misconfigured.
+ * a raw ALB hostname over HTTP (e.g. `http://apihub-dev-alb-...amazonaws.com`).
+ * When the frontend is served over HTTPS, the browser blocks those fetches
+ * as Mixed Content and login fails with "Failed to fetch". Forcing HTTPS
+ * client-side keeps login working even when the env var is misconfigured.
  *
  * No-op on the server (window is undefined) and in plain-HTTP local dev.
  */

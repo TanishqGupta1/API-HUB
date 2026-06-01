@@ -40,8 +40,10 @@ const TERMINAL = new Set([
   "pushed", "failed", "partial_failure", "rejected", "canceled", "dry_run_pushed", "error"
 ]);
 
+
 const MAX_POLL_ATTEMPTS = 150; // 5 min @ 2 s/tick
 const MAX_CONSECUTIVE_FAILURES = 5;
+
 
 function isTerminal(s: string) { return TERMINAL.has(s); }
 
@@ -144,21 +146,18 @@ export function BatchPushModal({ productId, supplierSlug, supplierSku, onClose }
 
       polling = true;
       try {
-        // Read current items synchronously outside of the setState updater so
-        // we don't spawn async work inside a state update function.
         setItems((prev) => {
           const inFlight = prev.filter((i) => i.push_log_id && !isTerminal(i.status));
           if (inFlight.length === 0) {
             stopPolling();
           }
-          // Fire fetches for in-flight items outside this updater via a microtask.
           Promise.resolve().then(() => {
             inFlight.forEach((item) => {
               api<PushStatusPoll>(
                 `/api/integrations/admin/push-requests/${item.push_log_id}`
               )
                 .then((poll) => {
-                  pollFailuresRef.current = 0; // reset on success
+                  pollFailuresRef.current = 0;
                   if (!mountedRef.current) return;
                   setItems((cur) =>
                     cur.map((i) =>

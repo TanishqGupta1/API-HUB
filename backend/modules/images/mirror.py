@@ -10,15 +10,12 @@ Entry points:
 """
 
 import hashlib
-import ipaddress
 import logging
 import os
 import re
-import socket
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Optional
-from urllib.parse import urlparse
 from uuid import UUID
 
 import httpx
@@ -26,6 +23,7 @@ from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from modules.common.ssrf import assert_safe_url
 from modules.images.storage import is_own_cdn, upload_image
 
 log = logging.getLogger(__name__)
@@ -58,29 +56,6 @@ def _s3_key(supplier_slug: str, sku: str, image_type: str, color: Optional[str],
     )
 
 
-def _assert_safe_url(url: str) -> None:
-    """Block SSRF targets: non-http(s) schemes, private/loopback IPs, link-local.
-
-    Raises ValueError for any URL that should not be fetched from the public
-    internet (cloud metadata endpoints, localhost, RFC-1918 ranges, etc.).
-    """
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"Disallowed URL scheme: {parsed.scheme!r}")
-    hostname = parsed.hostname
-    if not hostname:
-        raise ValueError("URL has no hostname")
-    try:
-        ip_str = socket.gethostbyname(hostname)
-        ip = ipaddress.ip_address(ip_str)
-    except OSError as exc:
-        raise ValueError(f"Cannot resolve hostname {hostname!r}: {exc}") from exc
-    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-        raise ValueError(
-            f"URL resolves to a disallowed address ({ip_str}) — SSRF guard"
-        )
-
-
 async def _fetch_and_process(url: str) -> tuple[bytes, str]:
     """Download image, resize to _MAX_DIM, convert to WebP. Returns (bytes, sha256).
 
@@ -91,9 +66,9 @@ async def _fetch_and_process(url: str) -> tuple[bytes, str]:
     Preserves alpha channel — logos and transparent PNGs are saved as WebP
     with RGBA so the transparency survives the format conversion.
     """
-    _assert_safe_url(url)
+    assert_safe_url(url)
     buf = BytesIO()
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
         async with client.stream("GET", url) as r:
             r.raise_for_status()
             received = 0

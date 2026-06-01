@@ -17,8 +17,7 @@ import { PushHistory } from "@/components/products/push-history";
 import { useSelectedCustomer } from "@/lib/customer-context";
 import { BrandingPanel } from "@/components/products/BrandingPanel";
 import type { Customer as CustomerType } from "@/lib/types";
-import { AlertTriangle, CheckCircle2, ImageIcon, Layers, Plus } from "lucide-react";
-import { BatchPushModal } from "@/components/products/batch-push-modal";
+import { AlertTriangle, CheckCircle2, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type { ProductPreview } from "@/lib/types";
 import Image from "next/image";
@@ -53,9 +52,7 @@ export default function ProductDetailPage() {
   const [addedThisSession, setAddedThisSession] = useState(false);
   const [customer, setCustomer] = useState<CustomerType | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
-  const [batchPushOpen, setBatchPushOpen] = useState(false);
-  const [mirrorLoading, setMirrorLoading] = useState(false);
-  const [mirrorStatus, setMirrorStatus] = useState<{ total_images: number; mirrored_images: number; pending_images: number } | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (selectedCustomerId) {
@@ -83,6 +80,33 @@ export default function ProductDetailPage() {
       toast.error(msg);
     } finally {
       setAdding(false);
+    }
+  }
+
+  function freshnessLabel(lastSynced: string | null | undefined) {
+    if (!lastSynced) return { text: "never synced", color: "text-[#b93232]" };
+    const ageMin = (Date.now() - new Date(lastSynced).getTime()) / 60000;
+    if (ageMin < 15) return { text: `${Math.floor(ageMin)}m ago`, color: "text-[#247a52]" };
+    if (ageMin < 60) return { text: `${Math.floor(ageMin)}m ago`, color: "text-[#c17c00]" };
+    const ageHr = ageMin / 60;
+    if (ageHr < 24) return { text: `${Math.floor(ageHr)}h ago`, color: "text-[#b93232]" };
+    return { text: `${Math.floor(ageHr / 24)}d ago`, color: "text-[#b93232]" };
+  }
+
+  async function handleSyncNow() {
+    if (!product || syncing) return;
+    setSyncing(true);
+    try {
+      await api(`/api/suppliers/${product.supplier_id}/import`, {
+        method: "POST",
+        body: JSON.stringify({ mode: "explicit_list", explicit_list: [product.supplier_sku] }),
+      });
+      toast.success("Sync started — refreshing in 5s…");
+      setTimeout(fetchData, 5000);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -118,10 +142,8 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     fetchData();
-    api<{ total_images: number; mirrored_images: number; pending_images: number }>(
-      `/api/images/mirror-status/${id}`
-    ).then(setMirrorStatus).catch(() => null);
   }, [id]);
+
 
   async function handleMirrorImages() {
     if (mirrorLoading) return;
@@ -143,6 +165,7 @@ export default function ProductDetailPage() {
       setMirrorLoading(false);
     }
   }
+
 
   const imageTabs = useMemo(() => {
     if (!product) return [] as Array<{ key: string; available: boolean }>;
@@ -259,11 +282,17 @@ export default function ProductDetailPage() {
           <div className="text-[32px] font-extrabold tracking-[-0.04em] leading-none text-[#1e1e24]">
             {product.product_name}
           </div>
-          <div className="text-[13px] text-[#888894] mt-2">
-            SKU: {product.supplier_sku} · Supplier: {product.supplier_name || "API Source"} ·{" "}
-            {product.last_synced
-              ? `Last synced ${new Date(product.last_synced).toLocaleDateString()}`
-              : "New Item Entry"}
+          <div className="text-[13px] text-[#888894] mt-2 flex items-center gap-2 flex-wrap">
+            <span>SKU: {product.supplier_sku} · Supplier: {product.supplier_name || "API Source"}</span>
+            <span>·</span>
+            {(() => {
+              const { text, color } = freshnessLabel(product.last_synced);
+              return (
+                <span className={`font-semibold font-mono text-[12px] ${color}`}>
+                  synced {text}
+                </span>
+              );
+            })()}
           </div>
         </div>
         <div className="flex gap-3">
@@ -291,35 +320,6 @@ export default function ProductDetailPage() {
               )}
             </button>
           )}
-          <button
-            onClick={handleMirrorImages}
-            disabled={mirrorLoading}
-            title={mirrorStatus ? `${mirrorStatus.mirrored_images}/${mirrorStatus.total_images} images on CDN` : "Mirror images to CDN"}
-            className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
-                       bg-white text-[#484852] border border-[#cfccc8] shadow-[0_3px_0_rgba(30,77,146,0.08)]
-                       hover:border-[#1e4d92] disabled:opacity-50 transition-all"
-          >
-            <ImageIcon className="w-4 h-4" />
-            {mirrorLoading ? "Mirroring…" : "Mirror Images"}
-            {mirrorStatus && mirrorStatus.total_images > 0 && (
-              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                mirrorStatus.pending_images === 0
-                  ? "bg-[#f0f9f4] text-[#247a52]"
-                  : "bg-[#fff7e0] text-[#c17c00]"
-              }`}>
-                {mirrorStatus.mirrored_images}/{mirrorStatus.total_images}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setBatchPushOpen(true)}
-            className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
-                       bg-[#1e4d92] text-white shadow-[0_3px_0_rgba(30,77,146,0.25)]
-                       hover:bg-[#173d74] transition-all"
-          >
-            <Layers className="w-4 h-4" />
-            Push to All Storefronts
-          </button>
           <PublishButton
             productId={id}
             supplierSlug={supplier?.slug}
@@ -327,6 +327,17 @@ export default function ProductDetailPage() {
               setTimeout(fetchData, 2000);
             }}
           />
+          <button
+            onClick={handleSyncNow}
+            disabled={syncing}
+            title="Re-fetch this product from the supplier API and update the database"
+            className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
+                       bg-white text-[#484852] border border-[#cfccc8] shadow-[0_3px_0_rgba(30,77,146,0.08)]
+                       hover:border-[#1e4d92] disabled:opacity-50 transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing…" : "Sync Now"}
+          </button>
           <button
             onClick={fetchData}
             className="inline-flex items-center gap-2 px-5 py-[10px] rounded-md text-[13px] font-semibold
@@ -396,25 +407,6 @@ export default function ProductDetailPage() {
             })}
           </div>
 
-          {/* CDN mirror status */}
-          {mirrorStatus && mirrorStatus.total_images > 0 && (
-            <div className={`mt-2 flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-semibold ${
-              mirrorStatus.pending_images === 0
-                ? "bg-[#f0f9f4] text-[#247a52] border border-[#b0ddc0]"
-                : "bg-[#fff7e0] text-[#c17c00] border border-[#f0d090]"
-            }`}>
-              {mirrorStatus.pending_images === 0 ? (
-                <CheckCircle2 className="w-3 h-3 shrink-0" />
-              ) : (
-                <ImageIcon className="w-3 h-3 shrink-0" />
-              )}
-              <span>
-                {mirrorStatus.pending_images === 0
-                  ? `All ${mirrorStatus.total_images} images on CDN`
-                  : `${mirrorStatus.mirrored_images}/${mirrorStatus.total_images} on CDN · ${mirrorStatus.pending_images} pending`}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Right — metadata */}
@@ -647,14 +639,6 @@ export default function ProductDetailPage() {
       </div>
     </div>
 
-    {batchPushOpen && product && (
-      <BatchPushModal
-        productId={id}
-        supplierSlug={supplier?.slug}
-        supplierSku={product.supplier_sku}
-        onClose={() => setBatchPushOpen(false)}
-      />
-    )}
-    </>
+</>
   );
 }
