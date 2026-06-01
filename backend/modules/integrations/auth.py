@@ -141,6 +141,22 @@ def _hash_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
 
+async def _get_key_from_db(db: AsyncSession, key_hash: str) -> Optional[IntegrationKey]:
+    """Look up a non-synthetic IntegrationKey by its hashed value.
+
+    Filter out synthetic admin-proxy keys at SQL level — they MUST NOT
+    be reachable via the X-Orchestrator-Key header path. The admin-proxy
+    route loads them by primary key separately.
+    """
+    result = await db.execute(
+        select(IntegrationKey).where(
+            IntegrationKey.key_hash == key_hash,
+            IntegrationKey.is_synthetic == False,  # noqa: E712 — SQL boolean
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def get_orchestrator_key(
     x_orchestrator_key: Annotated[Optional[str], Header(alias="X-Orchestrator-Key")] = None,
     db: AsyncSession = Depends(get_db),
@@ -151,16 +167,7 @@ async def get_orchestrator_key(
         })
 
     key_hash = _hash_key(x_orchestrator_key)
-    # Filter out synthetic admin-proxy keys at SQL level — they MUST NOT
-    # be reachable via the X-Orchestrator-Key header path. The admin-proxy
-    # route loads them by primary key separately.
-    result = await db.execute(
-        select(IntegrationKey).where(
-            IntegrationKey.key_hash == key_hash,
-            IntegrationKey.is_synthetic == False,  # noqa: E712 — SQL boolean
-        )
-    )
-    key = result.scalar_one_or_none()
+    key = await _get_key_from_db(db, key_hash)
 
     if not key:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail={
