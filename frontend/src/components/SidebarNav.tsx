@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { fetchUser, logout, type AuthUser } from "@/lib/auth";
 import { useSelectedCustomer } from "@/lib/customer-context";
 import { LayoutGrid } from "lucide-react";
+import { NotificationBell } from "@/components/NotificationBell";
 
 const NAV_ITEMS = [
   {
@@ -306,6 +307,8 @@ export default function SidebarNav() {
               </span>
             </Link>
           ))}
+          {/* Notifications — rendered separately so it can show a live badge */}
+          {group.section === "Actions" && <NotificationBell />}
           {/* Dynamic Customer Catalog Link */}
           {group.section === "Products" && selectedCustomerId && (
             <Link

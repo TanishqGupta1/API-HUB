@@ -26,6 +26,7 @@ from .base import (
     AdapterError,
     AuthError,
     DiscoveryMode,
+    ProductRef,
     SupplierError,
     TransientError,
 )
@@ -96,6 +97,12 @@ async def run_existing_import_job(
             await _finalize_job(db, job, status="failed", errors=errors, supplier=supplier, mode=mode)
             return
 
+        # INVENTORY_ONLY: skip full discover/hydrate — read known SKUs from DB
+        # and only update variant.inventory. Much faster than full hydrate.
+        if mode == DiscoveryMode.INVENTORY_ONLY:
+            await _run_inventory_only(db, job, adapter, supplier)
+            return
+
         try:
             refs = await adapter.discover(
                 mode, limit=limit, explicit_list=explicit_list,
@@ -112,57 +119,55 @@ async def run_existing_import_job(
         job.total_products = len(refs)
         await db.commit()
 
+        # Semaphore limits concurrent SOAP calls — 10 at a time is safe for
+        # SanMar without hitting rate limits, giving ~10x speedup over serial.
+        _sem = asyncio.Semaphore(10)
+
+        async def _hydrate_one(ref) -> tuple[bool, dict | None]:
+            """Fetch and persist one product. Returns (success, error_dict|None)."""
+            async with _sem:
+                retries = 2
+                while retries >= 0:
+                    try:
+                        ingest = await adapter.hydrate_product(ref)
+                        async with async_session() as own_db:
+                            await persist_product(own_db, supplier.id, ingest)
+                            await own_db.commit()
+                        return True, None
+                    except AuthError as e:
+                        return False, {"phase": "hydrate", "ref": ref.supplier_sku, "code": e.code, "msg": str(e), "fatal": True}
+                    except TransientError as e:
+                        if retries > 0:
+                            backoff = 2 ** (2 - retries)
+                            log.info("Transient error for %s, retrying in %ds... (%d left)", ref.supplier_sku, backoff, retries)
+                            retries -= 1
+                            await asyncio.sleep(backoff)
+                            continue
+                        return False, {"phase": "hydrate", "ref": ref.supplier_sku, "code": getattr(e, "code", None), "msg": str(e)}
+                    except (SupplierError, PersistError, AdapterError) as e:
+                        return False, {"phase": "hydrate", "ref": ref.supplier_sku, "code": getattr(e, "code", None), "msg": str(e)}
+                    except Exception as e:  # noqa: BLE001
+                        log.exception("unexpected per-product error for %s: %s", ref.supplier_sku, e)
+                        return False, {"phase": "hydrate", "ref": ref.supplier_sku, "msg": str(e)}
+                return False, {"phase": "hydrate", "ref": ref.supplier_sku, "msg": "exhausted retries"}
+
+        results = await asyncio.gather(*[_hydrate_one(ref) for ref in refs])
+
         success_count = 0
         fail_count = 0
-        for ref in refs:
-            retries = 2
-            while retries >= 0:
-                try:
-                    ingest = await adapter.hydrate_product(ref)
-                    await persist_product(db, supplier.id, ingest)
-                    await db.commit()
-                    success_count += 1
-                    break
-                except AuthError as e:
-                    # Mid-loop auth = still fatal.
-                    errors.append({"phase": "hydrate", "ref": ref.supplier_sku, "code": e.code, "msg": str(e)})
-                    await db.rollback()
-                    await _finalize_job(db, job, status="failed", errors=errors, success_count=success_count, failed_count=fail_count, supplier=supplier, mode=mode)
-                    return
-                except TransientError as e:
-                    if retries > 0:
-                        backoff = 2 ** (2 - retries)
-                        log.info("Transient error for %s, retrying in %ds... (%d left)", ref.supplier_sku, backoff, retries)
-                        retries -= 1
-                        await db.rollback()
-                        await asyncio.sleep(backoff)
-                        continue
-                    errors.append({
-                        "phase": "hydrate",
-                        "ref": ref.supplier_sku,
-                        "code": getattr(e, "code", None),
-                        "msg": str(e),
-                    })
-                    await db.rollback()
-                    fail_count += 1
-                    break
-                except (SupplierError, PersistError, AdapterError) as e:
-                    errors.append({
-                        "phase": "hydrate",
-                        "ref": ref.supplier_sku,
-                        "code": getattr(e, "code", None),
-                        "msg": str(e),
-                    })
-                    await db.rollback()
-                    fail_count += 1
-                    break
-                except Exception as e:                              # noqa: BLE001
-                    # Unexpected — log + continue but track in errors[].
-                    log.exception("unexpected per-product error: %s", e)
-                    errors.append({"phase": "hydrate", "ref": ref.supplier_sku, "msg": str(e)})
-                    await db.rollback()
-                    fail_count += 1
-                    break
+        auth_fatal = None
+        for success, err in results:
+            if success:
+                success_count += 1
+            else:
+                if err and err.get("fatal"):
+                    auth_fatal = err
+                errors.append(err)
+                fail_count += 1
+
+        if auth_fatal:
+            await _finalize_job(db, job, status="failed", errors=errors, success_count=success_count, failed_count=fail_count, supplier=supplier, mode=mode)
+            return
 
         status = (
             "success" if not errors
@@ -197,6 +202,81 @@ async def run_import(
         explicit_list=explicit_list,
     )
     return job_id
+
+
+async def _run_inventory_only(
+    db: AsyncSession,
+    job: SyncJob,
+    adapter,
+    supplier: Supplier,
+) -> None:
+    """Fast inventory-only sync: updates variant.inventory without re-fetching
+    product/pricing/images. Reads known SKUs from DB, calls inventory SOAP
+    for each, writes back inventory counts. Parallelised with Semaphore(10)."""
+    from sqlalchemy import select, update
+    from modules.catalog.models import Product, ProductVariant
+
+    skus = (await db.execute(
+        select(Product.supplier_sku)
+        .where(Product.supplier_id == supplier.id, Product.archived_at.is_(None))
+    )).scalars().all()
+
+    job.total_products = len(skus)
+    await db.commit()
+
+    sem = asyncio.Semaphore(10)
+    success_count = 0
+    fail_count = 0
+    errors: list[dict] = []
+
+    async def _fetch_inv(sku: str):
+        async with sem:
+            try:
+                ref = ProductRef(supplier_sku=sku)
+                inv_map = await adapter.hydrate_inventory_only(ref)
+                if inv_map:
+                    async with async_session() as own_db:
+                        for part_id, qty in inv_map.items():
+                            await own_db.execute(
+                                update(ProductVariant)
+                                .where(
+                                    ProductVariant.part_id == part_id,
+                                    ProductVariant.product_id.in_(
+                                        select(Product.id).where(
+                                            Product.supplier_id == supplier.id,
+                                            Product.supplier_sku == sku,
+                                        )
+                                    ),
+                                )
+                                .values(inventory=qty)
+                            )
+                        await own_db.commit()
+                return True, None
+            except NotImplementedError:
+                return False, {"phase": "inventory_only", "ref": sku, "msg": "adapter does not support inventory_only"}
+            except Exception as exc:
+                log.warning("Inventory-only error for %s: %s", sku, exc)
+                return False, {"phase": "inventory_only", "ref": sku, "msg": str(exc)}
+
+    results = await asyncio.gather(*[_fetch_inv(sku) for sku in skus])
+    for ok, err in results:
+        if ok:
+            success_count += 1
+        else:
+            fail_count += 1
+            if err:
+                errors.append(err)
+
+    status = "success" if not errors else "partial_success" if success_count > 0 else "failed"
+    await _finalize_job(
+        db, job,
+        status=status,
+        errors=errors or None,
+        success_count=success_count,
+        failed_count=fail_count,
+        supplier=supplier,
+        mode=DiscoveryMode.INVENTORY_ONLY,
+    )
 
 
 async def _finalize_job(

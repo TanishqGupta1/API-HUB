@@ -27,6 +27,7 @@ import modules.ops_config.models  # noqa: F401
 import modules.decorations.models  # noqa: F401
 import modules.auth.models  # noqa: F401
 import modules.audit_log.models  # noqa: F401
+import modules.alerting.models  # noqa: F401  — registers Notification + SchedulerHeartbeat with Base
 import modules.webhooks.models  # noqa: F401
 # customer_catalog re-exports CustomerProductSelection from catalog.models
 # so no separate import is needed here.
@@ -94,8 +95,10 @@ import modules.rest_connector.ss_adapter  # noqa: F401  registers SSAdapter
 import modules.promostandards.sanmar_adapter  # noqa: F401  registers SanMarAdapter
 import modules.promostandards.alphabroder_adapter  # noqa: F401  registers AlphabroderAdapter
 from modules.import_jobs.routes import router as import_jobs_router
-from modules.import_jobs.scheduler import start_scheduler
+from modules.import_jobs.scheduler import start_scheduler, start_inventory_scheduler
 from modules.decorations.routes import router as decorations_router
+from modules.alerting.routes import router as alerting_router
+from modules.alerting.checker import run_checker, run_startup_check
 from modules.pricing.routes import router as pricing_router, customer_router as pricing_customer_router
 
 
@@ -193,17 +196,26 @@ async def lifespan(app: FastAPI):
     # Connect to Redis (optional — falls back gracefully if REDIS_URL is unset)
     await init_redis()
 
-    # Start the background scheduler (sleeps first; no-op if DISABLE_SCHEDULER=true)
-    _scheduler_task = asyncio.create_task(start_scheduler(interval_hours=24))
+    # Start background tasks
+    # Scheduler sleeps first to avoid restart storms (no-op if DISABLE_SCHEDULER=true)
+    _scheduler_task = asyncio.create_task(start_scheduler())
+    # Inventory-only sync runs every 15 min (INVENTORY_SYNC_INTERVAL_MINUTES)
+    _inventory_task = asyncio.create_task(start_inventory_scheduler())
+    # Alerting checker runs every 5 min (ALERT_CHECK_INTERVAL_SECONDS)
+    _checker_task = asyncio.create_task(run_checker())
+    # Run one immediate check on boot to catch anything that failed during downtime.
+    # Keep a reference so the task isn't garbage-collected mid-flight.
+    _startup_check_task = asyncio.create_task(run_startup_check())
 
     yield
 
-    # Graceful shutdown: cancel scheduler, close Redis, then DB pool
-    _scheduler_task.cancel()
-    try:
-        await _scheduler_task
-    except asyncio.CancelledError:
-        pass
+    # Graceful shutdown: cancel background tasks, close Redis, then DB pool
+    for task in (_scheduler_task, _inventory_task, _checker_task, _startup_check_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     await close_redis()
     await engine.dispose()
 
@@ -269,6 +281,7 @@ app.include_router(pricing_customer_router, dependencies=_auth)
 app.include_router(decorations_router, dependencies=_auth)
 app.include_router(images_router, dependencies=_auth)
 app.include_router(audit_log_router, dependencies=_auth)
+app.include_router(alerting_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
 app.include_router(webhooks_router, dependencies=_auth)
 app.include_router(analytics_router, dependencies=_auth)

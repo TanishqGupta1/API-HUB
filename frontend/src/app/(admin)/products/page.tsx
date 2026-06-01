@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, X, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type { ProductListItem, Supplier } from "@/lib/types";
@@ -20,6 +21,8 @@ export default function ProductsPage() {
   const [categoryId, setCategoryId] = useState("");
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter]     = useState<"all" | "vg" | "supplier">("all");
+  const [readinessFilter, setReadinessFilter] = useState<"all" | "not_ready">("all");
+  const [bulkSyncing, setBulkSyncing] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -130,11 +133,54 @@ export default function ProductsPage() {
     [suppliers],
   );
 
+  function getMissingFields(p: ProductListItem) {
+    const missing: string[] = [];
+    if (!p.brand) missing.push("brand");
+    if (!p.category_id) missing.push("category");
+    if (p.price_min == null) missing.push("price");
+    if ((p.total_inventory ?? 0) === 0) missing.push("inventory");
+    if (!p.image_url) missing.push("image");
+    return missing;
+  }
+
   const displayedProducts = products.filter((p) => {
-    if (sourceFilter === "vg") return vgSupplierIds.has(p.supplier_id);
-    if (sourceFilter === "supplier") return !vgSupplierIds.has(p.supplier_id);
+    if (sourceFilter === "vg" && !vgSupplierIds.has(p.supplier_id)) return false;
+    if (sourceFilter === "supplier" && vgSupplierIds.has(p.supplier_id)) return false;
+    if (readinessFilter === "not_ready" && getMissingFields(p).length === 0) return false;
     return true;
   });
+
+  const notReadyCount = products.filter((p) => getMissingFields(p).length > 0).length;
+
+  async function handleBulkSync() {
+    const notReadyProducts = displayedProducts.filter((p) => getMissingFields(p).length > 0);
+    if (notReadyProducts.length === 0) return;
+
+    // Group SKUs by supplier
+    const bySupplier = new Map<string, string[]>();
+    for (const p of notReadyProducts) {
+      const skus = bySupplier.get(p.supplier_id) ?? [];
+      skus.push(p.supplier_sku);
+      bySupplier.set(p.supplier_id, skus);
+    }
+
+    setBulkSyncing(true);
+    let triggered = 0;
+    try {
+      for (const [supplierId, skus] of bySupplier) {
+        await api(`/api/suppliers/${supplierId}/import`, {
+          method: "POST",
+          body: JSON.stringify({ mode: "explicit_list", explicit_list: skus }),
+        });
+        triggered += skus.length;
+      }
+      toast.success(`Sync started for ${triggered} product${triggered !== 1 ? "s" : ""} across ${bySupplier.size} supplier${bySupplier.size !== 1 ? "s" : ""} — check back in ~30s`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bulk sync failed");
+    } finally {
+      setBulkSyncing(false);
+    }
+  }
 
   return (
     <div id="s-products">
@@ -175,9 +221,9 @@ export default function ProductsPage() {
       <div className="flex items-center gap-2 mb-8">
         {/* All Products pill */}
         <button
-          onClick={() => { setSupplierFilter("all"); setSupplierSearch(""); setCategoryId(""); setSourceFilter("all"); }}
+          onClick={() => { setSupplierFilter("all"); setSupplierSearch(""); setCategoryId(""); setSourceFilter("all"); setReadinessFilter("all"); }}
           className={`px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
-            ${supplierFilter === "all" && !categoryId && sourceFilter === "all"
+            ${supplierFilter === "all" && !categoryId && sourceFilter === "all" && readinessFilter === "all"
               ? "bg-[#1e1e24] text-white border-[#1e1e24]"
               : "bg-white text-[#484852] border-[#cfccc8] hover:border-[#1e4d92] hover:text-[#1e4d92]"
             }`}
@@ -218,6 +264,36 @@ export default function ProductsPage() {
         >
           ↓ Supplier Products
         </button>
+
+        {/* Not Push Ready filter pill */}
+        <button
+          onClick={() => setReadinessFilter(readinessFilter === "not_ready" ? "all" : "not_ready")}
+          className={`inline-flex items-center gap-1.5 px-4 py-[6px] rounded-full border text-[12px] font-semibold cursor-pointer transition-all duration-150
+            ${readinessFilter === "not_ready"
+              ? "bg-amber-500 text-white border-amber-500"
+              : "bg-white text-[#484852] border-[#cfccc8] hover:border-amber-400 hover:text-amber-700"
+            }`}
+        >
+          <span className={`inline-block w-[7px] h-[7px] rounded-full ${readinessFilter === "not_ready" ? "bg-white" : "bg-amber-400"}`} />
+          Not Push Ready
+          {notReadyCount > 0 && (
+            <span className={`ml-0.5 px-[6px] py-[1px] rounded-full text-[10px] font-bold ${readinessFilter === "not_ready" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-700"}`}>
+              {notReadyCount}
+            </span>
+          )}
+        </button>
+
+        {/* Bulk sync button — shown when not-ready filter is active */}
+        {readinessFilter === "not_ready" && displayedProducts.some((p) => getMissingFields(p).length > 0) && (
+          <button
+            onClick={handleBulkSync}
+            disabled={bulkSyncing}
+            className="inline-flex items-center gap-1.5 px-4 py-[6px] rounded-full border border-[#1e4d92] bg-[#1e4d92] text-white text-[12px] font-semibold cursor-pointer transition-all duration-150 hover:bg-[#163d78] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`w-3 h-3 ${bulkSyncing ? "animate-spin" : ""}`} />
+            {bulkSyncing ? "Syncing…" : "Sync All Not Ready"}
+          </button>
+        )}
 
         {/* Supplier dropdown */}
         <div className="relative" ref={dropdownRef}>

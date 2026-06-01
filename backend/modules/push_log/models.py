@@ -19,6 +19,7 @@ class ProductPushLog(Base):
     # status vocab: accepted → queued → processing → pushed | failed | partial_failure | rejected | canceled | dry_run_pushed
     status: Mapped[str] = mapped_column(String(50))
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    alerted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     pushed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

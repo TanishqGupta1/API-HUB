@@ -2,6 +2,8 @@ import asyncio
 import logging
 from uuid import UUID
 
+logger = logging.getLogger(__name__)
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func, select
@@ -234,9 +236,10 @@ async def _probe_promostandards(code: str | None, auth_config: dict) -> dict:
     except Exception as e:  # noqa: BLE001
         msg = str(e)
         lowered = msg.lower()
+        logger.warning("SOAP probe failed wsdl=%s error=%s", wsdl_url, msg[:500])
         if any(hint in lowered for hint in _AUTH_ERROR_HINTS):
-            return {"ok": False, "error": f"Authentication failed: {msg[:300]}"}
-        return {"ok": False, "error": f"SOAP call to {wsdl_url} failed: {msg[:300]}"}
+            return {"ok": False, "error": "Authentication failed — check credentials."}
+        return {"ok": False, "error": f"SOAP probe to {wsdl_url} failed — check WSDL URL and network."}
 
     return {
         "ok": True,
