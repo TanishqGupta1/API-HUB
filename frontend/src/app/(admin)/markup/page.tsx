@@ -41,11 +41,22 @@ function statusBadge(rule: MarkupRule) {
     return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#fdecea] text-[#b93232]">Expired</span>;
   return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#edf7ed] text-[#2e7d32]">Active</span>;
 }
-/** Convert an ISO datetime string to the "YYYY-MM-DDTHH:MM" format required by datetime-local inputs. */
+/** Convert an ISO datetime string to the "YYYY-MM-DDTHH:MM" format required by
+ * datetime-local inputs, in the user's local timezone.
+ *
+ * The stored value is a UTC instant. A plain `.replace("Z","").slice(0,16)`
+ * keeps the UTC wall-clock time, which shifts the displayed window by the
+ * user's UTC offset. We instead parse the instant and subtract the local
+ * timezone offset so the displayed local time round-trips back to the same
+ * stored UTC instant. */
 function toLocalInputValue(iso: string | null | undefined): string {
   if (!iso) return "";
-  // Slice to minute precision — datetime-local doesn't accept seconds or Z suffix
-  return iso.replace("Z", "").slice(0, 16);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  // Shift by the local offset so toISOString() yields local wall-clock time,
+  // then slice to "YYYY-MM-DDTHH:MM" (datetime-local rejects seconds/Z suffix).
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 const SCOPE_TYPES = [
@@ -130,7 +141,7 @@ export default function MarkupPage() {
     setFMinMargin(rule.min_margin != null ? String(rule.min_margin) : "");
     setFMinPrice(rule.min_price != null ? String(rule.min_price) : "");
     setFMaxPrice(rule.max_price != null ? String(rule.max_price) : "");
-    setFRounding(rule.rounding ?? "none");
+    setFRounding(rule.rounding || "nearest_99");
     setFPriority(String(rule.priority));
     setFFrom(toLocalInputValue(rule.effective_from as string | null));
     setFUntil(toLocalInputValue(rule.effective_until as string | null));
