@@ -1,7 +1,9 @@
 """X-Orchestrator-Key authentication dependency for the Integration Gateway."""
 import asyncio
 import hashlib
+import logging
 import time
+import uuid
 from typing import Annotated, Optional
 
 from fastapi import Depends, Header, HTTPException, status
@@ -10,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import async_session, get_db
 from .models import IntegrationKey
+
+log = logging.getLogger("integrations.auth")
 
 # ── Rate limiter ─────────────────────────────────────────────────────────────
 # When Redis is available (REDIS_URL set) → sliding-window via sorted sets,
@@ -31,7 +35,19 @@ async def _check_rate_limit_redis(key_str: str, limit: int) -> bool:
     """Sliding-window rate check via Redis sorted sets.
 
     Returns True if the request is allowed, False if rate-limited.
-    Uses a pipeline so the check is atomic within one round-trip.
+
+    Accept-then-record semantics: we trim the window and count FIRST, and
+    only record (ZADD) this request when it is under the limit. Rejected
+    (429'd) requests are NOT written to the set, so they don't inflate the
+    window and starve subsequent requests.
+
+    The sorted-set MEMBER is unique per request (now + uuid) while the SCORE
+    stays equal to ``now``. Using the timestamp alone as the member caused
+    same-microsecond/concurrent requests to collide on one member, which made
+    ZCARD undercount and silently leaked the limit.
+
+    Raises on any Redis error — the caller (_check_rate_limit) catches it and
+    fails open to the in-process bucket.
     """
     from cache import get_redis
     redis = get_redis()
@@ -42,14 +58,26 @@ async def _check_rate_limit_redis(key_str: str, limit: int) -> bool:
     now = time.time()
     window_start = now - 60.0
 
-    pipe = redis.pipeline()
-    pipe.zremrangebyscore(rkey, "-inf", window_start)   # drop old entries
-    pipe.zadd(rkey, {f"{now:.6f}": now})                # record this request
-    pipe.zcard(rkey)                                     # count in window
-    pipe.expire(rkey, 65)                                # TTL slightly > window
-    results = await pipe.execute()
-    count: int = results[2]
-    return count <= limit
+    # Step 1 — trim expired entries and read the current window count.
+    trim_pipe = redis.pipeline()
+    trim_pipe.zremrangebyscore(rkey, "-inf", window_start)  # drop old entries
+    trim_pipe.zcard(rkey)                                    # count in window
+    trim_pipe.expire(rkey, 65)                               # TTL slightly > window
+    trim_results = await trim_pipe.execute()
+    count: int = trim_results[1]
+
+    # Step 2 — reject without recording when already at/over the limit.
+    if count >= limit:
+        return False
+
+    # Step 3 — under the limit: record this request with a unique member so
+    # concurrent same-instant requests can't collide on a single member.
+    member = f"{now:.6f}:{uuid.uuid4().hex}"
+    add_pipe = redis.pipeline()
+    add_pipe.zadd(rkey, {member: now})
+    add_pipe.expire(rkey, 65)
+    await add_pipe.execute()
+    return True
 
 
 async def _check_rate_limit(key: IntegrationKey) -> None:
@@ -67,15 +95,31 @@ async def _check_rate_limit(key: IntegrationKey) -> None:
     # ── Redis path ────────────────────────────────────────────────────────────
     from cache import get_redis
     if get_redis() is not None:
-        allowed = await _check_rate_limit_redis(key_str, limit)
-        if not allowed:
-            raise HTTPException(
-                status.HTTP_429_TOO_MANY_REQUESTS,
-                detail={"code": "RATE_LIMITED", "message": "Request rate limit exceeded"},
+        try:
+            allowed = await _check_rate_limit_redis(key_str, limit)
+        except Exception as exc:
+            # FAIL-OPEN TO IN-PROCESS LIMITING (not fail-open to no-limit):
+            # a Redis flap/timeout must NOT 500 the request, and must NOT
+            # silently disable rate limiting. Log and fall through to the
+            # in-process token bucket below so the key is still limited
+            # (per-instance only, but better than unbounded).
+            log.warning(
+                "Redis rate-limit check failed (%s: %s) — falling back to "
+                "in-process bucket for key %s",
+                type(exc).__name__,
+                exc,
+                key_str,
             )
-        return
+        else:
+            if not allowed:
+                raise HTTPException(
+                    status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail={"code": "RATE_LIMITED", "message": "Request rate limit exceeded"},
+                )
+            return
 
     # ── In-process fallback (single-instance only) ────────────────────────────
+    # Reached when Redis is unavailable OR the Redis check raised (fail-open).
     now = time.monotonic()
     async with _rate_lock:
         tokens, window_start = _RATE_BUCKETS.get(key_str, (limit, now))

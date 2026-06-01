@@ -71,10 +71,24 @@ class OpsGraphQLClient:
             from cache import get_redis
             redis = get_redis()
             if redis is not None:
-                cached = await redis.get(_token_cache_key(self.auth))
+                cache_key = _token_cache_key(self.auth)
+                cached = await redis.get(cache_key)
                 if cached:
                     self._token = cached          # keep local copy for 401-retry
-                    self._token_expires_at = now + 3600  # approximate; Redis TTL is authoritative
+                    # Derive the per-instance expiry from the REAL remaining
+                    # Redis TTL — never fabricate a flat 1h. Faking the expiry
+                    # meant that after the Redis key expired, the per-instance
+                    # fast-path below would keep serving a stale token → 401s.
+                    pttl_ms = await redis.pttl(cache_key)
+                    if pttl_ms is not None and pttl_ms > 0:
+                        # pttl = remaining lifetime in ms. The -30s safety
+                        # margin is applied at the fast-path read site below.
+                        self._token_expires_at = now + (pttl_ms / 1000.0)
+                    else:
+                        # No usable TTL (-1 no-expiry, -2 missing, or None):
+                        # don't trust a local fast-path — force a re-check on
+                        # the next call instead of inventing an expiry.
+                        self._token_expires_at = 0.0
                     return cached
 
             # ── Fall back to per-instance cache ───────────────────────────────
@@ -108,21 +122,28 @@ class OpsGraphQLClient:
             self._token_expires_at = now + ttl
             return self._token
 
-    def _invalidate_token(self) -> None:
-        """Invalidate both the per-instance and Redis-cached token."""
+    async def _invalidate_token(self) -> None:
+        """Invalidate both the per-instance and Redis-cached token.
+
+        Awaits the Redis DELETE so eviction is DETERMINISTIC before the 401
+        retry mints a new token. The previous fire-and-forget create_task()
+        could race the retry and let it re-read the revoked token from Redis.
+        """
         self._token = None
         self._token_expires_at = 0.0
-        # Best-effort Redis eviction so the next request doesn't reuse a
-        # revoked token. Fire-and-forget — don't block the caller.
         try:
             from cache import get_redis
-            import asyncio
             redis = get_redis()
             if redis is not None:
-                task = asyncio.create_task(redis.delete(_token_cache_key(self.auth)))
-                task.add_done_callback(lambda _: None)  # silence "task never awaited"
-        except Exception:
-            pass
+                await redis.delete(_token_cache_key(self.auth))
+        except Exception as exc:
+            # Non-fatal: we already cleared the per-instance token, so the
+            # retry will mint a fresh one regardless. Log instead of swallowing.
+            log.warning(
+                "Failed to evict OPS token from Redis (%s: %s)",
+                type(exc).__name__,
+                exc,
+            )
 
     async def execute(self, query: str, *, variables: dict[str, Any]) -> OpsResult:
         """POST a GraphQL mutation/query. Returns OpsResult (never raises)."""
@@ -146,7 +167,7 @@ class OpsGraphQLClient:
         # OPS revoked the token early — refresh once and retry
         if resp.status_code == 401 and allow_retry:
             log.debug("OPS 401 — invalidating cached token and retrying once")
-            self._invalidate_token()
+            await self._invalidate_token()
             return await self._execute_once(query, variables=variables, allow_retry=False)
 
         try:
