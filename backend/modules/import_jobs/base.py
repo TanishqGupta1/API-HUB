@@ -22,6 +22,7 @@ class DiscoveryMode(str, Enum):
     FILTERED_SAMPLE = "filtered_sample"
     FULL_SELLABLE = "full_sellable"
     CLOSEOUTS = "closeouts"
+    INVENTORY_ONLY = "inventory_only"
 
 
 class ProductRef(BaseModel):
@@ -86,5 +87,14 @@ class BaseAdapter(ABC):
 
     async def discover_closeouts(self) -> List[ProductRef]:
         """Discover products that are marked as closeout."""
+        raise NotImplementedError
+
+    async def hydrate_inventory_only(self, ref: ProductRef) -> dict[str, int]:
+        """Fast path: fetch only inventory levels for one product SKU.
+
+        Returns {part_id: quantity_available}. Adapters that don't support
+        inventory-only fetching should leave this raising NotImplementedError —
+        the inventory sync loop will skip them gracefully.
+        """
         raise NotImplementedError
 

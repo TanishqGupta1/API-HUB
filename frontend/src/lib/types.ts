@@ -379,6 +379,20 @@ export interface MasterOptionsSyncStatus {
   last_synced_at: string | null;
 }
 
+/* In-app alerting */
+export interface Notification {
+  id: string;
+  /** push_failed | sync_failed | scheduler_down */
+  type: string;
+  /** error | warning */
+  severity: string;
+  title: string;
+  body: string;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
 /* Per-product config */
 export interface AttributeConfigItem {
   attribute_id: string | null;

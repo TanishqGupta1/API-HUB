@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { log } from "@/lib/log";
 import { isInFlight } from "@/lib/push-status";
@@ -152,27 +152,47 @@ export default function CustomerCatalogPage() {
       );
       toast.success("Push queued — gateway will deliver to OPS.");
     } catch (err: unknown) {
-      const rawMsg = err instanceof Error ? err.message : "Push failed";
-      log.error("Failed to push product", err);
+      // Check for a structured PREFLIGHT_BLOCKER envelope BEFORE logging.
+      // These are expected, user-facing errors (missing markup rule, bad
+      // credentials, etc.) — not unexpected crashes. Logging them with
+      // log.error would trigger the Next.js dev error overlay unnecessarily.
+      if (err instanceof ApiError && err.envelope != null) {
+        const env = err.envelope as Record<string, unknown>;
+        const details = env?.details as Record<string, unknown> | undefined;
+        if (env?.code === "PREFLIGHT_BLOCKER" && Array.isArray(details?.checks)) {
+          const checks = details!.checks as Array<{
+            ok: boolean;
+            name: string;
+            suggestion?: string | null;
+          }>;
+          const failed = checks.filter((c) => c && !c.ok);
+          const names = failed.map((c) => c.name.replace(/_/g, " ")).join(", ");
 
-      // If the gateway returned a structured PREFLIGHT_BLOCKER envelope,
-      // show a human-readable summary instead of dumping the JSON.
-      try {
-        const env = JSON.parse(rawMsg);
-        if (env?.code === "PREFLIGHT_BLOCKER" && Array.isArray(env?.details?.checks)) {
-          const failed = env.details.checks.filter((c: { ok: boolean }) => c && !c.ok);
-          const names = failed
-            .map((c: { name: string }) => c.name.replace(/_/g, " "))
-            .join(", ");
-          toast.error(`Push blocked by ${failed.length} preflight checks: ${names}`, {
-            description: "Open the Push Log or product preview for full details.",
-            duration: 6000,
-          });
+          // For credential-related blockers, point directly to customer settings.
+          const hasCredsBlocker = failed.some((c) =>
+            c.name === "ops_oauth2_reachable" || c.name === "customer_ops_creds_present"
+          );
+          const hasMarkupBlocker = failed.some((c) => c.name === "markup_rule_resolves");
+
+          let description: string;
+          if (hasCredsBlocker) {
+            description = `OPS credentials for this customer are missing or the token URL is unreachable — go to Customer Settings to update them.`;
+          } else if (hasMarkupBlocker) {
+            description = `No markup rule covers this product — go to Markup Rules and create a global or sanmar-scoped rule for this customer.`;
+          } else {
+            // Surface the first actionable suggestion the backend provides.
+            description =
+              failed.find((c) => c.suggestion)?.suggestion ??
+              "Open the product's Push preview page for full details.";
+          }
+
+          toast.error(`Push blocked: ${names}`, { description, duration: 8000 });
           return;
         }
-      } catch {
-        // not JSON — fall through to raw message
       }
+
+      const rawMsg = err instanceof Error ? err.message : "Push failed";
+      log.error("Failed to push product", err);
       toast.error(rawMsg);
     }
   };

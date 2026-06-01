@@ -2,7 +2,7 @@ from typing import Optional
 import uuid as uuid_mod
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,3 +28,4 @@ class SyncJob(Base):
     error_log: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     errors: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     discovery_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    alerted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

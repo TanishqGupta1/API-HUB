@@ -39,17 +39,6 @@ export function PublishButton({ productId, supplierSlug, onDone }: Props) {
 
   return (
     <div className="flex items-center gap-3">
-      {customers.length > 1 && (
-        <select
-          value={customerId}
-          onChange={(e) => setCustomerId(e.target.value)}
-          className="text-[12px] border border-[#cfccc8] rounded-md px-2 py-1.5 bg-white text-[#484852] focus:outline-none focus:border-[#1e4d92]"
-        >
-          {customers.filter((c) => c.is_active).map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-      )}
       <button
         type="button"
         onClick={go}

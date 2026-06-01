@@ -55,6 +55,7 @@ async def list_sync_jobs(
     return result.scalars().all()
 
 
+
 @router.get("/stream")
 async def stream_sync_jobs(
     request: Request,
@@ -89,8 +90,14 @@ async def stream_sync_jobs(
     async def event_stream():
         last_hash: Optional[str] = None
         ticks_since_push = 0
+        # Hard cap: close the connection after 30 minutes so a single client
+        # cannot hold a DB-polling loop open indefinitely. Browsers reconnect
+        # automatically via the EventSource retry mechanism.
+        deadline = asyncio.get_running_loop().time() + 1800  # 30 min
         while True:
             if await request.is_disconnected():
+                return
+            if asyncio.get_running_loop().time() >= deadline:
                 return
 
             # Each tick opens its own short-lived session so we never reuse a

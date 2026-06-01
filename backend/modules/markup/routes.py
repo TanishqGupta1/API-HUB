@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
-from modules.auth.dependencies import require_customer_access
+from modules.auth.dependencies import require_customer_access, CurrentUser
 from modules.catalog.ingest import require_ingest_secret
 from modules.catalog.models import ProductOption
 from modules.master_options.models import MasterOption, MasterOptionAttribute
@@ -169,7 +169,8 @@ async def list_markup_rules(customer_id: UUID, db: AsyncSession = Depends(get_db
 
 
 @router.post("", response_model=MarkupRuleRead, status_code=201)
-async def create_markup_rule(body: MarkupRuleCreate, db: AsyncSession = Depends(get_db)):
+async def create_markup_rule(body: MarkupRuleCreate, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    require_customer_access(body.customer_id, current_user)
     rule = MarkupRule(**body.model_dump())
     db.add(rule)
     await db.commit()
@@ -178,12 +179,13 @@ async def create_markup_rule(body: MarkupRuleCreate, db: AsyncSession = Depends(
 
 
 @router.patch("/{rule_id}", response_model=MarkupRuleRead)
-async def update_markup_rule(rule_id: UUID, body: MarkupRuleUpdate, db: AsyncSession = Depends(get_db)):
+async def update_markup_rule(rule_id: UUID, body: MarkupRuleUpdate, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
     """Partial update of a markup rule. Only fields present in the body are updated."""
     result = await db.execute(select(MarkupRule).where(MarkupRule.id == rule_id))
     rule = result.scalar_one_or_none()
     if not rule:
         raise HTTPException(404, "Markup rule not found")
+    require_customer_access(rule.customer_id, current_user)
     updates = body.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(rule, field, value)
@@ -193,11 +195,12 @@ async def update_markup_rule(rule_id: UUID, body: MarkupRuleUpdate, db: AsyncSes
 
 
 @router.delete("/{rule_id}")
-async def delete_markup_rule(rule_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_markup_rule(rule_id: UUID, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(MarkupRule).where(MarkupRule.id == rule_id))
     rule = result.scalar_one_or_none()
     if not rule:
         raise HTTPException(404, "Markup rule not found")
+    require_customer_access(rule.customer_id, current_user)
     await db.delete(rule)
     await db.commit()
     return {"deleted": True}

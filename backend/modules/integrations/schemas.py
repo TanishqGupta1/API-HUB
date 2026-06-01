@@ -94,6 +94,14 @@ class PushRequest(BaseModel):
     decorations: list[dict[str, Any]] = Field(default_factory=list)
     dry_run: bool = False
     callback: Optional[PushRequestCallback] = None
+    sync_before_push: bool = Field(
+        default=False,
+        description=(
+            "When true, triggers an explicit_list sync for this product SKU "
+            "before building the OPS payload. Adds ~5s latency but guarantees "
+            "fresh inventory and pricing data at push time."
+        ),
+    )
 
 
 # ── Push responses ──

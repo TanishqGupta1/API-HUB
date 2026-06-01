@@ -273,6 +273,42 @@ async def prepare_push_intent(
 
     supplier_sku = product.supplier_sku
 
+    # ── Optional pre-push sync: re-fetch product from supplier before building payload ──
+    if req.sync_before_push:
+        try:
+            from modules.import_jobs.service import run_import
+            from modules.import_jobs.base import DiscoveryMode
+            logger.info(
+                "sync_before_push: triggering explicit_list sync for %s / %s",
+                supplier_slug, supplier_sku,
+            )
+            # Timeout capped at 10 s (down from 30 s) to prevent worker
+            # starvation when multiple sync_before_push requests arrive
+            # simultaneously on a 2-worker deployment.
+            await asyncio.wait_for(
+                run_import(
+                    supplier_id=supplier.id,
+                    mode=DiscoveryMode.EXPLICIT_LIST,
+                    explicit_list=[supplier_sku],
+                ),
+                timeout=10.0,
+            )
+            # Re-load in own session so the request-scoped db connection
+            # is not held across the full sync duration.
+            async with async_session() as own_db:
+                fresh = (await own_db.execute(
+                    select(Product)
+                    .where(Product.id == product.id)
+                    .options(selectinload(Product.variants), selectinload(Product.images))
+                )).scalar_one_or_none()
+            if fresh:
+                product = fresh
+            logger.info("sync_before_push: sync complete for %s", supplier_sku)
+        except asyncio.TimeoutError:
+            logger.warning("sync_before_push timed out for %s — pushing with cached data", supplier_sku)
+        except Exception as exc:
+            logger.warning("sync_before_push failed for %s: %s — pushing with cached data", supplier_sku, exc)
+
     # ── Compute payload hash over the canonical request body (Rev 1, RFC 8785) ──
     # Task 6: real RFC 8785 JCS hash over the inbound request, not a stub on (product_id, customer_id).
     payload_hash = compute_payload_hash(req.model_dump(mode="json"))

@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { API_BASE } from "@/lib/env";
 import type { SyncJob } from "@/lib/types";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -100,43 +99,28 @@ export default function SyncJobsPage() {
   const [filterJobType,  setFilterJobType]  = useState("");
   const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
 
-  // Live updates via Server-Sent Events. Backend polls the DB at 2s ticks and
-  // only emits when the result set changes, so this is cheaper than the old
-  // setInterval polling and the UI updates within ~2s of any DB write.
-  // Supplier filter is applied client-side, so it does not need to reopen the
-  // stream — only status and job_type change the server-side query.
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (filterStatus) params.set("status", filterStatus);
-    if (filterJobType) params.set("job_type", filterJobType);
-    const url = `${API_BASE}/api/sync-jobs/stream${params.size ? `?${params}` : ""}`;
+    let cancelled = false;
 
-    setLoading(true);
-    setFetchError(null);
-    const es = new EventSource(url, { withCredentials: true });
-
-    es.onmessage = (e) => {
+    async function load() {
+      setLoading(true);
+      setFetchError(null);
       try {
-        setJobs(JSON.parse(e.data) as SyncJob[]);
-        setFetchError(null);
+        const params = new URLSearchParams();
+        if (filterStatus) params.set("status", filterStatus);
+        if (filterJobType) params.set("job_type", filterJobType);
+        const data = await api<SyncJob[]>(`/api/sync-jobs${params.size ? `?${params}` : ""}`);
+        if (!cancelled) setJobs(data);
       } catch (err) {
-        setFetchError(err instanceof Error ? err.message : "Stream parse error");
+        if (!cancelled) setFetchError(err instanceof Error ? err.message : "Failed to load sync jobs.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    };
+    }
 
-    es.onerror = () => {
-      // EventSource auto-reconnects on transient errors. Surface persistent
-      // failures (e.g. closed by server / auth) so the user knows the table
-      // is stale.
-      if (es.readyState === EventSource.CLOSED) {
-        setFetchError("Live connection closed — refresh to reconnect.");
-        setLoading(false);
-      }
-    };
-
-    return () => es.close();
+    load();
+    const interval = setInterval(load, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [filterStatus, filterJobType]);
 
   // Supplier options derived from data

@@ -83,7 +83,10 @@ export default function AdminDashboard() {
     const controller = new AbortController();
     // 12-second hard timeout — prevents the spinner from hanging forever when
     // the backend is slow to respond (TCP accepted but no HTTP reply yet).
-    const timer = setTimeout(() => controller.abort(), 12_000);
+    // `timedOut` distinguishes a genuine timeout abort (surface to the user)
+    // from a StrictMode/unmount cleanup abort (silently ignored).
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 12_000);
 
     async function load() {
       try {
@@ -99,16 +102,29 @@ export default function AdminDashboard() {
 
         const anyFailed = [sRes, jRes, supRes].some((r) => r.status === "rejected");
         if (anyFailed) {
-          // Log quietly — partial data is still shown, no full error state.
-          const errors = [sRes, jRes, supRes]
+          // A genuine 12s timeout aborts the in-flight fetches with an
+          // AbortError too — surface it instead of silently blanking the
+          // dashboard. StrictMode/unmount cleanup aborts (timedOut === false)
+          // stay suppressed since the second mount succeeds.
+          if (timedOut) {
+            setLoadError("Dashboard timed out — backend may be unavailable. Refresh to try again.");
+            log.error("Dashboard load timed out after 12s");
+            return;
+          }
+          // Filter out AbortErrors — these are expected in React StrictMode dev
+          // (effect cleanup aborts the first fetch; the second mount succeeds).
+          const realErrors = [sRes, jRes, supRes]
             .filter((r): r is PromiseRejectedResult => r.status === "rejected")
-            .map((r) => r.reason);
-          log.error("Dashboard partial load failure", errors);
+            .map((r) => r.reason)
+            .filter((e) => !(e instanceof DOMException && e.name === "AbortError"));
+          if (realErrors.length > 0) {
+            log.error("Dashboard partial load failure", realErrors);
+          }
         } else {
           setLoadError(null);
         }
       } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === "AbortError") {
+        if (timedOut || (e instanceof DOMException && e.name === "AbortError")) {
           setLoadError("Dashboard timed out — backend may be unavailable. Refresh to try again.");
         } else {
           setLoadError("Failed to load dashboard data. Check backend connectivity.");
