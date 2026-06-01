@@ -10,11 +10,21 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from modules.auth.dependencies import _require_vg_admin
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/n8n", tags=["n8n-proxy"])
+# vg_admin only. The role check runs before any handler body (so an
+# unauthorized caller gets 403 before we ever touch N8N_API_KEY), and
+# /api/n8n is intentionally absent from the ingest path allow-list, so
+# service tokens cannot reach these routes either.
+router = APIRouter(
+    prefix="/api/n8n",
+    tags=["n8n-proxy"],
+    dependencies=[Depends(_require_vg_admin)],
+)
 
 # Module-level client — reused across requests (connection pooling)
 _http_client: httpx.AsyncClient | None = None

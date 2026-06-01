@@ -258,4 +258,7 @@ async def test_connection_test_returns_ok_false_for_bad_url(client, seed_custome
     assert data["customer_id"] == seed_customer["id"]
     # URL is unreachable in tests — must return ok=false, not ok=true stub
     assert data["ok"] is False
-    assert "error" in data or "http_status" in data
+    # Failure responses carry a structured error_code (TOKEN_REQUEST_FAILED when
+    # the endpoint is unreachable, TOKEN_ENDPOINT_REJECTED on a non-200); older
+    # shapes used error/http_status.
+    assert "error_code" in data or "error" in data or "http_status" in data
