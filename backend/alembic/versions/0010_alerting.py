@@ -1,18 +1,21 @@
 """Add alerting tables and alerted idempotency columns.
 
-Revision ID: 0005_alerting
-Revises: 0004_webhooks
+Revision ID: 0010_alerting
+Revises: 0009_add_attribute_key
 Create Date: 2026-05-27
 
 Creates the notifications and scheduler_heartbeat tables.
 Adds alerted boolean columns to product_push_log and sync_jobs so the
 checker never fires duplicate notifications for the same failure.
+
+Backfills alerted=true for all pre-existing failed rows so a first deploy
+does not flood the notification feed with historical failures.
 """
 
 from alembic import op
 
-revision = "0005_alerting"
-down_revision = "0002_add_attribute_key"
+revision = "0010_alerting"
+down_revision = "0009_add_attribute_key"
 branch_labels = None
 depends_on = None
 
@@ -46,6 +49,14 @@ def upgrade() -> None:
     )
     op.execute(
         "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS alerted BOOLEAN NOT NULL DEFAULT FALSE"
+    )
+    # Backfill: mark all pre-existing failed rows as already alerted so the
+    # startup checker does not flood the notification feed on first deploy.
+    op.execute(
+        "UPDATE product_push_log SET alerted = TRUE WHERE status = 'failed'"
+    )
+    op.execute(
+        "UPDATE sync_jobs SET alerted = TRUE WHERE status = 'failed'"
     )
 
 

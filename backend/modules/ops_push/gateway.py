@@ -282,13 +282,16 @@ async def prepare_push_intent(
                 "sync_before_push: triggering explicit_list sync for %s / %s",
                 supplier_slug, supplier_sku,
             )
+            # Timeout capped at 10 s (down from 30 s) to prevent worker
+            # starvation when multiple sync_before_push requests arrive
+            # simultaneously on a 2-worker deployment.
             await asyncio.wait_for(
                 run_import(
                     supplier_id=supplier.id,
                     mode=DiscoveryMode.EXPLICIT_LIST,
                     explicit_list=[supplier_sku],
                 ),
-                timeout=30.0,
+                timeout=10.0,
             )
             # Re-load in own session so the request-scoped db connection
             # is not held across the full sync duration.

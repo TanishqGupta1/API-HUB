@@ -97,13 +97,12 @@ export default function AdminDashboard() {
         if (jRes.status === "fulfilled") setRecentJobs(jRes.value);
         if (supRes.status === "fulfilled") setSuppliers(supRes.value);
 
-        const anyFailed = [sRes, jRes, supRes].some((r) => r.status === "rejected");
-        if (anyFailed) {
-          // Log quietly — partial data is still shown, no full error state.
-          const errors = [sRes, jRes, supRes]
-            .filter((r): r is PromiseRejectedResult => r.status === "rejected")
-            .map((r) => r.reason);
-          log.error("Dashboard partial load failure", errors);
+        const failures = [sRes, jRes, supRes]
+          .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+          .map((r) => r.reason)
+          .filter((e) => !(e instanceof DOMException && e.name === "AbortError"));
+        if (failures.length > 0) {
+          log.error("Dashboard partial load failure", failures);
         } else {
           setLoadError(null);
         }

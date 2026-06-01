@@ -12,6 +12,14 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db, ENVIRONMENT
+
+def _require_non_prod_env() -> None:
+    """Raise 403 when running in production. Use as a guard for dev/demo-only endpoints."""
+    if ENVIRONMENT == "production":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint is not available in production.",
+        )
 from modules.auth.dependencies import VGAdmin
 from .models import Notification
 from .schemas import NotificationRead, UnreadCount
@@ -81,11 +89,7 @@ async def create_demo_notifications(
 ) -> dict:
     """Create one sample notification of each type so the UI can be demoed
     without waiting for a real failure. Non-production only."""
-    if ENVIRONMENT.lower() == "production":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Demo endpoint is not available in production.",
-        )
+    _require_non_prod_env()
     from .service import create_notification
 
     await create_notification(

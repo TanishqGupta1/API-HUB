@@ -142,15 +142,17 @@ async def _check_sync_failures() -> None:
 # ---------------------------------------------------------------------------
 
 async def _check_scheduler_heartbeat() -> None:
-    interval_hours = int(os.getenv("SCHEDULER_INTERVAL_HOURS", "1"))
-    stale_threshold = timedelta(hours=interval_hours * 2.5)
-
     async with async_session() as db:
         hb = await db.get(SchedulerHeartbeat, 1)
 
         if hb is None or hb.last_ran_at is None:
             # Scheduler has never run — don't alert yet (could be first boot)
             return
+
+        # Use the persisted interval from the DB row, not the env var, so the
+        # threshold stays consistent even after the env var is changed.
+        interval_hours = hb.interval_hours
+        stale_threshold = timedelta(hours=interval_hours * 2.5)
 
         age = datetime.now(timezone.utc) - hb.last_ran_at
         if age <= stale_threshold:
