@@ -60,6 +60,7 @@ from modules.portal.routes import router as portal_router
 from modules.images.routes import router as images_router
 from modules.webhooks.routes import router as webhooks_router
 from modules.analytics.routes import router as analytics_router
+from modules.n8n_proxy.routes import router as n8n_proxy_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -128,6 +129,7 @@ def _run_alembic_upgrade(*, stamp_baseline: bool = False) -> None:
 async def lifespan(app: FastAPI):
     _require_prod_env()
     import asyncio
+    from cache import init_redis, close_redis
 
     # Sentry must be initialised inside lifespan so that logging is already
     # configured — initialising at module import time means startup errors can
@@ -188,17 +190,21 @@ async def lifespan(app: FastAPI):
         async with async_session() as db:
             await ensure_vg_ops_supplier(db)
 
+    # Connect to Redis (optional — falls back gracefully if REDIS_URL is unset)
+    await init_redis()
+
     # Start the background scheduler (sleeps first; no-op if DISABLE_SCHEDULER=true)
     _scheduler_task = asyncio.create_task(start_scheduler(interval_hours=24))
 
     yield
 
-    # Graceful shutdown: cancel scheduler before closing DB pool
+    # Graceful shutdown: cancel scheduler, close Redis, then DB pool
     _scheduler_task.cancel()
     try:
         await _scheduler_task
     except asyncio.CancelledError:
         pass
+    await close_redis()
     await engine.dispose()
 
 
@@ -266,6 +272,7 @@ app.include_router(audit_log_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
 app.include_router(webhooks_router, dependencies=_auth)
 app.include_router(analytics_router, dependencies=_auth)
+app.include_router(n8n_proxy_router, dependencies=_auth)  # C2: was defined but never mounted
 # Customer self-service portal — requires customer_admin role (enforced inside routes)
 app.include_router(portal_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import time
 from dataclasses import dataclass
@@ -9,6 +10,16 @@ from typing import Any
 import httpx
 
 log = logging.getLogger("ops_client")
+
+
+def _token_cache_key(auth: "OpsAuth") -> str:
+    """Stable Redis key for a given OPS credential pair.
+
+    Derived from client_id + token_url so different storefronts
+    get independent cache slots.
+    """
+    raw = f"{auth.client_id}:{auth.token_url}"
+    return f"ops_token:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
 
 
 @dataclass(frozen=True)
@@ -55,6 +66,32 @@ class OpsGraphQLClient:
     async def _get_token(self) -> str:
         async with self._token_lock:
             now = time.time()
+
+            # ── Try Redis cache first ─────────────────────────────────────────
+            from cache import get_redis
+            redis = get_redis()
+            if redis is not None:
+                cache_key = _token_cache_key(self.auth)
+                cached = await redis.get(cache_key)
+                if cached:
+                    self._token = cached          # keep local copy for 401-retry
+                    # Derive the per-instance expiry from the REAL remaining
+                    # Redis TTL — never fabricate a flat 1h. Faking the expiry
+                    # meant that after the Redis key expired, the per-instance
+                    # fast-path below would keep serving a stale token → 401s.
+                    pttl_ms = await redis.pttl(cache_key)
+                    if pttl_ms is not None and pttl_ms > 0:
+                        # pttl = remaining lifetime in ms. The -30s safety
+                        # margin is applied at the fast-path read site below.
+                        self._token_expires_at = now + (pttl_ms / 1000.0)
+                    else:
+                        # No usable TTL (-1 no-expiry, -2 missing, or None):
+                        # don't trust a local fast-path — force a re-check on
+                        # the next call instead of inventing an expiry.
+                        self._token_expires_at = 0.0
+                    return cached
+
+            # ── Fall back to per-instance cache ───────────────────────────────
             if self._token and now < self._token_expires_at - 30:
                 return self._token
 
@@ -75,14 +112,38 @@ class OpsGraphQLClient:
                 raise RuntimeError(
                     f"OPS token endpoint returned no access_token: {str(body)[:200]}"
                 )
-            self._token = token
             ttl = int(body.get("expires_in", 3600))
+
+            # Store in Redis (expire 60s early to avoid using a near-expired token)
+            if redis is not None:
+                await redis.set(_token_cache_key(self.auth), token, ex=max(ttl - 60, 60))
+
+            self._token = token
             self._token_expires_at = now + ttl
             return self._token
 
-    def _invalidate_token(self) -> None:
+    async def _invalidate_token(self) -> None:
+        """Invalidate both the per-instance and Redis-cached token.
+
+        Awaits the Redis DELETE so eviction is DETERMINISTIC before the 401
+        retry mints a new token. The previous fire-and-forget create_task()
+        could race the retry and let it re-read the revoked token from Redis.
+        """
         self._token = None
         self._token_expires_at = 0.0
+        try:
+            from cache import get_redis
+            redis = get_redis()
+            if redis is not None:
+                await redis.delete(_token_cache_key(self.auth))
+        except Exception as exc:
+            # Non-fatal: we already cleared the per-instance token, so the
+            # retry will mint a fresh one regardless. Log instead of swallowing.
+            log.warning(
+                "Failed to evict OPS token from Redis (%s: %s)",
+                type(exc).__name__,
+                exc,
+            )
 
     async def execute(self, query: str, *, variables: dict[str, Any]) -> OpsResult:
         """POST a GraphQL mutation/query. Returns OpsResult (never raises)."""
@@ -106,7 +167,7 @@ class OpsGraphQLClient:
         # OPS revoked the token early — refresh once and retry
         if resp.status_code == 401 and allow_retry:
             log.debug("OPS 401 — invalidating cached token and retrying once")
-            self._invalidate_token()
+            await self._invalidate_token()
             return await self._execute_once(query, variables=variables, allow_retry=False)
 
         try:
