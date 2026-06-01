@@ -41,6 +41,13 @@ function statusBadge(rule: MarkupRule) {
     return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#fdecea] text-[#b93232]">Expired</span>;
   return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#edf7ed] text-[#2e7d32]">Active</span>;
 }
+/** Convert an ISO datetime string to the "YYYY-MM-DDTHH:MM" format required by datetime-local inputs. */
+function toLocalInputValue(iso: string | null | undefined): string {
+  if (!iso) return "";
+  // Slice to minute precision — datetime-local doesn't accept seconds or Z suffix
+  return iso.replace("Z", "").slice(0, 16);
+}
+
 const SCOPE_TYPES = [
   { label: "Global (all products)", value: "all" },
   { label: "Category", value: "category" },
@@ -66,6 +73,9 @@ export default function MarkupPage() {
   const [saving, setSaving] = useState(false);
   const [fErr, setFErr] = useState<string | null>(null);
 
+  /** The rule being edited; null means "create new". */
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+
   /* form fields */
   const [fScope, setFScope] = useState("all");
   const [fTarget, setFTarget] = useState("");
@@ -81,11 +91,52 @@ export default function MarkupPage() {
   const [fUntil, setFUntil] = useState("");
 
   const resetForm = () => {
+    setEditingRuleId(null);
     setFScope("all"); setFTarget(""); setFMarkupType("pct");
     setFMarkupPct(""); setFMarkupAmt(""); setFMinMargin("");
     setFMinPrice(""); setFMaxPrice(""); setFRounding("nearest_99");
     setFPriority("1"); setFFrom(""); setFUntil(""); setFErr(null);
   };
+
+  /** Populate form fields from an existing rule and open the modal for editing. */
+  function openEdit(rule: MarkupRule) {
+    setEditingRuleId(rule.id);
+
+    // Parse compound scope string (e.g. "category:Apparel" → scope="category", target="Apparel")
+    if (rule.scope === "all") {
+      setFScope("all");
+      setFTarget("");
+    } else {
+      const colonIdx = rule.scope.indexOf(":");
+      if (colonIdx !== -1) {
+        setFScope(rule.scope.slice(0, colonIdx));
+        setFTarget(rule.scope.slice(colonIdx + 1));
+      } else {
+        setFScope("all");
+        setFTarget("");
+      }
+    }
+
+    if (rule.markup_amount != null) {
+      setFMarkupType("amt");
+      setFMarkupAmt(String(rule.markup_amount));
+      setFMarkupPct("");
+    } else {
+      setFMarkupType("pct");
+      setFMarkupPct(rule.markup_pct != null ? String(rule.markup_pct) : "");
+      setFMarkupAmt("");
+    }
+
+    setFMinMargin(rule.min_margin != null ? String(rule.min_margin) : "");
+    setFMinPrice(rule.min_price != null ? String(rule.min_price) : "");
+    setFMaxPrice(rule.max_price != null ? String(rule.max_price) : "");
+    setFRounding(rule.rounding ?? "none");
+    setFPriority(String(rule.priority));
+    setFFrom(toLocalInputValue(rule.effective_from as string | null));
+    setFUntil(toLocalInputValue(rule.effective_until as string | null));
+    setFErr(null);
+    setShowModal(true);
+  }
 
   useEffect(() => {
     api<Customer[]>("/api/customers")
@@ -121,8 +172,9 @@ export default function MarkupPage() {
     if (!cid) return;
     setSaving(true); setFErr(null);
     const scope = fScope === "all" ? "all" : `${fScope}:${fTarget}`;
-    const body: MarkupRuleCreate = {
-      customer_id: cid, scope, rounding: fRounding,
+    const fields = {
+      scope,
+      rounding: fRounding,
       priority: parseInt(fPriority, 10),
       markup_pct: fMarkupType === "pct" && fMarkupPct ? parseFloat(fMarkupPct) : null,
       markup_amount: fMarkupType === "amt" && fMarkupAmt ? parseFloat(fMarkupAmt) : null,
@@ -133,8 +185,20 @@ export default function MarkupPage() {
       effective_until: fUntil || null,
     };
     try {
-      await api("/api/markup-rules", { method: "POST", body: JSON.stringify(body) });
-      setShowModal(false); resetForm(); if (cid) fetchRules(cid);
+      if (editingRuleId) {
+        // Edit mode — PATCH existing rule
+        await api(`/api/markup-rules/${editingRuleId}`, {
+          method: "PATCH",
+          body: JSON.stringify(fields),
+        });
+      } else {
+        // Create mode — POST new rule
+        const body: MarkupRuleCreate = { customer_id: cid, ...fields };
+        await api("/api/markup-rules", { method: "POST", body: JSON.stringify(body) });
+      }
+      setShowModal(false);
+      resetForm();
+      if (cid) fetchRules(cid);
     } catch { setFErr("Failed to save. Check your inputs."); }
     finally { setSaving(false); }
   };
@@ -217,6 +281,13 @@ export default function MarkupPage() {
                       <div className="flex gap-1.5">
                         <button
                           className="btn btn-ghost px-2.5 py-1 text-[12px]"
+                          onClick={() => openEdit(rule)}
+                          title="Edit rule"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn btn-ghost px-2.5 py-1 text-[12px]"
                           onClick={() => toggleActive(rule)}
                           title={rule.is_active ? "Pause rule" : "Activate rule"}
                         >
@@ -281,13 +352,13 @@ export default function MarkupPage() {
         </div>
       )}
 
-      {/* add rule modal */}
+      {/* add / edit rule modal */}
       {showModal && (
         <div className="fixed inset-0 bg-[#1e1e24]/40 flex items-center justify-center z-[100]">
           <div className="panel w-[520px] m-0 max-h-[90vh] overflow-y-auto">
             <div className="panel-header">
-              <div className="panel-title">Add Pricing Rule</div>
-              <button className="btn btn-ghost px-3 py-1 text-[12px]" onClick={() => setShowModal(false)}>✕</button>
+              <div className="panel-title">{editingRuleId ? "Edit Pricing Rule" : "Add Pricing Rule"}</div>
+              <button className="btn btn-ghost px-3 py-1 text-[12px]" onClick={() => { setShowModal(false); resetForm(); }}>✕</button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 grid gap-4">
 
@@ -402,9 +473,9 @@ export default function MarkupPage() {
               {fErr && <div className="text-[13px] text-[#b93232]">{fErr}</div>}
 
               <div className="flex gap-2.5 justify-end pt-1">
-                <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-ghost" onClick={() => { setShowModal(false); resetForm(); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? "Saving…" : "Save Rule"}
+                  {saving ? "Saving…" : editingRuleId ? "Save Changes" : "Save Rule"}
                 </button>
               </div>
             </form>

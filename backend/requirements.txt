@@ -16,6 +16,7 @@ Pillow>=10.4.0
 pytest>=8.0
 pytest-asyncio>=0.23
 respx>=0.21
+fakeredis>=2.20.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 bcrypt<4.0.0
@@ -23,3 +24,4 @@ alembic>=1.13.0
 psycopg2-binary>=2.9.9
 email-validator>=2.0.0
 boto3>=1.35.0
+redis[asyncio]>=5.0.0

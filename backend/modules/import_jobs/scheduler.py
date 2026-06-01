@@ -116,6 +116,38 @@ async def start_inventory_scheduler(interval_minutes: int = INVENTORY_SYNC_INTER
             log.error("Error in inventory scheduler loop: %s", e)
 
 
+_SCHEDULER_LOCK_KEY = "scheduler:running"
+
+
+async def _try_acquire_scheduler_lock(interval_hours: int) -> bool:
+    """Acquire a Redis distributed lock for the scheduler run.
+
+    Returns True if this instance should run (lock acquired or Redis
+    unavailable — fallback to always-run, which is the pre-Redis behaviour).
+    Returns False if another instance already holds the lock.
+    """
+    from cache import get_redis
+    redis = get_redis()
+    if redis is None:
+        return True  # No Redis — single-instance behaviour, always run
+
+    acquired = await redis.set(
+        _SCHEDULER_LOCK_KEY,
+        "1",
+        nx=True,
+        ex=int(interval_hours * 3600 * 0.9),  # 90% of interval so lock expires before next tick
+    )
+    return bool(acquired)
+
+
+async def _release_scheduler_lock() -> None:
+    """Release the distributed lock after the run completes."""
+    from cache import get_redis
+    redis = get_redis()
+    if redis is not None:
+        await redis.delete(_SCHEDULER_LOCK_KEY)
+
+
 async def start_scheduler(interval_hours: int = SCHEDULER_INTERVAL_HOURS):
     """Background scheduler loop.
 
@@ -125,6 +157,8 @@ async def start_scheduler(interval_hours: int = SCHEDULER_INTERVAL_HOURS):
 
     Writes a heartbeat to scheduler_heartbeat after each successful cycle
     so the alerting checker can detect whether the scheduler has stopped.
+    When Redis is available, uses a distributed lock so only ONE instance
+    runs the scheduled import in a multi-instance (ECS) deployment.
     """
     if os.getenv("DISABLE_SCHEDULER", "").lower() in ("1", "true", "yes"):
         log.info("Import scheduler disabled via DISABLE_SCHEDULER env var (n8n handles cron).")
@@ -139,8 +173,14 @@ async def start_scheduler(interval_hours: int = SCHEDULER_INTERVAL_HOURS):
         # Sleep FIRST — prevents bulk DELTA on every restart
         await asyncio.sleep(interval_hours * 3600)
         try:
-            log.info("Triggering scheduled imports at %s", datetime.now(timezone.utc))
-            await run_all_active_imports()
-            await _write_heartbeat(interval_hours)
+            if not await _try_acquire_scheduler_lock(interval_hours):
+                log.info("Scheduler: another instance holds the lock — skipping this cycle.")
+                continue
+            try:
+                log.info("Triggering scheduled imports at %s", datetime.now(timezone.utc))
+                await run_all_active_imports()
+                await _write_heartbeat(interval_hours)
+            finally:
+                await _release_scheduler_lock()
         except Exception as e:
             log.error("Error in scheduler loop: %s", e)

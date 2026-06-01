@@ -97,12 +97,17 @@ export default function AdminDashboard() {
         if (jRes.status === "fulfilled") setRecentJobs(jRes.value);
         if (supRes.status === "fulfilled") setSuppliers(supRes.value);
 
-        const failures = [sRes, jRes, supRes]
-          .filter((r): r is PromiseRejectedResult => r.status === "rejected")
-          .map((r) => r.reason)
-          .filter((e) => !(e instanceof DOMException && e.name === "AbortError"));
-        if (failures.length > 0) {
-          log.error("Dashboard partial load failure", failures);
+        const anyFailed = [sRes, jRes, supRes].some((r) => r.status === "rejected");
+        if (anyFailed) {
+          // Filter out AbortErrors — these are expected in React StrictMode dev
+          // (effect cleanup aborts the first fetch; the second mount succeeds).
+          const realErrors = [sRes, jRes, supRes]
+            .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+            .map((r) => r.reason)
+            .filter((e) => !(e instanceof DOMException && e.name === "AbortError"));
+          if (realErrors.length > 0) {
+            log.error("Dashboard partial load failure", realErrors);
+          }
         } else {
           setLoadError(null);
         }
