@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from modules.catalog.models import Category, Product, ProductImage, ProductVariant
+from modules.common.sanitize import sanitize_error
 from modules.promostandards.client import PromoStandardsClient
 from modules.promostandards.resolver import resolve_wsdl_url
 from modules.ps_directory.client import get_ps_endpoints
@@ -208,10 +209,11 @@ async def _probe_promostandards(code: str | None, auth_config: dict) -> dict:
             }
         return {"ok": False, "error": f"PromoStandards directory returned {e.response.status_code}"}
     except (httpx.ConnectError, httpx.TimeoutException) as e:
-        return {"ok": False, "error": f"Cannot reach PromoStandards directory: {e}"}
+        log.warning("PS directory unreachable for %s: %s", code, sanitize_error(e))
+        return {"ok": False, "error": "Cannot reach PromoStandards directory — check network/DNS."}
     except Exception as e:  # noqa: BLE001 — directory edge cases shouldn't 500 the probe
-        log.warning("PS directory lookup for %s failed: %s", code, e)
-        return {"ok": False, "error": f"Directory check failed: {e}"}
+        log.warning("PS directory lookup for %s failed: %s", code, sanitize_error(e))
+        return {"ok": False, "error": "Directory check failed — see server logs for details."}
 
     wsdl_url = resolve_wsdl_url(endpoints, "product_data")
     if not wsdl_url:

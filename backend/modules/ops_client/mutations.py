@@ -18,8 +18,10 @@ from .client import OpsGraphQLClient, OpsResult
 # ── set_product_category ─────────────────────────────────────────────────────
 
 _SET_PRODUCT_CATEGORY = """
-mutation SetProductCategory($input: setProductCategory_input!) {
+mutation SetProductCategory($input: ProductCategoryInput!) {
   setProductCategory(input: $input) {
+    result
+    message
     category_id
   }
 }
@@ -45,8 +47,10 @@ async def set_product_category(
 # ── set_product ──────────────────────────────────────────────────────────────
 
 _SET_PRODUCT = """
-mutation SetProduct($input: setProduct_input!) {
+mutation SetProduct($input: ProductInput!) {
   setProduct(input: $input) {
+    result
+    message
     products_id
   }
 }
@@ -78,9 +82,11 @@ async def set_product(
 # ── set_product_size ─────────────────────────────────────────────────────────
 
 _SET_PRODUCT_SIZE = """
-mutation SetProductSize($input: setProductSize_input!) {
+mutation SetProductSize($input: ProductSizeInput!) {
   setProductSize(input: $input) {
-    size_id
+    result
+    message
+    product_size_id
   }
 }
 """.strip()
@@ -113,8 +119,10 @@ async def set_product_size(
 # ── set_product_price ────────────────────────────────────────────────────────
 
 _SET_PRODUCT_PRICE = """
-mutation SetProductPrice($input: setProductPrice_input!) {
+mutation SetProductPrice($input: ProductPriceInput!) {
   setProductPrice(input: $input) {
+    result
+    message
     product_price_id
   }
 }
@@ -152,9 +160,11 @@ async def set_product_price(
 # ── set_assign_options ───────────────────────────────────────────────────────
 
 _SET_ASSIGN_OPTIONS = """
-mutation SetAssignOptions($input: setAssignOptions_input!) {
+mutation SetAssignOptions($input: AssignOptionsInput!) {
   setAssignOptions(input: $input) {
-    products_id
+    result
+    message
+    product_option_id
   }
 }
 """.strip()
@@ -178,9 +188,11 @@ async def set_assign_options(
 # ── set_additional_option ────────────────────────────────────────────────────
 
 _SET_ADDITIONAL_OPTION = """
-mutation SetAdditionalOption($input: setAdditionalOption_input!) {
+mutation SetAdditionalOption($input: AdditionalOptionInput!) {
   setAdditionalOption(input: $input) {
-    options_id
+    result
+    message
+    prod_add_opt_id
   }
 }
 """.strip()
@@ -205,9 +217,11 @@ async def set_additional_option(
 # ── set_additional_option_attributes ─────────────────────────────────────────
 
 _SET_ADDITIONAL_OPTION_ATTRIBUTES = """
-mutation SetAdditionalOptionAttributes($input: setAdditionalOptionAttributes_input!) {
+mutation SetAdditionalOptionAttributes($input: AdditionalOptionAttributesInput!) {
   setAdditionalOptionAttributes(input: $input) {
-    options_values_id
+    result
+    message
+    attribute_id
   }
 }
 """.strip()
@@ -240,9 +254,11 @@ async def set_additional_option_attributes(
 # ── set_products_attribute_price ──────────────────────────────────────────────
 
 _SET_PRODUCTS_ATTRIBUTE_PRICE = """
-mutation SetProductsAttributePrice($input: setProductsAttributePrice_input!) {
+mutation SetProductsAttributePrice($input: ProductsAttributePriceInput!) {
   setProductsAttributePrice(input: $input) {
-    products_attributes_id
+    result
+    message
+    attribute_id
   }
 }
 """.strip()
@@ -279,9 +295,12 @@ async def set_products_attribute_price(
 # ── update_product_stock ─────────────────────────────────────────────────────
 
 _UPDATE_PRODUCT_STOCK = """
-mutation UpdateProductStock($input: updateProductStock_input!) {
-  updateProductStock(input: $input) {
-    products_id
+mutation UpdateProductStock($stock_id: Int, $product_sku: String, $action: UpdateProductStockActionEnum!, $input: UpdateProductStockInput!) {
+  updateProductStock(stock_id: $stock_id, product_sku: $product_sku, action: $action, input: $input) {
+    result
+    message
+    stock_id
+    stock_quantity
   }
 }
 """.strip()
@@ -290,14 +309,23 @@ mutation UpdateProductStock($input: updateProductStock_input!) {
 async def update_product_stock(
     *,
     client: OpsGraphQLClient,
-    products_id: int,
-    quantity: int,
-    size_id: int | None = None,
+    action: str,
+    stock_quantity: int,
+    stock_id: int | None = None,
+    product_sku: str | None = None,
+    comment: str | None = None,
 ) -> OpsResult:
-    input_dict: dict = {"products_id": products_id, "quantity": quantity}
-    if size_id is not None:
-        input_dict["size_id"] = size_id
-    result = await client.execute(_UPDATE_PRODUCT_STOCK, variables={"input": input_dict})
+    variables: dict = {
+        "action": action,
+        "input": {"stock_quantity": stock_quantity},
+    }
+    if stock_id is not None:
+        variables["stock_id"] = stock_id
+    if product_sku is not None:
+        variables["product_sku"] = product_sku
+    if comment is not None:
+        variables["input"]["comment"] = comment
+    result = await client.execute(_UPDATE_PRODUCT_STOCK, variables=variables)
     if not result.ok:
         return result
     return OpsResult(ok=True, data=(result.data or {}).get("updateProductStock") or {}, raw=result.raw)
