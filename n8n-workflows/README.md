@@ -109,6 +109,7 @@ pulls). The OPS push path is FastAPI-owned end-to-end.
 | `pricing-sync-daily.json` | Daily | Per-supplier pricing refresh → hub `/api/ingest/{sid}/pricing` |
 | `catalog-sync-weekly.json` | Weekly | Full catalog rebuild |
 | `closeouts-monthly.json` | Monthly | Closeouts pull |
+| `ops-inline-push.json` | Manual | Load (catalog upsert) + send (push by `product_ref`) a product to an OPS storefront via the FastAPI gateway, then poll / receive callback. Auth: `X-Orchestrator-Key`. See `docs/integration-guide-inline-push.md`. |
 
 ## Next additions (not in v1)
 
