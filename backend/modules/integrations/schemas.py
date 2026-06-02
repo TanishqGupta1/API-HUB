@@ -17,6 +17,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from modules.catalog.schemas import ProductIngest
+
 
 # ── Push request envelope ──
 
@@ -89,8 +91,8 @@ class PushRequestCallback(BaseModel):
 class PushRequest(BaseModel):
     target: PushRequestTarget
     source: PushRequestSource
-    product_ref: PushRequestProductRef
-    product: Optional[dict[str, Any]] = None   # inline upsert (future)
+    product_ref: PushRequestProductRef = Field(default_factory=PushRequestProductRef)
+    product: Optional[ProductIngest] = None   # inline upsert; when set, hub upserts then pushes
     decorations: list[dict[str, Any]] = Field(default_factory=list)
     dry_run: bool = False
     callback: Optional[PushRequestCallback] = None
@@ -102,6 +104,30 @@ class PushRequest(BaseModel):
             "fresh inventory and pricing data at push time."
         ),
     )
+
+    @model_validator(mode="after")
+    def _require_product_or_ref(self) -> "PushRequest":
+        """Exactly one of (inline product, product_ref) must identify the push.
+
+        - Inline mode: `product` set, `product_ref` empty → derive
+          product_ref.supplier_sku from the inline product so the existing
+          resolve-from-catalog path finds the just-upserted row.
+        - Reference mode: `product_ref` set, `product` absent.
+        - Both set → ambiguous (which SKU wins?) → reject (spec: both → 422).
+        - Neither → reject.
+        """
+        has_ref = self.product_ref.product_id is not None or bool(self.product_ref.supplier_sku)
+        if self.product is not None:
+            if has_ref:
+                raise ValueError(
+                    "provide either `product` (inline) or `product_ref`, not both"
+                )
+            # Inline-only: derive the ref so the resolver finds the upserted row.
+            self.product_ref.supplier_sku = self.product.supplier_sku
+            return self
+        if not has_ref:
+            raise ValueError("either `product` (inline) or `product_ref` must be provided")
+        return self
 
 
 # ── Push responses ──
@@ -121,6 +147,10 @@ class PushRequestAccepted(BaseModel):
     callback_status: str = "not_requested"
     created_at: datetime
     links: PushRequestLinks
+    # Non-blocking preflight warnings (e.g. "no markup rule; passthrough").
+    # Blockers still 422 earlier; these are soft issues surfaced in the 202
+    # so the orchestrator sees them without polling.
+    warnings: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class StepResultOut(BaseModel):

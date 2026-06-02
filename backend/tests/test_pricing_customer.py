@@ -80,6 +80,85 @@ async def test_customer_quote_applies_customer_markup(db, seed_supplier):
 
 
 @pytest.mark.asyncio
+async def test_customer_quote_resolves_supplier_scoped_rule(db, seed_supplier):
+    """A supplier:{slug}-scoped rule must apply in the customer quote path.
+
+    Regression for the bug where resolve_customer_quote omitted supplier_slug,
+    so supplier-scoped rules matched in the push payload but were silently
+    ignored here — making the two pricing paths disagree. seed_supplier has
+    slug 'vg-ops-test'.
+    """
+    from modules.catalog.persistence import persist_product
+    from modules.catalog.schemas import ProductIngest, VariantIngest, VariantPriceIngest, ApparelDetailsIngest
+    from modules.catalog.models import Product, ProductVariant
+    from modules.customers.models import Customer
+    from modules.markup.models import MarkupRule
+    from modules.pricing.customer_quote import resolve_customer_quote
+    from modules.pricing.schemas import QuoteRequest
+    from database import async_session
+    from sqlalchemy import select
+
+    payload = ProductIngest(
+        supplier_sku="SUP-SCOPE-1",
+        product_name="supplier scoped",
+        product_type="apparel",
+        apparel_details=ApparelDetailsIngest(),
+        variants=[
+            VariantIngest(
+                part_id="SS-V1",
+                color="Black",
+                size="L",
+                base_price=Decimal("10.00"),
+                prices=[
+                    VariantPriceIngest(price_type="Net", quantity_min=1, quantity_max=2147483647, price=Decimal("10.00")),
+                ],
+            ),
+        ],
+    )
+    async with async_session() as s:
+        pid = await persist_product(s, seed_supplier.id, payload)
+        customer = Customer(
+            name="SupplierScope Co",
+            ops_base_url="https://test2.ops.com",
+            ops_token_url="https://test2.ops.com/token",
+            ops_client_id="x",
+            ops_auth_config={"client_secret": "x"},
+        )
+        s.add(customer)
+        await s.flush()
+        # ONLY a supplier-scoped rule — no "all" fallback. Before the fix this
+        # would resolve to None and the price would pass through unmarked.
+        s.add(MarkupRule(
+            customer_id=customer.id,
+            scope=f"supplier:{seed_supplier.slug}",
+            markup_pct=Decimal("40.00"),
+            rounding="none",
+            priority=0,
+        ))
+        await s.commit()
+        vid = (await s.execute(
+            select(ProductVariant.id).where(ProductVariant.product_id == pid)
+        )).scalar_one()
+        cid = customer.id
+
+    async with async_session() as s:
+        result = await resolve_customer_quote(
+            QuoteRequest(product_id=pid, variant_id=vid, qty=1),
+            cid,
+            s,
+        )
+        # 10.00 * 1.40 = 14.00 — proves the supplier:vg-ops-test rule resolved.
+        assert result.base_unit_price == Decimal("10.00")
+        assert result.unit_price == Decimal("14.00")
+        assert result.markup_pct == Decimal("40.00")
+
+    async with async_session() as s:
+        await s.execute(delete(Product).where(Product.id == pid))
+        await s.execute(delete(Customer).where(Customer.id == cid))
+        await s.commit()
+
+
+@pytest.mark.asyncio
 async def test_customer_quote_falls_back_when_no_markup(db, seed_supplier):
     """No markup rules — unit_price equals base, markup_pct is None."""
     from modules.catalog.persistence import persist_product

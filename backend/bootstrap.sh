@@ -17,6 +17,15 @@ echo "[bootstrap] launching uvicorn …"
 # from the ALB, so request.client.host and limiter.py's XFF parser see the
 # real client IP instead of the load-balancer's. FORWARDED_ALLOW_IPS should
 # be set to the ALB subnet CIDR in production (defaults to "*" for dev).
+# Fail closed in production: trusting XFF from "*" lets a client spoof its
+# source IP past the per-IP rate limiter. Require an explicit ALB subnet CIDR.
+_env="$(echo "${ENVIRONMENT:-development}" | tr '[:upper:]' '[:lower:]')"
+if [ "${_env}" = "production" ]; then
+  if [ -z "${FORWARDED_ALLOW_IPS}" ] || [ "${FORWARDED_ALLOW_IPS}" = "*" ]; then
+    echo "[bootstrap] FATAL: set FORWARDED_ALLOW_IPS to the ALB subnet CIDR in production (not unset or '*')." >&2
+    exit 1
+  fi
+fi
 FORWARDED_ALLOW_IPS="${FORWARDED_ALLOW_IPS:-*}"
 if [ "${UVICORN_RELOAD:-0}" = "1" ]; then
   exec python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload \
