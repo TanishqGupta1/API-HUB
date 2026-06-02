@@ -382,8 +382,13 @@ class TestMutationPlanOrder:
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
         stock_step = next(s for s in payload.plan if s.mutation == "updateProductStock")
-        assert stock_step.variables["input"]["action"] == "Reset"
+        # action and product_sku are top-level siblings of input (not nested)
+        assert stock_step.variables["action"] == "Reset"
+        assert stock_step.variables["product_sku"] == "PC61-WHT-M"
         assert stock_step.variables["input"]["stock_quantity"] == 42
+        # action must NOT be nested inside input
+        assert "action" not in stock_step.variables["input"]
+        assert "product_sku" not in stock_step.variables["input"]
 
     def test_no_setProductCategory_step(self):
         # Old spec had a separate setProductCategory step; new spec does not.
