@@ -32,6 +32,7 @@ limiter = Limiter(key_func=_client_ip)
 
 _EMAIL_WINDOW_SECONDS = 15 * 60   # 15 minutes
 _EMAIL_MAX_ATTEMPTS = 5           # per email per window
+_EMAIL_GC_THRESHOLD = 10_000      # sweep aged-out keys once the dict grows past this
 
 _email_attempts: dict[str, deque] = {}
 _email_lock = Lock()
@@ -48,6 +49,13 @@ def enforce_email_login_limit(email: str) -> None:
     key = email.strip().lower()
     cutoff = now - _EMAIL_WINDOW_SECONDS
     with _email_lock:
+        # Bound memory: without this, every distinct email (incl. an attacker
+        # spraying random addresses — the exact threat this defends against)
+        # leaves a dict entry forever. Opportunistically drop keys whose
+        # attempts have all aged out of the window.
+        if len(_email_attempts) > _EMAIL_GC_THRESHOLD:
+            for k in [k for k, b in _email_attempts.items() if not b or b[-1] < cutoff]:
+                del _email_attempts[k]
         bucket = _email_attempts.setdefault(key, deque())
         while bucket and bucket[0] < cutoff:
             bucket.popleft()

@@ -686,7 +686,11 @@ async def check_image_urls_reachable(
             try:
                 async with httpx.AsyncClient(timeout=timeout_seconds) as client:
                     resp = await client.head(url, follow_redirects=False)
-                ok = 200 <= resp.status_code < 300
+                # 2xx = present; 3xx = present-but-redirecting (common for CDNs).
+                # We deliberately do NOT follow the redirect (SSRF: a 30x could
+                # pivot to cloud metadata), but a redirect still proves the URL
+                # resolves, so it must not block the push. <400 = reachable.
+                ok = 200 <= resp.status_code < 400
                 return url, ok, f"HTTP {resp.status_code}"
             except Exception as exc:  # noqa: BLE001
                 return url, False, f"{exc.__class__.__name__}: {exc}"
@@ -706,7 +710,7 @@ async def check_image_urls_reachable(
     return CheckResult(
         "image_urls_reachable",
         True,
-        f"{len(urls)}/{len(urls)} HEAD 200",
+        f"{len(urls)}/{len(urls)} image URL(s) reachable",
     )
 
 
