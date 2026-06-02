@@ -240,6 +240,8 @@ async def prepare_push_intent(
     # validator already set product_ref.supplier_sku from the inline product,
     # so the resolver finds the just-upserted row by (supplier_sku, supplier_id).
     if req.product is not None:
+        # Local import avoids a circular import: catalog.persistence pulls in
+        # catalog models that (transitively) import gateway-adjacent modules.
         from modules.catalog.persistence import persist_product
         await persist_product(db, supplier.id, req.product, category_id=None)
         await db.flush()

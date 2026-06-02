@@ -40,6 +40,10 @@ async def resolve_customer_quote(
     # Without this, supplier-scoped rules match in the push payload
     # (markup/engine.calculate_price passes supplier_slug) but were silently
     # ignored in the customer quote — making the two pricing paths disagree.
+    # Local import avoids a circular import between pricing and suppliers modules.
+    # NOTE (review): this is one extra PK fetch per quote — fine for now; if
+    # quotes get hot/batched, thread supplier_slug from the caller that already
+    # loaded the supplier instead of re-fetching here.
     from modules.suppliers.models import Supplier
     supplier = await db.get(Supplier, product.supplier_id)
     supplier_slug = supplier.slug if supplier else None
