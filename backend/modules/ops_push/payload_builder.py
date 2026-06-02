@@ -615,11 +615,11 @@ def _build_updateProductStock_step(
         mutation="updateProductStock",
         source_key=f"variant_sku:{variant_sku}",
         variables={
+            "action": "Reset",
+            "product_sku": variant_sku,
             "input": {
-                "action": "Reset",
-                "product_sku": variant_sku,
                 "stock_quantity": inventory,
-            }
+            },
         },
         requires_response_from=[1],
     )

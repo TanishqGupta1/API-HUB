@@ -141,7 +141,10 @@ class FakeOpsClient:
         return r
 
     async def update_product_stock(self, variables: dict) -> dict:
-        r = {"products_id": variables.get("products_id", self._counter)}
+        r = {
+            "stock_id": self._counter,
+            "stock_quantity": (variables.get("input") or {}).get("stock_quantity", 0),
+        }
         self._record("update_product_stock", variables, r)
         return r
 

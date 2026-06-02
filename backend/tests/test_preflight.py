@@ -509,7 +509,8 @@ async def test_image_urls_reachable_pass_all_2xx():
         async def __aexit__(self, *a): return False
         async def head(self, *a, **kw): return _FakeResp(200)
 
-    with patch("modules.ops_push.preflight.httpx.AsyncClient", _FakeClient):
+    with patch("modules.ops_push.preflight.assert_safe_url", return_value=None), \
+         patch("modules.ops_push.preflight.httpx.AsyncClient", _FakeClient):
         r = await check_image_urls_reachable(ctx, timeout_seconds=0.5)
     assert r.ok is True
     assert "2/2" in r.detail
@@ -529,7 +530,8 @@ async def test_image_urls_reachable_fail_any_non_2xx():
             r.status_code = 404 if "dead" in url else 200
             return r
 
-    with patch("modules.ops_push.preflight.httpx.AsyncClient", _FakeClient):
+    with patch("modules.ops_push.preflight.assert_safe_url", return_value=None), \
+         patch("modules.ops_push.preflight.httpx.AsyncClient", _FakeClient):
         r = await check_image_urls_reachable(ctx, timeout_seconds=0.5)
     assert r.ok is False
     assert "1/2" in r.detail

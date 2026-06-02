@@ -12,6 +12,8 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
+pytestmark = pytest.mark.no_db
+
 from modules.ops_inbound.ops_client import (
     MUTATION_SET_ADDITIONAL_OPTION,
     MUTATION_SET_ADDITIONAL_OPTION_ATTRIBUTES,

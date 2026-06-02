@@ -24,4 +24,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --chown=app:app . .
 USER app
 EXPOSE 8000
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Trust X-Forwarded-For from the ALB so rate-limit / logging see the real
+# client IP, not the LB. Set FORWARDED_ALLOW_IPS=<ALB-subnet-CIDR> in the
+# ECS task-def for production. Defaults to "*" for dev / docker-compose.
+ENV FORWARDED_ALLOW_IPS="*"
+CMD ["sh", "-c", "exec python -m uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=\"${FORWARDED_ALLOW_IPS}\""]

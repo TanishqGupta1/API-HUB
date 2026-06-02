@@ -19,6 +19,7 @@ from database import get_db
 from modules.auth.dependencies import VGAdmin
 from modules.catalog.persistence import persist_product
 from modules.catalog.schemas import IngestResult, ProductIngest
+from modules.common.sanitize import sanitize_error
 from modules.customers.models import Customer
 from modules.master_options.models import MasterOption, MasterOptionAttribute
 from modules.master_options.schemas import MasterOptionIngest
@@ -273,7 +274,7 @@ async def ingest_supplier_products(
                 item.supplier_sku,
                 exc,
             )
-            errors.append({"supplier_sku": item.supplier_sku, "error": str(exc)[:300]})
+            errors.append({"supplier_sku": item.supplier_sku, "error": sanitize_error(exc)})
 
     job.records_processed = processed
     job.success_count = processed
