@@ -122,15 +122,16 @@ async def test_signup_status_open_only_during_bootstrap(client):
 @pytest.mark.no_db
 @pytest.mark.asyncio
 async def test_get_orchestrator_key_awaits_rate_limit(monkeypatch):
-    """Task 1b — verify _check_rate_limit is awaited at the call site.
+    """Task 1b — verify _check_rate_limit is awaited inside get_orchestrator_key.
 
-    Regression guard: if someone accidentally changes 'await _check_rate_limit'
-    back to a fire-and-forget call the rate limiter silently stops working.
-    This test patches _check_rate_limit with a coroutine that sets a flag,
-    then calls get_orchestrator_key and asserts the flag was set synchronously
-    before the function returned.
+    Regression guard: if someone accidentally drops the `await _check_rate_limit`
+    call (or makes it fire-and-forget) the rate limiter silently stops working.
+
+    We patch the real `_get_key_from_db` helper so the DB is never touched, then
+    patch `_check_rate_limit` with a coroutine that records the call. Because the
+    helper returns a fully-formed key, get_orchestrator_key runs to completion and
+    `called` must be populated — no bare except masking failures.
     """
-    import inspect
     from unittest.mock import AsyncMock, MagicMock
     from modules.integrations import auth as gw_auth
 
@@ -140,6 +141,7 @@ async def test_get_orchestrator_key_awaits_rate_limit(monkeypatch):
     fake_key = types.SimpleNamespace(
         id="test-key-id",
         is_active=True,
+        revoked_at=None,
         rate_limit_per_minute=10,
         scopes=["push"],
         customer_id=None,
@@ -147,23 +149,21 @@ async def test_get_orchestrator_key_awaits_rate_limit(monkeypatch):
 
     monkeypatch.setattr(gw_auth, "_check_rate_limit", mock_check)
 
-    # Patch DB lookup to return our fake key without hitting the DB.
-    async def fake_get_key(db, key_str):
+    # Patch the real DB-lookup helper to return our fake key without a DB.
+    async def fake_get_key(db, key_hash):
         return fake_key
 
-    monkeypatch.setattr(gw_auth, "_get_key_from_db", fake_get_key, raising=False)
+    monkeypatch.setattr(gw_auth, "_get_key_from_db", fake_get_key)
 
-    # If _check_rate_limit is awaited, 'called' will be populated before return.
-    try:
-        await gw_auth.get_orchestrator_key(
-            x_orchestrator_key="any-value",
-            db=MagicMock(),
-        )
-    except Exception:
-        pass  # We only care that the mock was called, not about downstream logic.
+    # If _check_rate_limit is awaited, 'called' is populated before return.
+    returned = await gw_auth.get_orchestrator_key(
+        x_orchestrator_key="any-value",
+        db=MagicMock(),
+    )
 
+    assert returned is fake_key
     assert called == ["test-key-id"], (
-        "_check_rate_limit was not awaited at the call site — "
+        "_check_rate_limit was not awaited inside get_orchestrator_key — "
         "rate limiting is silently broken"
     )
 
