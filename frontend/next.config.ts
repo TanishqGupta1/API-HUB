@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "cdn.ssactivewear.com" },
       { protocol: "https", hostname: "*.alphabroder.com" },
       { protocol: "https", hostname: "*.4over.com" },
+      { protocol: "https", hostname: "dei4q67dwezeh.cloudfront.net" },
       // Pin the project CDN to its specific distribution. Avoid `*.cloudfront.net`
       // — that allows ANY CloudFront distribution, including ones the attacker
       // controls. Set NEXT_PUBLIC_CDN_HOST in env when the CDN is provisioned.
