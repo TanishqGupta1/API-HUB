@@ -83,7 +83,10 @@ export default function AdminDashboard() {
     const controller = new AbortController();
     // 12-second hard timeout — prevents the spinner from hanging forever when
     // the backend is slow to respond (TCP accepted but no HTTP reply yet).
-    const timer = setTimeout(() => controller.abort(), 12_000);
+    // `timedOut` distinguishes a genuine timeout abort (surface to the user)
+    // from a StrictMode/unmount cleanup abort (silently ignored).
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 12_000);
 
     async function load() {
       try {
@@ -99,6 +102,15 @@ export default function AdminDashboard() {
 
         const anyFailed = [sRes, jRes, supRes].some((r) => r.status === "rejected");
         if (anyFailed) {
+          // A genuine 12s timeout aborts the in-flight fetches with an
+          // AbortError too — surface it instead of silently blanking the
+          // dashboard. StrictMode/unmount cleanup aborts (timedOut === false)
+          // stay suppressed since the second mount succeeds.
+          if (timedOut) {
+            setLoadError("Dashboard timed out — backend may be unavailable. Refresh to try again.");
+            log.error("Dashboard load timed out after 12s");
+            return;
+          }
           // Filter out AbortErrors — these are expected in React StrictMode dev
           // (effect cleanup aborts the first fetch; the second mount succeeds).
           const realErrors = [sRes, jRes, supRes]
@@ -112,7 +124,7 @@ export default function AdminDashboard() {
           setLoadError(null);
         }
       } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === "AbortError") {
+        if (timedOut || (e instanceof DOMException && e.name === "AbortError")) {
           setLoadError("Dashboard timed out — backend may be unavailable. Refresh to try again.");
         } else {
           setLoadError("Failed to load dashboard data. Check backend connectivity.");

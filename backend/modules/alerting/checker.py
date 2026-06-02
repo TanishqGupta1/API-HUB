@@ -29,6 +29,12 @@ log = logging.getLogger("alerting.checker")
 
 CHECK_INTERVAL_SECONDS = int(os.getenv("ALERT_CHECK_INTERVAL_SECONDS", "300"))  # 5 min
 
+# Cap how many failed rows a single tick will turn into notifications. A large
+# backlog (e.g. a supplier outage producing thousands of failures) would
+# otherwise create thousands of notifications in one transaction. Oldest rows
+# are handled first; the rest stay alerted=False and get picked up next tick.
+MAX_ALERTS_PER_TICK = 100
+
 _URL_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)
 _TOKEN_PATTERN = re.compile(r"(token|key|secret|password|auth|bearer)[=:\s]+\S+", re.IGNORECASE)
 
@@ -51,10 +57,13 @@ async def _check_push_failures() -> None:
     async with async_session() as db:
         rows = (
             await db.execute(
-                select(ProductPushLog).where(
+                select(ProductPushLog)
+                .where(
                     ProductPushLog.status == "failed",
                     ProductPushLog.alerted == False,  # noqa: E712
                 )
+                .order_by(ProductPushLog.pushed_at.asc())
+                .limit(MAX_ALERTS_PER_TICK)
             )
         ).scalars().all()
 
@@ -100,10 +109,13 @@ async def _check_sync_failures() -> None:
     async with async_session() as db:
         rows = (
             await db.execute(
-                select(SyncJob).where(
+                select(SyncJob)
+                .where(
                     SyncJob.status == "failed",
                     SyncJob.alerted == False,  # noqa: E712
                 )
+                .order_by(SyncJob.started_at.asc())
+                .limit(MAX_ALERTS_PER_TICK)
             )
         ).scalars().all()
 

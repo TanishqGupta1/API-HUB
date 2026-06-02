@@ -50,7 +50,7 @@ docker compose up -d n8n                      # n8n editor on :5678
 - `backend/` — FastAPI (Python 3.12). All routes under `/api/`. Async SQLAlchemy + asyncpg. Handles SOAP/REST fetch, normalization, storage, markup rules.
 - `frontend/` — Next.js 15 (App Router). Blueprint design system (Outfit + Fira Code fonts, paper palette #f2f0ed, blueprint blue #1e4d92, dot-grid). Uses shadcn/ui + Tailwind.
 - n8n (Docker, port 5678) — orchestrates sync schedules via HTTP triggers to FastAPI. Triggers the FastAPI Integration Gateway via webhooks for OPS push; no longer calls OPS directly.
-- `n8n-nodes-onprintshop/` — TypeScript custom n8n node for OnPrintShop GraphQL API. OAuth2 auth. **40/40 mutations implemented** (see `OPS-NODE-GAP-ANALYSIS.md`). Available for legacy flows.
+- `n8n-nodes-onprintshop/` — TypeScript custom n8n node for OnPrintShop GraphQL API. OAuth2 auth. Implements **40/40 approved mutations** per `OPS-NODE-GAP-ANALYSIS.md` (mutation coverage only; queries are tracked separately in that doc). Available for legacy flows.
 
 **Backend module pattern:** Each module in `backend/modules/` has `models.py`, `schemas.py`, `routes.py`, `__init__.py`. Some have `service.py`. Modules: `suppliers`, `catalog`, `customers`, `markup`, `push_log`, `ps_directory`, `sync_jobs`.
 
