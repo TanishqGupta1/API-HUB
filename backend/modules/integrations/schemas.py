@@ -147,6 +147,10 @@ class PushRequestAccepted(BaseModel):
     callback_status: str = "not_requested"
     created_at: datetime
     links: PushRequestLinks
+    # Non-blocking preflight warnings (e.g. "no markup rule; passthrough").
+    # Blockers still 422 earlier; these are soft issues surfaced in the 202
+    # so the orchestrator sees them without polling.
+    warnings: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class StepResultOut(BaseModel):

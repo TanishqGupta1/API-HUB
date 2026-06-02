@@ -147,6 +147,9 @@ async def create_push_request(
                 links=PushRequestLinks(
                     self=f"/api/integrations/v1/push-requests/{terminal.id}"
                 ),
+                # Preserve preflight warnings through the dry-run rebuild —
+                # they were attached to the accepted object by prepare_push_intent.
+                warnings=accepted.warnings,
             )
         return accepted
 

@@ -233,6 +233,17 @@ async def prepare_push_intent(
             "code": "UNKNOWN_REF", "message": f"Supplier '{supplier_slug}' not found"
         })
 
+    # ── Inline product upsert ──
+    # When the orchestrator ships the full product inline, upsert it into the
+    # catalog first (ON CONFLICT DO UPDATE via persist_product), then fall
+    # through to the normal resolve-from-catalog path below. The PushRequest
+    # validator already set product_ref.supplier_sku from the inline product,
+    # so the resolver finds the just-upserted row by (supplier_sku, supplier_id).
+    if req.product is not None:
+        from modules.catalog.persistence import persist_product
+        await persist_product(db, supplier.id, req.product, category_id=None)
+        await db.flush()
+
     # product_ref accepts product_id (UUID) OR supplier_sku — exactly one path
     # must resolve a row. We don't enforce "both unset" at the Pydantic layer so
     # error shape stays consistent with the gateway envelope.
@@ -393,6 +404,13 @@ async def prepare_push_intent(
         callback_status=push_log.callback_status,
         created_at=push_log.pushed_at,
         links=PushRequestLinks(self=f"/api/integrations/v1/push-requests/{push_log.id}"),
+        # run_preflight returns warnings as CheckResult dataclasses — serialize
+        # each to a dict for the response schema. (Test mocks may already pass
+        # dicts; tolerate both.)
+        warnings=[
+            w.to_dict() if hasattr(w, "to_dict") else w
+            for w in (getattr(preflight, "warnings", []) or [])
+        ],
     )
 
 
