@@ -30,6 +30,15 @@ class OpsAuth:
     client_id: str
     client_secret: str
 
+    def __post_init__(self) -> None:
+        # Defensive trim: a stray leading/trailing space pasted into a URL via
+        # the UI otherwise breaks httpx with "missing protocol". Frozen
+        # dataclass → set via object.__setattr__.
+        for _f in ("base_url", "token_url", "client_id", "client_secret"):
+            _v = getattr(self, _f)
+            if isinstance(_v, str):
+                object.__setattr__(self, _f, _v.strip())
+
 
 @dataclass(frozen=True)
 class OpsResult:
@@ -44,7 +53,9 @@ class OpsResult:
 class OpsGraphQLClient:
     """OAuth-aware GraphQL client for OnPrintShop. Token cached per instance."""
 
-    GRAPHQL_PATH = "/graphql"
+    # OPS serves GraphQL at /api/ (matches the n8n OnPrintShop node). The old
+    # /graphql path returns the storefront HTML page, not the API.
+    GRAPHQL_PATH = "/api/"
 
     def __init__(self, auth: OpsAuth, *, timeout_seconds: float = 30.0) -> None:
         self.auth = auth
@@ -96,15 +107,33 @@ class OpsGraphQLClient:
                 return self._token
 
             log.debug("Requesting new OPS access token from %s", self.auth.token_url)
-            resp = await self._http.post(
-                self.auth.token_url,
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": self.auth.client_id,
-                    "client_secret": self.auth.client_secret,
-                },
+            # OPS token endpoints vary by deployment in how they accept client
+            # credentials. Mirror VG's proven n8n OnPrintShop node: try JSON body,
+            # then form-urlencoded body, then HTTP Basic auth — first 2xx wins.
+            # (see n8n-nodes-onprintshop GenericFunctions.getAccessToken)
+            cid, csecret = self.auth.client_id, self.auth.client_secret
+            _attempts = (
+                ("json", {"json": {"grant_type": "client_credentials",
+                                   "client_id": cid, "client_secret": csecret}}),
+                ("form", {"data": {"grant_type": "client_credentials",
+                                   "client_id": cid, "client_secret": csecret}}),
+                ("basic", {"data": {"grant_type": "client_credentials"},
+                           "auth": (cid, csecret)}),
             )
-            resp.raise_for_status()
+            resp = None
+            for _label, _kwargs in _attempts:
+                resp = await self._http.post(self.auth.token_url, **_kwargs)
+                if resp.status_code < 400:
+                    log.debug("OPS access token obtained via %s auth", _label)
+                    break
+            if resp is None or resp.status_code >= 400:
+                # Surface OPS's actual error body — essential for diagnosing 401s.
+                raise RuntimeError(
+                    f"OPS token endpoint returned "
+                    f"{resp.status_code if resp is not None else 'no-response'} at "
+                    f"{self.auth.token_url} (tried json/form/basic auth): "
+                    f"{resp.text[:400] if resp is not None else ''}"
+                )
             body = resp.json()
 
             token = body.get("access_token")
