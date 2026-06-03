@@ -3,7 +3,7 @@ import os
 import uuid as uuid_mod
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from limiter import limiter
+from limiter import enforce_email_login_limit, limiter
 from jose import JWTError
 from sqlalchemy import exists, func, literal, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -126,6 +126,12 @@ async def login(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    # Per-email cap (defense against distributed brute-force where attacker
+    # spreads attempts across many IPs to evade the per-IP @limiter.limit).
+    # Counted BEFORE bcrypt verify so unknown-email attempts also consume
+    # budget — otherwise the endpoint becomes a free email-enumeration oracle.
+    enforce_email_login_limit(body.email)
+
     result = await db.execute(
         select(User).where(User.email == body.email, User.is_active.is_(True))
     )

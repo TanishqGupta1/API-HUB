@@ -13,11 +13,20 @@ from .adapter import PromoStandardsAdapter
 
 log = logging.getLogger(__name__)
 
+# PromoStandards production WSDL endpoints, per the SanMar Web Services
+# Integration Guide v24.3 (sanmar/SanMar-Web-Services-Integration-Guide-24.3.pdf).
+# The previous host `promostandards.sanmar.com` does not resolve — all SanMar
+# web services (legacy + PromoStandards) are served from ws.sanmar.com:8080.
+# Test host is test-ws.sanmar.com:8080 with the same paths.
 SANMAR_WSDLS = {
-    "PRODUCT": "https://promostandards.sanmar.com/ProductDataService/v200?wsdl",
-    "MEDIA": "https://promostandards.sanmar.com/MediaService/v110?wsdl",
-    "PRICING": "https://promostandards.sanmar.com/PricingAndConfigurationService/v100?wsdl",
-    "INVENTORY": "https://promostandards.sanmar.com/InventoryService/v200?wsdl",
+    # Product Data Service v2.0.0 (guide p8)
+    "PRODUCT": "https://ws.sanmar.com:8080/promostandards/ProductDataServiceBindingV2?WSDL",
+    # Media Content Service v1.0.0 (guide p54)
+    "MEDIA": "https://ws.sanmar.com:8080/promostandards/MediaContentServiceBinding?wsdl",
+    # Pricing and Configuration Service v1.0.0 (guide p81)
+    "PRICING": "https://ws.sanmar.com:8080/promostandards/PricingAndConfigurationServiceBinding?WSDL",
+    # Inventory Service v2.0.0 (guide p67)
+    "INVENTORY": "https://ws.sanmar.com:8080/promostandards/InventoryServiceBindingV2final?WSDL",
 }
 
 

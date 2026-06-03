@@ -8,6 +8,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,6 +16,29 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from modules.auth.dependencies import _require_vg_admin
 
 log = logging.getLogger(__name__)
+
+
+# Defense-in-depth: only http(s) and only hosts in N8N_API_ALLOWED_HOSTS (when
+# set) may be used as the n8n base URL. Prevents a misconfigured / attacker-
+# influenced env var from pointing the proxy at an arbitrary upstream. Empty
+# allowlist = no host restriction (dev default).
+def _validate_n8n_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise RuntimeError(
+            f"N8N_API_BASE_URL must use http:// or https:// (got {parsed.scheme!r})"
+        )
+    if not parsed.hostname:
+        raise RuntimeError("N8N_API_BASE_URL has no hostname")
+    allowed = os.getenv("N8N_API_ALLOWED_HOSTS", "").strip()
+    if allowed:
+        allowed_hosts = {h.strip().lower() for h in allowed.split(",") if h.strip()}
+        if parsed.hostname.lower() not in allowed_hosts:
+            raise RuntimeError(
+                f"N8N_API_BASE_URL host {parsed.hostname!r} not in N8N_API_ALLOWED_HOSTS"
+            )
+    return url
+
 
 # vg_admin only. The role check runs before any handler body (so an
 # unauthorized caller gets 403 before we ever touch N8N_API_KEY), and
@@ -44,7 +68,7 @@ def _base() -> str:
     # N8N_API_BASE_URL is the canonical var; N8N_BASE_URL kept for backward compat
     url = os.getenv("N8N_API_BASE_URL") or os.getenv("N8N_BASE_URL")
     if url:
-        return url.rstrip("/")
+        return _validate_n8n_url(url).rstrip("/")
     if os.getenv("ENVIRONMENT", "development").lower() == "production":
         raise RuntimeError(
             "N8N_API_BASE_URL must be set in production. "

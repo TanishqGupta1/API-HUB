@@ -2,13 +2,19 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from modules.auth.dependencies import _require_vg_admin, CurrentUser
+from modules.auth.dependencies import (
+    CurrentUser,
+    _require_vg_admin,
+    require_customer_access,
+)
 from modules.catalog.ingest import require_ingest_secret
 
 from . import service
+from .models import PushMapping
 from .schemas import PushMappingRead, PushMappingUpsert
 
 router = APIRouter(prefix="/api/push-mappings", tags=["push_mappings"])
@@ -41,8 +47,18 @@ async def list_mappings(
 @router.delete("/{id}")
 async def delete_mapping(
     id: UUID,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
+    # Tenant guard — fetch the mapping's owning customer_id and verify the
+    # caller has access. Prevents cross-tenant deletion by UUID guessing.
+    mapping = (
+        await db.execute(select(PushMapping).where(PushMapping.id == id))
+    ).scalar_one_or_none()
+    if mapping is None:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    require_customer_access(mapping.customer_id, current_user)
+
     success = await service.soft_delete_push_mapping(db, id)
     if not success:
         raise HTTPException(status_code=404, detail="Mapping not found")
