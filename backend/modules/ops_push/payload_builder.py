@@ -56,6 +56,9 @@ from modules.catalog.models import (
 from modules.customers.models import Customer
 from modules.decorations.models import CustomerProductDecoration
 from modules.markup.engine import apply_markup, resolve_rule
+from modules.ops_config.models import ProductStorefrontConfig
+from modules.pricing.overrides import apply_pricing_overrides
+from modules.pricing.resolvers import to_cents
 from modules.markup.models import MarkupRule
 from modules.push_mappings.models import PushMapping, PushMappingOption
 from modules.suppliers.models import Supplier
@@ -125,6 +128,10 @@ class OPSComputedPrice(BaseModel):
     markup_pct: Optional[float] = None
     markup_amount: Optional[float] = None
     rounding: str = "none"
+    storefront_override_applied: bool = Field(
+        default=False,
+        description="True when product_storefront_configs.pricing_overrides altered final_price",
+    )
 
 
 class OPSPushPayload(BaseModel):
@@ -321,6 +328,7 @@ class _PushContext:
     push_mapping: Optional[PushMapping]
     push_mapping_options: list[PushMappingOption]
     decoration_options: list[dict]
+    storefront_config: Optional[ProductStorefrontConfig]
 
 
 async def _load_context(
@@ -384,6 +392,15 @@ async def _load_context(
         list(decoration_row.decoration_options) if decoration_row else []
     )
 
+    storefront_config = (
+        await db.execute(
+            select(ProductStorefrontConfig).where(
+                ProductStorefrontConfig.customer_id == customer_id,
+                ProductStorefrontConfig.product_id == product_id,
+            )
+        )
+    ).scalar_one_or_none()
+
     return _PushContext(
         customer=customer,
         product=product,
@@ -395,6 +412,7 @@ async def _load_context(
         push_mapping=push_mapping,
         push_mapping_options=push_mapping_options,
         decoration_options=decoration_options,
+        storefront_config=storefront_config,
     )
 
 
@@ -517,7 +535,9 @@ def _build_setProductPrice_step(
             "input": {
                 "product_price_id": 0,
                 "products_id": _placeholder(1, "products_id"),
-                "size_id": _placeholder(size_step, "size_id"),
+                # Input field is `size_id`; value is threaded from the
+                # setProductSize response, which selects `product_size_id`.
+                "size_id": _placeholder(size_step, "product_size_id"),
                 "qty": 1,
                 "qty_to": 999999,
                 "price": final_price,
@@ -590,7 +610,8 @@ def _build_setAdditionalOptionAttributes_step(
         variables={
             "input": {
                 "products_id": _placeholder(1, "products_id"),
-                "option_id": _placeholder(option_step, "options_id"),
+                # setAdditionalOption response selects `prod_add_opt_id`.
+                "option_id": _placeholder(option_step, "prod_add_opt_id"),
                 "attribute_key": attr.attribute_key,
                 "title": attr.title or attr.attribute_key,
                 "setup_cost": _to_float(getattr(attr, "setup_cost", None)) or 0.0,
@@ -615,11 +636,11 @@ def _build_updateProductStock_step(
         mutation="updateProductStock",
         source_key=f"variant_sku:{variant_sku}",
         variables={
+            "action": "Reset",
+            "product_sku": variant_sku,
             "input": {
-                "action": "Reset",
-                "product_sku": variant_sku,
                 "stock_quantity": inventory,
-            }
+            },
         },
         requires_response_from=[1],
     )
@@ -681,9 +702,20 @@ def _synthesize_payload(
     # ---- Order variants deterministically (Rev 1 + Rev 3 P2.5) ----
     ordered_variants = sorted(ctx.variants, key=_variant_sort_key)
 
+    # Storefront overrides — must match the customer-quote path byte-for-byte
+    # or a customer can be quoted one price and have a different price pushed
+    # to OPS. Shared pure helper lives in pricing.overrides.
+    overrides_dict = (
+        ctx.storefront_config.pricing_overrides if ctx.storefront_config else None
+    )
+
     computed_prices: list[OPSComputedPrice] = []
     for v in ordered_variants:
         final = apply_markup(v.base_price, rule)
+        override_applied = False
+        if final is not None and overrides_dict:
+            final, override_applied = apply_pricing_overrides(final, overrides_dict)
+            final = to_cents(final)
         variant_sku = v.sku or f"{ctx.product.supplier_sku}-{str(v.id)[:8]}"
         computed_prices.append(
             OPSComputedPrice(
@@ -696,6 +728,7 @@ def _synthesize_payload(
                 markup_pct=(_to_float(rule.markup_pct) if rule else None),
                 markup_amount=(_to_float(rule.markup_amount) if rule else None),
                 rounding=(rule.rounding if rule else "none"),
+                storefront_override_applied=override_applied,
             )
         )
 

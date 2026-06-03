@@ -38,6 +38,24 @@ describe("DescriptionHtml — Issue #29 tabnapping protection", () => {
     expect(anchor.getAttribute("rel")).toBeNull();
   });
 
+  it('forces rel on target="_new" and named-window targets too', async () => {
+    // Modern browsers default _blank to noopener, but named targets
+    // (target="popup", target="_new") still leak window.opener — the hook
+    // must cover them. _self / _parent / _top stay untouched.
+    const html =
+      '<p><a href="https://x.example" target="popup">named</a></p>';
+    const { container } = render(<DescriptionHtml html={html} />);
+    const anchor = await findAnchor(container);
+    expect(anchor.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it('leaves target="_self" untouched (no new context to tabnap)', async () => {
+    const html = '<p><a href="https://x.example" target="_self">in-page</a></p>';
+    const { container } = render(<DescriptionHtml html={html} />);
+    const anchor = await findAnchor(container);
+    expect(anchor.getAttribute("rel")).toBeNull();
+  });
+
   it("overrides supplier-provided rel that omits noopener", async () => {
     const tricky =
       '<p><a href="https://x.example" target="_blank" rel="nofollow">x</a></p>';

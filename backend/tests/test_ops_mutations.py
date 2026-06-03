@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
 from modules.ops_client import mutations as m
 
+pytestmark = pytest.mark.no_db
+
 
 @pytest.fixture
 def fake_client():
@@ -102,7 +104,7 @@ async def test_set_product_passes_through_error(fake_client):
 @pytest.mark.asyncio
 async def test_set_product_size_threads_products_id(fake_client):
     fake_client.execute.return_value = OpsResult(
-        ok=True, data={"setProductSize": {"size_id": 555}}
+        ok=True, data={"setProductSize": {"product_size_id": 555}}
     )
     result = await m.set_product_size(
         client=fake_client,
@@ -119,7 +121,7 @@ async def test_set_product_size_threads_products_id(fake_client):
     assert v["color_name"] == "Navy"
     assert v["products_sku"] == "PC61-NAV-M"
     assert result.ok
-    assert result.data["size_id"] == 555
+    assert result.data["product_size_id"] == 555
 
 
 # ── T9: set_product_price ───────────────────────────────────────────────────
@@ -257,25 +259,29 @@ async def test_set_products_attribute_price_sends_fields(fake_client):
 @pytest.mark.asyncio
 async def test_update_product_stock_sends_fields(fake_client):
     fake_client.execute.return_value = OpsResult(
-        ok=True, data={"updateProductStock": {"products_id": 12345}}
+        ok=True, data={"updateProductStock": {"stock_id": 88, "stock_quantity": 200}}
     )
-    result = await m.update_product_stock(client=fake_client, products_id=12345, quantity=100, size_id=555)
+    result = await m.update_product_stock(
+        client=fake_client, action="Add", stock_quantity=100, stock_id=88, comment="New stock."
+    )
     assert result.ok
     _, kwargs = fake_client.execute.call_args
-    v = kwargs["variables"]["input"]
-    assert v["products_id"] == 12345
-    assert v["quantity"] == 100
-    assert v["size_id"] == 555
+    assert kwargs["variables"]["action"] == "Add"
+    assert kwargs["variables"]["stock_id"] == 88
+    assert kwargs["variables"]["input"]["stock_quantity"] == 100
+    assert kwargs["variables"]["input"]["comment"] == "New stock."
 
 
 @pytest.mark.asyncio
-async def test_update_product_stock_omits_size_id_when_none(fake_client):
+async def test_update_product_stock_omits_optional_args_when_none(fake_client):
     fake_client.execute.return_value = OpsResult(
-        ok=True, data={"updateProductStock": {"products_id": 12345}}
+        ok=True, data={"updateProductStock": {"stock_id": None, "stock_quantity": 50}}
     )
-    await m.update_product_stock(client=fake_client, products_id=12345, quantity=50)
+    await m.update_product_stock(client=fake_client, action="Reset", stock_quantity=50)
     _, kwargs = fake_client.execute.call_args
-    assert "size_id" not in kwargs["variables"]["input"]
+    assert "stock_id" not in kwargs["variables"]
+    assert "product_sku" not in kwargs["variables"]
+    assert "comment" not in kwargs["variables"]["input"]
 
 
 # ── set_product_design ───────────────────────────────────────────────────────

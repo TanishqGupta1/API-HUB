@@ -44,6 +44,116 @@ logger = logging.getLogger(__name__)
 # Maps GraphQL mutation root → (query string, response root key).
 # The query strings live in ops_client.mutations as the single source of
 # truth for OPS field shapes.
+async def _dedup_lookup_in_ops(
+    client: Any, supplier_sku: str
+) -> Optional[int]:
+    """Ask OPS whether it already has a product with this SKU.
+
+    Defensive: any error (auth, schema mismatch, transport) is logged and
+    returns None so the push falls through to its normal create-or-update
+    path. We never want a flaky dedup query to BLOCK a legitimate push.
+
+    Returns the OPS products_id when a match exists, else None.
+    """
+    try:
+        result = await _m.get_product_by_sku(client=client, products_sku=supplier_sku)
+    except Exception:  # noqa: BLE001 — defensive
+        logger.exception("dedup: get_product_by_sku raised for sku=%s", supplier_sku)
+        return None
+    if not result.ok:
+        logger.warning(
+            "dedup: get_product_by_sku not OK for sku=%s: %s",
+            supplier_sku, result.ops_error_message,
+        )
+        return None
+    pid = (result.data or {}).get("products_id")
+    if pid is None:
+        return None
+    try:
+        return int(pid)
+    except (TypeError, ValueError):
+        logger.warning("dedup: OPS returned non-numeric products_id=%r for sku=%s", pid, supplier_sku)
+        return None
+
+
+async def _verify_post_push(
+    client: Any, supplier_sku: str, expected_ops_product_id: str
+) -> None:
+    """Read-back the just-pushed product and verify OPS sees it with the
+    expected products_id. Logs a warning on mismatch; never raises and
+    never blocks the push. Opt-in via OPS_POST_PUSH_VERIFY=1.
+
+    Cheap sanity layer for the first weeks of live pushes — if OPS
+    silently dropped a write or our id-threading drifted, this surfaces
+    the bug before customers notice."""
+    import os as _os
+    if _os.getenv("OPS_POST_PUSH_VERIFY", "0") != "1":
+        return
+    try:
+        result = await _m.get_product_by_sku(client=client, products_sku=supplier_sku)
+    except Exception:  # noqa: BLE001
+        logger.exception("verify: get_product_by_sku raised for sku=%s", supplier_sku)
+        return
+    if not result.ok:
+        logger.warning(
+            "verify: get_product_by_sku not OK after push sku=%s: %s",
+            supplier_sku, result.ops_error_message,
+        )
+        return
+    observed = (result.data or {}).get("products_id")
+    if observed is None:
+        logger.warning(
+            "verify: OPS returned no products_id for sku=%s after push (expected=%s)",
+            supplier_sku, expected_ops_product_id,
+        )
+        return
+    if str(observed) != str(expected_ops_product_id):
+        logger.warning(
+            "verify: OPS products_id mismatch sku=%s expected=%s observed=%s — investigate",
+            supplier_sku, expected_ops_product_id, observed,
+        )
+    else:
+        logger.info(
+            "verify: OPS confirmed sku=%s -> products_id=%s",
+            supplier_sku, observed,
+        )
+
+
+async def _ensure_push_mapping_for_dedup(
+    db: AsyncSession,
+    customer: Customer,
+    product_id: uuid_mod.UUID,
+    supplier_sku: str,
+    ops_product_id: int,
+) -> None:
+    """Upsert push_mappings.target_ops_product_id so build_push_payload
+    sees it and chooses update mode. Called only when dedup discovered
+    an existing OPS row we didn't know about (e.g. after a crash
+    between OPS write and mapping save in a prior push)."""
+    now = datetime.now(timezone.utc)
+    existing = (await db.execute(
+        select(PushMapping).where(
+            PushMapping.source_product_id == product_id,
+            PushMapping.customer_id == customer.id,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        existing.target_ops_product_id = ops_product_id
+        existing.updated_at = now
+        return
+    db.add(PushMapping(
+        source_system="api-hub",
+        source_product_id=product_id,
+        source_supplier_sku=supplier_sku,
+        customer_id=customer.id,
+        target_ops_base_url=customer.ops_base_url or "",
+        target_ops_product_id=ops_product_id,
+        pushed_at=now,
+        updated_at=now,
+        status="active",
+    ))
+
+
 _MUTATION_DISPATCH: dict[str, tuple[str, str]] = {
     "set_product_category":            (_m._SET_PRODUCT_CATEGORY,            "setProductCategory"),
     "set_product":                     (_m._SET_PRODUCT,                     "setProduct"),
@@ -110,7 +220,9 @@ class FakeOpsClient:
         return r
 
     async def set_product_size(self, variables: dict) -> dict:
-        r = {"size_id": self._next_id()}
+        # Mirror the live setProductSize response field (product_size_id) so
+        # dry-run placeholder resolution matches the real OPS contract.
+        r = {"product_size_id": self._next_id()}
         self._record("set_product_size", variables, r)
         return r
 
@@ -126,7 +238,8 @@ class FakeOpsClient:
         return r
 
     async def set_additional_option(self, variables: dict) -> dict:
-        r = {"options_id": self._next_id()}
+        # Mirror the live setAdditionalOption response field (prod_add_opt_id).
+        r = {"prod_add_opt_id": self._next_id()}
         self._record("set_additional_option", variables, r)
         return r
 
@@ -141,7 +254,10 @@ class FakeOpsClient:
         return r
 
     async def update_product_stock(self, variables: dict) -> dict:
-        r = {"products_id": variables.get("products_id", self._counter)}
+        r = {
+            "stock_id": self._counter,
+            "stock_quantity": (variables.get("input") or {}).get("stock_quantity", 0),
+        }
         self._record("update_product_stock", variables, r)
         return r
 
@@ -232,6 +348,19 @@ async def prepare_push_intent(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={
             "code": "UNKNOWN_REF", "message": f"Supplier '{supplier_slug}' not found"
         })
+
+    # ── Inline product upsert ──
+    # When the orchestrator ships the full product inline, upsert it into the
+    # catalog first (ON CONFLICT DO UPDATE via persist_product), then fall
+    # through to the normal resolve-from-catalog path below. The PushRequest
+    # validator already set product_ref.supplier_sku from the inline product,
+    # so the resolver finds the just-upserted row by (supplier_sku, supplier_id).
+    if req.product is not None:
+        # Local import avoids a circular import: catalog.persistence pulls in
+        # catalog models that (transitively) import gateway-adjacent modules.
+        from modules.catalog.persistence import persist_product
+        await persist_product(db, supplier.id, req.product, category_id=None)
+        await db.flush()
 
     # product_ref accepts product_id (UUID) OR supplier_sku — exactly one path
     # must resolve a row. We don't enforce "both unset" at the Pydantic layer so
@@ -393,6 +522,13 @@ async def prepare_push_intent(
         callback_status=push_log.callback_status,
         created_at=push_log.pushed_at,
         links=PushRequestLinks(self=f"/api/integrations/v1/push-requests/{push_log.id}"),
+        # run_preflight returns warnings as CheckResult dataclasses — serialize
+        # each to a dict for the response schema. (Test mocks may already pass
+        # dicts; tolerate both.)
+        warnings=[
+            w.to_dict() if hasattr(w, "to_dict") else w
+            for w in (getattr(preflight, "warnings", []) or [])
+        ],
     )
 
 
@@ -447,6 +583,35 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 return
 
         try:
+            # ── Pre-push dedup (P2.2) ─────────────────────────────────────
+            # Before building the plan, if we have no push_mapping yet (i.e.
+            # we'd otherwise create a new OPS product), ask OPS whether one
+            # exists with this SKU. Catches the case where an earlier push
+            # wrote to OPS but crashed before persisting the mapping —
+            # without this guard, the retry creates a duplicate row in OPS.
+            #
+            # Skipped for dry-run (FakeOpsClient.GetProductBySku returns the
+            # programmed dict so tests can still exercise the dedup path).
+            if customer is not None and push_log.supplier_sku:
+                existing_mapping = (await db.execute(
+                    select(PushMapping).where(
+                        PushMapping.source_product_id == push_log.product_id,
+                        PushMapping.customer_id == push_log.customer_id,
+                    )
+                )).scalar_one_or_none()
+                if existing_mapping is None or not existing_mapping.target_ops_product_id:
+                    discovered = await _dedup_lookup_in_ops(client, push_log.supplier_sku)
+                    if discovered is not None:
+                        logger.info(
+                            "dedup: OPS already has products_id=%s for sku=%s — switching to update mode",
+                            discovered, push_log.supplier_sku,
+                        )
+                        await _ensure_push_mapping_for_dedup(
+                            db, customer, push_log.product_id,
+                            push_log.supplier_sku, discovered,
+                        )
+                        await db.flush()
+
             # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
             payload = await build_push_payload(db, push_log.customer_id, push_log.product_id)
             plan = [step.model_dump(mode="json") for step in payload.plan]
@@ -515,6 +680,18 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
                     final_status = "partial_failure" if ops_product_id else "failed"
                     break
+
+            # ── Post-push read-back verify (P2.2.4 — opt-in) ────────────
+            # When OPS_POST_PUSH_VERIFY=1, ask OPS to confirm the product
+            # we just wrote actually shows up with the expected id.
+            # Logs only — never blocks.
+            if (
+                final_status == "pushed"
+                and ops_product_id
+                and not push_log.dry_run
+                and push_log.supplier_sku
+            ):
+                await _verify_post_push(client, push_log.supplier_sku, ops_product_id)
 
             # ── Persist results ──
             push_log.step_results = _redact_auth(step_results)

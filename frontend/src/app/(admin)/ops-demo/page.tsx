@@ -163,25 +163,25 @@ export default function OpsDemoPage() {
           <div className="w-12 h-12 rounded-lg border border-[#cfccc8] overflow-hidden shrink-0 bg-[#f9f7f4] flex items-center justify-center text-[9px] font-mono text-[#888894]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="https://images.sanmar.com/imgindex/PC61_NAVY_front.jpg"
-              alt="PC61"
+              src="https://cdnm.sanmar.com/catalog/images/JST81.jpg"
+              alt="JST81"
               className="w-full h-full object-contain"
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-[13px] text-[#1e1e24]">Port &amp; Company Essential Tee</div>
-            <div className="font-mono text-[10px] text-[#888894] mt-0.5">PC61 · SanMar</div>
+            <div className="font-bold text-[13px] text-[#1e1e24]">Sport-Tek Fleece-Lined Colorblock Jacket</div>
+            <div className="font-mono text-[10px] text-[#888894] mt-0.5">JST81 · SanMar</div>
             <div className="flex flex-wrap gap-1 mt-1.5">
-              {["Navy/S", "Navy/M", "Navy/L", "White/M"].map((v) => (
+              {["Black/XS", "Black/S", "Black/M", "Black/L"].map((v) => (
                 <span key={v} className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-[#f2f0ed] text-[#484852]">{v}</span>
               ))}
             </div>
           </div>
           <div className="text-right shrink-0 space-y-0.5">
             <div className="text-[10px] font-bold text-[#888894] uppercase tracking-widest">Sell price</div>
-            <div className="text-[16px] font-extrabold text-[#1e1e24]">$5.59</div>
-            <div className="text-[9px] text-[#247a52] font-bold">$3.99 + 40% markup</div>
+            <div className="text-[16px] font-extrabold text-[#1e1e24]">$54.59</div>
+            <div className="text-[9px] text-[#247a52] font-bold">$41.99 + 30% markup</div>
           </div>
         </div>
         <div className="px-5 py-2 border-t border-[#f2f0ed] flex items-center gap-2 text-[10px] text-[#888894]">

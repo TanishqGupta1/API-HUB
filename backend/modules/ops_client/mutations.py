@@ -1,4 +1,4 @@
-"""OPS GraphQL mutation wrappers — one function per mutation.
+"""OPS GraphQL mutation + query wrappers — one function per operation.
 
 ID threading order for apparel push:
   set_product_category → category_id
@@ -9,6 +9,9 @@ ID threading order for apparel push:
   set_additional_option / set_additional_option_attributes / set_products_attribute_price
   update_product_stock(products_id)
   set_product_design(products_id)
+
+Queries (P2.2 — read-back / dedup):
+  get_product_by_sku(products_sku) → products_id | None
 """
 from __future__ import annotations
 
@@ -18,8 +21,10 @@ from .client import OpsGraphQLClient, OpsResult
 # ── set_product_category ─────────────────────────────────────────────────────
 
 _SET_PRODUCT_CATEGORY = """
-mutation SetProductCategory($input: setProductCategory_input!) {
+mutation SetProductCategory($input: ProductCategoryInput!) {
   setProductCategory(input: $input) {
+    result
+    message
     category_id
   }
 }
@@ -45,8 +50,10 @@ async def set_product_category(
 # ── set_product ──────────────────────────────────────────────────────────────
 
 _SET_PRODUCT = """
-mutation SetProduct($input: setProduct_input!) {
+mutation SetProduct($input: ProductInput!) {
   setProduct(input: $input) {
+    result
+    message
     products_id
   }
 }
@@ -78,9 +85,11 @@ async def set_product(
 # ── set_product_size ─────────────────────────────────────────────────────────
 
 _SET_PRODUCT_SIZE = """
-mutation SetProductSize($input: setProductSize_input!) {
+mutation SetProductSize($input: ProductSizeInput!) {
   setProductSize(input: $input) {
-    size_id
+    result
+    message
+    product_size_id
   }
 }
 """.strip()
@@ -113,8 +122,10 @@ async def set_product_size(
 # ── set_product_price ────────────────────────────────────────────────────────
 
 _SET_PRODUCT_PRICE = """
-mutation SetProductPrice($input: setProductPrice_input!) {
+mutation SetProductPrice($input: ProductPriceInput!) {
   setProductPrice(input: $input) {
+    result
+    message
     product_price_id
   }
 }
@@ -152,9 +163,11 @@ async def set_product_price(
 # ── set_assign_options ───────────────────────────────────────────────────────
 
 _SET_ASSIGN_OPTIONS = """
-mutation SetAssignOptions($input: setAssignOptions_input!) {
+mutation SetAssignOptions($input: AssignOptionsInput!) {
   setAssignOptions(input: $input) {
-    products_id
+    result
+    message
+    product_option_id
   }
 }
 """.strip()
@@ -178,9 +191,11 @@ async def set_assign_options(
 # ── set_additional_option ────────────────────────────────────────────────────
 
 _SET_ADDITIONAL_OPTION = """
-mutation SetAdditionalOption($input: setAdditionalOption_input!) {
+mutation SetAdditionalOption($input: AdditionalOptionInput!) {
   setAdditionalOption(input: $input) {
-    options_id
+    result
+    message
+    prod_add_opt_id
   }
 }
 """.strip()
@@ -205,9 +220,11 @@ async def set_additional_option(
 # ── set_additional_option_attributes ─────────────────────────────────────────
 
 _SET_ADDITIONAL_OPTION_ATTRIBUTES = """
-mutation SetAdditionalOptionAttributes($input: setAdditionalOptionAttributes_input!) {
+mutation SetAdditionalOptionAttributes($input: AdditionalOptionAttributesInput!) {
   setAdditionalOptionAttributes(input: $input) {
-    options_values_id
+    result
+    message
+    attribute_id
   }
 }
 """.strip()
@@ -240,9 +257,11 @@ async def set_additional_option_attributes(
 # ── set_products_attribute_price ──────────────────────────────────────────────
 
 _SET_PRODUCTS_ATTRIBUTE_PRICE = """
-mutation SetProductsAttributePrice($input: setProductsAttributePrice_input!) {
+mutation SetProductsAttributePrice($input: ProductsAttributePriceInput!) {
   setProductsAttributePrice(input: $input) {
-    products_attributes_id
+    result
+    message
+    attribute_id
   }
 }
 """.strip()
@@ -279,9 +298,12 @@ async def set_products_attribute_price(
 # ── update_product_stock ─────────────────────────────────────────────────────
 
 _UPDATE_PRODUCT_STOCK = """
-mutation UpdateProductStock($input: updateProductStock_input!) {
-  updateProductStock(input: $input) {
-    products_id
+mutation UpdateProductStock($stock_id: Int, $product_sku: String, $action: UpdateProductStockActionEnum!, $input: UpdateProductStockInput!) {
+  updateProductStock(stock_id: $stock_id, product_sku: $product_sku, action: $action, input: $input) {
+    result
+    message
+    stock_id
+    stock_quantity
   }
 }
 """.strip()
@@ -290,14 +312,23 @@ mutation UpdateProductStock($input: updateProductStock_input!) {
 async def update_product_stock(
     *,
     client: OpsGraphQLClient,
-    products_id: int,
-    quantity: int,
-    size_id: int | None = None,
+    action: str,
+    stock_quantity: int,
+    stock_id: int | None = None,
+    product_sku: str | None = None,
+    comment: str | None = None,
 ) -> OpsResult:
-    input_dict: dict = {"products_id": products_id, "quantity": quantity}
-    if size_id is not None:
-        input_dict["size_id"] = size_id
-    result = await client.execute(_UPDATE_PRODUCT_STOCK, variables={"input": input_dict})
+    variables: dict = {
+        "action": action,
+        "input": {"stock_quantity": stock_quantity},
+    }
+    if stock_id is not None:
+        variables["stock_id"] = stock_id
+    if product_sku is not None:
+        variables["product_sku"] = product_sku
+    if comment is not None:
+        variables["input"]["comment"] = comment
+    result = await client.execute(_UPDATE_PRODUCT_STOCK, variables=variables)
     if not result.ok:
         return result
     return OpsResult(ok=True, data=(result.data or {}).get("updateProductStock") or {}, raw=result.raw)
@@ -328,3 +359,47 @@ async def set_product_design(
     if not result.ok:
         return result
     return OpsResult(ok=True, data=(result.data or {}).get("setProductDesign") or {}, raw=result.raw)
+
+
+# ── get_product_by_sku (P2.2 dedup) ─────────────────────────────────────────
+#
+# Used pre-push to ask OPS "do you already have a product with this SKU?" so
+# a retry of a previously-failed push doesn't create a duplicate row in OPS.
+#
+# Schema is PROVISIONAL — confirm against the OPS Postman collection when
+# Christian shares it. The function returns Optional[int] (products_id) so
+# the dedup caller never sees raw schema details; only the wrapper has to
+# change if OPS uses a different operation name (e.g. getProductsList with
+# a SKU filter) or different field names.
+
+_GET_PRODUCT_BY_SKU = """
+query GetProductBySku($products_sku: String!) {
+  getProductBySku(products_sku: $products_sku) {
+    products_id
+    products_sku
+  }
+}
+""".strip()
+
+
+async def get_product_by_sku(
+    *,
+    client: OpsGraphQLClient,
+    products_sku: str,
+) -> OpsResult:
+    """Look up an existing OPS product by SKU. Returns the wrapper's data
+    dict containing products_id when found, or an empty dict when not.
+
+    Callers should check result.ok AND result.data.get('products_id').
+    A missing products_id is a successful 'not found', not a failure.
+    """
+    result = await client.execute(
+        _GET_PRODUCT_BY_SKU,
+        variables={"products_sku": products_sku},
+    )
+    if not result.ok:
+        return result
+    # OPS convention nests the operation result under the operation name;
+    # mirror the unwrap pattern from the mutation helpers.
+    payload = (result.data or {}).get("getProductBySku") or {}
+    return OpsResult(ok=True, data=payload, raw=result.raw)

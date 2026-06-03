@@ -4,15 +4,24 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
   images: {
+    // /_next/image will only proxy URLs whose host matches one of these
+    // patterns. Keep this list tight — every entry is an SSRF/exfil vector
+    // for the optimiser. http:// is intentionally omitted; SVG is left off
+    // (Next default) so attacker-controlled markup can't execute.
     remotePatterns: [
       { protocol: "https", hostname: "*.sanmar.com" },
       { protocol: "https", hostname: "cdn.ssactivewear.com" },
       { protocol: "https", hostname: "*.alphabroder.com" },
-      { protocol: "https", hostname: "images.alphabroder.com" },
       { protocol: "https", hostname: "*.4over.com" },
-      { protocol: "https", hostname: "*.cloudfront.net" },
-      // Add project CDN/S3/R2 host here when configured
+      { protocol: "https", hostname: "dei4q67dwezeh.cloudfront.net" },
+      // Pin the project CDN to its specific distribution. Avoid `*.cloudfront.net`
+      // — that allows ANY CloudFront distribution, including ones the attacker
+      // controls. Set NEXT_PUBLIC_CDN_HOST in env when the CDN is provisioned.
+      ...(process.env.NEXT_PUBLIC_CDN_HOST
+        ? [{ protocol: "https" as const, hostname: process.env.NEXT_PUBLIC_CDN_HOST }]
+        : []),
     ],
+    dangerouslyAllowSVG: false,
   },
   output: "standalone",
   async redirects() {

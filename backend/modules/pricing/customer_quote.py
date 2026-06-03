@@ -1,7 +1,6 @@
 """Customer-facing quote: resolve base price then apply markup + storefront overrides."""
 from __future__ import annotations
 
-import math
 from decimal import Decimal
 from uuid import UUID
 
@@ -13,6 +12,7 @@ from modules.markup.engine import apply_markup, resolve_rule
 from modules.markup.models import MarkupRule
 
 from .errors import MissingPricingDataError
+from .overrides import apply_pricing_overrides
 from .resolvers import load_product, resolve_quote_for_product, to_cents
 from .schemas import CustomerQuoteResult, QuoteRequest, QuoteResult
 
@@ -35,7 +35,20 @@ async def resolve_customer_quote(
             select(MarkupRule).where(MarkupRule.customer_id == customer_id)
         )
     ).scalars().all()
-    rule = resolve_rule(rules, product.supplier_sku, product.category)
+
+    # Derive supplier slug so `supplier:{slug}`-scoped rules resolve here too.
+    # Without this, supplier-scoped rules match in the push payload
+    # (markup/engine.calculate_price passes supplier_slug) but were silently
+    # ignored in the customer quote — making the two pricing paths disagree.
+    # Local import avoids a circular import between pricing and suppliers modules.
+    # NOTE (review): this is one extra PK fetch per quote — fine for now; if
+    # quotes get hot/batched, thread supplier_slug from the caller that already
+    # loaded the supplier instead of re-fetching here.
+    from modules.suppliers.models import Supplier
+    supplier = await db.get(Supplier, product.supplier_id)
+    supplier_slug = supplier.slug if supplier else None
+
+    rule = resolve_rule(rules, product.supplier_sku, product.category, supplier_slug)
 
     marked_up_unit = apply_markup(base_result.unit_price, rule)
 
@@ -64,15 +77,11 @@ async def _apply_storefront_override(
     current_unit: Decimal,
     db: AsyncSession,
 ) -> tuple[Decimal, bool]:
-    """Apply pricing_overrides from product_storefront_configs.
+    """Load product_storefront_configs.pricing_overrides and apply.
 
-    Supported keys:
-      - "fixed_unit_price": str  — replaces price entirely
-      - "extra_markup_pct": str  — additional % on top of marked-up price
-      - "rounding": "nearest_99" | "nearest_dollar" | "none"
-
-    All rounding uses to_cents (ROUND_HALF_UP) for consistency with the
-    rest of the pricing pipeline (M2).
+    DB lookup lives here; the pure math is in pricing.overrides so the
+    push path (which already loaded the row in its context) can reuse it
+    without a second query and stay byte-identical with the quote.
     """
     from modules.ops_config.models import ProductStorefrontConfig
 
@@ -86,21 +95,4 @@ async def _apply_storefront_override(
     if cfg is None or not cfg.pricing_overrides:
         return current_unit, False
 
-    overrides = cfg.pricing_overrides
-    new_unit = current_unit
-
-    if "fixed_unit_price" in overrides:
-        return to_cents(Decimal(str(overrides["fixed_unit_price"]))), True
-
-    if "extra_markup_pct" in overrides:
-        pct = Decimal(str(overrides["extra_markup_pct"]))
-        new_unit = new_unit * (Decimal("1") + pct / Decimal("100"))
-
-    rounding = overrides.get("rounding")
-    if rounding == "nearest_99":
-        new_unit = Decimal(math.floor(new_unit)) + Decimal("0.99")
-    elif rounding == "nearest_dollar":
-        # Use to_cents-compatible rounding, not Python's banker rounding (M2).
-        new_unit = Decimal(math.floor(new_unit + Decimal("0.5")))
-
-    return new_unit, True
+    return apply_pricing_overrides(current_unit, cfg.pricing_overrides)
