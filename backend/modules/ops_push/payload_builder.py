@@ -535,6 +535,8 @@ def _build_setProductPrice_step(
             "input": {
                 "product_price_id": 0,
                 "products_id": _placeholder(1, "products_id"),
+                # Input field is `size_id`; value is threaded from the
+                # setProductSize response, which selects `product_size_id`.
                 "size_id": _placeholder(size_step, "product_size_id"),
                 "qty": 1,
                 "qty_to": 999999,
@@ -608,7 +610,8 @@ def _build_setAdditionalOptionAttributes_step(
         variables={
             "input": {
                 "products_id": _placeholder(1, "products_id"),
-                "option_id": _placeholder(option_step, "options_id"),
+                # setAdditionalOption response selects `prod_add_opt_id`.
+                "option_id": _placeholder(option_step, "prod_add_opt_id"),
                 "attribute_key": attr.attribute_key,
                 "title": attr.title or attr.attribute_key,
                 "setup_cost": _to_float(getattr(attr, "setup_cost", None)) or 0.0,

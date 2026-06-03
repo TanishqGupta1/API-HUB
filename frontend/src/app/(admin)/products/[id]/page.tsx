@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type {
@@ -20,7 +21,6 @@ import type { Customer as CustomerType } from "@/lib/types";
 import { AlertTriangle, CheckCircle2, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type { ProductPreview } from "@/lib/types";
-import Image from "next/image";
 
 const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
 
@@ -110,7 +110,7 @@ export default function ProductDetailPage() {
     }
   }
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [p, preview] = await Promise.all([
         api<Product>(`/api/products/${id}`),
@@ -138,33 +138,9 @@ export default function ProductDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchData();
   }, [id]);
 
-
-  async function handleMirrorImages() {
-    if (mirrorLoading) return;
-    setMirrorLoading(true);
-    try {
-      const result = await api<{ mirrored: number; skipped: number; failed: number }>(
-        `/api/images/mirror/${id}`,
-        { method: "POST" }
-      );
-      toast.success(`Mirrored ${result.mirrored} image${result.mirrored !== 1 ? "s" : ""}${result.failed ? ` (${result.failed} failed)` : ""}`);
-      const status = await api<{ total_images: number; mirrored_images: number; pending_images: number }>(
-        `/api/images/mirror-status/${id}`
-      );
-      setMirrorStatus(status);
-      fetchData();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Mirror failed");
-    } finally {
-      setMirrorLoading(false);
-    }
-  }
+  useEffect(() => { fetchData(); }, [fetchData]);
 
 
   const imageTabs = useMemo(() => {
@@ -214,7 +190,6 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <>
     <div id="s-product-detail">
 
       {/* Source badge bar */}
@@ -259,14 +234,9 @@ export default function ProductDetailPage() {
         );
       })()}
       {missingFields.length === 0 && product && (
-        <div className="mb-4 bg-[#f0f9f4] border-2 border-[#247a52] rounded-xl px-5 py-3 flex items-start gap-3">
-          <CheckCircle2 className="w-5 h-5 text-[#247a52] shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <div className="text-[13px] font-semibold text-[#1a5c3a]">Product data complete</div>
-            <div className="text-[12px] text-[#247a52]/80 mt-0.5">
-              All product fields are present. Customer-side checks (OPS credentials, markup rules, master options) run when you click <span className="font-semibold">Push to OPS</span>.
-            </div>
-          </div>
+        <div className="mb-4 bg-[#f0f9f4] border-2 border-[#247a52] rounded-xl px-5 py-3 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-[#247a52] shrink-0" />
+          <span className="text-[13px] font-semibold text-[#1a5c3a]">All required fields present — ready to push</span>
         </div>
       )}
 
@@ -362,7 +332,7 @@ export default function ProductDetailPage() {
                 src={activeImage}
                 alt={`${product.product_name} (${activeImageTab})`}
                 fill
-                sizes="300px"
+                sizes="320px"
                 className="object-contain p-5"
               />
             ) : (
@@ -406,7 +376,6 @@ export default function ProductDetailPage() {
               );
             })}
           </div>
-
         </div>
 
         {/* Right — metadata */}
@@ -638,7 +607,5 @@ export default function ProductDetailPage() {
         </div>
       </div>
     </div>
-
-</>
   );
 }

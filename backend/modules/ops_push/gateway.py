@@ -220,6 +220,8 @@ class FakeOpsClient:
         return r
 
     async def set_product_size(self, variables: dict) -> dict:
+        # Mirror the live setProductSize response field (product_size_id) so
+        # dry-run placeholder resolution matches the real OPS contract.
         r = {"product_size_id": self._next_id()}
         self._record("set_product_size", variables, r)
         return r
@@ -236,7 +238,8 @@ class FakeOpsClient:
         return r
 
     async def set_additional_option(self, variables: dict) -> dict:
-        r = {"options_id": self._next_id()}
+        # Mirror the live setAdditionalOption response field (prod_add_opt_id).
+        r = {"prod_add_opt_id": self._next_id()}
         self._record("set_additional_option", variables, r)
         return r
 
@@ -363,7 +366,7 @@ async def prepare_push_intent(
     # must resolve a row. We don't enforce "both unset" at the Pydantic layer so
     # error shape stays consistent with the gateway envelope.
     if pref.product_id is None and not pref.supplier_sku:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail={
             "code": "INVALID_REF",
             "message": "product_ref must include product_id or supplier_sku",
         })
@@ -487,7 +490,7 @@ async def prepare_push_intent(
     if not preflight.ok:
         # Use Task 7's spec-shaped error envelope (status/code/message/details/trace_id).
         envelope = preflight.to_error_envelope()
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=envelope)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=envelope)
 
     # ── Insert push_log row ──
     now = datetime.now(timezone.utc)

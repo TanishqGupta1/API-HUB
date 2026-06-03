@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import { clearCachedUser } from "@/lib/auth";
 import { API_BASE } from "@/lib/env";
 
-
-
 export default function SetupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");

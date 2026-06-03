@@ -311,7 +311,7 @@ export interface SyncJob {
   supplier_name: string;
   job_type: JobType;
   status: SyncStatus;
-  started_at: string | null;
+  started_at: string;
   completed_at: string | null;
   total_products: number;
   success_count: number;
@@ -434,7 +434,6 @@ export interface CustomerProductSelection {
 
   // Embedded product fields (saves an extra fetch on the catalog page)
   supplier_id: string;
-  supplier_slug: string | null;
   supplier_sku: string;
   product_name: string;
   product_type: string;
@@ -605,23 +604,20 @@ export interface OPSPushPayload {
 
 /** Append-only entry written by the worker to product_push_log.step_results JSONB. */
 export interface OPSStepResult {
-  /** Sequential step index (always a number — backend StepResultOut uses int). */
   step: number;
-  source_key?: string | null;
+  source_key: string;
   mutation: string;
-  request_fingerprint?: string | null;
-  ops_ids?: Record<string, unknown> | null;
-  attempted_at?: string | null;
-  status?: "ok" | "failed" | null;
-  /** Derived boolean — true when status === "ok". */
-  ok?: boolean;
+  request_fingerprint: string;
+  ops_ids: Record<string, unknown>;
+  attempted_at: string;
+  status: "ok" | "failed";
   error?: string | null;
-  latency_ms?: number | null;
+  latency_ms?: number;
 }
 
 /** Opaque JSONB shape; spec leaves the contents flexible. */
 export interface CleanupTargets {
-  ops_product_id?: number | null;
+  ops_product_id?: string | null;
   product_size_ids?: number[];
   option_ids?: number[];
   attribute_ids?: number[];
@@ -681,7 +677,9 @@ export interface PushLog {
 export interface PushRequestBody {
   target: { system: "ops"; customer_id: string };
   source: { supplier_slug: string };
-  /** Either product_ref OR product inline; never both. Supply product_id OR supplier_sku. */
+  /** Either product_ref OR product inline; never both.
+   *  product_ref identifies a product by internal UUID OR supplier_sku — backend
+   *  resolves whichever is supplied (see modules/integrations/schemas.py:PushRequestProductRef). */
   product_ref?: { product_id?: string; supplier_sku?: string };
   product?: Record<string, unknown>; // ProductIngest shape
   decorations?: Array<{

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   ChevronLeft,
@@ -20,7 +20,7 @@ export default function ProductOptionsPage() {
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchOptions = async () => {
+  const fetchOptions = useCallback(async () => {
     try {
       const data = await api<any>(`/api/products/${id}`);
       setProduct(data);
@@ -30,12 +30,11 @@ export default function ProductOptionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     fetchOptions();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [fetchOptions]);
 
   const updateAttr = (optionId: string, attrId: string, field: string, value: any) => {
     setOptions((prev) =>
