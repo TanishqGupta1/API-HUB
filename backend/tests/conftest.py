@@ -73,8 +73,11 @@ app.dependency_overrides[_get_current_user] = lambda: _TEST_ADMIN
 TEST_SUPPLIER_SLUGS = ("vg-ops-test", "vg-ops-inactive")
 TEST_CUSTOMER_OPS_URLS = (
     "https://test.ops.com",
+    "https://test1.ops.com",   # CPS Archived/Failed/Recovered/Unique test factories
     "https://test2.ops.com",
     "https://test3.ops.com",
+    "https://mock.ops",        # generic "Test Customer" factory — most common leak
+    "http://ops.test",         # alternate "Test Customer" factory
 )
 
 _SCHEMA_CREATED = False
