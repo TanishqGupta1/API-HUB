@@ -46,6 +46,11 @@ async def upsert_config(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.role not in ("vg_admin", "ingest_service") and (
+        current_user.role != "customer_admin"
+        or current_user.customer_id != data.customer_id
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized for this customer")
     """Create or update a storefront configuration mapping."""
     if current_user.role not in ("vg_admin", "ingest_service") and (
         current_user.role != "customer_admin"

@@ -30,7 +30,8 @@ export function StorefrontProductCard({ product }: Props) {
       <div className="relative h-[220px] bg-[#ebe8e3] flex items-center justify-center border-b border-[#cfccc8]">
         {product.image_url ? (
           <Image src={product.image_url} alt={product.product_name}
-               fill sizes="(max-width: 768px) 100vw, 300px" className="object-contain p-4" />
+               fill sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+               className="object-contain p-4" />
         ) : (
           <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#b4b4bc]">No image</span>
         )}

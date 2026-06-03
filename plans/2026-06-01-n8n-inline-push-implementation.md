@@ -459,7 +459,18 @@ git commit -m "fix(preflight): SSRF-guard image HEAD probe, no redirect-follow (
 
 ---
 
-## Task 5: Frontend — orchestrator-keys admin page
+## Task 5: Frontend — orchestrator-keys admin page  — ✅ ALREADY SATISFIED (no new code)
+
+**Resolution (2026-06-02):** This page already exists on the `urvashi` branch as
+`frontend/src/app/(admin)/integrations/page.tsx` (Vidhi's canonical version) and is
+linked in the sidebar at `SidebarNav.tsx:198 → /integrations`. It implements list /
+create / reveal-once / revoke against the existing `GET|POST /api/integrations/keys`
++ `/keys/{id}/revoke` endpoints, in Blueprint styling. `types.ts` carries an explicit
+note that the duplicate `integration-keys/page.tsx` was **deliberately deleted** and
+the types live in that page — so creating a second page would re-introduce a removed
+duplicate. Task 5 is therefore complete; the only delta from the plan's wording is the
+route name (`/integrations` rather than `/integration-keys`) and comma-separated
+scope inputs instead of multiselect (acceptable UX equivalent).
 
 **Files:**
 - Create: `frontend/src/app/(admin)/integration-keys/page.tsx`
@@ -511,21 +522,31 @@ git commit -m "feat(frontend): orchestrator-keys admin page (list/create/reveal-
 
 ---
 
-## Task 6: n8n example workflow + integration guide
+## Task 6: n8n example workflow + integration guide  — ✅ DONE (ref-based recipe)
+
+**Resolution (2026-06-02):** Done, documenting the **working ref-based** path
+(load via `POST /suppliers/{slug}/products`, then send via `POST /push-requests`
+with `product_ref`), since the inline `product` upsert (Tasks 1–2) is not yet
+wired on this branch. Both the workflow and the guide flag inline mode as
+documented-but-pending so migrating later is a one-line body change. The guide
+also accurately notes the callback is **not** yet HMAC-signed (the `secret` is
+accepted but unused). Step 2 below: the JSON was validated as parseable and node/
+connection-shaped against `sanmar-soap-pull.json`; a live n8n import was **not**
+run in this environment.
 
 **Files:**
 - Create: `n8n-workflows/ops-inline-push.json`
 - Create: `docs/integration-guide-inline-push.md`
 
-- [ ] **Step 1: Author the workflow JSON**
+- [x] **Step 1: Author the workflow JSON**
 
 Create `n8n-workflows/ops-inline-push.json` — a minimal valid n8n workflow with: (a) a Manual/Trigger node, (b) an **HTTP Request** node `POST {{API_URL}}/api/integrations/v1/push-requests` with header `X-Orchestrator-Key` (credential ref) and JSON body containing `source`, `target`, `product` (ProductIngest), `dry_run`, `callback`; (c) a **Wait** + **HTTP Request** `GET .../push-requests/{{$json.push_log_id}}` poll loop branch; (d) a separate **Webhook** trigger node documenting the callback receiver. Mirror node JSON shape from an existing file in `n8n-workflows/` (e.g. `sanmar-soap-pull.json`).
 
-- [ ] **Step 2: Validate import**
+- [x] **Step 2: Validate import** (JSON parse + node-shape validated; live n8n import not run here)
 
 Import the JSON into a local n8n (`docker compose up -d n8n`, open :5678, import). Expected: imports without schema error.
 
-- [ ] **Step 3: Write the integration guide**
+- [x] **Step 3: Write the integration guide**
 
 Create `docs/integration-guide-inline-push.md` covering: how to mint a key (admin UI), the `X-Orchestrator-Key` header, the full request body schema (link `GET /suppliers/{slug}/schema` discovery), a complete curl example (dry_run then live), every error code (`UNKNOWN_REF`, `INVALID_REF`, `SUPPLIER_MISMATCH`, `IDEMPOTENCY_CONFLICT`, `IN_FLIGHT`, `PREFLIGHT_BLOCKER`/422), `Idempotency-Key` semantics, polling (`GET /push-requests/{id}` terminal states) vs webhook callback (`X-ApiHub-Event`, HMAC), and the partial-failure contract (inline product is upserted even if an OPS mutation step fails → `push_log.status = partial_failure`).
 

@@ -289,7 +289,7 @@ export const FIXTURE_STEP_RESULTS_PARTIAL: OPSStepResult[] = [
 // ───────────────────────────────────────────────────────────────────────────
 
 export const FIXTURE_CLEANUP_TARGETS: CleanupTargets = {
-  ops_product_id: 12345,
+  ops_product_id: "12345",
   product_size_ids: [901, 902],
   option_ids: [],
   attribute_ids: [],

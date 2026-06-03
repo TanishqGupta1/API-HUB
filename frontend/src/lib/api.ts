@@ -1,7 +1,5 @@
 import { API_BASE } from "./env";
 
-
-
 export class ApiError extends Error {
   status: number;
   /** Parsed JSON body from the backend, if the response was JSON. */
@@ -27,87 +25,55 @@ export interface ApiOptions extends RequestInit {
   skipAuthRedirect?: boolean;
 }
 
-/**
- * Attempt to silently refresh the access token using the HttpOnly
- * refresh_token cookie.  Returns true if the refresh succeeded.
- * Only runs once per call — no infinite loops.
- */
-let _refreshInFlight: Promise<boolean> | null = null;
-
-async function _tryRefresh(): Promise<boolean> {
-  if (_refreshInFlight) return _refreshInFlight;
-  _refreshInFlight = fetch(`${API_BASE}/api/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-  })
-    .then((r) => r.ok)
-    .catch(() => false)
-    .finally(() => {
-      _refreshInFlight = null;
-    });
-  return _refreshInFlight;
-}
-
-async function _parseError(res: Response): Promise<ApiError> {
-  const contentType = res.headers.get("content-type") ?? "";
-  let message: string;
-  let envelope: unknown;
-  if (contentType.includes("application/json")) {
-    const json = await res.json().catch(() => null);
-    const detail = json?.detail ?? json;
-    message = typeof detail === "string" ? detail : JSON.stringify(detail);
-    envelope = detail;
-  } else {
-    message = await res.text().catch(() => res.statusText);
-    if (message.length > 200) message = message.slice(0, 200) + "…";
-  }
-  return new ApiError(res.status, message, envelope);
-}
-
 export async function api<T>(path: string, options?: ApiOptions): Promise<T> {
-  const method = (options?.method ?? "GET").toUpperCase();
-  const needsContentType = ["POST", "PUT", "PATCH"].includes(method);
   const headers: Record<string, string> = {
-    ...(needsContentType ? { "Content-Type": "application/json" } : {}),
+    "Content-Type": "application/json",
     ...(options?.headers as Record<string, string>),
   };
 
   const { skipAuthRedirect, ...fetchOptions } = options ?? {};
 
-  const doFetch = () =>
-    fetch(`${API_BASE}${path}`, { ...fetchOptions, headers, credentials: "include" });
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...fetchOptions,
+    headers,
+    credentials: "include",
+  });
 
-  let res = await doFetch();
-
-  // ── 401 handling: try silent token refresh before giving up ──────────────
-  if (res.status === 401 && !skipAuthRedirect) {
-    const refreshed = await _tryRefresh();
-    if (refreshed) {
-      // Retry the original request with the new access token cookie
-      res = await doFetch();
+  if (res.status === 401) {
+    if (
+      !skipAuthRedirect &&
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/login") &&
+      !window.location.pathname.startsWith("/setup")
+    ) {
+      window.location.href = "/login";
     }
-
-    // If still 401 after refresh attempt, redirect to login
-    if (res.status === 401) {
-      if (
-        typeof window !== "undefined" &&
-        !window.location.pathname.startsWith("/login") &&
-        !window.location.pathname.startsWith("/setup")
-      ) {
-        window.location.href = "/login";
-      }
+    // For skipAuthRedirect callers, fall through to the normal error path
+    // below so they get the real backend error message (not just
+    // "Session expired"). For everyone else, preserve existing behavior.
+    if (!skipAuthRedirect) {
       throw new ApiError(401, "Session expired");
     }
   }
 
   if (!res.ok) {
-    throw await _parseError(res);
+    const contentType = res.headers.get("content-type") ?? "";
+    let message: string;
+    let envelope: unknown;
+    if (contentType.includes("application/json")) {
+      const json = await res.json().catch(() => null);
+      const detail = json?.detail ?? json;
+      message = typeof detail === "string" ? detail : JSON.stringify(detail);
+      envelope = detail;
+    } else {
+      message = await res.text().catch(() => res.statusText);
+      // Truncate HTML responses to avoid flooding the UI
+      if (message.length > 200) message = message.slice(0, 200) + "…";
+    }
+    throw new ApiError(res.status, message, envelope);
   }
 
   if (res.status === 204) {
-    // Return an empty object — callers that destructure the result (e.g.
-    // `const { id } = await api(...)`) won't throw on a void response,
-    // while callers that discard the result are unaffected.
     return {} as T;
   }
 

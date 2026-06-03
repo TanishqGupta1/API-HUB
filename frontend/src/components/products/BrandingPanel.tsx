@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import NextImage from "next/image";
 import { api } from "@/lib/api";
 import { API_BASE } from "@/lib/env";
 import { log } from "@/lib/log";
@@ -8,7 +9,6 @@ import type { Customer, Product, ProductDecoration, DecorationOption } from "@/l
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2, Palette, Image as ImageIcon, Move, Maximize, RefreshCw, Trash2 } from "lucide-react";
-import Image from "next/image";
 
 interface Props {
   product: Product;
@@ -171,7 +171,7 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                 {previewMode === 'css' ? (
                   <>
                     {/* Product Image Base */}
-                    <Image
+                    <NextImage
                         src={product.image_url || "/placeholder-product.png"}
                         alt="Preview Base"
                         fill
@@ -181,8 +181,8 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                     
                     {/* Decoration Overlay */}
                     {logoUrl && (
-                        <div
-                            className="absolute pointer-events-none transition-all duration-200 relative"
+                        <div 
+                            className="absolute pointer-events-none transition-all duration-200"
                             style={{
                                 left: `${posX}%`,
                                 top: `${posY}%`,
@@ -191,7 +191,7 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                                 height: '100px',
                             }}
                         >
-                            <Image
+                            <NextImage
                                 src={logoUrl}
                                 alt="Logo Overlay"
                                 fill
@@ -202,7 +202,7 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                     )}
                   </>
                 ) : (
-                  <Image
+                  <NextImage
                     src={`${API_BASE}/api/customers/${customer.id}/products/${product.id}/decorations/preview.png?t=${Date.now()}`}
                     alt="Engine Preview"
                     fill

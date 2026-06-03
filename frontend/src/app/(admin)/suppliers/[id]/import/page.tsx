@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type { Supplier } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import Image from "next/image";
 
 interface Category {
   name: string;
@@ -173,7 +173,7 @@ export default function ImportFromSupplierPage() {
               alt={categoryInfo.name}
               width={128}
               height={128}
-              className="mt-3 object-cover rounded border border-[#cfccc8]"
+              className="mt-3 h-32 w-32 object-cover rounded border border-[#cfccc8]"
             />
           )}
         </div>

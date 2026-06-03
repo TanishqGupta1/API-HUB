@@ -30,7 +30,7 @@ export function CleanupChecklist({ targets, opsBaseUrl }: Props) {
   const categoryIds = targets.category_ids ?? [];
   const priceIds = targets.price_ids ?? [];
 
-  const items: Array<{ kind: string; ids: number[] }> = [];
+  const items: Array<{ kind: string; ids: Array<string | number> }> = [];
   if (opsProductId != null) items.push({ kind: "Product", ids: [opsProductId] });
   if (productSizeIds.length > 0) items.push({ kind: "Size", ids: productSizeIds });
   if (optionIds.length > 0) items.push({ kind: "Option", ids: optionIds });
