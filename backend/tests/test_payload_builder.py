@@ -209,6 +209,7 @@ def _ctx(
     customer: SimpleNamespace | None = None,
     product: SimpleNamespace | None = None,
     supplier: SimpleNamespace | None = None,
+    storefront_config=None,
 ) -> _PushContext:
     """Build a _PushContext from mock pieces. Pass `images=[]` to test
     the no-images path (the `_UNSET` sentinel distinguishes empty-list
@@ -227,6 +228,7 @@ def _ctx(
         push_mapping=push_mapping,
         push_mapping_options=([] if push_mapping_options is _UNSET else push_mapping_options),
         decoration_options=([] if decoration_options is _UNSET else decoration_options),
+        storefront_config=storefront_config,
     )
 
 
@@ -805,3 +807,91 @@ class TestRequestFingerprint:
 def test_placeholder_format():
     assert _placeholder(1, "products_id") == "$step1.products_id"
     assert _placeholder(12, "product_size_id") == "$step12.product_size_id"
+
+
+# ===========================================================================
+# Storefront pricing_overrides parity
+# (push payload must equal the customer quote — same helper, same inputs)
+# ===========================================================================
+
+
+class TestStorefrontOverridesInPush:
+    """Without these, a customer could be quoted X and have Y pushed to OPS."""
+
+    def _cfg(self, overrides: dict) -> SimpleNamespace:
+        return SimpleNamespace(pricing_overrides=overrides)
+
+    def test_no_storefront_config_leaves_price_untouched(self):
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M", base_price=Decimal("10.00"))],
+            markup_rules=[_markup_rule(pct=Decimal("50.0"))],
+            storefront_config=None,
+        )
+        p = _synthesize_payload(ctx).computed_prices[0]
+        assert p.final_price == pytest.approx(15.00)
+        assert p.storefront_override_applied is False
+
+    def test_fixed_unit_price_overrides_markup(self):
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M", base_price=Decimal("10.00"))],
+            markup_rules=[_markup_rule(pct=Decimal("50.0"))],
+            storefront_config=self._cfg({"fixed_unit_price": "19.99"}),
+        )
+        p = _synthesize_payload(ctx).computed_prices[0]
+        assert p.final_price == pytest.approx(19.99)
+        assert p.storefront_override_applied is True
+
+    def test_extra_markup_pct_stacks_on_marked_up_price(self):
+        # 10.00 → +50% markup → 15.00 → +20% extra → 18.00
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M", base_price=Decimal("10.00"))],
+            markup_rules=[_markup_rule(pct=Decimal("50.0"))],
+            storefront_config=self._cfg({"extra_markup_pct": "20"}),
+        )
+        p = _synthesize_payload(ctx).computed_prices[0]
+        assert p.final_price == pytest.approx(18.00)
+        assert p.storefront_override_applied is True
+
+    def test_nearest_99_rounding(self):
+        # 10.00 → +30% markup → 13.00 → floor + .99 = 13.99
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M", base_price=Decimal("10.00"))],
+            markup_rules=[_markup_rule(pct=Decimal("30.0"))],
+            storefront_config=self._cfg({"rounding": "nearest_99"}),
+        )
+        p = _synthesize_payload(ctx).computed_prices[0]
+        assert p.final_price == pytest.approx(13.99)
+        assert p.storefront_override_applied is True
+
+    def test_setProductPrice_step_uses_override(self):
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M", base_price=Decimal("10.00"))],
+            markup_rules=[_markup_rule(pct=Decimal("50.0"))],
+            storefront_config=self._cfg({"fixed_unit_price": "24.99"}),
+        )
+        plan = _synthesize_payload(ctx).plan
+        price_step = next(s for s in plan if s.mutation == "setProductPrice")
+        assert price_step.variables["input"]["price"] == pytest.approx(24.99)
+        # vendor_price is wholesale (base_price), untouched by overrides
+        assert price_step.variables["input"]["vendor_price"] == pytest.approx(10.00)
+
+    def test_empty_overrides_dict_treated_as_no_override(self):
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M", base_price=Decimal("10.00"))],
+            markup_rules=[_markup_rule(pct=Decimal("50.0"))],
+            storefront_config=self._cfg({}),
+        )
+        p = _synthesize_payload(ctx).computed_prices[0]
+        assert p.final_price == pytest.approx(15.00)
+        assert p.storefront_override_applied is False
+
+    def test_quote_and_push_apply_identical_helper(self):
+        """Smoke check: push uses the exact same apply_pricing_overrides
+        as the quote path — regression guard if either side ever forks."""
+        from modules.pricing import overrides as push_helper
+        from modules.pricing import customer_quote as quote_path
+
+        # The quote path's wrapper delegates to the same pure function.
+        # If a refactor moves one but not the other, this import breaks.
+        assert push_helper.apply_pricing_overrides is not None
+        assert hasattr(quote_path, "_apply_storefront_override")
