@@ -77,7 +77,7 @@ async def test_fake_client_unknown_mutation_returns_not_ok():
         variables={"input": {}},
     )
     assert r.ok is False
-    assert r.ops_error_code == "UNKNOWN_MUTATION"
+    assert r.ops_error_code == "UNKNOWN_OPERATION"
     assert r.ops_error_message == "SetBogusThing"
 
 

@@ -1,4 +1,4 @@
-"""OPS GraphQL mutation wrappers — one function per mutation.
+"""OPS GraphQL mutation + query wrappers — one function per operation.
 
 ID threading order for apparel push:
   set_product_category → category_id
@@ -9,6 +9,9 @@ ID threading order for apparel push:
   set_additional_option / set_additional_option_attributes / set_products_attribute_price
   update_product_stock(products_id)
   set_product_design(products_id)
+
+Queries (P2.2 — read-back / dedup):
+  get_product_by_sku(products_sku) → products_id | None
 """
 from __future__ import annotations
 
@@ -356,3 +359,47 @@ async def set_product_design(
     if not result.ok:
         return result
     return OpsResult(ok=True, data=(result.data or {}).get("setProductDesign") or {}, raw=result.raw)
+
+
+# ── get_product_by_sku (P2.2 dedup) ─────────────────────────────────────────
+#
+# Used pre-push to ask OPS "do you already have a product with this SKU?" so
+# a retry of a previously-failed push doesn't create a duplicate row in OPS.
+#
+# Schema is PROVISIONAL — confirm against the OPS Postman collection when
+# Christian shares it. The function returns Optional[int] (products_id) so
+# the dedup caller never sees raw schema details; only the wrapper has to
+# change if OPS uses a different operation name (e.g. getProductsList with
+# a SKU filter) or different field names.
+
+_GET_PRODUCT_BY_SKU = """
+query GetProductBySku($products_sku: String!) {
+  getProductBySku(products_sku: $products_sku) {
+    products_id
+    products_sku
+  }
+}
+""".strip()
+
+
+async def get_product_by_sku(
+    *,
+    client: OpsGraphQLClient,
+    products_sku: str,
+) -> OpsResult:
+    """Look up an existing OPS product by SKU. Returns the wrapper's data
+    dict containing products_id when found, or an empty dict when not.
+
+    Callers should check result.ok AND result.data.get('products_id').
+    A missing products_id is a successful 'not found', not a failure.
+    """
+    result = await client.execute(
+        _GET_PRODUCT_BY_SKU,
+        variables={"products_sku": products_sku},
+    )
+    if not result.ok:
+        return result
+    # OPS convention nests the operation result under the operation name;
+    # mirror the unwrap pattern from the mutation helpers.
+    payload = (result.data or {}).get("getProductBySku") or {}
+    return OpsResult(ok=True, data=payload, raw=result.raw)
