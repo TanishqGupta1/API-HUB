@@ -273,7 +273,11 @@ class PromoStandardsAdapter(BaseAdapter):
                     fobId="1",
                     priceType="Net",
                     configurationType="Blank",
-                    **client._auth(ws_version="1.0.0")
+                    **client._auth(
+                        ws_version="1.0.0",
+                        localization_country="us",
+                        localization_language="en",
+                    ),
                 )
             except TransportError as te:
                 raise TransientError(f"Network timeout: {te}") from te
