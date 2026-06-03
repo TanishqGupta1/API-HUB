@@ -173,9 +173,14 @@ async def persist_product(
             sort_order=img.sort_order,
             checksum=img.checksum,
         ).on_conflict_do_update(
-            constraint="uq_product_images_supplier_url",
+            # Model defines uq_product_image_url on (product_id, url) —
+            # match that here, not the legacy supplier_url constraint that
+            # only kicks in when supplier_image_url is non-null (most
+            # PromoStandards ingests leave it null, so the URL constraint
+            # is what actually fires).
+            constraint="uq_product_image_url",
             set_={
-                "url": img.url,
+                "supplier_image_url": img.supplier_image_url,
                 "image_type": img.image_type,
                 "color": img.color,
                 "sort_order": img.sort_order or idx,

@@ -278,10 +278,26 @@ class PromoStandardsAdapter(BaseAdapter):
             except TransportError as te:
                 raise TransientError(f"Network timeout: {te}") from te
             except Exception:
-                if h.last_received and h.last_received.get("envelope") is not None:
-                    _classify_fault_xml(etree.tostring(h.last_received["envelope"]))
+                # zeep's HistoryPlugin raises IndexError when buffer is empty
+                # (e.g. WSDL-validation errors that fail before the network
+                # send). Guard with try/except so we surface the real error
+                # instead of a confusing "deque index out of range".
+                try:
+                    last = h.last_received
+                except IndexError:
+                    last = None
+                if last and last.get("envelope") is not None:
+                    _classify_fault_xml(etree.tostring(last["envelope"]))
                 raise
-            body = etree.tostring(h.last_received["envelope"])
+            try:
+                last = h.last_received
+            except IndexError:
+                last = None
+            if last is None or last.get("envelope") is None:
+                raise TransientError(
+                    f"getConfigurationAndPricing returned no envelope for {ref.supplier_sku}"
+                )
+            body = etree.tostring(last["envelope"])
             _classify_fault_xml(body)
             return body
         return await asyncio.to_thread(_sync_call)

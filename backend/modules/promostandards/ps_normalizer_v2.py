@@ -43,6 +43,24 @@ def _parse_iso(val: Optional[str]) -> Optional[datetime]:
     except ValueError:
         return None
 
+def _dedupe_price_tiers(tiers: list[VariantPriceIngest]) -> list[VariantPriceIngest]:
+    """Dedupe a list of VariantPriceIngest by (price_type, quantity_min).
+
+    When multiple entries collide on the unique key, keep the **cheapest**.
+    Necessary because some PromoStandards implementations (notably SanMar)
+    pack per-size prices into the same group without a part_id, all using
+    the same quantity_min — broadcasting them all to a variant violates the
+    DB uq_variant_price_type_qty constraint.
+    """
+    seen: dict[tuple[str, int], VariantPriceIngest] = {}
+    for tier in tiers:
+        key = (tier.price_type, tier.quantity_min)
+        existing = seen.get(key)
+        if existing is None or tier.price < existing.price:
+            seen[key] = tier
+    return list(seen.values())
+
+
 _MEDIA_CLASS_TO_TYPE = {
     "primary": "front",
     "front model": "front",
@@ -115,6 +133,13 @@ def normalize_get_product_xml(xml_bytes: bytes) -> ProductIngest:
                 ))
     
     if msrp_tiers:
+        # SanMar packs multiple per-size MSRPs into the same ProductPriceGroup
+        # without part_id association — every entry uses quantityMin=1 with a
+        # different price. Broadcasting them all to every variant violates the
+        # uq_variant_price_type_qty constraint (one price per type+qty_min per
+        # variant). Per-variant tiers come from the pricing service via
+        # merge_pricing; here we just keep the cheapest MSRP as a baseline.
+        msrp_tiers = _dedupe_price_tiers(msrp_tiers)
         for v in variants:
             v.prices.extend(msrp_tiers)
 
@@ -163,6 +188,14 @@ def merge_pricing(ingest: ProductIngest, pricing_xml: bytes) -> ProductIngest:
                 quantity_min=int(qmin) if qmin else 1,
                 price=Decimal(value),
             ))
+
+    # Defensive: dedupe each variant's price list so we never violate
+    # uq_variant_price_type_qty downstream. merge_pricing appends new tiers
+    # from the pricing service, which combined with any MSRPs carried from
+    # the product service can collide on (price_type, quantity_min).
+    for variant in ingest.variants:
+        if variant.prices:
+            variant.prices = _dedupe_price_tiers(variant.prices)
 
     # Bug 1 fix: backfill VariantIngest.base_price from the lowest Net-tier price
     # when the SOAP `getProductPricing` payload provides tiers but no flat base.
