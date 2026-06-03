@@ -220,6 +220,8 @@ class FakeOpsClient:
         return r
 
     async def set_product_size(self, variables: dict) -> dict:
+        # Mirror the live setProductSize response field (product_size_id) so
+        # dry-run placeholder resolution matches the real OPS contract.
         r = {"product_size_id": self._next_id()}
         self._record("set_product_size", variables, r)
         return r
@@ -236,7 +238,8 @@ class FakeOpsClient:
         return r
 
     async def set_additional_option(self, variables: dict) -> dict:
-        r = {"options_id": self._next_id()}
+        # Mirror the live setAdditionalOption response field (prod_add_opt_id).
+        r = {"prod_add_opt_id": self._next_id()}
         self._record("set_additional_option", variables, r)
         return r
 
