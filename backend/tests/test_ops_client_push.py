@@ -44,8 +44,8 @@ def _final_prices(*skus: str, price: str = "9.99") -> dict[str, Decimal]:
 # Returns OpsResult shaped like each mutation's real OPS response
 _CATEGORY_OK  = OpsResult(ok=True, data={"setProductCategory": {"category_id": 100}})
 _PRODUCT_OK   = OpsResult(ok=True, data={"setProduct": {"products_id": 200}})
-_SIZE_OK_1    = OpsResult(ok=True, data={"setProductSize": {"size_id": 301}})
-_SIZE_OK_2    = OpsResult(ok=True, data={"setProductSize": {"size_id": 302}})
+_SIZE_OK_1    = OpsResult(ok=True, data={"setProductSize": {"product_size_id": 301}})
+_SIZE_OK_2    = OpsResult(ok=True, data={"setProductSize": {"product_size_id": 302}})
 _PRICE_OK     = OpsResult(ok=True, data={"setProductPrice": {"product_price_id": 401}})
 _ERR          = OpsResult(ok=False, ops_error_code="OPS_ERR", ops_error_message="boom")
 
@@ -83,7 +83,7 @@ async def test_happy_path_mutation_order():
             return _CATEGORY_OK
         if "SetProductSize" in query:
             calls.append("size")
-            return OpsResult(ok=True, data={"setProductSize": {"size_id": len(calls) * 10}})
+            return OpsResult(ok=True, data={"setProductSize": {"product_size_id": len(calls) * 10}})
         if "SetProductPrice" in query:
             calls.append("price")
             return _PRICE_OK
@@ -116,7 +116,7 @@ async def test_happy_path_ids_threaded_correctly():
             return OpsResult(ok=True, data={"setProduct": {"products_id": 777}})
         if "SetProductSize" in query:
             assert variables["input"]["products_id"] == 777
-            return OpsResult(ok=True, data={"setProductSize": {"size_id": 888}})
+            return OpsResult(ok=True, data={"setProductSize": {"product_size_id": 888}})
         if "SetProductPrice" in query:
             assert variables["input"]["products_id"] == 777
             assert variables["input"]["size_id"] == 888
