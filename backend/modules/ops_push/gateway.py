@@ -110,7 +110,7 @@ class FakeOpsClient:
         return r
 
     async def set_product_size(self, variables: dict) -> dict:
-        r = {"size_id": self._next_id()}
+        r = {"product_size_id": self._next_id()}
         self._record("set_product_size", variables, r)
         return r
 

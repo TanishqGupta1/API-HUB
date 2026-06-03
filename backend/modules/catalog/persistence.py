@@ -130,6 +130,7 @@ async def persist_product(
             color=v.color,
             size=v.size,
             sku=v.sku,
+            part_id=v.part_id,
             base_price=v.base_price,
             inventory=v.inventory,
             warehouse=v.warehouse,
@@ -140,6 +141,7 @@ async def persist_product(
             set_={
                 "color": v.color,
                 "size": v.size,
+                "part_id": v.part_id,
                 "base_price": v.base_price,
                 "inventory": v.inventory,
                 "warehouse": v.warehouse,

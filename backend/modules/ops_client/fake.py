@@ -48,7 +48,7 @@ class FakeOpsClient:
         if name == "SetProductSize":
             return OpsResult(
                 ok=True,
-                data={"setProductSize": {"size_id": self._allocate_id()}},
+                data={"setProductSize": {"product_size_id": self._allocate_id()}},
             )
         if name == "SetProductPrice":
             return OpsResult(

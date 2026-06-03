@@ -108,9 +108,9 @@ async def push_apparel_product(
                 "size_id_by_sku": size_id_by_sku, "step_results": step_results,
                 "cleanup_targets": cleanup_targets, "error": r.ops_error_message,
             }
-        size_id = (r.data or {}).get("size_id")
+        size_id = (r.data or {}).get("product_size_id")
         if size_id is None:
-            _record("set_product_size", False, sku=variant.sku, error="OPS returned null size_id")
+            _record("set_product_size", False, sku=variant.sku, error="OPS returned null product_size_id")
             cleanup_targets.append({"ops_product_id": ops_product_id})
             for sku, sid in size_id_by_sku.items():
                 cleanup_targets.append({"ops_size_id": sid, "sku": sku})

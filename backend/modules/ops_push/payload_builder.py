@@ -517,7 +517,7 @@ def _build_setProductPrice_step(
             "input": {
                 "product_price_id": 0,
                 "products_id": _placeholder(1, "products_id"),
-                "size_id": _placeholder(size_step, "size_id"),
+                "size_id": _placeholder(size_step, "product_size_id"),
                 "qty": 1,
                 "qty_to": 999999,
                 "price": final_price,

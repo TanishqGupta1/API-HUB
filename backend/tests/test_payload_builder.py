@@ -451,6 +451,8 @@ class TestStepDependencies:
         price_step_2 = payload.plan[4]
         assert 1 in price_step_1.requires_response_from
         assert price_step_1.variables["input"]["size_id"].startswith("$step")
+        # Verifies the wiring reads product_size_id from setProductSize's response
+        assert price_step_1.variables["input"]["size_id"].endswith(".product_size_id")
         assert 1 in price_step_2.requires_response_from
         # Sanity: the two prices reference different size steps
         assert price_step_1.variables["input"]["size_id"] != price_step_2.variables["input"]["size_id"]

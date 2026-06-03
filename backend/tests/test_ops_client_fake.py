@@ -42,7 +42,7 @@ async def test_fake_client_handles_all_known_mutations():
     expected = {
         "SetProductCategory":            ("setProductCategory", "category_id"),
         "SetProduct":                    ("setProduct", "products_id"),
-        "SetProductSize":                ("setProductSize", "size_id"),
+        "SetProductSize":                ("setProductSize", "product_size_id"),
         "SetProductPrice":               ("setProductPrice", "product_price_id"),
         "SetAdditionalOption":           ("setAdditionalOption", "prod_add_opt_id"),
         "SetAdditionalOptionAttributes": ("setAdditionalOptionAttributes", "attribute_id"),
