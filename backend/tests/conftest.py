@@ -13,6 +13,11 @@ if sys.platform == "win32":
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
+# Tests run without an arq worker process — keep enqueue_push on the
+# in-process fallback path so BackgroundTasks executes inline as before.
+# Production deploys leave this unset (or =1) to use the durable Redis queue.
+os.environ["OPS_PUSH_DURABLE_QUEUE"] = "0"
+
 _test_db_url = os.environ.get("TEST_DATABASE_URL")
 if _test_db_url:
     os.environ["POSTGRES_URL"] = _test_db_url

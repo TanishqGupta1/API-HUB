@@ -1,11 +1,12 @@
 """SanMar-specific PromoStandards adapter.
 
-Overrides WSDL resolution and authentication payload to match SanMar's 
+Overrides WSDL resolution and authentication payload to match SanMar's
 implementation of PromoStandards.
 """
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from modules.import_jobs.registry import register_adapter
@@ -13,20 +14,25 @@ from .adapter import PromoStandardsAdapter
 
 log = logging.getLogger(__name__)
 
-# PromoStandards production WSDL endpoints, per the SanMar Web Services
-# Integration Guide v24.3 (sanmar/SanMar-Web-Services-Integration-Guide-24.3.pdf).
-# The previous host `promostandards.sanmar.com` does not resolve — all SanMar
-# web services (legacy + PromoStandards) are served from ws.sanmar.com:8080.
-# Test host is test-ws.sanmar.com:8080 with the same paths.
+# PromoStandards WSDL endpoints, per the SanMar Web Services Integration
+# Guide v24.3. All SanMar web services (legacy + PromoStandards) are served
+# from ws.sanmar.com:8080 in production; test environment uses the same
+# paths under test-ws.sanmar.com:8080. Set SANMAR_USE_TEST=1 in .env to
+# target test (e.g. when Christian issues test-environment creds).
+_SANMAR_HOST = (
+    "test-ws.sanmar.com:8080"
+    if os.getenv("SANMAR_USE_TEST", "0") == "1"
+    else "ws.sanmar.com:8080"
+)
 SANMAR_WSDLS = {
     # Product Data Service v2.0.0 (guide p8)
-    "PRODUCT": "https://ws.sanmar.com:8080/promostandards/ProductDataServiceBindingV2?WSDL",
+    "PRODUCT":   f"https://{_SANMAR_HOST}/promostandards/ProductDataServiceBindingV2?WSDL",
     # Media Content Service v1.0.0 (guide p54)
-    "MEDIA": "https://ws.sanmar.com:8080/promostandards/MediaContentServiceBinding?wsdl",
+    "MEDIA":     f"https://{_SANMAR_HOST}/promostandards/MediaContentServiceBinding?wsdl",
     # Pricing and Configuration Service v1.0.0 (guide p81)
-    "PRICING": "https://ws.sanmar.com:8080/promostandards/PricingAndConfigurationServiceBinding?WSDL",
+    "PRICING":   f"https://{_SANMAR_HOST}/promostandards/PricingAndConfigurationServiceBinding?WSDL",
     # Inventory Service v2.0.0 (guide p67)
-    "INVENTORY": "https://ws.sanmar.com:8080/promostandards/InventoryServiceBindingV2final?WSDL",
+    "INVENTORY": f"https://{_SANMAR_HOST}/promostandards/InventoryServiceBindingV2final?WSDL",
 }
 
 
