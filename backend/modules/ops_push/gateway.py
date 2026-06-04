@@ -545,6 +545,21 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             return
 
         # ── Atomic transition: accepted → processing ──
+        # Only one worker should ever claim a given push_log row. The WHERE
+        # clause ensures the transition is idempotent: if two workers race,
+        # only the first succeeds; the second sees zero rows updated.
+        #
+        # Retry behaviour when a prior attempt crashed mid-push and left
+        # the row in 'processing':
+        #   - Terminal states (pushed / failed / partial_failure / dry_run_pushed):
+        #     the push already completed — return silently, nothing to do.
+        #   - 'processing': the prior attempt crashed before writing a terminal
+        #     state. Raise so arq's retry/DLQ contract engages: subsequent
+        #     retries keep raising until the budget is exhausted, at which
+        #     point run_push_job calls _finalize_push_log_failed and the row
+        #     is marked 'failed'. Without the raise, arq treats the silent
+        #     return as success and never retries — the row sticks in
+        #     'processing' forever.
         result = await db.execute(
             update(ProductPushLog)
             .where(ProductPushLog.id == push_log_id, ProductPushLog.status == "accepted")
@@ -552,8 +567,22 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             .returning(ProductPushLog.id)
         )
         if not result.fetchone():
-            logger.warning("execute_push: push_log %s not in accepted state", push_log_id)
-            return
+            # Row was not in 'accepted' — check why before deciding what to do.
+            _TERMINAL = {"pushed", "failed", "partial_failure", "dry_run_pushed"}
+            if push_log.status in _TERMINAL:
+                logger.info(
+                    "execute_push: push_log %s already terminal (%s) — skipping",
+                    push_log_id, push_log.status,
+                )
+                return
+            # 'processing' (or any unexpected non-terminal state): a prior
+            # attempt is stuck. Raise so arq retries and eventually
+            # calls _finalize_push_log_failed on exhaustion.
+            raise RuntimeError(
+                f"execute_push: push_log {push_log_id} is in '{push_log.status}' "
+                f"(expected 'accepted') — prior attempt may have crashed; "
+                f"arq will retry."
+            )
         await db.commit()
 
         product = (await db.execute(
