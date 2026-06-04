@@ -382,19 +382,17 @@ def check_markup_rule_resolves(ctx: _PreflightContext) -> CheckResult:
         supplier_slug=ctx.supplier.slug,
     )
     if rule is None:
+        # No markup rule configured → push at WHOLESALE COST (no markup applied).
+        # Policy: markup is deferred (per manager), so a missing rule is a
+        # pass-with-note, not a blocker. The payload's apply_markup() falls back
+        # to base_price when rule is None, so price == vendor_price.
         return CheckResult(
             "markup_rule_resolves",
-            False,
+            True,
             (
-                f"no markup rule matches product '{ctx.product.supplier_sku}' "
-                f"(category={ctx.product.category}, supplier={ctx.supplier.slug}) "
-                f"for customer '{ctx.customer.name}'"
-            ),
-            field="customer.markup_rules",
-            suggestion=(
-                f"Create a global 'all' markup rule for customer "
-                f"'{ctx.customer.name}', or a supplier:'{ctx.supplier.slug}' "
-                f"scoped rule."
+                f"no markup rule for '{ctx.product.supplier_sku}' "
+                f"(supplier={ctx.supplier.slug}, customer='{ctx.customer.name}') "
+                f"— pushing at wholesale cost (no markup applied)"
             ),
         )
     pct = f"{float(rule.markup_pct)}%" if rule.markup_pct is not None else None
