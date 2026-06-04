@@ -27,8 +27,8 @@ export function PriceTierTable({ tiers }: Props) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map((t) => (
-            <tr key={`${t.group_name}-${t.qty_min}`} className="odd:bg-white even:bg-[#f9f7f4]">
+          {sorted.map((t, i) => (
+            <tr key={`${t.group_name ?? i}-${t.qty_min}-${t.qty_max}`} className="odd:bg-white even:bg-[#f9f7f4]">
               <td className="px-3 py-1.5 font-mono">
                 {t.qty_max >= UNBOUNDED ? `${t.qty_min}+` : `${t.qty_min} – ${t.qty_max}`}
               </td>

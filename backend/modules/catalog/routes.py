@@ -288,7 +288,7 @@ async def export_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
             "price_min": min(prices) if prices else None,
             "price_max": max(prices) if prices else None,
         },
-        "images": [{"url": img.url, "sort_order": img.sort_order} for img in (product.images or [])],
+        "images": [{"id": str(img.id), "url": img.url, "image_type": img.image_type, "color": img.color, "sort_order": img.sort_order} for img in (product.images or [])],
     }
 
 

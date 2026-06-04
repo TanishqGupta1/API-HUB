@@ -43,7 +43,8 @@ export function DescriptionHtml({ html }: Props) {
 
   useEffect(() => {
     if (!html) { setClean(null); return; }
-    import("dompurify").then(({ default: DOMPurify }) => {
+    import("dompurify").then((mod) => {
+      const DOMPurify = mod.default ?? mod;
       // Issue #29 — force rel="noopener noreferrer" on any <a> that opens
       // a new browsing context. Without this, supplier-controlled HTML can
       // tabnap (the new tab inherits window.opener and can redirect the
