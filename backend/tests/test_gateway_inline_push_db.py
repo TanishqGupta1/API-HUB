@@ -111,7 +111,7 @@ async def test_inline_accept_includes_warnings_field(client, key_and_customer):
     assert r.status_code == 202, r.text
     assert r.json()["warnings"] == [
         {"name": "markup", "ok": True, "detail": "no rule; using passthrough",
-         "field": None, "suggestion": None}
+         "field": None, "suggestion": None, "warn": False}
     ]
 
 

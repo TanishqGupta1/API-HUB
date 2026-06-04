@@ -22,25 +22,23 @@ from .service import (
 
 log = logging.getLogger(__name__)
 
+# OPS query is `productMasterOptions` (wrapped in ProductMasterOptionsData),
+# NOT `getMasterOptions` (which doesn't exist on the OPS schema). `attributes`
+# is a JSON scalar — selected with no sub-fields.
 _QUERY_GET_MASTER_OPTIONS = """
 query GetMasterOptions($limit: Int, $offset: Int) {
-  getMasterOptions(limit: $limit, offset: $offset) {
-    master_option_id
-    title
-    option_key
-    options_type
-    pricing_method
-    status
-    sort_order
-    description
-    master_option_tag
-    attributes {
-      attribute_id
+  productMasterOptions(limit: $limit, offset: $offset) {
+    productMasterOptions {
+      master_option_id
       title
+      option_key
+      options_type
+      pricing_method
+      status
       sort_order
-      price
-      attribute_key
-      master_attribute_id
+      description
+      master_option_tag
+      attributes
     }
   }
 }
@@ -127,7 +125,7 @@ async def sync_master_options(
             f"OPS error: {res.ops_error_code} — {res.ops_error_message}",
         )
 
-    raw_options = (res.data or {}).get("getMasterOptions") or []
+    raw_options = ((res.data or {}).get("productMasterOptions") or {}).get("productMasterOptions") or []
     if not raw_options:
         return {"synced": 0, "message": "OPS returned no master options."}
 
@@ -137,6 +135,10 @@ async def sync_master_options(
         mo_id = mo.get("master_option_id")
         if mo_id is None:
             continue
+        # OPS returns master_option_tag as a list (e.g. [7]); the DB column is
+        # text, so flatten it to a comma-joined string.
+        _t = mo.get("master_option_tag")
+        _mo_tag = ",".join(str(x) for x in _t) if isinstance(_t, list) else _t
         stmt = (
             pg_insert(MasterOption)
             .values(
@@ -148,7 +150,7 @@ async def sync_master_options(
                 status=int(mo.get("status") or 1),
                 sort_order=int(mo.get("sort_order") or 0),
                 description=mo.get("description"),
-                master_option_tag=mo.get("master_option_tag"),
+                master_option_tag=_mo_tag,
                 raw_json=mo,
                 synced_at=now,
             )
@@ -162,7 +164,7 @@ async def sync_master_options(
                     "status": int(mo.get("status") or 1),
                     "sort_order": int(mo.get("sort_order") or 0),
                     "description": mo.get("description"),
-                    "master_option_tag": mo.get("master_option_tag"),
+                    "master_option_tag": _mo_tag,
                     "raw_json": mo,
                     "synced_at": now,
                 },
@@ -178,13 +180,15 @@ async def sync_master_options(
             )
         )
         for attr in mo.get("attributes") or []:
-            attr_id = attr.get("attribute_id")
+            # OPS attribute records key the ID as master_attribute_id (no
+            # attribute_id / title fields); fall back gracefully.
+            attr_id = attr.get("master_attribute_id") or attr.get("attribute_id")
             if attr_id is None:
                 continue
             db.add(MasterOptionAttribute(
                 master_option_id=row,
                 ops_attribute_id=int(attr_id),
-                title=attr.get("title") or "",
+                title=attr.get("title") or attr.get("attribute_key") or "",
                 attribute_key=attr.get("attribute_key") or None,
                 sort_order=int(attr.get("sort_order") or 0),
                 default_price=attr.get("price"),
