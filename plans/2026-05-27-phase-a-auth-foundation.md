@@ -1,5 +1,12 @@
 # Auth Foundation Hardening Implementation Plan
 
+> **✅ DONE (landed, verified 2026-06-02).** Shipped via PR #144. `require_customer_access`
+> is enforced across the tenant routers, registration is bootstrap-only (first admin on
+> empty DB, 409 thereafter), the per-key rate limiter is awaited, CI is blocking, and the
+> migrations exist. See "Current state" in `plans/2026-06-02-production-readiness.md` for
+> the verification evidence. The unticked `- [ ]` boxes below are historical — the work
+> is complete.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close the three live auth/authorization holes (vg_admin self-registration, dead per-key rate limiter, cross-tenant IDOR) and make the foundation enforceable (blocking CI, migrations that match the models), on a branch every open PR can rebase onto.

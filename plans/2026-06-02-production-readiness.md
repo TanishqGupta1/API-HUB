@@ -85,16 +85,14 @@ Coverage is better than a first pass suggests (suppliers/tenant/key-auth have in
 
 ---
 
-### Phase 4 — Hygiene & optimization (debt)
+### Phase 4 — Hygiene & optimization (debt) — in progress 2026-06-04
 
-- [ ] **Decide the lazy-image (SanMar FTP) feature flag** — NOT dead code: `trigger_lazy_image_fetch` is wired into `GET /api/products/{product_id}` (`catalog/routes.py:192-204`) behind `ENABLE_LAZY_IMAGES` (default `false`), and `storage.upload_image` has a real S3/R2 path when configured. Only the FTP client (`sanmar_ftp.py`) and its file listing are mocked. Two clean options — pick one, don't leave it half-wired:
-  - **(a) Remove the feature** if SOAP MediaContent fully covers images: delete `sanmar_ftp.py`, the gated caller, `scripts/sync_images.py`, and `tests/test_image_pipeline.py:68` together.
-  - **(b) Finish the feature** if FTP is a wanted supplement (e.g. higher-res bulk images): implement real `aioftp` in `sanmar_ftp.py` behind the existing flag; needs SanMar SFTP creds (pending from Christian).
-- [ ] **REST delta-sync** — S&S + 4Over `discover_changed` fall back to full re-fetch. Optimize once volume justifies (not a blocker).
-- [ ] **4Over frontend sync button** — `print-products/page.tsx:50` disabled "coming in V1d". Wire it or confirm intentional.
-- [ ] **Docs** — refresh `docs/progress.md` (still V0/April); tick landed plan checkboxes; mark `phase-a-auth-foundation` + `security-leak-remediation` plans DONE.
+- [x] **Decide the lazy-image (SanMar FTP) feature flag** — **chose (a) Remove.** The whole path was mock-only (mock FTP listing + mock `_mock_upload_to_s3`); SOAP `getMediaContent` already covers real images, and finishing it was blocked on SanMar SFTP creds. Deleted `sanmar_ftp.py`, `modules/images/service.py`, `scripts/sync_images.py`, `tests/test_image_pipeline.py`, and the `ENABLE_LAZY_IMAGES`-gated caller + now-unused imports in `catalog/routes.py`. **Kept** the `last_image_fetch_attempt_at` column — it's used by the real `images/mirror.py` pipeline, not just the lazy feature.
+- [ ] **REST delta-sync** — S&S + 4Over `discover_changed` fall back to full re-fetch. Optimize once volume justifies (not a blocker). **Deferred** — not part of this pass.
+- [x] **4Over frontend sync button** — **chose to wire it.** `print-products/page.tsx` now routes "Sync from 4Over" into the standard supplier import flow (`/suppliers/{id}/import`) for the configured 4Over supplier; disabled only when none exists. Removed the "coming in V1d" stub copy and updated the info banner. The 4Over REST adapter was already wired into the generic import path.
+- [x] **Docs** — refreshed `docs/progress.md` with a Current State (2026-06-04) section + corrected the stale "routes missing" module map; marked `phase-a-auth-foundation` + `security-leak-remediation` plans DONE.
 
-**Exit:** no dead mock code on a live path; docs reflect reality.
+**Exit:** no dead mock code on a live path; docs reflect reality. (REST delta-sync intentionally deferred.)
 
 ---
 
