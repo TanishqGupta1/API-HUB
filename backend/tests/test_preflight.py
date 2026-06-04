@@ -247,12 +247,16 @@ def test_markup_rule_resolves_pass_with_global_rule():
     assert "50" in r.detail
 
 
-def test_markup_rule_resolves_fail_when_no_rules():
+def test_markup_rule_resolves_pass_with_warn_when_no_rules():
+    # Deferred-markup policy: a missing rule is a pass-with-note (push at
+    # wholesale cost), NOT a blocker — but it must be flagged loudly (warn=True)
+    # so run_preflight surfaces it in WARNING log + response warnings.
     ctx = _ctx(markup_rules=[])
     r = check_markup_rule_resolves(ctx)
-    assert r.ok is False
+    assert r.ok is True
+    assert r.warn is True
     assert "no markup rule" in r.detail.lower()
-    assert r.field == "customer.markup_rules"
+    assert "wholesale cost" in r.detail.lower()
 
 
 # ===========================================================================
