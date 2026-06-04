@@ -21,7 +21,7 @@ from modules.integrations.models import IntegrationKey
 from modules.integrations.schemas import PushRequest, PushRequestAccepted, PushRequestLinks
 from modules.markup.engine import calculate_price
 from modules.ops_client import mutations as _m
-from modules.ops_client.client import OpsAuth, OpsGraphQLClient
+from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
 from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
 from modules.ops_push.preflight import run_preflight
 from modules.push_log.models import ProductPushLog
@@ -176,6 +176,18 @@ class OpsClientAdapter:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    async def execute(self, query: str, *, variables: dict) -> OpsResult:
+        """Raw GraphQL passthrough for read queries (dedup / post-push verify
+        call ``get_product_by_sku``, which calls ``client.execute``).
+
+        ``__getattr__`` only resolves the mutation method names, so without an
+        explicit ``execute`` here every dedup/verify lookup raised
+        ``AttributeError: execute`` and was silently swallowed — dedup never ran
+        on a live push. Defined as a real method so normal lookup finds it
+        before ``__getattr__``.
+        """
+        return await self._client.execute(query, variables=variables)
+
     def __getattr__(self, name: str) -> Any:
         if name not in _MUTATION_DISPATCH:
             raise AttributeError(name)
@@ -201,6 +213,13 @@ class FakeOpsClient:
 
     async def aclose(self) -> None:
         pass
+
+    async def execute(self, query: str, *, variables: dict | None = None) -> OpsResult:
+        """Dry-run has no real OPS to query. Report 'no existing product' so the
+        dedup path treats every dry-run as a create (mirrors the empty-result
+        contract of get_product_by_sku). Prevents the AttributeError that used to
+        make dry-run dedup silently no-op."""
+        return OpsResult(ok=True, data={"getProductBySku": {}})
 
     def _next_id(self) -> int:
         self._counter += 1

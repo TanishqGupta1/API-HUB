@@ -372,7 +372,10 @@ class TestMutationPlanOrder:
         assert payload.plan[3].mutation == "setProductPrice"
         assert payload.plan[4].mutation == "setProductPrice"
 
-    def test_inventory_is_last(self):
+    def test_inventory_is_last(self, monkeypatch):
+        # Stock steps are deferred by default (OPS sizes carry no SKU to target);
+        # opt in to assert the full plan shape.
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
@@ -380,7 +383,8 @@ class TestMutationPlanOrder:
         last_two = payload.plan[-2:]
         assert all(s.mutation == "updateProductStock" for s in last_two)
 
-    def test_inventory_action_is_reset(self):
+    def test_inventory_action_is_reset(self, monkeypatch):
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
         stock_step = next(s for s in payload.plan if s.mutation == "updateProductStock")
@@ -397,9 +401,10 @@ class TestMutationPlanOrder:
         ctx = _ctx(variants=[_variant("PC61-WHT-M")])
         payload = _synthesize_payload(ctx)
         assert not any(s.mutation == "setProductCategory" for s in payload.plan)
-        # Category lives on setProduct.input instead.
+        # Category is deferred: OPS ProductInput uses an int `category_id`
+        # (nullable), not `category_name`, so the builder sends neither for now.
         setProduct = payload.plan[0]
-        assert "category_name" in setProduct.variables["input"]
+        assert "category_name" not in setProduct.variables["input"]
 
 
 class TestVariantOrdering:
@@ -588,7 +593,11 @@ class TestImagePolicy:
         assert payload.primary_image_url == "https://x/front.jpg"
         assert payload.image_warnings == []
         setProduct = payload.plan[0]
-        assert setProduct.variables["input"]["products_image"] == "https://x/front.jpg"
+        # Image is captured on the payload (primary_image_url) but NOT sent in
+        # setProduct: OPS ProductInput has no `products_image` field (verified via
+        # schema introspection) — images upload via a separate OPS flow.
+        assert "products_image" not in setProduct.variables["input"]
+        assert "imagename" not in setProduct.variables["input"]
 
     def test_multiple_images_warns(self):
         ctx = _ctx(
@@ -650,7 +659,9 @@ class TestTitlePrefix:
 
 
 class TestPC61Smoke:
-    def test_pc61_plan_shape(self):
+    def test_pc61_plan_shape(self, monkeypatch):
+        # Opt into stock steps so the smoke covers the full mutation shape.
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         # Match the SanMar PC61 contour: 56 variants, 1 mapped option
         colors = ["Black", "White", "Red", "Royal", "Navy", "Ash", "Heather Gray"]
         sizes = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL"]
@@ -752,29 +763,33 @@ class TestSetProductVariables:
             "do not cast to str in _build_setAssignOptions_step"
         )
 
-    def test_category_name_present_in_set_product(self):
-        """setProduct.category_name must be non-empty.
+    def test_set_product_uses_ops_field_names(self):
+        """setProduct.input must use the live OPS ProductInput field names.
 
-        OPS requires a valid category to create a product. The builder uses
-        product.category or falls back to 'Uncategorized'.
+        OPS ProductInput has `product_description` (not `products_description`)
+        and no `category_name`/`brand`/`products_image` fields — sending those
+        returns INVALID_USER_INPUT. (Verified via schema introspection.)
         """
-        ctx = _ctx(
-            variants=[_variant("PC61-WHT-M")],
-            product=_product(category="T-Shirts"),
-        )
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], product=_product(category="Polos"))
         payload = _synthesize_payload(ctx)
-        cat = payload.plan[0].variables["input"]["category_name"]
-        assert cat and cat.strip(), "category_name must be non-empty in setProduct"
+        inp = payload.plan[0].variables["input"]
+        assert "product_description" in inp
+        for forbidden in ("category_name", "brand", "products_image", "products_description"):
+            assert forbidden not in inp, f"{forbidden} is not a valid ProductInput field"
 
-    def test_category_falls_back_to_uncategorized(self):
-        """No category on the product → builder sends 'Uncategorized', not None."""
-        ctx = _ctx(
-            variants=[_variant("PC61-WHT-M")],
-            product=_product(category=None),
-        )
-        payload = _synthesize_payload(ctx)
-        cat = payload.plan[0].variables["input"]["category_name"]
-        assert cat == "Uncategorized"
+    def test_category_is_deferred_not_sent_as_name(self):
+        """Category is deferred: OPS ProductInput uses int `category_id`
+        (nullable), so the builder sends neither `category_name` nor a bogus
+        category — regardless of whether the product has a category string."""
+        for cat_value in ("T-Shirts", None):
+            ctx = _ctx(
+                variants=[_variant("PC61-WHT-M")],
+                product=_product(category=cat_value),
+            )
+            payload = _synthesize_payload(ctx)
+            inp = payload.plan[0].variables["input"]
+            assert "category_name" not in inp
+            assert "category_id" not in inp  # deferred until category resolution is wired
 
 
 # ===========================================================================

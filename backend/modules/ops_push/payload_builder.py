@@ -472,19 +472,21 @@ def _build_setProduct_step(
     update mode: products_id = existing OPS product id from push_mappings.
     """
     title = f"{_customer_prefix(ctx.customer, ctx.supplier)}{ctx.product.product_name}"
+    # Field names match the live OPS `ProductInput` schema (verified via GraphQL
+    # introspection 2026-06-04). OPS ProductInput has NO `category_name`, `brand`,
+    # or `products_image` — description is `product_description`, category is an
+    # int `category_id` (nullable; deferred), and the product image is uploaded
+    # via a separate flow. Sending the old names made setProduct return
+    # INVALID_USER_INPUT. Keep only fields OPS accepts.
     variables: dict[str, Any] = {
         "input": {
             "products_id": existing_ops_id if push_mode == "update" else 0,
             "products_title": title,
             "products_internal_title": ctx.product.supplier_sku,
-            "category_name": ctx.product.category or "Uncategorized",
             "visible": 1,
-            "products_description": ctx.product.description or "",
-            "brand": ctx.product.brand or "",
+            "product_description": ctx.product.description or "",
         }
     }
-    if primary_image_url:
-        variables["input"]["products_image"] = primary_image_url
 
     return OPSMutationStep(
         step=1,
@@ -498,19 +500,28 @@ def _build_setProduct_step(
 def _build_setProductSize_step(
     step_num: int, variant: ProductVariant, variant_sku: str
 ) -> OPSMutationStep:
-    """One setProductSize per variant. Depends on step 1 for products_id."""
+    """One setProductSize per variant. Depends on step 1 for products_id.
+
+    Field names match the live OPS `ProductSizeInput` schema (introspected
+    2026-06-04): the id field is `size_id` (0 = create), the label is
+    `size_title`, and `visible` is a String. ProductSizeInput has NO color or
+    SKU field, so the color/size pair is encoded into `size_title` to keep each
+    variant a distinct OPS size row. (Proper color modelling via OPS
+    options/attributes is a later enhancement.)
+    """
+    color = (variant.color or "").strip()
+    size = (variant.size or "").strip()
+    size_title = " / ".join(p for p in (color, size) if p) or variant_sku
     return OPSMutationStep(
         step=step_num,
         mutation="setProductSize",
         source_key=f"variant_sku:{variant_sku}",
         variables={
             "input": {
-                "product_size_id": 0,
+                "size_id": 0,
                 "products_id": _placeholder(1, "products_id"),
-                "size_name": variant.size or "",
-                "color_name": variant.color or "",
-                "products_sku": variant_sku,
-                "visible": 1,
+                "size_title": size_title,
+                "visible": "1",
             }
         },
         requires_response_from=[1],
@@ -801,14 +812,21 @@ def _synthesize_payload(
                 )
                 next_step += 1
 
-    # Final N steps: updateProductStock × N (action=Reset)
-    for v, price in zip(ordered_variants, computed_prices):
-        plan.append(
-            _build_updateProductStock_step(
-                next_step, price.variant_sku, v.inventory or 0
+    # Final N steps: updateProductStock × N (action=Reset).
+    # Deferred by default: updateProductStock targets a stock row by
+    # `product_sku`, but OPS `ProductSizeInput` carries no SKU, so a freshly
+    # created variant has no OPS-side SKU/stock_id to match in a single push —
+    # the Reset would no-op/fail. Opt in with OPS_PUSH_INCLUDE_STOCK=1 once
+    # per-variant stock targeting (read-back of OPS SKUs/stock_ids) is wired.
+    import os as _os
+    if _os.getenv("OPS_PUSH_INCLUDE_STOCK", "0") == "1":
+        for v, price in zip(ordered_variants, computed_prices):
+            plan.append(
+                _build_updateProductStock_step(
+                    next_step, price.variant_sku, v.inventory or 0
+                )
             )
-        )
-        next_step += 1
+            next_step += 1
 
     client_id = ctx.customer.ops_client_id or ""
     return OPSPushPayload(

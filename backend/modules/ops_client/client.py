@@ -96,16 +96,7 @@ class OpsGraphQLClient:
                 return self._token
 
             log.debug("Requesting new OPS access token from %s", self.auth.token_url)
-            resp = await self._http.post(
-                self.auth.token_url,
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": self.auth.client_id,
-                    "client_secret": self.auth.client_secret,
-                },
-            )
-            resp.raise_for_status()
-            body = resp.json()
+            body = await self._request_token()
 
             token = body.get("access_token")
             if not token:
@@ -121,6 +112,46 @@ class OpsGraphQLClient:
             self._token = token
             self._token_expires_at = now + ttl
             return self._token
+
+    async def _request_token(self) -> dict:
+        """POST the client-credentials grant, tolerating both token-endpoint shapes.
+
+        OnPrintShop deployments differ: some require a JSON body (staging returns
+        401 for form-encoded), others accept form-urlencoded. Try JSON first, then
+        form — the same order the n8n OnPrintShop node uses. A 2xx that isn't JSON
+        with an access_token (e.g. an HTML page from a wrong path) is treated as a
+        miss so the next shape is tried.
+        """
+        creds = {
+            "grant_type": "client_credentials",
+            "client_id": self.auth.client_id,
+            "client_secret": self.auth.client_secret,
+        }
+        attempts: tuple[tuple[str, dict], ...] = (
+            ("json", {"json": creds}),
+            ("form", {"data": creds}),
+        )
+        last_detail = "no attempt made"
+        for kind, kwargs in attempts:
+            try:
+                resp = await self._http.post(self.auth.token_url, **kwargs)
+            except httpx.HTTPError as e:
+                last_detail = f"{kind}: {e!r}"
+                continue
+            if resp.is_success:
+                try:
+                    body = resp.json()
+                except ValueError:
+                    last_detail = f"{kind}: HTTP {resp.status_code} non-JSON response"
+                    continue
+                if isinstance(body, dict) and body.get("access_token"):
+                    return body
+                last_detail = f"{kind}: HTTP {resp.status_code} without access_token"
+            else:
+                last_detail = f"{kind}: HTTP {resp.status_code} {resp.text[:120]}"
+        raise RuntimeError(
+            f"OPS token request to {self.auth.token_url} failed (tried JSON + form): {last_detail}"
+        )
 
     async def _invalidate_token(self) -> None:
         """Invalidate both the per-instance and Redis-cached token.
