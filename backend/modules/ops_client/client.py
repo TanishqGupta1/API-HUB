@@ -123,10 +123,12 @@ class OpsGraphQLClient:
             resp = None
             for _label, _kwargs in _attempts:
                 resp = await self._http.post(self.auth.token_url, **_kwargs)
-                if resp.status_code < 400:
+                # Only a 2xx is a real success. `< 400` wrongly accepted 3xx
+                # redirects (no token body) and fell through to a None token.
+                if 200 <= resp.status_code < 300:
                     log.debug("OPS access token obtained via %s auth", _label)
                     break
-            if resp is None or resp.status_code >= 400:
+            if resp is None or not (200 <= resp.status_code < 300):
                 # Surface OPS's actual error body — essential for diagnosing 401s.
                 raise RuntimeError(
                     f"OPS token endpoint returned "
