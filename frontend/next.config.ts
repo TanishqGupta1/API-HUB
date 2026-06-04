@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.alphabroder.com" },
       { protocol: "https", hostname: "*.4over.com" },
       { protocol: "https", hostname: "dei4q67dwezeh.cloudfront.net" },
+      // placehold.co — placeholder images used only by SEED/demo products.
+      // Real products use the supplier CDNs above. Dev/demo convenience.
+      { protocol: "https", hostname: "placehold.co" },
       // Pin the project CDN to its specific distribution. Avoid `*.cloudfront.net`
       // — that allows ANY CloudFront distribution, including ones the attacker
       // controls. Set NEXT_PUBLIC_CDN_HOST in env when the CDN is provisioned.
@@ -21,7 +24,10 @@ const nextConfig: NextConfig = {
         ? [{ protocol: "https" as const, hostname: process.env.NEXT_PUBLIC_CDN_HOST }]
         : []),
     ],
-    dangerouslyAllowSVG: false,
+    // placehold.co serves SVG. Allow it, but sandbox the markup + block scripts
+    // via CSP so an SVG can't execute anything (mitigates dangerouslyAllowSVG).
+    dangerouslyAllowSVG: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   output: "standalone",
   async redirects() {
