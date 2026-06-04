@@ -397,9 +397,11 @@ class TestMutationPlanOrder:
         ctx = _ctx(variants=[_variant("PC61-WHT-M")])
         payload = _synthesize_payload(ctx)
         assert not any(s.mutation == "setProductCategory" for s in payload.plan)
-        # Category lives on setProduct.input instead.
+        # Category lives on setProduct.input as category_id (Int), sourced from
+        # the storefront mapping and omitted when unmapped (default ctx has none).
         setProduct = payload.plan[0]
-        assert "category_name" in setProduct.variables["input"]
+        assert "category_name" not in setProduct.variables["input"]
+        assert "category_id" not in setProduct.variables["input"]
 
 
 class TestVariantOrdering:
@@ -588,7 +590,7 @@ class TestImagePolicy:
         assert payload.primary_image_url == "https://x/front.jpg"
         assert payload.image_warnings == []
         setProduct = payload.plan[0]
-        assert setProduct.variables["input"]["products_image"] == "https://x/front.jpg"
+        assert setProduct.variables["input"]["imagename"] == "https://x/front.jpg"
 
     def test_multiple_images_warns(self):
         ctx = _ctx(
@@ -618,7 +620,7 @@ class TestImagePolicy:
         payload = _synthesize_payload(ctx)
         assert payload.primary_image_url is None
         setProduct = payload.plan[0]
-        assert "products_image" not in setProduct.variables["input"]
+        assert "imagename" not in setProduct.variables["input"]
 
 
 # ===========================================================================
@@ -752,29 +754,30 @@ class TestSetProductVariables:
             "do not cast to str in _build_setAssignOptions_step"
         )
 
-    def test_category_name_present_in_set_product(self):
-        """setProduct.category_name must be non-empty.
+    def test_category_id_present_when_mapped(self):
+        """setProduct.input.category_id is the mapped OPS category id (Int).
 
-        OPS requires a valid category to create a product. The builder uses
-        product.category or falls back to 'Uncategorized'.
+        OPS's ProductInput uses category_id (Int), sourced from the storefront
+        mapping (ProductStorefrontConfig.ops_category_id), not category_name.
         """
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
             product=_product(category="T-Shirts"),
+            storefront_config=SimpleNamespace(pricing_overrides=None, ops_category_id="42"),
         )
         payload = _synthesize_payload(ctx)
-        cat = payload.plan[0].variables["input"]["category_name"]
-        assert cat and cat.strip(), "category_name must be non-empty in setProduct"
+        assert payload.plan[0].variables["input"]["category_id"] == 42
 
-    def test_category_falls_back_to_uncategorized(self):
-        """No category on the product → builder sends 'Uncategorized', not None."""
+    def test_category_omitted_when_unmapped(self):
+        """No storefront mapping → no category in setProduct (no 'Uncategorized' fallback)."""
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
             product=_product(category=None),
         )
         payload = _synthesize_payload(ctx)
-        cat = payload.plan[0].variables["input"]["category_name"]
-        assert cat == "Uncategorized"
+        inp = payload.plan[0].variables["input"]
+        assert "category_id" not in inp
+        assert "category_name" not in inp
 
 
 # ===========================================================================
@@ -819,7 +822,10 @@ class TestStorefrontOverridesInPush:
     """Without these, a customer could be quoted X and have Y pushed to OPS."""
 
     def _cfg(self, overrides: dict) -> SimpleNamespace:
-        return SimpleNamespace(pricing_overrides=overrides)
+        # ops_category_id mirrors the real ProductStorefrontConfig model — the
+        # builder reads ctx.storefront_config.ops_category_id directly, so the
+        # attr must exist (None = unmapped → category omitted from setProduct).
+        return SimpleNamespace(pricing_overrides=overrides, ops_category_id=None)
 
     def test_no_storefront_config_leaves_price_untouched(self):
         ctx = _ctx(
