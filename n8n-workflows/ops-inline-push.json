@@ -1,0 +1,261 @@
+{
+  "id": "ops-inline-push",
+  "name": "OPS Product Push (load + send)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Edit these three values + the product body for your push.\n// `product` is the canonical ProductIngest shape — discover the full schema at\n// GET /api/integrations/v1/suppliers/{supplier_slug}/schema\nconst customer_id = '00000000-0000-0000-0000-000000000000'; // target OPS storefront (Customer UUID)\nconst supplier_slug = 'sanmar';\nconst product = {\n  supplier_sku: 'PC61',\n  product_name: 'Port & Company Essential Tee',\n  product_type: 'apparel',\n  brand: 'Port & Company',\n  description: 'Classic 100% cotton crew-neck tee.',\n  apparel_details: { fabric: 'cotton' },\n  variants: [\n    { part_id: 'PC61-BLK-S', sku: 'PC61-BLK-S', color: 'Black', size: 'S', base_price: 3.42, inventory: 120 },\n    { part_id: 'PC61-BLK-M', sku: 'PC61-BLK-M', color: 'Black', size: 'M', base_price: 3.42, inventory: 340 }\n  ],\n  images: [\n    { url: 'https://cdn.example-supplier.com/pc61-black.jpg', image_type: 'primary', color: 'Black', sort_order: 0 }\n  ]\n};\nreturn [{ json: { customer_id, supplier_slug, product, supplier_sku: product.supplier_sku } }];"
+      },
+      "id": "build-inputs",
+      "name": "Build Product + Target",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/api/integrations/v1/suppliers/{{ $json.supplier_slug }}/products",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Orchestrator-Key",
+              "value": "={{ $env.ORCHESTRATOR_KEY }}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $json.supplier_slug }}-{{ $json.supplier_sku }}-ingest"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify([$json.product]) }}",
+        "options": {}
+      },
+      "id": "ingest-product",
+      "name": "1. Load — Upsert Product into Catalog",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_BASE_URL }}/api/integrations/v1/push-requests",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Orchestrator-Key",
+              "value": "={{ $env.ORCHESTRATOR_KEY }}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $('Build Product + Target').item.json.supplier_slug }}-{{ $('Build Product + Target').item.json.supplier_sku }}-push-1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  target: { system: 'ops', customer_id: $('Build Product + Target').item.json.customer_id },\n  source: { supplier_slug: $('Build Product + Target').item.json.supplier_slug },\n  product_ref: { supplier_sku: $('Build Product + Target').item.json.supplier_sku },\n  dry_run: true,\n  callback: { url: $env.CALLBACK_URL, secret: $env.CALLBACK_SECRET }\n}) }}",
+        "options": {}
+      },
+      "id": "push-request",
+      "name": "2. Send — Create Push Request (dry_run)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "wait",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ],
+      "webhookId": "a1b2c3d4-e5f6-4789-a0b1-c2d3e4f5a6b7"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.API_BASE_URL }}/api/integrations/v1/push-requests/{{ $('2. Send — Create Push Request (dry_run)').item.json.push_log_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Orchestrator-Key",
+              "value": "={{ $env.ORCHESTRATOR_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "poll-status",
+      "name": "3. Poll Push Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "terminal-check",
+              "leftValue": "={{ ['pushed','failed','partial_failure','rejected','dry_run_pushed','canceled'].includes($json.status) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-terminal",
+      "name": "Reached Terminal State?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ops-push-callback",
+        "options": {}
+      },
+      "id": "callback-webhook",
+      "name": "Callback Receiver (X-ApiHub-Event)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        680,
+        600
+      ],
+      "webhookId": "f0e1d2c3-b4a5-4687-9281-0a1b2c3d4e5f"
+    }
+  ],
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Build Product + Target",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Product + Target": {
+      "main": [
+        [
+          {
+            "node": "1. Load — Upsert Product into Catalog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Load — Upsert Product into Catalog": {
+      "main": [
+        [
+          {
+            "node": "2. Send — Create Push Request (dry_run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Send — Create Push Request (dry_run)": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "3. Poll Push Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Poll Push Status": {
+      "main": [
+        [
+          {
+            "node": "Reached Terminal State?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reached Terminal State?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}

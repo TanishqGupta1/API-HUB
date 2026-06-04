@@ -25,6 +25,7 @@ from modules.master_options.models import MasterOption, MasterOptionAttribute
 from modules.master_options.schemas import MasterOptionIngest
 from modules.ops_push.gateway import execute_push, prepare_push_intent
 from modules.ops_push.task_runner import run_push_task
+from modules.ops_push.queue import enqueue_push
 from modules.push_mappings import service as push_mapping_service
 from modules.push_mappings.schemas import PushMappingUpsert
 from modules.suppliers.models import Supplier
@@ -154,7 +155,7 @@ async def create_push_request(
             )
         return accepted
 
-    background_tasks.add_task(run_push_task, accepted.push_log_id)
+    await enqueue_push(accepted.push_log_id, background_tasks=background_tasks)
     return accepted
 
 
@@ -591,7 +592,7 @@ async def admin_batch_push_request(
                     await db.refresh(terminal)
                 final_status = terminal.status if terminal else accepted.status
             else:
-                background_tasks.add_task(run_push_task, accepted.push_log_id)
+                await enqueue_push(accepted.push_log_id, background_tasks=background_tasks)
                 final_status = accepted.status
 
             items.append(BatchPushItem(
@@ -780,7 +781,7 @@ async def admin_retry_push(
     push_log.pushed_at = datetime.now(timezone.utc)
     await db.commit()
 
-    background_tasks.add_task(run_push_task, push_log.id)
+    await enqueue_push(push_log.id, background_tasks=background_tasks)
     logger.info("admin_retry_push: queued retry for push_log %s", push_log_id)
 
     return PushStatusOut(
@@ -838,5 +839,5 @@ async def admin_push_request(
                 ),
             )
         return accepted
-    background_tasks.add_task(run_push_task, accepted.push_log_id)
+    await enqueue_push(accepted.push_log_id, background_tasks=background_tasks)
     return accepted

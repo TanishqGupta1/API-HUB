@@ -104,7 +104,7 @@ async def test_set_product_passes_through_error(fake_client):
 @pytest.mark.asyncio
 async def test_set_product_size_threads_products_id(fake_client):
     fake_client.execute.return_value = OpsResult(
-        ok=True, data={"setProductSize": {"size_id": 555}}
+        ok=True, data={"setProductSize": {"product_size_id": 555}}
     )
     result = await m.set_product_size(
         client=fake_client,
@@ -121,7 +121,7 @@ async def test_set_product_size_threads_products_id(fake_client):
     assert v["color_name"] == "Navy"
     assert v["products_sku"] == "PC61-NAV-M"
     assert result.ok
-    assert result.data["size_id"] == 555
+    assert result.data["product_size_id"] == 555
 
 
 # ── T9: set_product_price ───────────────────────────────────────────────────

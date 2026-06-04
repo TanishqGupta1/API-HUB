@@ -5,7 +5,7 @@ import uuid as uuid_mod
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from limiter import enforce_email_login_limit, limiter
 from jose import JWTError
-from sqlalchemy import exists, func, literal, select
+from sqlalchemy import exists, func, literal, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,6 +45,12 @@ _COOKIE_SECURE = os.getenv("ENVIRONMENT", "development").lower() == "production"
 _DUMMY_HASH = hash_password("$dummy-for-timing$do-not-use$")
 
 _SIGNUP_SETTING_KEY = "signup_enabled"
+
+# Transaction-level advisory lock key shared by the two bootstrap paths
+# (/register and /setup). Serializes concurrent first-admin creation so the
+# "no users yet?" check and the insert can't interleave across connections.
+# Arbitrary fixed constant ("BOOT" in ASCII).
+_BOOTSTRAP_LOCK_KEY = 0x424F4F54
 
 
 async def _is_signup_enabled(db: AsyncSession) -> bool:
@@ -202,10 +208,14 @@ async def setup_first_admin(
 ) -> User:
     """Create the first vg_admin. Returns 409 if ANY user already exists.
 
-    INSERT ... SELECT ... WHERE NOT EXISTS is atomic — the count check and
-    insert happen in one statement, eliminating the TOCTOU race where two
-    concurrent requests both see count==0 and both succeed.
+    INSERT ... SELECT ... WHERE NOT EXISTS is NOT race-safe on its own: under
+    READ COMMITTED two concurrent transactions each see zero users in their
+    snapshot and both insert (with different emails the on-conflict on email
+    doesn't catch them). A transaction-level advisory lock serializes the two
+    so the loser observes the winner's committed row and the WHERE NOT EXISTS
+    yields no row -> 409.
     """
+    await db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _BOOTSTRAP_LOCK_KEY})
     stmt = (
         pg_insert(User)
         .from_select(
@@ -276,7 +286,13 @@ async def register(
     Self-service signup was removed: it used to mint vg_admin whenever
     signup_enabled was on (cross-tenant privilege escalation). Equivalent to
     /setup; consolidate the two bootstrap paths in a follow-up.
+
+    Race-safety: the transaction-level advisory lock serializes concurrent
+    bootstrap attempts so the second observes the first's committed row and
+    falls through to 409 (the bare INSERT ... WHERE NOT EXISTS is not enough
+    under READ COMMITTED — see setup_first_admin).
     """
+    await db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _BOOTSTRAP_LOCK_KEY})
     stmt = (
         pg_insert(User)
         .from_select(

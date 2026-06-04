@@ -13,6 +13,11 @@ if sys.platform == "win32":
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
+# Tests run without an arq worker process — keep enqueue_push on the
+# in-process fallback path so BackgroundTasks executes inline as before.
+# Production deploys leave this unset (or =1) to use the durable Redis queue.
+os.environ["OPS_PUSH_DURABLE_QUEUE"] = "0"
+
 _test_db_url = os.environ.get("TEST_DATABASE_URL")
 if _test_db_url:
     os.environ["POSTGRES_URL"] = _test_db_url
@@ -68,8 +73,11 @@ app.dependency_overrides[_get_current_user] = lambda: _TEST_ADMIN
 TEST_SUPPLIER_SLUGS = ("vg-ops-test", "vg-ops-inactive")
 TEST_CUSTOMER_OPS_URLS = (
     "https://test.ops.com",
+    "https://test1.ops.com",   # CPS Archived/Failed/Recovered/Unique test factories
     "https://test2.ops.com",
     "https://test3.ops.com",
+    "https://mock.ops",        # generic "Test Customer" factory — most common leak
+    "http://ops.test",         # alternate "Test Customer" factory
 )
 
 _SCHEMA_CREATED = False
@@ -114,13 +122,26 @@ async def _cleanup_test_suppliers() -> None:
     from modules.sync_jobs.models import SyncJob
 
     async with async_session() as s:
-        # Also sweep slugs from test_customer_catalog (cps-test-*) which
-        # builds throwaway suppliers per-test but doesn't clean them up.
+        # Sweep every prefix used by test factories so rows don't leak
+        # into the dev DB across pytest runs (which was clogging the
+        # /suppliers admin page with 30+ phantom rows).
+        #
+        # Sources of each prefix:
+        #   cps-test-%     test_customer_catalog
+        #   t7-% .. t10-%  test_phase1_task{7..10}.py
+        #   test-%         test_persist_product.py
+        #   test-slug-%    test_ops_push_failure.py
+        #   auth-leak-test test_supplier_auth_no_leak.py (explicit)
         supplier_ids = (
             await s.execute(
                 select(Supplier.id).where(
-                    Supplier.slug.in_(TEST_SUPPLIER_SLUGS)
+                    Supplier.slug.in_(TEST_SUPPLIER_SLUGS + ("auth-leak-test",))
                     | Supplier.slug.like("cps-test-%")
+                    | Supplier.slug.like("t7-%")
+                    | Supplier.slug.like("t8-%")
+                    | Supplier.slug.like("t9-%")
+                    | Supplier.slug.like("t10-%")
+                    | Supplier.slug.like("test-%")
                 )
             )
         ).scalars().all()

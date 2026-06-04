@@ -89,6 +89,7 @@ class ProductVariant(Base):
     color: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     sku: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    part_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
     base_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     inventory: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     warehouse: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
