@@ -51,6 +51,13 @@ jobs:
         working-directory: backend
         run: pip install -r requirements.txt
 
+      # Build the schema on the fresh CI Postgres. conftest's create_all runs
+      # too late (a cleanup fixture queries tables first), and create_all alone
+      # doesn't reproduce the migrated schema — so apply migrations explicitly.
+      - name: Build database schema (migrations)
+        working-directory: backend
+        run: alembic upgrade head
+
       - name: Run pytest
         working-directory: backend
         run: python -m pytest --tb=short -q
