@@ -190,7 +190,25 @@ class OpsClientAdapter:
             data = (result.data or {}).get(response_root)
             if isinstance(data, list):
                 data = data[0] if data else {}
-            return data or {}
+            data = data or {}
+            # ── Application-level silent-failure detection ────────────
+            # OPS returns HTTP 200 + result:false when a mutation is
+            # rejected at the app layer (missing required field, etc.).
+            # The wrapper functions in mutations.py have _check_result,
+            # but THIS path bypasses those wrappers and talks directly
+            # to OPS. Without this check the gateway records steps as
+            # `ok` while OPS silently drops the data — exactly what
+            # happened to setProductPrice (id:null for all 558 calls)
+            # and PC54's setProduct (phantom id:10001).
+            result_val = data.get("result")
+            is_rejected = (
+                result_val is False
+                or (isinstance(result_val, str) and result_val.lower() == "false")
+            )
+            if is_rejected:
+                ops_msg = data.get("message") or f"OPS rejected {response_root}"
+                raise RuntimeError(f"OPS_REJECTED: {str(ops_msg)[:400]}")
+            return data
 
         return _invoke
 

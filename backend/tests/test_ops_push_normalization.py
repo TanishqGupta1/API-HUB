@@ -397,3 +397,80 @@ async def test_set_product_success_still_works(fake_client):
     )
     assert result.ok is True
     assert result.data["id"] == 540
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Gateway-level silent-failure detection (Phase 1.1 — second pass)
+# ───────────────────────────────────────────────────────────────────────────
+# The mutation wrappers' _check_result is bypassed by OpsClientAdapter._invoke
+# which talks to OPS directly. The same check must therefore live in _invoke
+# or silent failures slip through the production push path.
+
+
+class TestOpsClientAdapterRejectsResultFalse:
+    @pytest.mark.asyncio
+    async def test_invoke_raises_on_result_false(self):
+        """OPS returning result:false at app layer must raise from _invoke
+        so the gateway records the step as `failed`, not `ok`. This is the
+        root cause of the PC54 phantom (id:10001) and the missing 558
+        prices on PC61 — both went through the gateway, not the wrappers."""
+        from modules.ops_push.gateway import OpsClientAdapter
+        from unittest.mock import AsyncMock
+
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"setProductPrice": [{
+                "result": False,
+                "message": "Price Defining method is required.",
+                "id": None,
+            }]},
+        ))
+        adapter = OpsClientAdapter(client)
+        with pytest.raises(RuntimeError, match="OPS_REJECTED"):
+            await adapter.set_product_price({"inputs": [{"products_id": 1, "size_id": 2, "price": 10, "vendor_price": 5}]})
+
+    @pytest.mark.asyncio
+    async def test_invoke_passes_through_on_success(self):
+        from modules.ops_push.gateway import OpsClientAdapter
+        from unittest.mock import AsyncMock
+
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"setProduct": [{"result": True, "message": "ok", "id": 540}]},
+        ))
+        adapter = OpsClientAdapter(client)
+        resp = await adapter.set_product({"inputs": [{"products_title": "T"}]})
+        assert resp["id"] == 540
+
+    @pytest.mark.asyncio
+    async def test_invoke_detects_string_false(self):
+        """Belt-and-suspenders: OPS sometimes returns result as string."""
+        from modules.ops_push.gateway import OpsClientAdapter
+        from unittest.mock import AsyncMock
+
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"setProductSize": [{"result": "false", "message": "no good", "id": None}]},
+        ))
+        adapter = OpsClientAdapter(client)
+        with pytest.raises(RuntimeError, match="OPS_REJECTED"):
+            await adapter.set_product_size({"inputs": [{}]})
+
+    @pytest.mark.asyncio
+    async def test_invoke_no_result_field_is_success(self):
+        """Some mutations (e.g. updateProductStock in some shapes) may
+        omit `result`. Absence != failure."""
+        from modules.ops_push.gateway import OpsClientAdapter
+        from unittest.mock import AsyncMock
+
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"setProduct": [{"id": 540}]},  # no result field
+        ))
+        adapter = OpsClientAdapter(client)
+        resp = await adapter.set_product({"inputs": [{}]})
+        assert resp["id"] == 540

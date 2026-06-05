@@ -575,6 +575,17 @@ def _build_setProductPrice_step(
                 "price": final_price,
                 "vendor_price": base_price,
                 "visible": "1",  # OPS ProductPriceInput.visible is String
+                # user_type_id is required by OPS. Without it OPS returns
+                # result:true with id:null and silently drops the price.
+                # "1" = default/all-users user type (matches existing OPS
+                # products). Verified live against staging.visualgraphx
+                # (a direct setProductPrice without this field returns
+                # id:null; adding "1" returns a real id).
+                "user_type_id": "1",
+                # price_defining_method MUST be set on each price too — not
+                # just on the parent product. OPS validation message:
+                # "Price Defining method is required."
+                "price_defining_method": "1",
             }]
         },
         requires_response_from=[1, size_step],
