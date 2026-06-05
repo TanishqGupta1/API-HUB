@@ -514,7 +514,19 @@ def _build_setProduct_step(
         except (TypeError, ValueError):
             pass
     if primary_image_url:
-        inp["imagename"] = primary_image_url
+        # OPS stores `imagename` as a relative filename and prepends its own
+        # CDN base path (e.g. ".../images/product/{filename}") at serve time.
+        # Sending a full URL like "https://cdnm.sanmar.com/.../PC61.jpg" causes
+        # OPS to double-prefix it into garbage. Strip to the filename only.
+        #
+        # NOTE: this only fixes the URL format. The image file must still
+        # exist on OPS's CDN — currently it doesn't, because we have no
+        # upload pipeline to push the bytes (Phase 3 partial fix). Customers
+        # see a clean broken-image link instead of a malformed URL. Full fix
+        # requires either: (a) Christian opens OPS's CDN to fetch from
+        # SanMar's IP, or (b) we add a media upload step via OPS's REST
+        # upload endpoint (no GraphQL mutation exists for binary upload).
+        inp["imagename"] = primary_image_url.rsplit("/", 1)[-1]
     variables: dict[str, Any] = {"inputs": [inp]}
 
     return OPSMutationStep(

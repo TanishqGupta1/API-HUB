@@ -589,10 +589,37 @@ class TestImagePolicy:
             images=[_image("https://x/front.jpg", image_type="front")],
         )
         payload = _synthesize_payload(ctx)
+        # payload.primary_image_url keeps the full URL for downstream readers
+        # (e.g. preflight image-reachability check, audit log).
         assert payload.primary_image_url == "https://x/front.jpg"
         assert payload.image_warnings == []
         setProduct = payload.plan[0]
-        assert setProduct.variables["inputs"][0]["imagename"] == "https://x/front.jpg"
+        # But the mutation receives just the filename — OPS prepends its CDN
+        # base path at serve time; sending a full URL produces a double-prefix.
+        assert setProduct.variables["inputs"][0]["imagename"] == "front.jpg"
+
+    def test_imagename_strips_to_filename_for_deep_paths(self):
+        """SanMar URLs have multi-segment paths like /imglib/mresjpg/2013/f14/PC61_aqua_back.jpg.
+        Everything before the last '/' must be dropped — OPS only wants the leaf."""
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            images=[_image(
+                "https://cdnm.sanmar.com/imglib/mresjpg/2013/f14/PC61_aquaticblue_flat_back.jpg",
+                image_type="front",
+            )],
+        )
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["imagename"] == "PC61_aquaticblue_flat_back.jpg"
+
+    def test_imagename_passes_through_when_already_a_filename(self):
+        """If primary_image_url is already a bare filename (no slashes),
+        rsplit('/', 1)[-1] returns it unchanged."""
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            images=[_image("PC61_front.jpg", image_type="front")],
+        )
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["imagename"] == "PC61_front.jpg"
 
     def test_multiple_images_warns(self):
         ctx = _ctx(
