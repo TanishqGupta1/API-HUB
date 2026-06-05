@@ -674,17 +674,31 @@ def _build_setAdditionalOptionAttributes_step(
 
 
 def _build_updateProductStock_step(
-    step_num: int, variant_sku: str, inventory: int
+    step_num: int, size_step: int, variant_sku: str, inventory: int
 ) -> OPSMutationStep:
     """Inventory LAST step per Rev 1 §"PC61 outbound mutation sequence".
 
-    action=Add for the initial stock entry. OPS rejects "Reset" when no
-    prior stock row exists ("Invalid Product SKU or initial stock not
-    added!"). product_sku is the stable identifier.
+    Phase 6 — stock_id resolution via read-back:
+      OPS's updateProductStock identifies the variant by stock_id (or by
+      product_sku). There is NO per-size SKU field in OPS's schema, so
+      product_sku never matches anything for products we created via API.
+      Instead the gateway runs a productStocks(product_id) read-back
+      after setProductSize completes and resolves the right stock_id
+      from a `(product_id, size_id) -> stock_id` map.
 
-    Note: setProductSize does NOT accept a SKU field, so OPS auto-derives
-    the SKU from products_internal_title + size_title. variant_sku here
-    must match that derivation for OPS to find the right row.
+      This step carries:
+        * `_size_id_ref` — placeholder resolved to the OPS size_id of the
+          matching setProductSize step, used by the gateway as the lookup
+          key into the stock-read-back map.
+        * `stock_id` — pre-populated to None; the gateway overwrites it
+          at execute time with the looked-up stock_id, or skips the step
+          with a clear warning when no stock entry exists for that size
+          (admin must initialize stock in OPS UI first; the API has no
+          way to create initial stock entries).
+
+      action=Add increments existing stock; for fresh products with zero
+      starting stock the admin-initialized entry will be 0 and Add brings
+      it to the desired quantity.
     """
     return OPSMutationStep(
         step=step_num,
@@ -692,12 +706,15 @@ def _build_updateProductStock_step(
         source_key=f"variant_sku:{variant_sku}",
         variables={
             "action": "Add",
-            "product_sku": variant_sku,
+            # _size_id_ref is a gateway-only sentinel (prefixed with _ to
+            # mark it as not-part-of-the-OPS-mutation). The gateway strips
+            # it before sending and uses it to find the stock_id.
+            "_size_id_ref": _placeholder(size_step, "size_id"),
             "input": {
                 "stock_quantity": inventory,
             },
         },
-        requires_response_from=[1],
+        requires_response_from=[size_step],
     )
 
 
@@ -856,11 +873,15 @@ def _synthesize_payload(
                 )
                 next_step += 1
 
-    # Final N steps: updateProductStock × N (action=Reset)
+    # Final N steps: updateProductStock × N (action=Add, with stock_id
+    # resolved by gateway read-back — see _build_updateProductStock_step).
     for v, price in zip(ordered_variants, computed_prices):
         plan.append(
             _build_updateProductStock_step(
-                next_step, price.variant_sku, v.inventory or 0
+                next_step,
+                size_step_by_sku[price.variant_sku],
+                price.variant_sku,
+                v.inventory or 0,
             )
         )
         next_step += 1

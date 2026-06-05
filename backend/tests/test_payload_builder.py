@@ -381,15 +381,27 @@ class TestMutationPlanOrder:
         assert all(s.mutation == "updateProductStock" for s in last_two)
 
     def test_inventory_action_is_add(self):
-        # action=Add is used because Reset requires a pre-existing stock row
-        # and OPS rejects Reset for sizes that don't have one yet (initial pushes).
+        # action=Add increments existing stock. Phase 6: OPS has no per-size
+        # SKU field anywhere in its schema, so updateProductStock identifies
+        # the variant by stock_id. The stock_id is resolved at execute time
+        # by the gateway from a productStocks(product_id) read-back.
+        #
+        # The plan step does NOT carry stock_id directly — it carries a
+        # gateway-only sentinel `_size_id_ref` (a placeholder) that the
+        # gateway uses to look up the stock_id for that variant's size.
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
         stock_step = next(s for s in payload.plan if s.mutation == "updateProductStock")
-        # action and product_sku are top-level siblings of input (not nested)
         assert stock_step.variables["action"] == "Add"
-        assert stock_step.variables["product_sku"] == "PC61-WHT-M"
         assert stock_step.variables["input"]["stock_quantity"] == 42
+        # _size_id_ref is the gateway lookup hint — must reference a
+        # setProductSize step's size_id response.
+        assert stock_step.variables["_size_id_ref"].startswith("$step")
+        assert stock_step.variables["_size_id_ref"].endswith(".size_id")
+        # product_sku is gone — OPS can't match it without a per-size SKU
+        # field, so threading it does nothing useful and is misleading.
+        assert "product_sku" not in stock_step.variables
+        assert "stock_id" not in stock_step.variables  # filled by gateway
         # action must NOT be nested inside input
         assert "action" not in stock_step.variables["input"]
         assert "product_sku" not in stock_step.variables["input"]
