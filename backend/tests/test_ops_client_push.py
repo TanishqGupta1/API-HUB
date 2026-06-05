@@ -18,6 +18,11 @@ from modules.catalog.schemas import ProductIngest, VariantIngest
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
 from modules.ops_client.push import push_apparel_product
 
+# Hermetic — mocks client.execute, no DB or network required. Opt out of
+# the autouse DB-cleanup fixture in conftest.py so these tests pass
+# standalone without Postgres running.
+pytestmark = pytest.mark.no_db
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -109,18 +114,20 @@ async def test_happy_path_ids_threaded_correctly():
 
     async def _capture(query, *, variables):
         captured.append({"query": query, "vars": variables})
+        # Array-input mutations send variables.inputs (list); responses
+        # return canonical `id` wrapped in a list — mutations.py unwraps both.
         if "SetProductCategory" in query:
-            return OpsResult(ok=True, data={"setProductCategory": {"category_id": 555}})
+            return OpsResult(ok=True, data={"setProductCategory": [{"id": 555}]})
         if "SetProduct(" in query:
-            assert variables["input"]["category_id"] == 555
-            return OpsResult(ok=True, data={"setProduct": {"products_id": 777}})
+            assert variables["inputs"][0]["category_id"] == 555
+            return OpsResult(ok=True, data={"setProduct": [{"id": 777}]})
         if "SetProductSize" in query:
-            assert variables["input"]["products_id"] == 777
-            return OpsResult(ok=True, data={"setProductSize": {"product_size_id": 888}})
+            assert variables["inputs"][0]["products_id"] == 777
+            return OpsResult(ok=True, data={"setProductSize": [{"id": 888}]})
         if "SetProductPrice" in query:
-            assert variables["input"]["products_id"] == 777
-            assert variables["input"]["size_id"] == 888
-            return OpsResult(ok=True, data={"setProductPrice": {"product_price_id": 999}})
+            assert variables["inputs"][0]["products_id"] == 777
+            assert variables["inputs"][0]["size_id"] == 888
+            return OpsResult(ok=True, data={"setProductPrice": [{"id": 999}]})
         return _ERR
 
     client.execute = _capture

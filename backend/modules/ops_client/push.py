@@ -44,7 +44,8 @@ async def push_apparel_product(
             "size_id_by_sku": {}, "step_results": step_results,
             "cleanup_targets": [], "error": r.ops_error_message,
         }
-    ops_category_id = (r.data or {}).get("category_id")
+    # OPS returns canonical `id`; older wrappers may still return category_id.
+    ops_category_id = (r.data or {}).get("id") or (r.data or {}).get("category_id")
     if ops_category_id is None:
         _record("set_product_category", False, error="OPS returned null category_id")
         return {
@@ -72,7 +73,8 @@ async def push_apparel_product(
             "size_id_by_sku": {}, "step_results": step_results,
             "cleanup_targets": cleanup_targets, "error": r.ops_error_message,
         }
-    ops_product_id = (r.data or {}).get("products_id")
+    # OPS returns canonical `id`; older wrappers may still return products_id.
+    ops_product_id = (r.data or {}).get("id") or (r.data or {}).get("products_id")
     if ops_product_id is None:
         _record("set_product", False, error="OPS returned null products_id")
         cleanup_targets.append({"ops_category_id": ops_category_id})
@@ -89,12 +91,18 @@ async def push_apparel_product(
         if not variant.sku:
             _record("set_product_size", False, sku="", error=f"variant {variant.part_id} missing sku")
             continue
+        # ProductSizeInput has size_title (no separate size_name/color_name)
+        # and no products_sku field. Fold color into the title.
+        color = (variant.color or "").strip()
+        size = (variant.size or "").strip()
+        if color and size:
+            size_title = f"{color} / {size}"
+        else:
+            size_title = color or size or variant.sku
         r = await m.set_product_size(
             client=client,
             products_id=ops_product_id,
-            size_name=variant.size or "",
-            color_name=variant.color or "",
-            products_sku=variant.sku,
+            size_title=size_title,
             visible=1,
         )
         if not r.ok:
@@ -108,7 +116,8 @@ async def push_apparel_product(
                 "size_id_by_sku": size_id_by_sku, "step_results": step_results,
                 "cleanup_targets": cleanup_targets, "error": r.ops_error_message,
             }
-        size_id = (r.data or {}).get("product_size_id")
+        # OPS returns canonical `id`; older wrappers may still return product_size_id.
+        size_id = (r.data or {}).get("id") or (r.data or {}).get("product_size_id")
         if size_id is None:
             _record("set_product_size", False, sku=variant.sku, error="OPS returned null product_size_id")
             cleanup_targets.append({"ops_product_id": ops_product_id})
