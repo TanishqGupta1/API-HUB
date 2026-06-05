@@ -472,21 +472,29 @@ def _build_setProduct_step(
     update mode: products_id = existing OPS product id from push_mappings.
     """
     title = f"{_customer_prefix(ctx.customer, ctx.supplier)}{ctx.product.product_name}"
-    # Field names match the live OPS `ProductInput` schema (verified via GraphQL
-    # introspection 2026-06-04). OPS ProductInput has NO `category_name`, `brand`,
-    # or `products_image` — description is `product_description`, category is an
-    # int `category_id` (nullable; deferred), and the product image is uploaded
-    # via a separate flow. Sending the old names made setProduct return
-    # INVALID_USER_INPUT. Keep only fields OPS accepts.
-    variables: dict[str, Any] = {
-        "input": {
-            "products_id": existing_ops_id if push_mode == "update" else 0,
-            "products_title": title,
-            "products_internal_title": ctx.product.supplier_sku,
-            "visible": 1,
-            "product_description": ctx.product.description or "",
-        }
+    # Field names verified against OPS's live ProductInput schema:
+    #   - product_description  (NOT products_description)
+    #   - imagename            (NOT products_image)
+    #   - category_id (Int)    (NOT category_name) — sourced from the storefront
+    #     mapping; omitted when unmapped (category is optional) so the push
+    #     isn't blocked while category mapping is still being set up.
+    #   - `brand` dropped — ProductInput has no brand field.
+    inp: dict[str, Any] = {
+        "products_id": existing_ops_id if push_mode == "update" else 0,
+        "products_title": title,
+        "products_internal_title": ctx.product.supplier_sku,
+        "visible": 1,
+        "product_description": ctx.product.description or "",
     }
+    _cat = ctx.storefront_config.ops_category_id if ctx.storefront_config else None
+    if _cat:
+        try:
+            inp["category_id"] = int(_cat)
+        except (TypeError, ValueError):
+            pass
+    variables: dict[str, Any] = {"input": inp}
+    if primary_image_url:
+        variables["input"]["imagename"] = primary_image_url
 
     return OPSMutationStep(
         step=1,

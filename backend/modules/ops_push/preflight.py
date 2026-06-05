@@ -156,6 +156,11 @@ class CheckResult:
     field: Optional[str] = None
     # One-line operator suggestion (e.g. "Set ops_token_url in /customers/...").
     suggestion: Optional[str] = None
+    # ok=True but operationally significant. run_preflight() lifts any warn check
+    # into PreflightResults.warnings AND emits a WARNING log, so a pass with real
+    # consequences (e.g. pushing at wholesale cost with no markup rule) is never
+    # silent in the push UI/log.
+    warn: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -164,6 +169,7 @@ class CheckResult:
             "detail": self.detail,
             "field": self.field,
             "suggestion": self.suggestion,
+            "warn": self.warn,
         }
 
 
@@ -382,20 +388,25 @@ def check_markup_rule_resolves(ctx: _PreflightContext) -> CheckResult:
         supplier_slug=ctx.supplier.slug,
     )
     if rule is None:
+        # No markup rule configured → push at WHOLESALE COST (no markup applied).
+        # Policy: markup is deferred (per manager), so a missing rule is a
+        # pass-with-note, not a blocker. The payload's apply_markup() falls back
+        # to base_price when rule is None, so price == vendor_price.
+        # warn=True → run_preflight() surfaces this LOUDLY (WARNING log + response
+        # warnings) so a silent sell-at-cost can never happen unnoticed.
         return CheckResult(
             "markup_rule_resolves",
-            False,
+            True,
             (
-                f"no markup rule matches product '{ctx.product.supplier_sku}' "
-                f"(category={ctx.product.category}, supplier={ctx.supplier.slug}) "
-                f"for customer '{ctx.customer.name}'"
+                f"no markup rule for '{ctx.product.supplier_sku}' "
+                f"(supplier={ctx.supplier.slug}, customer='{ctx.customer.name}') "
+                f"— pushing at WHOLESALE COST (no markup applied)"
             ),
-            field="customer.markup_rules",
             suggestion=(
-                f"Create a global 'all' markup rule for customer "
-                f"'{ctx.customer.name}', or a supplier:'{ctx.supplier.slug}' "
-                f"scoped rule."
+                "Intentional under the deferred-markup policy. To apply markup, "
+                "add a rule for this customer (global 'all' or supplier-scoped)."
             ),
+            warn=True,
         )
     pct = f"{float(rule.markup_pct)}%" if rule.markup_pct is not None else None
     amt = f"${float(rule.markup_amount)}" if rule.markup_amount is not None else None
@@ -938,8 +949,20 @@ async def run_preflight(
     warnings: list[CheckResult] = []
     # 1
     checks.append(check_base_price_set(ctx))
-    # 2
-    checks.append(check_markup_rule_resolves(ctx))
+    # 2 — markup. A missing rule is a pass-with-note (deferred-markup policy):
+    #     we push at wholesale cost. Surface it LOUDLY so it's never a silent
+    #     sell-at-cost — WARNING log + an entry in the response `warnings`.
+    markup_check = check_markup_rule_resolves(ctx)
+    checks.append(markup_check)
+    if markup_check.ok and markup_check.warn:
+        log.warning(
+            "preflight: NO MARKUP RULE for product=%s customer=%s — pushing at "
+            "WHOLESALE COST (no markup applied). %s",
+            product_id,
+            customer_id,
+            markup_check.detail,
+        )
+        warnings.append(markup_check)
     # 3 — soft-pass in dry_run when no mappings exist yet; log a warning so
     #     the operator knows a live push will still need option mapping.
     mapping_check = check_push_mappings_present(ctx, dry_run=dry_run)

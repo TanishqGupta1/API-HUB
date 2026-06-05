@@ -58,7 +58,8 @@ async def test_inprocess_fallback_raises_without_background_tasks(monkeypatch):
 
 async def test_durable_path_enqueues_to_arq(monkeypatch):
     """OPS_PUSH_DURABLE_QUEUE=1 + REDIS_URL set → enqueue_push goes through
-    arq.create_pool().enqueue_job and returns the resulting job_id."""
+    arq.create_pool().enqueue_job and returns the resulting job_id.
+    _job_id must be passed so arq's uniqueness dedup is active (Bug 2 fix)."""
     monkeypatch.setenv("OPS_PUSH_DURABLE_QUEUE", "1")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -71,18 +72,22 @@ async def test_durable_path_enqueues_to_arq(monkeypatch):
     fake_pool.enqueue_job = AsyncMock(return_value=fake_job)
     fake_pool.aclose = AsyncMock()
 
+    push_id = uuid_mod.uuid4()
     with patch("arq.create_pool", AsyncMock(return_value=fake_pool)):
-        job_id = await enqueue_push(uuid_mod.uuid4())
+        job_id = await enqueue_push(push_id)
 
     assert job_id == "fake-job-id-abc123"
-    fake_pool.enqueue_job.assert_awaited_once()
     fake_pool.aclose.assert_awaited_once()
+    # Verify _job_id is passed so arq's dedup guard is active
+    call_kwargs = fake_pool.enqueue_job.call_args
+    assert call_kwargs.kwargs.get("_job_id") == f"push:{push_id}"
 
 
 async def test_durable_path_duplicate_job_returns_sentinel(monkeypatch):
-    """arq returns None when a job with the same job_id already exists
+    """arq returns None when a job with the same _job_id already exists
     (uniqueness guard). enqueue_push treats that as success — the prior
-    job is what we want to run — and returns a 'dedup' sentinel."""
+    job is what we want to run — and returns a 'dedup' sentinel.
+    This path is now reachable because _job_id is set (Bug 2 fix)."""
     monkeypatch.setenv("OPS_PUSH_DURABLE_QUEUE", "1")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -97,6 +102,9 @@ async def test_durable_path_duplicate_job_returns_sentinel(monkeypatch):
         job_id = await enqueue_push(push_id)
 
     assert job_id == f"arq:dedup:{push_id}"
+    # Confirm _job_id was passed (this is what makes arq return None on dupe)
+    call_kwargs = fake_pool.enqueue_job.call_args
+    assert call_kwargs.kwargs.get("_job_id") == f"push:{push_id}"
 
 
 async def test_durable_path_falls_back_in_dev_on_redis_failure(monkeypatch):
@@ -250,3 +258,81 @@ async def test_run_push_job_success_path_is_silent_on_retry_state():
 
     fin.assert_not_awaited()
     dl.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Bug 1 — execute_push stuck-processing retry contract
+# ---------------------------------------------------------------------------
+
+
+async def test_execute_push_raises_on_stuck_processing_row():
+    """Bug 1 fix: when execute_push finds the row in 'processing' (a prior
+    attempt crashed), it must RAISE — not silently return — so arq's retry
+    and DLQ contract actually engages.
+
+    Without this fix the retry returns None, arq treats that as success,
+    no further retries fire, and the row stays in 'processing' forever."""
+    import uuid as _uuid
+    from unittest.mock import MagicMock, AsyncMock, patch
+    from modules.ops_push.gateway import execute_push
+    from modules.push_log.models import ProductPushLog
+
+    push_log_id = _uuid.uuid4()
+
+    # Simulate a push_log already in 'processing' (prior attempt crashed).
+    fake_row = MagicMock(spec=ProductPushLog)
+    fake_row.id = push_log_id
+    fake_row.status = "processing"
+
+    # The atomic UPDATE finds no row (status != 'accepted') → returns nothing.
+    fake_result = MagicMock()
+    fake_result.fetchone.return_value = None
+
+    fake_db = AsyncMock()
+    fake_db.get = AsyncMock(return_value=fake_row)
+    fake_db.execute = AsyncMock(return_value=fake_result)
+    fake_db.commit = AsyncMock()
+    fake_db.__aenter__ = AsyncMock(return_value=fake_db)
+    fake_db.__aexit__ = AsyncMock(return_value=False)
+
+    fake_session = MagicMock()
+    fake_session.return_value.__aenter__ = AsyncMock(return_value=fake_db)
+    fake_session.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("modules.ops_push.gateway.async_session", fake_session):
+        with pytest.raises(RuntimeError, match="processing"):
+            await execute_push(push_log_id)
+
+
+async def test_execute_push_returns_silently_for_terminal_states():
+    """Bug 1 fix: when execute_push finds the row already in a terminal state
+    (pushed / failed / partial_failure / dry_run_pushed) it must return
+    silently — the job already completed on a prior attempt."""
+    import uuid as _uuid
+    from unittest.mock import MagicMock, AsyncMock, patch
+    from modules.ops_push.gateway import execute_push
+    from modules.push_log.models import ProductPushLog
+
+    for terminal_status in ("pushed", "failed", "partial_failure", "dry_run_pushed"):
+        push_log_id = _uuid.uuid4()
+
+        fake_row = MagicMock(spec=ProductPushLog)
+        fake_row.id = push_log_id
+        fake_row.status = terminal_status
+
+        fake_result = MagicMock()
+        fake_result.fetchone.return_value = None
+
+        fake_db = AsyncMock()
+        fake_db.get = AsyncMock(return_value=fake_row)
+        fake_db.execute = AsyncMock(return_value=fake_result)
+        fake_db.commit = AsyncMock()
+
+        fake_session = MagicMock()
+        fake_session.return_value.__aenter__ = AsyncMock(return_value=fake_db)
+        fake_session.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("modules.ops_push.gateway.async_session", fake_session):
+            # Must not raise — just return silently
+            result = await execute_push(push_log_id)
+            assert result is None, f"Expected None for terminal status '{terminal_status}'"

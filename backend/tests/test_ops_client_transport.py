@@ -80,7 +80,11 @@ async def test_client_constructable():
 
 @pytest.mark.asyncio
 async def test_client_has_graphql_path():
-    """Client should expose the standard OPS GraphQL path."""
+    """Client should expose the OPS GraphQL path.
+
+    OPS serves GraphQL at /api/ (matches the n8n OnPrintShop node); the old
+    /graphql path returns the storefront HTML page, not the API.
+    """
     auth = OpsAuth(
         base_url="https://x",
         token_url="https://x/t",
@@ -88,4 +92,4 @@ async def test_client_has_graphql_path():
         client_secret="b",
     )
     client = OpsGraphQLClient(auth=auth)
-    assert client.GRAPHQL_PATH == "/graphql"
+    assert client.GRAPHQL_PATH == "/api/"

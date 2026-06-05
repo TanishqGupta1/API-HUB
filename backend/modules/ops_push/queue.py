@@ -47,9 +47,13 @@ async def enqueue_push(
 
             pool = await create_pool(WorkerSettings.redis_settings)
             try:
-                job = await pool.enqueue_job("run_push_job", str(push_log_id))
+                job = await pool.enqueue_job(
+                    "run_push_job",
+                    str(push_log_id),
+                    _job_id=f"push:{push_log_id}",
+                )
                 if job is None:
-                    # arq returns None when a job with the same job_id
+                    # arq returns None when a job with the same _job_id
                     # already exists (uniqueness guard). Treat as success
                     # — the prior job is what we want to run.
                     log.info(

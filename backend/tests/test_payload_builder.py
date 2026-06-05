@@ -401,10 +401,11 @@ class TestMutationPlanOrder:
         ctx = _ctx(variants=[_variant("PC61-WHT-M")])
         payload = _synthesize_payload(ctx)
         assert not any(s.mutation == "setProductCategory" for s in payload.plan)
-        # Category is deferred: OPS ProductInput uses an int `category_id`
-        # (nullable), not `category_name`, so the builder sends neither for now.
+        # Category lives on setProduct.input as category_id (Int), sourced from
+        # the storefront mapping and omitted when unmapped (default ctx has none).
         setProduct = payload.plan[0]
         assert "category_name" not in setProduct.variables["input"]
+        assert "category_id" not in setProduct.variables["input"]
 
 
 class TestVariantOrdering:
@@ -593,11 +594,7 @@ class TestImagePolicy:
         assert payload.primary_image_url == "https://x/front.jpg"
         assert payload.image_warnings == []
         setProduct = payload.plan[0]
-        # Image is captured on the payload (primary_image_url) but NOT sent in
-        # setProduct: OPS ProductInput has no `products_image` field (verified via
-        # schema introspection) — images upload via a separate OPS flow.
-        assert "products_image" not in setProduct.variables["input"]
-        assert "imagename" not in setProduct.variables["input"]
+        assert setProduct.variables["input"]["imagename"] == "https://x/front.jpg"
 
     def test_multiple_images_warns(self):
         ctx = _ctx(
@@ -627,7 +624,7 @@ class TestImagePolicy:
         payload = _synthesize_payload(ctx)
         assert payload.primary_image_url is None
         setProduct = payload.plan[0]
-        assert "products_image" not in setProduct.variables["input"]
+        assert "imagename" not in setProduct.variables["input"]
 
 
 # ===========================================================================
@@ -777,19 +774,30 @@ class TestSetProductVariables:
         for forbidden in ("category_name", "brand", "products_image", "products_description"):
             assert forbidden not in inp, f"{forbidden} is not a valid ProductInput field"
 
-    def test_category_is_deferred_not_sent_as_name(self):
-        """Category is deferred: OPS ProductInput uses int `category_id`
-        (nullable), so the builder sends neither `category_name` nor a bogus
-        category — regardless of whether the product has a category string."""
-        for cat_value in ("T-Shirts", None):
-            ctx = _ctx(
-                variants=[_variant("PC61-WHT-M")],
-                product=_product(category=cat_value),
-            )
-            payload = _synthesize_payload(ctx)
-            inp = payload.plan[0].variables["input"]
-            assert "category_name" not in inp
-            assert "category_id" not in inp  # deferred until category resolution is wired
+    def test_category_id_present_when_mapped(self):
+        """setProduct.input.category_id is the mapped OPS category id (Int).
+
+        OPS's ProductInput uses category_id (Int), sourced from the storefront
+        mapping (ProductStorefrontConfig.ops_category_id), not category_name.
+        """
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            product=_product(category="T-Shirts"),
+            storefront_config=SimpleNamespace(pricing_overrides=None, ops_category_id="42"),
+        )
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["input"]["category_id"] == 42
+
+    def test_category_omitted_when_unmapped(self):
+        """No storefront mapping → no category in setProduct (no 'Uncategorized' fallback)."""
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            product=_product(category=None),
+        )
+        payload = _synthesize_payload(ctx)
+        inp = payload.plan[0].variables["input"]
+        assert "category_id" not in inp
+        assert "category_name" not in inp
 
 
 # ===========================================================================
@@ -834,7 +842,10 @@ class TestStorefrontOverridesInPush:
     """Without these, a customer could be quoted X and have Y pushed to OPS."""
 
     def _cfg(self, overrides: dict) -> SimpleNamespace:
-        return SimpleNamespace(pricing_overrides=overrides)
+        # ops_category_id mirrors the real ProductStorefrontConfig model — the
+        # builder reads ctx.storefront_config.ops_category_id directly, so the
+        # attr must exist (None = unmapped → category omitted from setProduct).
+        return SimpleNamespace(pricing_overrides=overrides, ops_category_id=None)
 
     def test_no_storefront_config_leaves_price_untouched(self):
         ctx = _ctx(

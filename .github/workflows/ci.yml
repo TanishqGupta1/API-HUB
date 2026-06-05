@@ -1,0 +1,84 @@
+name: CI
+
+# PR test gate (Phase C of plans/2026-06-04-green-main-and-ci-gate.md).
+# Runs the backend pytest suite (against a real Postgres) and the frontend
+# lint/build on every PR into main, plus on push to main for a post-merge
+# signal. Branch protection (Phase D) requires the `backend-tests` and
+# `frontend-build` checks below.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  # ─── Backend: full pytest suite against a real Postgres ──────────────────────
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vg_user
+          POSTGRES_PASSWORD: vg_pass
+          POSTGRES_DB: vg_hub_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vg_user -d vg_hub_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # conftest.py prefers TEST_DATABASE_URL, then POSTGRES_URL. The schema is
+      # created via Base.metadata.create_all against this fresh DB.
+      POSTGRES_URL: postgresql+asyncpg://vg_user:vg_pass@localhost:5432/vg_hub_test
+      # Throwaway Fernet key — CI only, never used for real data. Required by the
+      # EncryptedJSON column type at import time.
+      SECRET_KEY: IhPMgSTzhxbfmpk9zZcQwvNh3Bt0t6x03BCb6vgvarg=
+      INGEST_SHARED_SECRET: ci-test-secret-not-for-prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        working-directory: backend
+        run: python -m pytest --tb=short -q
+
+  # ─── Frontend: lint + production build ───────────────────────────────────────
+  frontend-build:
+    runs-on: ubuntu-latest
+    env:
+      # Build-time dummy so `next build` doesn't fail on the missing public env.
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build

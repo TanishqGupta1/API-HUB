@@ -30,6 +30,15 @@ class OpsAuth:
     client_id: str
     client_secret: str
 
+    def __post_init__(self) -> None:
+        # Defensive trim: a stray leading/trailing space pasted into a URL via
+        # the UI otherwise breaks httpx with "missing protocol". Frozen
+        # dataclass → set via object.__setattr__.
+        for _f in ("base_url", "token_url", "client_id", "client_secret"):
+            _v = getattr(self, _f)
+            if isinstance(_v, str):
+                object.__setattr__(self, _f, _v.strip())
+
 
 @dataclass(frozen=True)
 class OpsResult:
@@ -44,7 +53,9 @@ class OpsResult:
 class OpsGraphQLClient:
     """OAuth-aware GraphQL client for OnPrintShop. Token cached per instance."""
 
-    GRAPHQL_PATH = "/graphql"
+    # OPS serves GraphQL at /api/ (matches the n8n OnPrintShop node). The old
+    # /graphql path returns the storefront HTML page, not the API.
+    GRAPHQL_PATH = "/api/"
 
     def __init__(self, auth: OpsAuth, *, timeout_seconds: float = 30.0) -> None:
         self.auth = auth
@@ -117,19 +128,23 @@ class OpsGraphQLClient:
         """POST the client-credentials grant, tolerating both token-endpoint shapes.
 
         OnPrintShop deployments differ: some require a JSON body (staging returns
-        401 for form-encoded), others accept form-urlencoded. Try JSON first, then
-        form — the same order the n8n OnPrintShop node uses. A 2xx that isn't JSON
-        with an access_token (e.g. an HTML page from a wrong path) is treated as a
-        miss so the next shape is tried.
+        401 for form-encoded), others accept form-urlencoded, and some expect the
+        client credentials via HTTP Basic auth. Try JSON, then form, then Basic —
+        the same order the n8n OnPrintShop node uses. A 2xx that isn't JSON with an
+        access_token (e.g. an HTML page from a wrong path) is treated as a miss so
+        the next shape is tried.
         """
+        cid, csecret = self.auth.client_id, self.auth.client_secret
         creds = {
             "grant_type": "client_credentials",
-            "client_id": self.auth.client_id,
-            "client_secret": self.auth.client_secret,
+            "client_id": cid,
+            "client_secret": csecret,
         }
         attempts: tuple[tuple[str, dict], ...] = (
             ("json", {"json": creds}),
             ("form", {"data": creds}),
+            ("basic", {"data": {"grant_type": "client_credentials"},
+                       "auth": (cid, csecret)}),
         )
         last_detail = "no attempt made"
         for kind, kwargs in attempts:
