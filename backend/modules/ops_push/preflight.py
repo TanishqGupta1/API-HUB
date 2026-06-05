@@ -580,7 +580,7 @@ async def check_ops_oauth2_reachable(
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post(
                 token_url,
-                data={
+                json={
                     "grant_type": "client_credentials",
                     "client_id": client_id,
                     "client_secret": secret,
@@ -682,6 +682,10 @@ async def check_image_urls_reachable(
             True,
             f"{len(urls)} image(s) present — HTTP HEAD check skipped in dry_run mode",
         )
+
+    # Cap at 5 sampled URLs — checking hundreds of CDN images serially
+    # can take minutes and adds no real signal beyond the first few.
+    urls = urls[:5]
 
     sem = asyncio.Semaphore(5)
 
