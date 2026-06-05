@@ -485,10 +485,22 @@ def _build_setProduct_step(
         "products_internal_title": ctx.product.supplier_sku,
         "visible": 1,
         "product_description": ctx.product.description or "",
-        # Required OPS fields for all products
-        "predefined_product_type": "1",   # standard product type
-        "price_defining_method": "qty",   # quantity-based pricing
-        "measurement_unit_id": 1,         # default unit (inches)
+        # ── Required OPS ProductInput fields for all products ──────────
+        # Phase 1 audit findings (June 2026):
+        #   * predefined_product_type — silent reject when null
+        #   * price_defining_method — silent reject of "qty" string;
+        #     OPS expects a numeric string. "1" = qty-based pricing
+        #     (verified against working products on staging.visualgraphx)
+        #   * measurement_unit_id — silent reject when 0/null
+        #   * enable_stock_management — required for updateProductStock
+        #     to find variants; without it, all stock writes fail
+        #   * product_type — working OPS products always have this set;
+        #     null may hide the product from some admin UI filters
+        "predefined_product_type": "1",
+        "price_defining_method": "1",
+        "measurement_unit_id": 1,
+        "enable_stock_management": "1",
+        "product_type": "1",
     }
     _cat = ctx.storefront_config.ops_category_id if ctx.storefront_config else None
     if _cat:

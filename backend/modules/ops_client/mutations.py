@@ -39,6 +39,39 @@ def _unwrap_list(data: dict | None, key: str) -> dict:
     return val or {}
 
 
+def _check_result(data: dict, mutation_name: str) -> OpsResult | None:
+    """Detect OPS application-level failures (HTTP 200 with `result: false`).
+
+    Background — Phase 1.1 of the OPS audit:
+      OPS returns 200 OK with `{result: false, message: "...", id: null}`
+      when a mutation is rejected at the application layer (missing required
+      field, invalid value, etc.). Without this check the caller treats the
+      response as success, the gateway records the step as `ok`, and the
+      downstream id-threading silently drops to None — producing phantom
+      "successful" pushes like PC54 (id 10001) that don't actually exist
+      in OPS.
+
+    Returns:
+      An error `OpsResult` when `result is False`, else `None` (success path).
+    """
+    # `result` may come back as bool or string from different OPS deployments.
+    # Treat both False (bool) and "false" (string) as the rejection signal.
+    result_val = data.get("result")
+    is_rejected = (
+        result_val is False
+        or (isinstance(result_val, str) and result_val.lower() == "false")
+    )
+    if is_rejected:
+        msg = data.get("message") or f"OPS rejected {mutation_name}"
+        return OpsResult(
+            ok=False,
+            ops_error_code="OPS_REJECTED",
+            ops_error_message=str(msg)[:400],
+            raw={"mutation": mutation_name, "ops_response": data},
+        )
+    return None
+
+
 async def set_product_category(
     *,
     client: OpsGraphQLClient,
@@ -52,7 +85,11 @@ async def set_product_category(
     )
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=_unwrap_list(result.data, "setProductCategory"), raw=result.raw)
+    data = _unwrap_list(result.data, "setProductCategory")
+    err = _check_result(data, "setProductCategory")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_product ──────────────────────────────────────────────────────────────
@@ -87,12 +124,11 @@ async def set_product(
     )
     if not result.ok:
         return result
-    data = result.data or {}
-    # setProduct returns a list when inputs is an array — unwrap first item
-    sp = data.get("setProduct")
-    if isinstance(sp, list):
-        sp = sp[0] if sp else {}
-    return OpsResult(ok=True, data=sp or {}, raw=result.raw)
+    data = _unwrap_list(result.data, "setProduct")
+    err = _check_result(data, "setProduct")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_product_size ─────────────────────────────────────────────────────────
@@ -125,7 +161,11 @@ async def set_product_size(
     )
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=_unwrap_list(result.data, "setProductSize"), raw=result.raw)
+    data = _unwrap_list(result.data, "setProductSize")
+    err = _check_result(data, "setProductSize")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_product_price ────────────────────────────────────────────────────────
@@ -165,7 +205,11 @@ async def set_product_price(
     result = await client.execute(_SET_PRODUCT_PRICE, variables={"inputs": [input_dict]})
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=_unwrap_list(result.data, "setProductPrice"), raw=result.raw)
+    data = _unwrap_list(result.data, "setProductPrice")
+    err = _check_result(data, "setProductPrice")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_assign_options ───────────────────────────────────────────────────────
@@ -193,7 +237,11 @@ async def set_assign_options(
     )
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=_unwrap_list(result.data, "setAssignOptions"), raw=result.raw)
+    data = _unwrap_list(result.data, "setAssignOptions")
+    err = _check_result(data, "setAssignOptions")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_additional_option ────────────────────────────────────────────────────
@@ -230,7 +278,11 @@ async def set_additional_option(
     )
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=_unwrap_list(result.data, "setAdditionalOption"), raw=result.raw)
+    data = _unwrap_list(result.data, "setAdditionalOption")
+    err = _check_result(data, "setAdditionalOption")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_additional_option_attributes ─────────────────────────────────────────
@@ -267,11 +319,11 @@ async def set_additional_option_attributes(
     )
     if not result.ok:
         return result
-    return OpsResult(
-        ok=True,
-        data=_unwrap_list(result.data, "setAdditionalOptionAttributes"),
-        raw=result.raw,
-    )
+    data = _unwrap_list(result.data, "setAdditionalOptionAttributes")
+    err = _check_result(data, "setAdditionalOptionAttributes")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_products_attribute_price ──────────────────────────────────────────────
@@ -310,11 +362,11 @@ async def set_products_attribute_price(
     )
     if not result.ok:
         return result
-    return OpsResult(
-        ok=True,
-        data=_unwrap_list(result.data, "setProductsAttributePrice"),
-        raw=result.raw,
-    )
+    data = _unwrap_list(result.data, "setProductsAttributePrice")
+    err = _check_result(data, "setProductsAttributePrice")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── update_product_stock ─────────────────────────────────────────────────────
@@ -353,7 +405,14 @@ async def update_product_stock(
     result = await client.execute(_UPDATE_PRODUCT_STOCK, variables=variables)
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=(result.data or {}).get("updateProductStock") or {}, raw=result.raw)
+    # updateProductStock is the one mutation that doesn't use array inputs;
+    # its response is a single dict, not a list. Still subject to the same
+    # application-level result-checking.
+    data = (result.data or {}).get("updateProductStock") or {}
+    err = _check_result(data, "updateProductStock")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_product_design ───────────────────────────────────────────────────────

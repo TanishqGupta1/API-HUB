@@ -24,7 +24,14 @@ from modules.ops_push.gateway import (
     _MUTATION_ID_ALIAS,
 )
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
-from modules.ops_client.mutations import _unwrap_list, set_product, set_product_size
+from modules.ops_client.mutations import (
+    _check_result,
+    _unwrap_list,
+    set_product,
+    set_product_size,
+    set_product_price,
+    update_product_stock,
+)
 
 pytestmark = pytest.mark.no_db
 
@@ -231,3 +238,162 @@ class TestFakeOpsClientReturnsId:
         assert len(fake.calls) == 2
         assert fake.calls[0]["method"] == "set_product"
         assert fake.calls[1]["method"] == "set_product_size"
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# _check_result — detect OPS application-level failures (Phase 1.1)
+# ───────────────────────────────────────────────────────────────────────────
+
+
+class TestCheckResult:
+    """Without this check, OPS returning {result:false, id:null} would be
+    silently treated as success — producing phantom 'pushed' products like
+    PC54 (id 10001) that don't actually exist in OPS."""
+
+    def test_returns_none_on_success(self):
+        """result=true means OPS accepted the mutation — pass through."""
+        assert _check_result({"result": True, "id": 540}, "setProduct") is None
+
+    def test_returns_none_when_no_result_field(self):
+        """Some mutations (e.g. setProductDesign) don't return `result`.
+        Don't treat absence of the field as a failure."""
+        assert _check_result({"id": 540}, "setProduct") is None
+
+    def test_returns_none_on_empty_dict(self):
+        assert _check_result({}, "setProduct") is None
+
+    def test_detects_bool_false(self):
+        err = _check_result(
+            {"result": False, "message": "Column 'X' cannot be null", "id": None},
+            "setProduct",
+        )
+        assert err is not None
+        assert err.ok is False
+        assert err.ops_error_code == "OPS_REJECTED"
+        assert "Column 'X' cannot be null" in (err.ops_error_message or "")
+
+    def test_detects_string_false_case_insensitive(self):
+        """Some OPS deployments return the result as a string, not bool."""
+        for val in ["false", "False", "FALSE"]:
+            err = _check_result({"result": val, "message": "bad"}, "setProduct")
+            assert err is not None, f"Failed to detect string {val!r} as rejection"
+            assert err.ok is False
+
+    def test_does_not_false_positive_on_truthy_strings(self):
+        """'true' string and unrelated values must NOT trigger rejection."""
+        assert _check_result({"result": "true"}, "setProduct") is None
+        assert _check_result({"result": "ok"}, "setProduct") is None
+        assert _check_result({"result": 1}, "setProduct") is None
+
+    def test_includes_mutation_name_in_default_message(self):
+        """Even without an OPS-provided message, the error tells you which
+        mutation failed — critical for diagnosing partial-failure step_results."""
+        err = _check_result({"result": False}, "setProductSize")
+        assert "setProductSize" in (err.ops_error_message or "")
+
+    def test_truncates_long_messages(self):
+        """OPS error messages can be huge (full SQL snippets). Cap to 400 chars
+        so step_results JSONB doesn't blow up storage."""
+        long_msg = "x" * 1000
+        err = _check_result({"result": False, "message": long_msg}, "setProduct")
+        assert err is not None
+        assert len(err.ops_error_message) <= 400
+
+    def test_preserves_raw_response_for_diagnostics(self):
+        """The full OPS response (incl. id:null, any other fields) is preserved
+        in `raw` so investigators can see exactly what OPS sent back."""
+        opsd = {"result": False, "message": "nope", "id": None, "extra": "data"}
+        err = _check_result(opsd, "setProduct")
+        assert err.raw is not None
+        assert err.raw["mutation"] == "setProduct"
+        assert err.raw["ops_response"] == opsd
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Integration: wrappers now propagate OPS application-level failures
+# ───────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_set_product_propagates_result_false(fake_client):
+    """The PC54 silent-failure scenario: OPS returns HTTP 200 with result:false.
+    Before Phase 1.1 this returned ok=True with id=null. Now it must return
+    ok=False with the OPS-provided error message."""
+    fake_client.execute.return_value = OpsResult(
+        ok=True,
+        data={"setProduct": [{
+            "result": False,
+            "message": "Column 'predefined_product_type' cannot be null",
+            "id": None,
+        }]},
+    )
+    result = await set_product(
+        client=fake_client, category_id=1, products_title="X", products_internal_title="X",
+    )
+    assert result.ok is False, "Phase 1.1 broken: silent failure leaked as success"
+    assert result.ops_error_code == "OPS_REJECTED"
+    assert "predefined_product_type" in (result.ops_error_message or "")
+
+
+@pytest.mark.asyncio
+async def test_set_product_size_propagates_result_false(fake_client):
+    """PC54's downstream symptom: setProductSize returns id:null for every
+    variant because the parent product never persisted."""
+    fake_client.execute.return_value = OpsResult(
+        ok=True,
+        data={"setProductSize": [{"result": False, "message": "no such product", "id": None}]},
+    )
+    result = await set_product_size(client=fake_client, products_id=10001, size_title="M")
+    assert result.ok is False
+    assert result.ops_error_code == "OPS_REJECTED"
+
+
+@pytest.mark.asyncio
+async def test_set_product_price_propagates_result_false(fake_client):
+    """PC61's price-loss scenario: 558 setProductPrice calls returned id:null
+    because price_defining_method was blank on the product."""
+    fake_client.execute.return_value = OpsResult(
+        ok=True,
+        data={"setProductPrice": [{"result": False, "message": "price method missing", "id": None}]},
+    )
+    result = await set_product_price(
+        client=fake_client, products_id=540, size_id=1229,
+        price="3.99", vendor_price="2.50",
+    )
+    assert result.ok is False
+    assert result.ops_error_code == "OPS_REJECTED"
+
+
+@pytest.mark.asyncio
+async def test_update_product_stock_propagates_result_false(fake_client):
+    """updateProductStock uses singular `input` (not arrays) but still
+    subject to the same result-checking."""
+    fake_client.execute.return_value = OpsResult(
+        ok=True,
+        data={"updateProductStock": {
+            "result": False,
+            "message": "Invalid Product SKU or initial stock not added!",
+            "id": None,
+            "stock_quantity": 0,
+        }},
+    )
+    result = await update_product_stock(
+        client=fake_client, action="Add", stock_quantity=42, product_sku="PC61-WHT-S",
+    )
+    assert result.ok is False
+    assert result.ops_error_code == "OPS_REJECTED"
+    assert "Invalid Product SKU" in (result.ops_error_message or "")
+
+
+@pytest.mark.asyncio
+async def test_set_product_success_still_works(fake_client):
+    """Sanity: a normal success path must still pass result-checking."""
+    fake_client.execute.return_value = OpsResult(
+        ok=True,
+        data={"setProduct": [{"result": True, "message": "ok", "id": 540}]},
+    )
+    result = await set_product(
+        client=fake_client, category_id=1, products_title="X", products_internal_title="X",
+    )
+    assert result.ok is True
+    assert result.data["id"] == 540
