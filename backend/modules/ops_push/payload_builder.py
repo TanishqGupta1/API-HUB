@@ -502,7 +502,12 @@ def _build_setProduct_step(
         "enable_stock_management": "1",
         "product_type": "1",
     }
-    _cat = ctx.storefront_config.ops_category_id if ctx.storefront_config else None
+    # Category resolution: per-product storefront override wins; if absent,
+    # fall back to the per-customer default_ops_category_id (Phase 2 of the
+    # OPS push audit). Without a category, OPS hides the product from the
+    # admin's default browse view, so we want a sensible fallback.
+    _cat = (ctx.storefront_config.ops_category_id if ctx.storefront_config else None) \
+        or getattr(ctx.customer, "default_ops_category_id", None)
     if _cat:
         try:
             inp["category_id"] = int(_cat)

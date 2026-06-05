@@ -771,7 +771,8 @@ class TestSetProductVariables:
         assert payload.plan[0].variables["inputs"][0]["category_id"] == 42
 
     def test_category_omitted_when_unmapped(self):
-        """No storefront mapping → no category in setProduct (no 'Uncategorized' fallback)."""
+        """No storefront mapping AND no customer default → no category in setProduct
+        (no silent 'Uncategorized' fallback)."""
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
             product=_product(category=None),
@@ -780,6 +781,45 @@ class TestSetProductVariables:
         inp = payload.plan[0].variables["inputs"][0]
         assert "category_id" not in inp
         assert "category_name" not in inp
+
+    def test_falls_back_to_customer_default_category(self):
+        """Phase 2 of the OPS push audit: when no per-product storefront
+        config has a category, use customer.default_ops_category_id so
+        products aren't created uncategorized (which OPS admin hides)."""
+        cust = _customer()
+        cust.default_ops_category_id = 539  # mimic the column we added
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            product=_product(category=None),
+            customer=cust,
+        )
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["category_id"] == 539
+
+    def test_storefront_override_beats_customer_default(self):
+        """When BOTH storefront config and customer default are set, the
+        per-product storefront override wins — more specific."""
+        cust = _customer()
+        cust.default_ops_category_id = 539
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            product=_product(category=None),
+            customer=cust,
+            storefront_config=SimpleNamespace(pricing_overrides=None, ops_category_id="42"),
+        )
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["category_id"] == 42
+
+    def test_customer_without_default_does_not_set_category(self):
+        """Customer fixture without default_ops_category_id attr at all
+        (e.g. pre-migration) must not crash and must omit the field."""
+        cust = _customer()  # no default_ops_category_id set
+        # Force the attr to be missing entirely (simulates an older SimpleNamespace)
+        if hasattr(cust, "default_ops_category_id"):
+            del cust.default_ops_category_id
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], customer=cust)
+        payload = _synthesize_payload(ctx)
+        assert "category_id" not in payload.plan[0].variables["inputs"][0]
 
 
 # ===========================================================================

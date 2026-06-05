@@ -30,7 +30,7 @@ async def test_set_product_category_sends_canonical_fields(fake_client):
         ok=True, data={"setProductCategory": [{"id": 42}]}
     )
     result = await m.set_product_category(
-        client=fake_client, category_name="T-Shirts", parent_id=0, visible=1,
+        client=fake_client, category_name="T-Shirts", parent_id=0, status="1",
     )
     assert result.ok
     _, kwargs = fake_client.execute.call_args
@@ -40,7 +40,9 @@ async def test_set_product_category_sends_canonical_fields(fake_client):
     v = inputs[0]
     assert v["category_name"] == "T-Shirts"
     assert v["parent_id"] == 0
-    assert v["visible"] == 1
+    # ProductCategoryInput uses `status` (String) not `visible` (Int)
+    assert v["status"] == "1"
+    assert "visible" not in v
 
 
 @pytest.mark.asyncio
@@ -49,7 +51,7 @@ async def test_set_product_category_extracts_id(fake_client):
         ok=True, data={"setProductCategory": [{"id": 99}]}
     )
     result = await m.set_product_category(
-        client=fake_client, category_name="Polos", parent_id=0, visible=1,
+        client=fake_client, category_name="Polos", parent_id=0, status="1",
     )
     assert result.ok
     # Wrapper unwraps the list and returns the first item's fields

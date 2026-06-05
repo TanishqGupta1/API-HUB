@@ -34,7 +34,7 @@ async def push_apparel_product(
         client=client,
         category_name=product.category_name or "Uncategorized",
         parent_id=0,
-        visible=1,
+        status="1",  # ProductCategoryInput uses `status` (String), not `visible` (Int)
     )
     if not r.ok:
         _record("set_product_category", False, error=r.ops_error_message)

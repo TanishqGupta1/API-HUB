@@ -77,11 +77,13 @@ async def set_product_category(
     client: OpsGraphQLClient,
     category_name: str,
     parent_id: int = 0,
-    visible: int = 1,
+    status: str = "1",
 ) -> OpsResult:
+    # ProductCategoryInput uses `status` (String) — not `visible` (Int).
+    # Verified against live OPS schema via introspection (June 2026).
     result = await client.execute(
         _SET_PRODUCT_CATEGORY,
-        variables={"inputs": [{"category_name": category_name, "parent_id": parent_id, "visible": visible}]},
+        variables={"inputs": [{"category_name": category_name, "parent_id": parent_id, "status": status}]},
     )
     if not result.ok:
         return result
