@@ -18,6 +18,11 @@ from modules.catalog.schemas import ProductIngest, VariantIngest
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
 from modules.ops_client.push import push_apparel_product
 
+# Hermetic — mocks client.execute, no DB or network required. Opt out of
+# the autouse DB-cleanup fixture in conftest.py so these tests pass
+# standalone without Postgres running.
+pytestmark = pytest.mark.no_db
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

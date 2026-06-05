@@ -8,6 +8,10 @@ Verifies:
 import pytest
 from modules.ops_client.client import OpsAuth, OpsResult, OpsGraphQLClient
 
+# Hermetic — no DB, no network. Opt out of the autouse DB-cleanup fixture
+# in conftest.py so these tests pass standalone without Postgres running.
+pytestmark = pytest.mark.no_db
+
 
 # ── OpsAuth tests ────────────────────────────────────────────────────────────
 
