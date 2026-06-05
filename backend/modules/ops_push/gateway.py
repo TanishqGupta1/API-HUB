@@ -212,47 +212,47 @@ class FakeOpsClient:
     def _record(self, method: str, variables: dict, response: dict) -> None:
         self.calls.append({"method": method, "input": variables, "response": response})
 
+    # All array-input mutations return `id` (matching live OPS contract).
+    # _normalize_mutation_response in execute_push aliases `id` to the named
+    # field downstream placeholders expect (products_id, size_id, etc.).
+
     async def set_product_category(self, variables: dict) -> dict:
-        r = {"category_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_product_category", variables, r)
         return r
 
     async def set_product(self, variables: dict) -> dict:
-        r = {"products_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_product", variables, r)
         return r
 
     async def set_product_size(self, variables: dict) -> dict:
-        # Mirror the live setProductSize response field (product_size_id) so
-        # dry-run placeholder resolution matches the real OPS contract.
-        r = {"product_size_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_product_size", variables, r)
         return r
 
     async def set_product_price(self, variables: dict) -> dict:
-        r = {"product_price_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_product_price", variables, r)
         return r
 
     async def set_assign_options(self, variables: dict) -> dict:
-        inp = variables.get("input", variables)
-        r = {"products_id": inp.get("products_id", self._counter)}
+        r = {"id": self._next_id()}
         self._record("set_assign_options", variables, r)
         return r
 
     async def set_additional_option(self, variables: dict) -> dict:
-        # Mirror the live setAdditionalOption response field (prod_add_opt_id).
-        r = {"prod_add_opt_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_additional_option", variables, r)
         return r
 
     async def set_additional_option_attributes(self, variables: dict) -> dict:
-        r = {"options_values_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_additional_option_attributes", variables, r)
         return r
 
     async def set_products_attribute_price(self, variables: dict) -> dict:
-        r = {"products_attributes_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_products_attribute_price", variables, r)
         return r
 

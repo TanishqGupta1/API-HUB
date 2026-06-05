@@ -88,4 +88,6 @@ async def test_client_has_graphql_path():
         client_secret="b",
     )
     client = OpsGraphQLClient(auth=auth)
-    assert client.GRAPHQL_PATH == "/graphql"
+    # OPS exposes GraphQL at /api/ (verified live against visualgraphx staging).
+    # The /graphql path returns the storefront HTML page, not the GraphQL API.
+    assert client.GRAPHQL_PATH == "/api/"
