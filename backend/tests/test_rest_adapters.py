@@ -51,7 +51,9 @@ class _FakeResp:
 
 
 def _supplier(**auth) -> SimpleNamespace:
+    import uuid as _uuid
     return SimpleNamespace(
+        id=_uuid.uuid4(),
         name="Test Supplier",
         auth_config=auth or {},
         base_url=None,
