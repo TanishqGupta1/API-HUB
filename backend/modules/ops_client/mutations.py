@@ -234,14 +234,22 @@ async def set_product_price(
     qty: int = 1,
     qty_to: int | None = None,
     visible: int = 1,
+    price_defining_method: str = "1",
 ) -> OpsResult:
+    # OPS requires:
+    # - price/vendor_price as Float (not string) — string causes INVALID_USER_INPUT
+    # - price_defining_method — missing causes "Price Defining method is required"
+    if price is None or vendor_price is None:
+        return OpsResult(ok=False, ops_error_code="MISSING_PRICE",
+                         ops_error_message="price and vendor_price must not be None")
     input_dict: dict = {
         "products_id": products_id,
         "size_id": size_id,
         "qty": qty,
-        "price": price,
-        "vendor_price": vendor_price,
-        "visible": visible,
+        "price": float(price),
+        "vendor_price": float(vendor_price),
+        "visible": str(visible),
+        "price_defining_method": price_defining_method,
     }
     if qty_to is not None:
         input_dict["qty_to"] = qty_to
