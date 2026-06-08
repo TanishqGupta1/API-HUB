@@ -237,3 +237,63 @@ async def get_product_by_sku(
         return result
     payload = (result.data or {}).get("getProductBySku") or {}
     return OpsResult(ok=True, data=payload, raw=result.raw)
+
+
+# ── get_product_stocks (Phase 6 — stock_id read-back) ───────────────────────
+#
+# OPS's updateProductStock requires either stock_id or product_sku to identify
+# the variant. The catch:
+#   * There is no per-size SKU field anywhere in OPS's product / size schema;
+#     OPS appears to assume SKUs were assigned via the admin UI.
+#   * stock entries (stock_id rows) only exist for variants where an admin
+#     manually initialized stock through the OPS UI. They are NOT auto-created
+#     by setProductSize or by enabling enable_stock_management.
+#
+# This query lets the gateway read the existing stock entries for a product
+# after setProductSize completes, then thread the stock_id into each
+# updateProductStock step (instead of the supplier SKU that OPS doesn't know
+# about). Variants without a stock entry are skipped with an actionable
+# warning so an operator can initialize them in OPS admin.
+
+_GET_PRODUCT_STOCKS = """
+query GetProductStocks($product_id: Int, $limit: Int, $offset: Int) {
+  productStocks(product_id: $product_id, limit: $limit, offset: $offset) {
+    productStocks {
+      stock_id
+      size_id
+      size_title
+      stock_quantity
+    }
+  }
+}
+""".strip()
+
+
+async def get_product_stocks(
+    *,
+    client: OpsGraphQLClient,
+    product_id: int,
+    limit: int = 500,
+) -> OpsResult:
+    """Return the list of existing OPS stock entries for a product.
+
+    Returns ``OpsResult.data = {"productStocks": [...]}`` on success
+    (possibly empty list when no entries exist). The "Data not found"
+    error OPS returns for products with zero stock entries is mapped to
+    an empty list so callers don't need to special-case the error path.
+    """
+    result = await client.execute(
+        _GET_PRODUCT_STOCKS, variables={"product_id": product_id, "limit": limit, "offset": 0},
+    )
+    if not result.ok:
+        # OPS returns DATA_NOT_FOUND when no stock entries exist — treat
+        # as "empty list" so callers can iterate cleanly.
+        if (result.ops_error_code or "") == "DATA_NOT_FOUND":
+            return OpsResult(ok=True, data={"productStocks": []}, raw=result.raw)
+        return result
+    payload = (result.data or {}).get("productStocks") or {}
+    return OpsResult(
+        ok=True,
+        data={"productStocks": payload.get("productStocks") or []},
+        raw=result.raw,
+    )
