@@ -328,14 +328,12 @@ async def test_get_decoration_returns_existing(client, seed_supplier):
 
 
 @pytest.mark.asyncio
-async def test_get_decoration_returns_empty_when_none(client):
+async def test_get_decoration_returns_404_when_none(client):
     import uuid
     fake_cid = uuid.uuid4()
     fake_pid = uuid.uuid4()
     resp = await client.get(f"/api/customers/{fake_cid}/products/{fake_pid}/decorations")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["decoration_options"] == []
+    assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

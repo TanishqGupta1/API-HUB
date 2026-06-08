@@ -23,7 +23,7 @@ class DecorationRead(BaseModel):
     customer_id: UUID
     product_id: UUID
     decoration_options: list[DecorationOptionDict]
-    updated_at: Optional[datetime] = None  # None when no decoration row exists yet
+    updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
