@@ -3,7 +3,39 @@
 > Source of truth for what is actually implemented in the codebase.
 > The master plan lives in `plans/2026-04-14-v0-proof-of-concept.md` — do not edit that file here.
 
-Last updated: 2026-04-22
+Last updated: 2026-06-04
+
+---
+
+## Current State (2026-06-04)
+
+> The live source of truth for the path to production is
+> `plans/2026-06-02-production-readiness.md`. The V0 task-by-task detail below is
+> retained for history but no longer reflects the full system.
+
+**V0 (proof of concept) — shipped.** All backend modules + frontend screens listed
+in the Quick Status table are implemented. The `ps_directory` and `catalog` routes
+that the V0 detail below marks "missing" now exist and are registered in `main.py`.
+
+**V1 (integration pipeline) — shipped.** All four supplier adapters are wired
+end-to-end (discover → hydrate → persist → record): SanMar SOAP, Alphabroder SOAP,
+S&S REST, 4Over REST-HMAC. SanMar product images come from SOAP `getMediaContent`
+(MediaService/v110), normalized into `ingest.images`.
+
+**Production-readiness plan (2026-06-02):**
+- **Phase 1 — land in-flight PRs:** ✅ complete (#159, #160 merged; 8 security issues closed).
+- **Phase 2 — durable push/sync queue + OPS read-back/dedup:** ✅ landed (#163, #164).
+- **Phase 3 — test hardening:** ✅ landed (#165); suite green (~637 tests collected).
+- **Phase 4 — hygiene & optimization:** in progress (2026-06-04):
+  - ✅ Removed the mocked lazy-image (SanMar FTP) feature — `sanmar_ftp.py`,
+    `images/service.py`, `scripts/sync_images.py`, the `ENABLE_LAZY_IMAGES`-gated
+    caller in `catalog/routes.py`, and `tests/test_image_pipeline.py`. Real images
+    come from SOAP MediaContent; the FTP path was mock-only. (`last_image_fetch_attempt_at`
+    is kept — it's used by the real `images/mirror.py` pipeline.)
+  - ✅ Wired the "Sync from 4Over" button on Print Products into the standard supplier
+    import flow (`/suppliers/{id}/import`); disabled only when no 4Over supplier exists.
+  - ⏸ REST delta-sync (S&S + 4Over `discover_changed`) still falls back to full
+    re-fetch — deferred until volume justifies it (not a blocker).
 
 ---
 
@@ -351,9 +383,14 @@ backend/
   requirements.txt           ✅  All Python deps including python-dotenv
   modules/
     suppliers/               ✅  Model, schemas, full CRUD routes, endpoint cache service, field mappings endpoint
-    ps_directory/            ✅  Client + schemas  |  ❌ routes.py missing
-    catalog/                 ✅  Models + schemas  |  ❌ routes.py missing
+    ps_directory/            ✅  Client + schemas + routes
+    catalog/                 ✅  Models + schemas + routes
     customers/               ✅  Model, schemas, full CRUD routes, __init__
     markup/                  ✅  Model, schemas, full CRUD routes, __init__
     push_log/                ✅  Model, schemas, routes, __init__
 ```
+
+> Many more modules have shipped since V0 (`auth`, `ops_push`, `ops_client`,
+> `integrations`, `images`, `webhooks`, `sync_jobs`, `rest_connector`,
+> `customer_catalog`, `pricing`, `decorations`, …). See the live module tree under
+> `backend/modules/` and `plans/2026-06-02-production-readiness.md` for current scope.

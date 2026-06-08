@@ -105,7 +105,16 @@ Squash-merge `fix/payload-builder-tests-ops-schema` → `main`. Conventional tit
 
 ### C1. Backend job
 - `services: postgres:16` (env: `POSTGRES_USER/PASSWORD/DB` matching `POSTGRES_URL`), health-check.
-- steps: checkout → `actions/setup-python@v5` (3.12) → `pip install -r backend/requirements.txt` → set `POSTGRES_URL`/`SECRET_KEY`/`INGEST_SHARED_SECRET` env → `cd backend && python -m pytest -q`.
+- steps: checkout → `actions/setup-python@v5` (3.12) → `pip install -r backend/requirements.txt` → set `POSTGRES_URL`/`SECRET_KEY`/`INGEST_SHARED_SECRET` env → **`cd backend && alembic upgrade head`** → `cd backend && python -m pytest -q`.
+
+> **Amendment (2026-06-05):** the original C1 omitted the schema-build step and
+> CI failed with `relation "customers" does not exist`. A fresh CI Postgres is
+> empty, and `conftest.py`'s `create_all` runs too late — the autouse
+> `_cleanup_around_test` fixture issues `DELETE FROM customers` before
+> `_create_schema` runs. The local suite only passed because the dev DB was
+> pre-built (alembic + create_all). **Fix:** run `alembic upgrade head` (reads
+> `POSTGRES_URL`, applies all 11 migrations) before pytest. Validated against a
+> fresh DB: migrations + create_all → DB-backed tests green.
 
 ### C2. Frontend job
 - checkout → `actions/setup-node@v4` (Node 20) → `cd frontend && npm ci` → `npm run lint` → `npm run build`.
