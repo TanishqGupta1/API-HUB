@@ -22,6 +22,7 @@ from modules.integrations.schemas import PushRequest, PushRequestAccepted, PushR
 from modules.markup.engine import calculate_price
 from modules.ops_client import mutations as _m
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
+from modules.ops_client.fake import FakeOpsClient
 from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
 from modules.ops_push.preflight import run_preflight
 from modules.ops_push.verify import verify_pushed_product
@@ -310,91 +311,6 @@ class OpsClientAdapter:
             return data
 
         return _invoke
-
-
-class FakeOpsClient:
-    """Dry-run client — fabricates IDs and records calls. No OPS traffic."""
-
-    is_dry_run: bool = True  # sentinel checked by _resolve_stock_id_for_size
-
-    def __init__(self) -> None:
-        self.calls: list[dict] = []
-        self._counter = 10000
-
-    async def aclose(self) -> None:
-        pass
-
-    async def execute(self, query: str, *, variables: dict | None = None) -> OpsResult:
-        """Dry-run has no real OPS to query. Report 'no existing product' so the
-        dedup path treats every dry-run as a create (mirrors the empty-result
-        contract of get_product_by_sku). Prevents the AttributeError that used to
-        make dry-run dedup silently no-op."""
-        return OpsResult(ok=True, data={"getProductBySku": {}})
-
-    def _next_id(self) -> int:
-        self._counter += 1
-        return self._counter
-
-    def _record(self, method: str, variables: dict, response: dict) -> None:
-        self.calls.append({"method": method, "input": variables, "response": response})
-
-    # All array-input mutations return `id` (matching live OPS contract).
-    # _normalize_mutation_response in execute_push aliases `id` to the named
-    # field downstream placeholders expect (products_id, size_id, etc.).
-
-    async def set_product_category(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product_category", variables, r)
-        return r
-
-    async def set_product(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product", variables, r)
-        return r
-
-    async def set_product_size(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product_size", variables, r)
-        return r
-
-    async def set_product_price(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product_price", variables, r)
-        return r
-
-    async def set_assign_options(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_assign_options", variables, r)
-        return r
-
-    async def set_additional_option(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_additional_option", variables, r)
-        return r
-
-    async def set_additional_option_attributes(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_additional_option_attributes", variables, r)
-        return r
-
-    async def set_products_attribute_price(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_products_attribute_price", variables, r)
-        return r
-
-    async def set_products_image_gallery(self, variables: dict) -> dict:
-        # Gallery returns {result, message} (no id) — mirror that shape.
-        r = {"result": True, "message": "dry-run image gallery ok"}
-        self._record("set_products_image_gallery", variables, r)
-        return r
-
-    async def update_product_stock(self, variables: dict) -> dict:
-        r = {
-            "stock_id": self._counter,
-            "stock_quantity": (variables.get("input") or {}).get("stock_quantity", 0),
-        }
-        self._record("update_product_stock", variables, r)
-        return r
 
 
 def _build_live_client(customer: Customer) -> OpsClientAdapter:
