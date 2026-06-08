@@ -1,6 +1,6 @@
 # Pending Work — API-HUB
 
-> Snapshot: 2026-06-08. Source: PR review + codebase exploration session.
+> Snapshot: 2026-06-08 (updated). Source: PR review + codebase exploration session.
 > Focus is the OPS push pipeline (M1 gateway), which is **not production-ready**.
 
 ## Legend
@@ -14,15 +14,16 @@
 | # | Item | Owner | Detail |
 |---|------|-------|--------|
 | 🔴 1.1 | `setProduct` returns `INTERNAL_SERVER_ERROR` on OPS staging for **every** payload | OPS | Same token creates categories + runs queries fine → server-side resolver bug. Needs OPS Express app-server log. See `docs/ops-staging-setproduct-issue.md`. **Nothing creates in OPS until fixed.** |
-| 🔴 1.2 | Gateway records OPS `result:false` as `ok` (silent failure) | DEV | `gateway.py` `_invoke` returns `data or {}` with no rejection check. OPS returns HTTP 200 + `result:false` on app-layer rejects → step logged success while data dropped (PC54 phantom id, 558 dropped prices). **Fix lives in unmerged PR #172.** |
+| ✅ 1.2 | ~~Gateway records OPS `result:false` as `ok` (silent failure)~~ | DEV | Fixed in #172 + #177. `_invoke` now checks `result:false` and raises. `_check_result` + `TestCheckResult` unit tests added. Silent-failure guard closed. |
 
 ---
 
-## 2. Open PR
+## 2. Open PRs
 
-| # | PR | State | Action needed |
-|---|-----|-------|---------------|
-| 🟠 2.1 | **#172** (Vidhi) — default category + stock read-back + silent-failure guard | CONFLICTING, no migration | (a) Rebase onto main (conflicts w/ merged #169/#173 in `mutations.py`/`gateway.py`/`payload_builder.py`/`push.py` + 3 tests). (b) **Add Alembic migration** `0012_*` for `Customer.default_ops_category_id` — currently missing, breaks prod `alembic upgrade head`. (c) Resolve stock strategy vs merged #169 (deferred-by-default) — recommend deferral default + read-back behind the flag. Lands the **1.2 silent-failure guard** — highest value. |
+| # | PR | State | Notes |
+|---|-----|-------|-------|
+| ✅ 2.1 | **#172** (Vidhi) — default category + stock read-back + silent-failure guard | **MERGED** | Conflicts resolved, migration 0012 added, stock read-back behind `OPS_PUSH_INCLUDE_STOCK` flag. |
+| ✅ — | **#177** — dead-code cleanup, verify wiring, migration 0012 | **MERGED** | Deleted `push.py` + orphaned wrapper fns, wired `_verify_b7_readback`, CI green. |
 
 ---
 
@@ -32,8 +33,8 @@
 |---|------|-------|--------|
 | 🟠 3.1 | Apparel variant model is wrong | OPS + DEV | Uses `setProductSize`; OPS apparel wants `setAdditionalOption` + `setAdditionalOptionAttributes` (ref product 361). Products land but aren't properly shoppable. Plumbing half-built (`OptionStrategy` + builders exist in `payload_builder.py`, not wired for apparel). Needs Christian's confirm, then flip strategy. See `docs/backlog-ops-additional-options.md`. |
 | 🟡 3.2 | Images OFF by default (`OPS_PUSH_INCLUDE_IMAGES=0`) | OPS + DEV | OPS GraphQL can't ingest image binaries — stores `products_large_image_name` string verbatim, never fetches URLs; no upload mutation; `/api/*` is GraphQL-only (no REST upload). Enable only once images uploaded into OPS media (admin URL-fetch or an upload API). |
-| 🟡 3.3 | Stock OFF by default (`OPS_PUSH_INCLUDE_STOCK=0`) | DEV | OPS `updateProductStock` needs `stock_id`; OPS has no per-size SKU field + no API to create initial stock entries (admin must init via UI). #172's read-back resolves `stock_id` from a `productStocks` query — land behind the flag. |
-| 🟡 3.4 | Wire `verify_pushed_product()` into gateway finalize | DEV | `modules/ops_push/verify.py` (merged via #173) is standalone. Wire into push-finalize so push status reflects what actually persisted in OPS, not mutation acks (B7). |
+| 🟡 3.3 | Stock OFF by default (`OPS_PUSH_INCLUDE_STOCK=0`) | DEV | OPS `updateProductStock` needs `stock_id`; stock read-back via `productStocks` query is implemented (#172) and live behind the flag. Enable once OPS admin initialises stock entries for variants via UI. |
+| ✅ 3.4 | ~~Wire `verify_pushed_product()` into gateway finalize~~ | DEV | Done in #177. `_verify_b7_readback` wired into `execute_push` finalize step. |
 
 ---
 
@@ -41,10 +42,10 @@
 
 | # | Item | Detail |
 |---|------|--------|
-| ⚪ 4.1 | Delete legacy push path | `modules/ops_client/push.py` (`push_apparel_product`) is **orphaned** (zero callers). It's the only caller of the 12 `mutations.py` wrapper fns. M1 gateway uses the raw `_SET_*` query consts, bypassing wrappers. Delete `push.py` + the 12 wrapper fns; **keep the 12 query consts**. (This is why #173's wrapper fix targeted dead code.) |
-| ⚪ 4.2 | Consolidate duplicate `FakeOpsClient` | Two doubles: `ops_client/fake.py` (tests) + inline `gateway.py:211` (dry-run). They drift. Unify. |
+| ✅ 4.1 | ~~Delete legacy push path~~ | Done in #177. `push.py` deleted, 12 orphaned wrapper fns removed, query consts kept. |
+| ✅ 4.2 | ~~Consolidate duplicate `FakeOpsClient`~~ | Done. Inline class removed from `gateway.py`; `ops_client/fake.py` is now the single canonical source with `is_dry_run` sentinel + full `execute()` routing. |
 | ⚪ 4.3 | Single-source the n8n node tree | `api-hub/n8n-nodes-onprintshop/` AND `../n8n-nodes-onprintshop/` both exist → drift risk. Symlink or submodule. |
-| ⚪ 4.4 | Decide fate of n8n OnPrintShop node | Post-M1 pivot, OPS push is FastAPI-owned. Node's ops now duplicate gateway intent ("legacy flows" only). Archive or keep as documented fallback — don't dual-maintain. |
+| ✅ 4.4 | ~~Decide fate of n8n OnPrintShop node~~ | Done by Sinchana (#168). Documented as legacy fallback; FastAPI gateway is the primary OPS push path. |
 
 ---
 
@@ -52,23 +53,24 @@
 
 | # | Item | Detail |
 |---|------|--------|
-| 🟡 5.1 | No issue tracking | `gh issue list` is empty. File issues for §1–§3 so the team has a board. |
+| ✅ 5.1 | ~~No issue tracking~~ | Done by Sinchana — issues filed on GitHub board. |
 | 🟡 5.2 | REST delta-sync deferred | S&S + 4Over `discover_changed` fall back to full re-fetch. Optimize when volume justifies (not a blocker). |
-| ⚪ 5.3 | Local DB not runnable here | api-hub Postgres can't start on this machine — port 5432 held by an unrelated project (`clarity-v2`). No api-hub pgdata volume exists. Push logs live on whatever env ran the pushes (remote/staging or a teammate), not locally. |
+| — | 5.3 | Not actionable — local port conflict on the audit machine (5432 held by `clarity-v2`). No action needed. |
 
 ---
 
-## Recommended sequence
-1. **Chase 1.1** (OPS `setProduct` 500) — everything downstream is dead without it.
-2. **Land #172** (rebase + migration + stock decision) → closes 1.2 silent-failure guard.
-3. **Confirm 3.1** apparel model with Christian → flip `OptionStrategy`.
-4. **Clear debt** 4.1–4.3 (cheap, local, removes the #173-style confusion).
-5. **File issues** (5.1) so this list lives on the board, not just here.
+## Recommended next steps
+1. **Chase 1.1** — draft message to Christian with exact repro for `setProduct` 500. Nothing ships until OPS fixes this.
+2. **Ask Christian** — does PROD `setProduct` work? If yes, you're closer than staging signals suggest.
+3. **Write standalone repro script** — env-driven, no DB, one command for Christian to reproduce + retest.
+4. **Hold** on 3.1 / 3.2 / 3.3 — all gated on Christian's answers (apparel model, store binding, image upload path).
 
 ---
 
-## Recently shipped (this session — for context)
-- #174 merged — ops-config authz dedupe + docstring fix.
-- #169 merged — lazy-image removal, 4Over button, SafeImage, OAuth token flow, `adapter.execute` dedup fix, CI gate (Postgres + alembic), image gallery (deferred), stock (deferred).
-- #173 merged — `price_defining_method` on M1 price step (live price fix), float coercion, `verify.py`.
-- #175 closed — duplicate of #169.
+## Shipped (closed this sprint)
+- ✅ #172 merged — default category + stock read-back + silent-failure guard
+- ✅ #177 merged — dead-code cleanup (`push.py`), B7 verify wiring, migration 0012
+- ✅ #174 merged — ops-config authz dedupe + docstring fix
+- ✅ #173 merged — `price_defining_method` on M1 price step, float coercion, `verify.py`
+- ✅ #169 merged — lazy-image removal, 4Over button, SafeImage, OAuth token flow, dedup fix, CI gate
+- ✅ #168 merged — Sinchana: n8n node fate decision, issue tracking (4.4, 5.1, 5.2)
