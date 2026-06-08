@@ -18,6 +18,7 @@ class Customer(Base):
     ops_auth_config: Mapped[dict] = mapped_column(EncryptedJSON, default=dict)
     logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # ops_auth_config stores: { "client_secret": "..." }
+    default_ops_category_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Per-customer default OPS category. Used as the fallback in
     # _build_setProduct_step when a product has no storefront-config category.

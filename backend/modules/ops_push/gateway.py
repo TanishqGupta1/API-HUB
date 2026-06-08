@@ -24,6 +24,7 @@ from modules.ops_client import mutations as _m
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
 from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
 from modules.ops_push.preflight import run_preflight
+from modules.ops_push.verify import verify_pushed_product
 from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
 from modules.suppliers.models import Supplier
@@ -119,6 +120,37 @@ async def _verify_post_push(
         )
 
 
+async def _verify_b7_readback(ops: Any, ops_product_id: Any) -> None:
+    """Full B7 read-back: sizes, stock, images, prices. Opt-in via OPS_POST_PUSH_VERIFY=1.
+    Never blocks or raises — logs only."""
+    import os as _os
+    if _os.getenv("OPS_POST_PUSH_VERIFY", "0") != "1":
+        return
+    try:
+        pid = int(ops_product_id)
+    except (TypeError, ValueError):
+        logger.warning("verify[B7]: non-numeric ops_product_id=%r, skipping", ops_product_id)
+        return
+    try:
+        report = await verify_pushed_product(ops, pid)
+        if not report.get("exists"):
+            logger.warning(
+                "verify[B7]: product NOT found in OPS after push — products_id=%s", pid
+            )
+        else:
+            logger.info(
+                "verify[B7]: products_id=%s sizes=%d stock_rows=%d images=%d prices=%d/%d",
+                pid,
+                report["size_count"],
+                report["stock_rows"],
+                report["image_count"],
+                report["price_check"]["with_price_rows"],
+                report["price_check"]["sizes_sampled"],
+            )
+    except Exception:
+        logger.exception("verify[B7]: raised for products_id=%s", pid)
+
+
 # Per-product cache of (size_id -> stock_id) maps. Populated lazily on the
 # first updateProductStock call of a product so we only query OPS once per
 # product per push (not once per variant).
@@ -138,11 +170,6 @@ async def _resolve_stock_id_for_size(
 
     Defensive: returns None on any error so the caller records an
     actionable warning instead of aborting the push.
-
-    Dry-run / FakeOpsClient: the dry-run client has no `execute` method
-    (it implements per-mutation methods directly). Return a synthetic
-    stock_id so dry-runs exercise the full plan and don't generate
-    spurious "no stock entry" warnings.
     """
     if product_id is None:
         return None
@@ -909,7 +936,9 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 and not push_log.dry_run
                 and push_log.supplier_sku
             ):
-                await _verify_post_push(getattr(client, "_client", client), push_log.supplier_sku, ops_product_id)
+                raw_client = getattr(client, "_client", client)
+                await _verify_post_push(raw_client, push_log.supplier_sku, ops_product_id)
+                await _verify_b7_readback(raw_client, ops_product_id)
 
             # ── Persist results ──
             push_log.step_results = _redact_auth(step_results)

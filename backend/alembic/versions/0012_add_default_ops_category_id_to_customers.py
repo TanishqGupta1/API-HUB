@@ -1,6 +1,6 @@
 """Add default_ops_category_id to customers.
 
-Revision ID: 0012_add_default_ops_category_id
+Revision ID: 0012_add_default_ops_category
 Revises: 0011_add_part_id
 Create Date: 2026-06-08
 
@@ -13,7 +13,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0012_add_default_ops_category_id"
+revision = "0012_add_default_ops_category"
 down_revision = "0011_add_part_id"
 branch_labels = None
 depends_on = None

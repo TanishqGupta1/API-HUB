@@ -76,11 +76,11 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  target: { system: 'ops', customer_id: $('Build Product + Target').item.json.customer_id },\n  source: { supplier_slug: $('Build Product + Target').item.json.supplier_slug },\n  product_ref: { supplier_sku: $('Build Product + Target').item.json.supplier_sku },\n  dry_run: true,\n  callback: { url: $env.CALLBACK_URL, secret: $env.CALLBACK_SECRET }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  target: { system: 'ops', customer_id: $('Build Product + Target').item.json.customer_id },\n  source: { supplier_slug: $('Build Product + Target').item.json.supplier_slug },\n  product_ref: { supplier_sku: $('Build Product + Target').item.json.supplier_sku },\n  dry_run: false,\n  callback: { url: $env.CALLBACK_URL, secret: $env.CALLBACK_SECRET }\n}) }}",
         "options": {}
       },
       "id": "push-request",
-      "name": "2. Send — Create Push Request (dry_run)",
+      "name": "2. Send — Create Push Request (live)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -105,7 +105,7 @@
     },
     {
       "parameters": {
-        "url": "={{ $env.API_BASE_URL }}/api/integrations/v1/push-requests/{{ $('2. Send — Create Push Request (dry_run)').item.json.push_log_id }}",
+        "url": "={{ $env.API_BASE_URL }}/api/integrations/v1/push-requests/{{ $('2. Send — Create Push Request (live)').item.json.push_log_id }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -203,14 +203,14 @@
       "main": [
         [
           {
-            "node": "2. Send — Create Push Request (dry_run)",
+            "node": "2. Send — Create Push Request (live)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "2. Send — Create Push Request (dry_run)": {
+    "2. Send — Create Push Request (live)": {
       "main": [
         [
           {
