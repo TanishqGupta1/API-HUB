@@ -1,7 +1,7 @@
 import uuid as uuid_mod
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base, EncryptedJSON
@@ -18,6 +18,7 @@ class Customer(Base):
     ops_auth_config: Mapped[dict] = mapped_column(EncryptedJSON, default=dict)
     logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # ops_auth_config stores: { "client_secret": "..." }
+    default_ops_category_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

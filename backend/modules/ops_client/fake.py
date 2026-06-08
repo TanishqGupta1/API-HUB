@@ -48,32 +48,32 @@ class FakeOpsClient:
         if name == "SetProductCategory":
             return OpsResult(
                 ok=True,
-                data={"setProductCategory": {"category_id": self._allocate_id()}},
+                data={"setProductCategory": {"id": self._allocate_id()}},
             )
         if name == "SetProduct":
             return OpsResult(
                 ok=True,
-                data={"setProduct": {"products_id": self._allocate_id()}},
+                data={"setProduct": {"id": self._allocate_id()}},
             )
         if name == "SetProductSize":
             return OpsResult(
                 ok=True,
-                data={"setProductSize": {"product_size_id": self._allocate_id()}},
+                data={"setProductSize": {"id": self._allocate_id()}},
             )
         if name == "SetProductPrice":
             return OpsResult(
                 ok=True,
-                data={"setProductPrice": {"product_price_id": self._allocate_id()}},
+                data={"setProductPrice": {"id": self._allocate_id()}},
             )
         if name == "SetAdditionalOption":
             return OpsResult(
                 ok=True,
-                data={"setAdditionalOption": {"prod_add_opt_id": self._allocate_id()}},
+                data={"setAdditionalOption": {"id": self._allocate_id()}},
             )
         if name == "SetAdditionalOptionAttributes":
             return OpsResult(
                 ok=True,
-                data={"setAdditionalOptionAttributes": {"attribute_id": self._allocate_id()}},
+                data={"setAdditionalOptionAttributes": {"id": self._allocate_id()}},
             )
         if name == "SetProductsAttributePrice":
             return OpsResult(
