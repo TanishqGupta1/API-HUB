@@ -624,6 +624,47 @@ class TestImagePolicy:
         setProduct = payload.plan[0]
         assert "imagename" not in setProduct.variables["inputs"][0]
 
+    def test_image_gallery_step_present_when_opted_in(self, monkeypatch):
+        # Images are opt-in (OPS_PUSH_INCLUDE_IMAGES); OPS can't fetch URLs yet.
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            images=[
+                _image("https://x/front.jpg", image_type="front", sort_order=0),
+                _image("https://x/back.jpg", image_type="back", sort_order=1),
+            ],
+        )
+        payload = _synthesize_payload(ctx)
+        gallery = [s for s in payload.plan if s.mutation == "setProductsImageGallery"]
+        assert len(gallery) == 1
+        step = gallery[0]
+        # products_id is a forward-ref to step 1, optimizeimg on
+        assert step.variables["products_id"] == "$step1.products_id"
+        assert step.variables["optimizeimg"] == 1
+        assert step.requires_response_from == [1]
+        arr = step.variables["input"]["image_arr"]
+        assert [i["products_large_image_name"] for i in arr] == [
+            "https://x/front.jpg",
+            "https://x/back.jpg",
+        ]
+        assert all(i["products_image_gallery_id"] == 0 for i in arr)
+
+    def test_no_image_gallery_when_no_images(self, monkeypatch):
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], images=[])
+        payload = _synthesize_payload(ctx)
+        assert not any(s.mutation == "setProductsImageGallery" for s in payload.plan)
+
+    def test_image_gallery_off_by_default(self):
+        # Default is opt-out: OPS doesn't fetch external URLs, so the step is
+        # deferred until images are uploaded into OPS media (see payload_builder).
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            images=[_image("https://x/front.jpg", image_type="front")],
+        )
+        payload = _synthesize_payload(ctx)
+        assert not any(s.mutation == "setProductsImageGallery" for s in payload.plan)
+
 
 # ===========================================================================
 # Customer title prefix
@@ -654,7 +695,10 @@ class TestTitlePrefix:
 
 
 class TestPC61Smoke:
-    def test_pc61_plan_shape(self):
+    def test_pc61_plan_shape(self, monkeypatch):
+        # Opt into image steps so the smoke covers the full mutation shape.
+        # (Stock is unconditional on this base; the env var is a no-op here.)
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
         # Match the SanMar PC61 contour: 56 variants, 1 mapped option
         colors = ["Black", "White", "Red", "Royal", "Navy", "Ash", "Heather Gray"]
         sizes = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL"]
@@ -677,12 +721,14 @@ class TestPC61Smoke:
         )
         payload = _synthesize_payload(ctx)
 
-        # 1 setProduct + 56 sizes + 56 prices + 1 option + 56 stock = 170 steps
-        assert len(payload.plan) == 1 + 56 + 56 + 1 + 56
+        # 1 setProduct + 56 sizes + 56 prices + 1 option + 1 image gallery
+        # + 56 stock = 171 steps (default _ctx supplies one front image)
+        assert len(payload.plan) == 1 + 56 + 56 + 1 + 1 + 56
         mutations = [s.mutation for s in payload.plan]
         assert mutations.count("setProductSize") == 56
         assert mutations.count("setProductPrice") == 56
         assert mutations.count("setAssignOptions") == 1
+        assert mutations.count("setProductsImageGallery") == 1
         assert mutations.count("updateProductStock") == 56
 
 

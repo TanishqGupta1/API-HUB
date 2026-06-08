@@ -163,6 +163,7 @@ _MUTATION_DISPATCH: dict[str, tuple[str, str]] = {
     "set_additional_option":           (_m._SET_ADDITIONAL_OPTION,           "setAdditionalOption"),
     "set_additional_option_attributes": (_m._SET_ADDITIONAL_OPTION_ATTRIBUTES, "setAdditionalOptionAttributes"),
     "set_products_attribute_price":    (_m._SET_PRODUCTS_ATTRIBUTE_PRICE,    "setProductsAttributePrice"),
+    "set_products_image_gallery":      (_m._SET_PRODUCTS_IMAGE_GALLERY,      "setProductsImageGallery"),
     "update_product_stock":            (_m._UPDATE_PRODUCT_STOCK,            "updateProductStock"),
 }
 
@@ -254,6 +255,12 @@ class FakeOpsClient:
     async def set_products_attribute_price(self, variables: dict) -> dict:
         r = {"id": self._next_id()}
         self._record("set_products_attribute_price", variables, r)
+        return r
+
+    async def set_products_image_gallery(self, variables: dict) -> dict:
+        # Gallery returns {result, message} (no id) — mirror that shape.
+        r = {"result": True, "message": "dry-run image gallery ok"}
+        self._record("set_products_image_gallery", variables, r)
         return r
 
     async def update_product_stock(self, variables: dict) -> dict:
@@ -680,6 +687,14 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     final_status = "partial_failure" if ops_product_id else "failed"
                     break
 
+                # setProductsImageGallery takes products_id as a top-level Int!
+                # arg; OPS returns the setProduct id as a string, which the
+                # GraphQL layer rejects for Int!. Coerce numeric strings to int.
+                if mutation == "setProductsImageGallery":
+                    _pid = variables.get("products_id")
+                    if isinstance(_pid, str) and _pid.lstrip("-").isdigit():
+                        variables = dict(variables, products_id=int(_pid))
+
                 fingerprint = hashlib.sha256(
                     _json.dumps({"mutation": mutation, "variables": variables}, sort_keys=True).encode()
                 ).hexdigest()[:16]
@@ -722,12 +737,13 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                         "request_fingerprint": fingerprint,
                     })
                 except Exception as e:
-                    # Stock updates are best-effort: OPS doesn't expose a SKU
-                    # field on ProductSizeInput, so our supplier SKUs can't be
-                    # matched in OPS. Log per-variant stock failures as warnings
-                    # but don't abort the push — the product + sizes + prices
+                    # Stock + image-gallery writes are best-effort. Stock: OPS
+                    # exposes no SKU field on ProductSizeInput, so our supplier
+                    # SKUs can't be matched. Images: a bad/unreachable URL
+                    # shouldn't sink an otherwise-good push. Log these as
+                    # warnings but don't abort — the product + sizes + prices
                     # are the critical writes.
-                    is_warn_only = mutation == "updateProductStock"
+                    is_warn_only = mutation in ("updateProductStock", "setProductsImageGallery")
                     step_results.append({
                         "step": step_num,
                         "mutation": mutation,
@@ -888,6 +904,7 @@ def _mutation_to_method(mutation: str) -> str:
         "setAdditionalOption":           "set_additional_option",
         "setAdditionalOptionAttributes": "set_additional_option_attributes",
         "setProductsAttributePrice":     "set_products_attribute_price",
+        "setProductsImageGallery":       "set_products_image_gallery",
         "updateProductStock":            "update_product_stock",
     }
     return mapping.get(mutation, mutation)
