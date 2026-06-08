@@ -718,6 +718,50 @@ def _build_updateProductStock_step(
     )
 
 
+def _build_setProductsImageGallery_step(
+    step_num: int, ctx: _PushContext, products_id_step: int = 1
+) -> Optional[OPSMutationStep]:
+    """One setProductsImageGallery for the whole product.
+
+    OPS has no file-upload mutation; images are referenced by URL in each
+    item's `products_large_image_name`, and OPS fetches + optimizes them
+    server-side when optimizeimg=1 (verified live against staging — see
+    `scripts/ops_image_spike.py`). Depends on step 1 for products_id; OPS
+    returns that id as a string but this mutation needs a top-level Int!, so
+    the gateway coerces it at execute time.
+
+    Returns None when the product has no usable image URLs (nothing to push).
+    """
+    if not ctx.images:
+        return None
+    title = ctx.product.product_name or ctx.product.supplier_sku
+    image_arr = [
+        {
+            "products_image_gallery_id": 0,  # 0 = create
+            "delete": 0,
+            "title": title,
+            "products_large_image_name": img.url,
+            "sort_order": (img.sort_order or idx),
+            "status": "1",
+        }
+        for idx, img in enumerate(ctx.images)
+        if img.url
+    ]
+    if not image_arr:
+        return None
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setProductsImageGallery",
+        source_key=f"images:{ctx.product.supplier_sku}",
+        variables={
+            "products_id": _placeholder(products_id_step, "products_id"),
+            "optimizeimg": 1,
+            "input": {"image_arr": image_arr},
+        },
+        requires_response_from=[products_id_step],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public entrypoint: build_push_payload()
 # ---------------------------------------------------------------------------
@@ -873,18 +917,37 @@ def _synthesize_payload(
                 )
                 next_step += 1
 
+    # Image gallery — pushes product images via setProductsImageGallery.
+    # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_IMAGES=1): OPS does NOT
+    # fetch external URLs — it treats `products_large_image_name` as a filename
+    # inside its own media library and prepends its CDN path, so passing a
+    # supplier/CDN URL produces a broken path (verified via
+    # scripts/ops_image_readback.py on #547) and pollutes the gallery with dead
+    # rows. The step is wired and ready; enable it once images are uploaded into
+    # OPS media and we pass bare OPS filenames. Placed before stock so inventory
+    # stays the final step (Rev 1 contract). Best-effort/warn-only in the gateway.
+    import os as _os
+
+    if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") == "1":
+        gallery_step = _build_setProductsImageGallery_step(next_step, ctx, products_id_step=1)
+        if gallery_step is not None:
+            plan.append(gallery_step)
+            next_step += 1
+
     # Final N steps: updateProductStock × N (action=Add, with stock_id
     # resolved by gateway read-back — see _build_updateProductStock_step).
-    for v, price in zip(ordered_variants, computed_prices):
-        plan.append(
-            _build_updateProductStock_step(
-                next_step,
-                size_step_by_sku[price.variant_sku],
-                price.variant_sku,
-                v.inventory or 0,
+    # Deferred by default: opt in with OPS_PUSH_INCLUDE_STOCK=1.
+    if _os.getenv("OPS_PUSH_INCLUDE_STOCK", "0") == "1":
+        for v, price in zip(ordered_variants, computed_prices):
+            plan.append(
+                _build_updateProductStock_step(
+                    next_step,
+                    size_step_by_sku[price.variant_sku],
+                    price.variant_sku,
+                    v.inventory or 0,
+                )
             )
-        )
-        next_step += 1
+            next_step += 1
 
     client_id = ctx.customer.ops_client_id or ""
     return OPSPushPayload(

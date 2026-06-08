@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { Package, Loader2, CheckCircle2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Image from "next/image";
+import { SafeImage as Image } from "@/components/common/safe-image";
 
 interface CatalogItem {
   selection_id: string;

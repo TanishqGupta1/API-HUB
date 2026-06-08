@@ -155,8 +155,11 @@ async def test_set_product_price_threads_products_id_and_size_id(fake_client):
     v = inputs[0]
     assert v["products_id"] == 12345
     assert v["size_id"] == 555
-    assert v["price"] == "9.99"
-    assert v["vendor_price"] == "3.99"
+    # Wrapper coerces price/vendor_price to Float (OPS rejects string prices
+    # with INVALID_USER_INPUT) and sends price_defining_method.
+    assert v["price"] == 9.99
+    assert v["vendor_price"] == 3.99
+    assert v["price_defining_method"] == "1"
     assert "qty_to" not in v
     assert result.ok
     assert result.data["id"] == 7777

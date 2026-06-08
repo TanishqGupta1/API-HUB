@@ -7,7 +7,7 @@ import { log } from "@/lib/log";
 import type { ProductPreview, ProductImage, Supplier } from "@/lib/types";
 import { useSelectedCustomer } from "@/lib/customer-context";
 import { AlertTriangle, CheckCircle2, ArrowLeft, Send, Package } from "lucide-react";
-import Image from "next/image";
+import { SafeImage as Image } from "@/components/common/safe-image";
 
 const IMAGE_TAB_ORDER = ["front", "back", "swatch", "detail"] as const;
 

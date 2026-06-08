@@ -133,6 +133,49 @@ async def set_product(
     return OpsResult(ok=True, data=data, raw=result.raw)
 
 
+# ── set_products_image_gallery ───────────────────────────────────────────────
+
+_SET_PRODUCTS_IMAGE_GALLERY = """
+mutation SetProductsImageGallery($products_id: Int!, $optimizeimg: Int, $input: ProductsImageGalleryBulkInput!) {
+  setProductsImageGallery(products_id: $products_id, optimizeimg: $optimizeimg, input: $input) {
+    result
+    message
+  }
+}
+""".strip()
+
+
+async def set_products_image_gallery(
+    *,
+    client: OpsGraphQLClient,
+    products_id: int,
+    image_arr: list[dict],
+    optimizeimg: int = 1,
+) -> OpsResult:
+    """Attach product images via the gallery.
+
+    OPS has NO file-upload mutation — images are referenced by URL in each
+    item's `products_large_image_name`, and OPS fetches + optimizes the URL
+    server-side when `optimizeimg=1` (verified live against staging; see
+    `scripts/ops_image_spike.py`). Returns `[{result, message}]` (no id).
+    """
+    result = await client.execute(
+        _SET_PRODUCTS_IMAGE_GALLERY,
+        variables={
+            "products_id": products_id,
+            "optimizeimg": optimizeimg,
+            "input": {"image_arr": image_arr},
+        },
+    )
+    if not result.ok:
+        return result
+    data = _unwrap_list(result.data, "setProductsImageGallery")
+    err = _check_result(data, "setProductsImageGallery")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
+
+
 # ── set_product_size ─────────────────────────────────────────────────────────
 
 _SET_PRODUCT_SIZE = """
@@ -193,14 +236,22 @@ async def set_product_price(
     qty: int = 1,
     qty_to: int | None = None,
     visible: int = 1,
+    price_defining_method: str = "1",
 ) -> OpsResult:
+    # OPS requires:
+    # - price/vendor_price as Float (not string) — string causes INVALID_USER_INPUT
+    # - price_defining_method — missing causes "Price Defining method is required"
+    if price is None or vendor_price is None:
+        return OpsResult(ok=False, ops_error_code="MISSING_PRICE",
+                         ops_error_message="price and vendor_price must not be None")
     input_dict: dict = {
         "products_id": products_id,
         "size_id": size_id,
         "qty": qty,
-        "price": price,
-        "vendor_price": vendor_price,
-        "visible": visible,
+        "price": float(price),
+        "vendor_price": float(vendor_price),
+        "visible": str(visible),
+        "price_defining_method": price_defining_method,
     }
     if qty_to is not None:
         input_dict["qty_to"] = qty_to

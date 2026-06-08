@@ -576,16 +576,31 @@ async def check_ops_oauth2_reachable(
             "token cache hit (no fresh OAuth2 round trip)",
         )
 
+    creds = {
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": secret,
+    }
+
+    def _token_ok(r: httpx.Response) -> bool:
+        if r.status_code != 200:
+            return False
+        try:
+            return bool(r.json().get("access_token"))
+        except ValueError:
+            return False
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(
-                token_url,
-                json={
-                    "grant_type": "client_credentials",
-                    "client_id": client_id,
-                    "client_secret": secret,
-                },
-            )
+            # OPS token endpoints differ on encoding: some require a JSON body
+            # (staging returns 401 for form-encoded), others accept form. Try
+            # JSON first, then fall back to form — same order as the n8n node
+            # and modules/ops_client.
+            resp = await client.post(token_url, json=creds)
+            if not _token_ok(resp):
+                form_resp = await client.post(token_url, data=creds)
+                if _token_ok(form_resp):
+                    resp = form_resp
     except httpx.UnsupportedProtocol as exc:
         # token_url is non-empty but malformed (e.g. missing http:// scheme).
         # Returning a clean CheckResult prevents the gateway from 500ing — the

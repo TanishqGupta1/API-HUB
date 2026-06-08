@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
+import { SafeImage as Image } from "@/components/common/safe-image";
 import type { ProductImage } from "@/lib/types";
 
 interface ImageGalleryProps {

@@ -32,8 +32,8 @@ export default function PrintProductsPage() {
     }, 300);
   }, [search, supplierFilter]);
 
-  const printSuppliers = suppliers.filter((s) =>
-    ["4over", "print", "4over-rest"].some((k) => s.slug?.toLowerCase().includes(k) || s.name?.toLowerCase().includes(k))
+  const fourOverSupplier = suppliers.find((s) =>
+    s.slug?.toLowerCase().includes("4over") || s.name?.toLowerCase().includes("4over")
   );
 
   return (
@@ -47,17 +47,31 @@ export default function PrintProductsPage() {
           </p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <button
-            className="btn btn-ghost"
-            disabled
-            title="4Over API integration coming in V1d"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-              <polyline points="1 4 1 10 7 10" />
-              <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
-            </svg>
-            Sync from 4Over
-          </button>
+          {fourOverSupplier ? (
+            <Link
+              href={`/suppliers/${fourOverSupplier.id}/import`}
+              className="btn btn-ghost"
+              title={`Import products from ${fourOverSupplier.name}`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
+              </svg>
+              Sync from 4Over
+            </Link>
+          ) : (
+            <button
+              className="btn btn-ghost"
+              disabled
+              title="Add a 4Over supplier first to enable syncing"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
+              </svg>
+              Sync from 4Over
+            </button>
+          )}
           <Link href="/print-products/new" className="btn btn-primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
               <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -82,8 +96,17 @@ export default function PrintProductsPage() {
           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
         <span style={{ fontSize: "12px", color: "#1e4d92" }}>
-          <strong>4Over integration</strong> is planned for V1d. Once connected, products will be fetched automatically via the 4Over REST API.
-          Until then, you can add print products manually.
+          {fourOverSupplier ? (
+            <>
+              <strong>4Over is connected.</strong> Use <strong>Sync from 4Over</strong> to pull products via the 4Over REST API,
+              or add print products manually.
+            </>
+          ) : (
+            <>
+              <strong>4Over integration</strong> runs over the 4Over REST API. Add a 4Over supplier to enable
+              <strong> Sync from 4Over</strong>, or add print products manually in the meantime.
+            </>
+          )}
         </span>
       </div>
 
@@ -173,7 +196,9 @@ export default function PrintProductsPage() {
                         No print products yet
                       </div>
                       <div style={{ fontSize: "12px", color: "var(--ink-muted)" }}>
-                        Add products manually or wait for the 4Over API integration in V1d
+                        {fourOverSupplier
+                          ? "Use Sync from 4Over to import products, or add one manually"
+                          : "Add products manually, or connect a 4Over supplier to sync"}
                       </div>
                     </div>
                     <Link href="/print-products/new" className="btn btn-primary" style={{ marginTop: "4px" }}>
