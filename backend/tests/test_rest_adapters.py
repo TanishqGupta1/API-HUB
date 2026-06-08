@@ -183,10 +183,28 @@ async def test_fourover_normalize_fallbacks_on_sparse_payload(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fourover_discover_changed_falls_back_to_full(monkeypatch):
+async def test_fourover_discover_changed_skips_fresh_skus(monkeypatch):
+    """discover_changed filters out SKUs already synced more recently than `since`."""
+    from datetime import datetime, timezone
+    a = _fourover(monkeypatch)
+    a.client.get_products = AsyncMock(return_value=[{"uuid": "u1"}, {"uuid": "u2"}])
+    # u1 is fresh in DB (last_synced > since) — should be skipped
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = [("u1",)]
+    a.db = mock_db
+    refs = await a.discover_changed(datetime(2026, 1, 1, tzinfo=timezone.utc))
+    assert [r.supplier_sku for r in refs] == ["u2"]
+
+
+@pytest.mark.asyncio
+async def test_fourover_discover_changed_returns_all_when_none_fresh(monkeypatch):
+    """discover_changed returns every ref when DB has no freshly-synced SKUs."""
     from datetime import datetime, timezone
     a = _fourover(monkeypatch)
     a.client.get_products = AsyncMock(return_value=[{"uuid": "u1"}])
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = []  # nothing fresh
+    a.db = mock_db
     refs = await a.discover_changed(datetime(2026, 1, 1, tzinfo=timezone.utc))
     assert [r.supplier_sku for r in refs] == ["u1"]
 
@@ -358,3 +376,32 @@ async def test_ss_hydrate_through_real_normalizer_contract(monkeypatch):
     assert v_s.inventory == 120
     assert len(v_s.prices) == 1 and str(v_s.prices[0].price) == "3.42"
     assert len(p.images) == 1  # two Black rows share one image → deduped
+
+
+@pytest.mark.asyncio
+async def test_ss_discover_changed_skips_fresh_skus(monkeypatch):
+    """discover_changed filters out SKUs already synced more recently than `since`."""
+    from datetime import datetime, timezone
+    a = _ss(monkeypatch)
+    a._client.get = AsyncMock(return_value=_FakeResp(200, [
+        {"styleID": "39"}, {"styleID": "40"}
+    ]))
+    # style 39 is fresh in DB (last_synced > since) — should be skipped
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = [("39",)]
+    a.db = mock_db
+    refs = await a.discover_changed(datetime(2026, 1, 1, tzinfo=timezone.utc))
+    assert [r.supplier_sku for r in refs] == ["40"]
+
+
+@pytest.mark.asyncio
+async def test_ss_discover_changed_returns_all_when_none_fresh(monkeypatch):
+    """discover_changed returns every ref when DB has no freshly-synced SKUs."""
+    from datetime import datetime, timezone
+    a = _ss(monkeypatch)
+    a._client.get = AsyncMock(return_value=_FakeResp(200, [{"styleID": "39"}]))
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = []  # nothing fresh
+    a.db = mock_db
+    refs = await a.discover_changed(datetime(2026, 1, 1, tzinfo=timezone.utc))
+    assert [r.supplier_sku for r in refs] == ["39"]
