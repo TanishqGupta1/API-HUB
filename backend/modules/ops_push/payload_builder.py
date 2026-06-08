@@ -570,6 +570,8 @@ def _build_setProductPrice_step(
                 "price": final_price,
                 "vendor_price": base_price,
                 "visible": "1",  # OPS ProductPriceInput.visible is String
+                # Required by OPS; omitting causes "Price Defining method is required".
+                "price_defining_method": "1",
             }]
         },
         requires_response_from=[1, size_step],

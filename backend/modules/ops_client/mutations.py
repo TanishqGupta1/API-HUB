@@ -239,6 +239,9 @@ async def set_product_price(
     # OPS requires:
     # - price/vendor_price as Float (not string) — string causes INVALID_USER_INPUT
     # - price_defining_method — missing causes "Price Defining method is required"
+    if price is None or vendor_price is None:
+        return OpsResult(ok=False, ops_error_code="MISSING_PRICE",
+                         ops_error_message="price and vendor_price must not be None")
     input_dict: dict = {
         "products_id": products_id,
         "size_id": size_id,
