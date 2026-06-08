@@ -131,6 +131,49 @@ async def set_product(
     return OpsResult(ok=True, data=data, raw=result.raw)
 
 
+# ── set_products_image_gallery ───────────────────────────────────────────────
+
+_SET_PRODUCTS_IMAGE_GALLERY = """
+mutation SetProductsImageGallery($products_id: Int!, $optimizeimg: Int, $input: ProductsImageGalleryBulkInput!) {
+  setProductsImageGallery(products_id: $products_id, optimizeimg: $optimizeimg, input: $input) {
+    result
+    message
+  }
+}
+""".strip()
+
+
+async def set_products_image_gallery(
+    *,
+    client: OpsGraphQLClient,
+    products_id: int,
+    image_arr: list[dict],
+    optimizeimg: int = 1,
+) -> OpsResult:
+    """Attach product images via the gallery.
+
+    OPS has NO file-upload mutation — images are referenced by URL in each
+    item's `products_large_image_name`, and OPS fetches + optimizes the URL
+    server-side when `optimizeimg=1` (verified live against staging; see
+    `scripts/ops_image_spike.py`). Returns `[{result, message}]` (no id).
+    """
+    result = await client.execute(
+        _SET_PRODUCTS_IMAGE_GALLERY,
+        variables={
+            "products_id": products_id,
+            "optimizeimg": optimizeimg,
+            "input": {"image_arr": image_arr},
+        },
+    )
+    if not result.ok:
+        return result
+    data = _unwrap_list(result.data, "setProductsImageGallery")
+    err = _check_result(data, "setProductsImageGallery")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
+
+
 # ── set_product_size ─────────────────────────────────────────────────────────
 
 _SET_PRODUCT_SIZE = """
