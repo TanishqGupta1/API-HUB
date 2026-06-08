@@ -72,15 +72,7 @@ async def get_decoration(
 ) -> DecorationRead:
     row = await db.get(CustomerProductDecoration, (customer_id, product_id))
     if row is None:
-        # Return empty decoration instead of 404 — the product exists, it just
-        # hasn't had branding saved yet. Frontend BrandingPanel opens in editor
-        # mode when decoration_options is empty. A 404 here creates console noise
-        # every time a product page is opened for the first time.
-        return DecorationRead(
-            customer_id=customer_id,
-            product_id=product_id,
-            decoration_options=[],
-        )
+        raise HTTPException(404, "No decoration found")
     return DecorationRead.model_validate(row)
 
 
