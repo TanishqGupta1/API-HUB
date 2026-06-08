@@ -146,9 +146,9 @@ async def _resolve_stock_id_for_size(
     """
     if product_id is None:
         return None
-    # Dry-run path: FakeOpsClient has no execute(); return a fake id so
-    # the stock step runs through (it's a fake call anyway).
-    if not hasattr(client, "execute"):
+    # Dry-run path: FakeOpsClient.execute() returns a GetProductBySku stub,
+    # not a productStocks result — detect via the sentinel instead of duck-typing.
+    if getattr(client, "is_dry_run", False):
         return 99000 + int(size_id)  # stable fake id, distinct per variant
     cache_key = product_id
     if cache_key not in _stock_lookup_cache:
@@ -287,6 +287,8 @@ class OpsClientAdapter:
 
 class FakeOpsClient:
     """Dry-run client — fabricates IDs and records calls. No OPS traffic."""
+
+    is_dry_run: bool = True  # sentinel checked by _resolve_stock_id_for_size
 
     def __init__(self) -> None:
         self.calls: list[dict] = []
