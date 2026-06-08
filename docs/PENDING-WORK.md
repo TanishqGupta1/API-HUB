@@ -13,7 +13,7 @@
 
 | # | Item | Owner | Detail |
 |---|------|-------|--------|
-| 🔴 1.1 | `setProduct` returns `INTERNAL_SERVER_ERROR` on OPS staging for **every** payload | OPS | Same token creates categories + runs queries fine → server-side resolver bug. Needs OPS Express app-server log. See `docs/ops-staging-setproduct-issue.md`. **Nothing creates in OPS until fixed.** |
+| 🟡 1.1 | ~~`setProduct` returns `INTERNAL_SERVER_ERROR` on OPS staging for **every** payload~~ — **APPEARS RESOLVED (2026-06-08)** | OPS | Live push of L420 succeeded end-to-end: products_id **#547**, 98/98 mutations OK (1 setProduct + 48 sizes + 48 prices). The earlier 500s were our pre-#166 payload (missing required ProductInput fields / wrong contract), not an OPS resolver bug. Reconfirm with Christian whether anything changed server-side. See `docs/ops-staging-setproduct-issue.md`. |
 | 🔴 1.2 | Gateway records OPS `result:false` as `ok` (silent failure) | DEV | `gateway.py` `_invoke` returns `data or {}` with no rejection check. OPS returns HTTP 200 + `result:false` on app-layer rejects → step logged success while data dropped (PC54 phantom id, 558 dropped prices). **Fix lives in unmerged PR #172.** |
 
 ---
@@ -41,7 +41,7 @@
 
 | # | Item | Detail |
 |---|------|--------|
-| ⚪ 4.1 | Delete legacy push path | `modules/ops_client/push.py` (`push_apparel_product`) is **orphaned** (zero callers). It's the only caller of the 12 `mutations.py` wrapper fns. M1 gateway uses the raw `_SET_*` query consts, bypassing wrappers. Delete `push.py` + the 12 wrapper fns; **keep the 12 query consts**. (This is why #173's wrapper fix targeted dead code.) |
+| ⚪ 4.1 | Delete legacy push path | **PARTIALLY DONE (2026-06-08):** deleted orphaned `modules/ops_client/push.py` (`push_apparel_product`, zero prod callers) + `tests/test_ops_client_push.py`; suite stays green (350 passed). **Remaining:** the `mutations.py` wrapper fns are NOT all dead — `get_product_by_sku` is live in `gateway.py` (dedup/verify) + `verify.py`. M1 gateway uses raw `_SET_*` query consts for the rest. Per-fn dead-code pass needed before removing the remaining wrappers + their `test_ops_mutations.py` cases; keep the query consts and `get_product_by_sku`. |
 | ⚪ 4.2 | Consolidate duplicate `FakeOpsClient` | Two doubles: `ops_client/fake.py` (tests) + inline `gateway.py:211` (dry-run). They drift. Unify. |
 | ⚪ 4.3 | Single-source the n8n node tree | `api-hub/n8n-nodes-onprintshop/` AND `../n8n-nodes-onprintshop/` both exist → drift risk. Symlink or submodule. |
 | ⚪ 4.4 | Decide fate of n8n OnPrintShop node | Post-M1 pivot, OPS push is FastAPI-owned. Node's ops now duplicate gateway intent ("legacy flows" only). Archive or keep as documented fallback — don't dual-maintain. |
