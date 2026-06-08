@@ -485,6 +485,22 @@ def _build_setProduct_step(
         "products_internal_title": ctx.product.supplier_sku,
         "visible": 1,
         "product_description": ctx.product.description or "",
+        # ── Required OPS ProductInput fields for all products ──────────
+        # Phase 1 audit findings (June 2026):
+        #   * predefined_product_type — silent reject when null
+        #   * price_defining_method — silent reject of "qty" string;
+        #     OPS expects a numeric string. "1" = qty-based pricing
+        #     (verified against working products on staging.visualgraphx)
+        #   * measurement_unit_id — silent reject when 0/null
+        #   * enable_stock_management — required for updateProductStock
+        #     to find variants; without it, all stock writes fail
+        #   * product_type — working OPS products always have this set;
+        #     null may hide the product from some admin UI filters
+        "predefined_product_type": "1",
+        "price_defining_method": "1",
+        "measurement_unit_id": 1,
+        "enable_stock_management": "1",
+        "product_type": "1",
     }
     _cat = ctx.storefront_config.ops_category_id if ctx.storefront_config else None
     if _cat:
@@ -492,9 +508,9 @@ def _build_setProduct_step(
             inp["category_id"] = int(_cat)
         except (TypeError, ValueError):
             pass
-    variables: dict[str, Any] = {"input": inp}
     if primary_image_url:
-        variables["input"]["imagename"] = primary_image_url
+        inp["imagename"] = primary_image_url
+    variables: dict[str, Any] = {"inputs": [inp]}
 
     return OPSMutationStep(
         step=1,
@@ -509,19 +525,22 @@ def _build_setProductSize_step(
     step_num: int, variant: ProductVariant, variant_sku: str
 ) -> OPSMutationStep:
     """One setProductSize per variant. Depends on step 1 for products_id."""
+    color = (variant.color or "").strip()
+    size = (variant.size or "").strip()
+    if color and size:
+        size_title = f"{color} / {size}"
+    else:
+        size_title = color or size or variant_sku
     return OPSMutationStep(
         step=step_num,
         mutation="setProductSize",
         source_key=f"variant_sku:{variant_sku}",
         variables={
-            "input": {
-                "product_size_id": 0,
+            "inputs": [{
                 "products_id": _placeholder(1, "products_id"),
-                "size_name": variant.size or "",
-                "color_name": variant.color or "",
-                "products_sku": variant_sku,
-                "visible": 1,
-            }
+                "size_title": size_title,
+                "visible": "1",  # OPS ProductSizeInput.visible is String
+            }]
         },
         requires_response_from=[1],
     )
@@ -542,18 +561,18 @@ def _build_setProductPrice_step(
         mutation="setProductPrice",
         source_key=f"variant_sku:{variant_sku}",
         variables={
-            "input": {
-                "product_price_id": 0,
+            "inputs": [{
                 "products_id": _placeholder(1, "products_id"),
-                # Input field is `size_id`; value is threaded from the
-                # setProductSize response, which selects `product_size_id`.
-                "size_id": _placeholder(size_step, "product_size_id"),
+                # OPS returns `id` from setProductSize, normalized to `size_id` in gateway.
+                "size_id": _placeholder(size_step, "size_id"),
                 "qty": 1,
                 "qty_to": 999999,
                 "price": final_price,
                 "vendor_price": base_price,
-                "visible": "1",
-            }
+                "visible": "1",  # OPS ProductPriceInput.visible is String
+                # Required by OPS; omitting causes "Price Defining method is required".
+                "price_defining_method": "1",
+            }]
         },
         requires_response_from=[1, size_step],
     )
@@ -571,13 +590,11 @@ def _build_setAssignOptions_step(
             + (f"/{mapping.source_attribute_key}" if mapping.source_attribute_key else "")
         ),
         variables={
-            "input": {
+            "inputs": [{
                 "products_id": _placeholder(1, "products_id"),
                 "master_option_id": mapping.target_ops_option_id,
-                "master_attribute_id": mapping.target_ops_attribute_id,
-                "price": _to_float(mapping.price) or 0.0,
                 "sort_order": getattr(mapping, "sort_order", 0) or 0,
-            }
+            }]
         },
         requires_response_from=[1],
     )
@@ -593,14 +610,13 @@ def _build_setAdditionalOption_step(
         mutation="setAdditionalOption",
         source_key=f"option_key:{opt.option_key}",
         variables={
-            "input": {
+            "inputs": [{
                 "products_id": _placeholder(1, "products_id"),
                 "option_key": opt.option_key,
                 "title": opt.title or opt.option_key,
                 "options_type": getattr(opt, "options_type", "combo"),
-                "required": getattr(opt, "required", False),
                 "sort_order": opt.sort_order or 0,
-            }
+            }]
         },
         requires_response_from=[1],
     )
@@ -618,17 +634,16 @@ def _build_setAdditionalOptionAttributes_step(
         mutation="setAdditionalOptionAttributes",
         source_key=f"attribute_key:{opt_key}/{attr.attribute_key}",
         variables={
-            "input": {
-                "products_id": _placeholder(1, "products_id"),
-                # setAdditionalOption response selects `prod_add_opt_id`.
-                "option_id": _placeholder(option_step, "prod_add_opt_id"),
+            "inputs": [{
+                # OPS setAdditionalOption returns `id`, normalized to `prod_add_opt_id` in gateway.
+                "prod_add_opt_id": _placeholder(option_step, "prod_add_opt_id"),
                 "attribute_key": attr.attribute_key,
-                "title": attr.title or attr.attribute_key,
+                "label": attr.title or attr.attribute_key,
                 "setup_cost": _to_float(getattr(attr, "setup_cost", None)) or 0.0,
                 "multiplier": _to_float(getattr(attr, "multiplier", None)) or 1.0,
-            }
+            }]
         },
-        requires_response_from=[1, option_step],
+        requires_response_from=[option_step],
     )
 
 
@@ -637,22 +652,70 @@ def _build_updateProductStock_step(
 ) -> OPSMutationStep:
     """Inventory LAST step per Rev 1 §"PC61 outbound mutation sequence".
 
-    action=Reset because API-HUB owns the absolute on-hand number.
-    product_sku is the stable identifier (preferred over stock_id which
-    only exists after a prior successful inventory write).
+    action=Add for the initial stock entry. OPS rejects "Reset" when no
+    prior stock row exists ("Invalid Product SKU or initial stock not
+    added!"). product_sku is the stable identifier.
+
+    Note: setProductSize does NOT accept a SKU field, so OPS auto-derives
+    the SKU from products_internal_title + size_title. variant_sku here
+    must match that derivation for OPS to find the right row.
     """
     return OPSMutationStep(
         step=step_num,
         mutation="updateProductStock",
         source_key=f"variant_sku:{variant_sku}",
         variables={
-            "action": "Reset",
+            "action": "Add",
             "product_sku": variant_sku,
             "input": {
                 "stock_quantity": inventory,
             },
         },
         requires_response_from=[1],
+    )
+
+
+def _build_setProductsImageGallery_step(
+    step_num: int, ctx: _PushContext, products_id_step: int = 1
+) -> Optional[OPSMutationStep]:
+    """One setProductsImageGallery for the whole product.
+
+    OPS has no file-upload mutation; images are referenced by URL in each
+    item's `products_large_image_name`, and OPS fetches + optimizes them
+    server-side when optimizeimg=1 (verified live against staging — see
+    `scripts/ops_image_spike.py`). Depends on step 1 for products_id; OPS
+    returns that id as a string but this mutation needs a top-level Int!, so
+    the gateway coerces it at execute time.
+
+    Returns None when the product has no usable image URLs (nothing to push).
+    """
+    if not ctx.images:
+        return None
+    title = ctx.product.product_name or ctx.product.supplier_sku
+    image_arr = [
+        {
+            "products_image_gallery_id": 0,  # 0 = create
+            "delete": 0,
+            "title": title,
+            "products_large_image_name": img.url,
+            "sort_order": (img.sort_order or idx),
+            "status": "1",
+        }
+        for idx, img in enumerate(ctx.images)
+        if img.url
+    ]
+    if not image_arr:
+        return None
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setProductsImageGallery",
+        source_key=f"images:{ctx.product.supplier_sku}",
+        variables={
+            "products_id": _placeholder(products_id_step, "products_id"),
+            "optimizeimg": 1,
+            "input": {"image_arr": image_arr},
+        },
+        requires_response_from=[products_id_step],
     )
 
 
@@ -811,14 +874,37 @@ def _synthesize_payload(
                 )
                 next_step += 1
 
-    # Final N steps: updateProductStock × N (action=Reset)
-    for v, price in zip(ordered_variants, computed_prices):
-        plan.append(
-            _build_updateProductStock_step(
-                next_step, price.variant_sku, v.inventory or 0
+    # Final N steps: updateProductStock × N (action=Reset).
+    # Deferred by default: updateProductStock targets a stock row by
+    # `product_sku`, but OPS `ProductSizeInput` carries no SKU, so a freshly
+    # created variant has no OPS-side SKU/stock_id to match in a single push —
+    # the Reset would no-op/fail. Opt in with OPS_PUSH_INCLUDE_STOCK=1 once
+    # per-variant stock targeting (read-back of OPS SKUs/stock_ids) is wired.
+    import os as _os
+
+    # Image gallery — pushes product images via setProductsImageGallery.
+    # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_IMAGES=1): OPS does NOT
+    # fetch external URLs — it treats `products_large_image_name` as a filename
+    # inside its own media library and prepends its CDN path, so passing a
+    # supplier/CDN URL produces a broken path (verified via
+    # scripts/ops_image_readback.py on #547) and pollutes the gallery with dead
+    # rows. The step is wired and ready; enable it once images are uploaded into
+    # OPS media and we pass bare OPS filenames. Placed before stock so inventory
+    # stays the final step (Rev 1 contract). Best-effort/warn-only in the gateway.
+    if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") == "1":
+        gallery_step = _build_setProductsImageGallery_step(next_step, ctx, products_id_step=1)
+        if gallery_step is not None:
+            plan.append(gallery_step)
+            next_step += 1
+
+    if _os.getenv("OPS_PUSH_INCLUDE_STOCK", "0") == "1":
+        for v, price in zip(ordered_variants, computed_prices):
+            plan.append(
+                _build_updateProductStock_step(
+                    next_step, price.variant_sku, v.inventory or 0
+                )
             )
-        )
-        next_step += 1
+            next_step += 1
 
     client_id = ctx.customer.ops_client_id or ""
     return OPSPushPayload(

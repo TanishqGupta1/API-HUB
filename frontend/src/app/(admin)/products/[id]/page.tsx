@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
+import { SafeImage as Image } from "@/components/common/safe-image";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
 import type {

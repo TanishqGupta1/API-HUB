@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import NextImage from "next/image";
+import { SafeImage as NextImage } from "@/components/common/safe-image";
 import { api } from "@/lib/api";
 import { API_BASE } from "@/lib/env";
 import { log } from "@/lib/log";

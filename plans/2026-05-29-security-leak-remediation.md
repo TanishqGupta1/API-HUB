@@ -1,5 +1,12 @@
 # Security Leak Remediation Implementation Plan
 
+> **✅ DONE (landed, verified 2026-06-02).** Shipped mostly via PR #160 (SSRF guard on
+> image preflight, `sanitize_error` redaction, n8n proxy `vg_admin` gate, XFF-aware
+> limiter, Next.js `remotePatterns`, Sentry `maskAllText`+`blockAllMedia`, push-mappings
+> tenant guard) plus the IDOR audit (issues #147–#153, #29 closed). See "Current state"
+> in `plans/2026-06-02-production-readiness.md`. The unticked `- [ ]` boxes below are
+> historical — the work is complete.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close the exploitable leaks from the 2026-05-29 four-lane security audit — SSRF to cloud metadata, cross-tenant IDOR (markup writes, push-log, push-mappings, products, orchestrator push-status), rate-limit bypass, error-body echo, and Sentry credential capture.

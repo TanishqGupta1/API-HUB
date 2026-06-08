@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Image from "next/image";
+import { SafeImage as Image } from "@/components/common/safe-image";
 import { CheckCircle2, Plus, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
 import type { ProductListItem } from "@/lib/types";

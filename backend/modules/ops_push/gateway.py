@@ -21,7 +21,7 @@ from modules.integrations.models import IntegrationKey
 from modules.integrations.schemas import PushRequest, PushRequestAccepted, PushRequestLinks
 from modules.markup.engine import calculate_price
 from modules.ops_client import mutations as _m
-from modules.ops_client.client import OpsAuth, OpsGraphQLClient
+from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
 from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
 from modules.ops_push.preflight import run_preflight
 from modules.push_log.models import ProductPushLog
@@ -163,6 +163,7 @@ _MUTATION_DISPATCH: dict[str, tuple[str, str]] = {
     "set_additional_option":           (_m._SET_ADDITIONAL_OPTION,           "setAdditionalOption"),
     "set_additional_option_attributes": (_m._SET_ADDITIONAL_OPTION_ATTRIBUTES, "setAdditionalOptionAttributes"),
     "set_products_attribute_price":    (_m._SET_PRODUCTS_ATTRIBUTE_PRICE,    "setProductsAttributePrice"),
+    "set_products_image_gallery":      (_m._SET_PRODUCTS_IMAGE_GALLERY,      "setProductsImageGallery"),
     "update_product_stock":            (_m._UPDATE_PRODUCT_STOCK,            "updateProductStock"),
 }
 
@@ -176,6 +177,18 @@ class OpsClientAdapter:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    async def execute(self, query: str, *, variables: dict) -> OpsResult:
+        """Raw GraphQL passthrough for read queries (dedup / post-push verify
+        call ``get_product_by_sku``, which calls ``client.execute``).
+
+        ``__getattr__`` only resolves the mutation method names, so without an
+        explicit ``execute`` here every dedup/verify lookup raised
+        ``AttributeError: execute`` and was silently swallowed — dedup never ran
+        on a live push. Defined as a real method so normal lookup finds it
+        before ``__getattr__``.
+        """
+        return await self._client.execute(query, variables=variables)
+
     def __getattr__(self, name: str) -> Any:
         if name not in _MUTATION_DISPATCH:
             raise AttributeError(name)
@@ -187,7 +200,10 @@ class OpsClientAdapter:
                 code = result.ops_error_code or "OPS_ERROR"
                 msg = result.ops_error_message or "OPS mutation failed"
                 raise RuntimeError(f"{code}: {msg}")
-            return ((result.data or {}).get(response_root) or {})
+            data = (result.data or {}).get(response_root)
+            if isinstance(data, list):
+                data = data[0] if data else {}
+            return data or {}
 
         return _invoke
 
@@ -202,6 +218,13 @@ class FakeOpsClient:
     async def aclose(self) -> None:
         pass
 
+    async def execute(self, query: str, *, variables: dict | None = None) -> OpsResult:
+        """Dry-run has no real OPS to query. Report 'no existing product' so the
+        dedup path treats every dry-run as a create (mirrors the empty-result
+        contract of get_product_by_sku). Prevents the AttributeError that used to
+        make dry-run dedup silently no-op."""
+        return OpsResult(ok=True, data={"getProductBySku": {}})
+
     def _next_id(self) -> int:
         self._counter += 1
         return self._counter
@@ -209,48 +232,54 @@ class FakeOpsClient:
     def _record(self, method: str, variables: dict, response: dict) -> None:
         self.calls.append({"method": method, "input": variables, "response": response})
 
+    # All array-input mutations return `id` (matching live OPS contract).
+    # _normalize_mutation_response in execute_push aliases `id` to the named
+    # field downstream placeholders expect (products_id, size_id, etc.).
+
     async def set_product_category(self, variables: dict) -> dict:
-        r = {"category_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_product_category", variables, r)
         return r
 
     async def set_product(self, variables: dict) -> dict:
-        r = {"products_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_product", variables, r)
         return r
 
     async def set_product_size(self, variables: dict) -> dict:
-        # Mirror the live setProductSize response field (product_size_id) so
-        # dry-run placeholder resolution matches the real OPS contract.
-        r = {"product_size_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_product_size", variables, r)
         return r
 
     async def set_product_price(self, variables: dict) -> dict:
-        r = {"product_price_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_product_price", variables, r)
         return r
 
     async def set_assign_options(self, variables: dict) -> dict:
-        inp = variables.get("input", variables)
-        r = {"products_id": inp.get("products_id", self._counter)}
+        r = {"id": self._next_id()}
         self._record("set_assign_options", variables, r)
         return r
 
     async def set_additional_option(self, variables: dict) -> dict:
-        # Mirror the live setAdditionalOption response field (prod_add_opt_id).
-        r = {"prod_add_opt_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_additional_option", variables, r)
         return r
 
     async def set_additional_option_attributes(self, variables: dict) -> dict:
-        r = {"options_values_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_additional_option_attributes", variables, r)
         return r
 
     async def set_products_attribute_price(self, variables: dict) -> dict:
-        r = {"products_attributes_id": self._next_id()}
+        r = {"id": self._next_id()}
         self._record("set_products_attribute_price", variables, r)
+        return r
+
+    async def set_products_image_gallery(self, variables: dict) -> dict:
+        # Gallery returns {result, message} (no id) — mirror that shape.
+        r = {"result": True, "message": "dry-run image gallery ok"}
+        self._record("set_products_image_gallery", variables, r)
         return r
 
     async def update_product_stock(self, variables: dict) -> dict:
@@ -629,7 +658,8 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     )
                 )).scalar_one_or_none()
                 if existing_mapping is None or not existing_mapping.target_ops_product_id:
-                    discovered = await _dedup_lookup_in_ops(client, push_log.supplier_sku)
+                    raw_client = getattr(client, "_client", client)
+                    discovered = await _dedup_lookup_in_ops(raw_client, push_log.supplier_sku)
                     if discovered is not None:
                         logger.info(
                             "dedup: OPS already has products_id=%s for sku=%s — switching to update mode",
@@ -676,16 +706,45 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     final_status = "partial_failure" if ops_product_id else "failed"
                     break
 
+                # setProductsImageGallery takes products_id as a top-level Int!
+                # arg; OPS returns the setProduct id as a string, which the
+                # GraphQL layer rejects for Int!. Coerce numeric strings to int.
+                if mutation == "setProductsImageGallery":
+                    _pid = variables.get("products_id")
+                    if isinstance(_pid, str) and _pid.lstrip("-").isdigit():
+                        variables = dict(variables, products_id=int(_pid))
+
                 fingerprint = hashlib.sha256(
                     _json.dumps({"mutation": mutation, "variables": variables}, sort_keys=True).encode()
                 ).hexdigest()[:16]
+                # Brief throttle between mutations to avoid OPS rate-limiting.
+                # 0.1s gives ~10 req/s — fast enough for 1675 steps in ~3 min.
+                if step_num > 1:
+                    await asyncio.sleep(0.1)
+
                 try:
                     method = getattr(client, _mutation_to_method(mutation), None)
                     if method is None:
                         raise NotImplementedError(f"No client method for {mutation}")
                     resp = await method(variables)
+                    # All array-input mutations return {index,result,message,id}.
+                    # Downstream placeholders use named aliases; add them here.
+                    resp = _normalize_mutation_response(mutation, resp)
+                    # setProduct may return id=null when the product already exists
+                    # in OPS from a prior partial push. Fall back to a SKU lookup.
+                    if mutation == "setProduct" and not resp.get("products_id"):
+                        raw_client = getattr(client, "_client", client)
+                        sku_result = await _m.get_product_by_sku(
+                            client=raw_client, products_sku=push_log.supplier_sku
+                        )
+                        if sku_result.ok and sku_result.data.get("products_id"):
+                            resp = dict(resp, products_id=sku_result.data["products_id"])
+                            logger.info(
+                                "setProduct returned null id — resolved via SKU lookup: %s → products_id=%s",
+                                push_log.supplier_sku, resp["products_id"],
+                            )
                     step_responses[step_num] = resp
-                    if "products_id" in resp:
+                    if "products_id" in resp and resp["products_id"]:
                         ops_product_id = str(resp["products_id"])
                     ops_ids = {k: str(v) for k, v in resp.items() if k.endswith("_id")}
                     step_results.append({
@@ -697,15 +756,24 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                         "request_fingerprint": fingerprint,
                     })
                 except Exception as e:
+                    # Stock + image-gallery writes are best-effort. Stock: OPS
+                    # exposes no SKU field on ProductSizeInput, so our supplier
+                    # SKUs can't be matched. Images: a bad/unreachable URL
+                    # shouldn't sink an otherwise-good push. Log these as
+                    # warnings but don't abort — the product + sizes + prices
+                    # are the critical writes.
+                    is_warn_only = mutation in ("updateProductStock", "setProductsImageGallery")
                     step_results.append({
                         "step": step_num,
                         "mutation": mutation,
-                        "status": "failed",
+                        "status": "warning" if is_warn_only else "failed",
                         "ops_ids": {},
                         "attempted_at": t_start.isoformat(),
                         "request_fingerprint": fingerprint,
                         "error": str(e),
                     })
+                    if is_warn_only:
+                        continue  # keep iterating over remaining stock updates
                     cleanup_targets = {"ops_product_id": ops_product_id, "failed_at": mutation}
                     final_status = "partial_failure" if ops_product_id else "failed"
                     break
@@ -720,21 +788,20 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 and not push_log.dry_run
                 and push_log.supplier_sku
             ):
-                await _verify_post_push(client, push_log.supplier_sku, ops_product_id)
+                await _verify_post_push(getattr(client, "_client", client), push_log.supplier_sku, ops_product_id)
 
             # ── Persist results ──
             push_log.step_results = _redact_auth(step_results)
             push_log.status = final_status
             push_log.cleanup_targets = cleanup_targets
-            if ops_product_id and final_status == "pushed":
+            # Save ops_product_id for both success and partial_failure so
+            # retries can use update mode instead of creating a duplicate product.
+            if ops_product_id and final_status in ("pushed", "partial_failure"):
                 push_log.ops_product_id = ops_product_id
 
             # ── Upsert push_mappings (live push only) ──
-            # target_ops_product_id is an INTEGER column; the mutation responses
-            # carry it as int but step_results stringifies for JSON serialization.
-            # Coerce back to int here and skip the mapping write if the OPS id
-            # isn't numeric (e.g. early-failure cases where ops_product_id is None).
-            if final_status == "pushed" and ops_product_id is not None:
+            # Also record on partial_failure so retries switch to update mode.
+            if final_status in ("pushed", "partial_failure") and ops_product_id is not None:
                 try:
                     target_int = int(ops_product_id)
                 except (TypeError, ValueError):
@@ -823,6 +890,29 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             await client.aclose()
 
 
+# Maps each mutation to the named alias that downstream placeholders use for its `id`.
+# OPS returns `id` for all array-input mutations; these are the field names callers expect.
+_MUTATION_ID_ALIAS: dict[str, str] = {
+    "setProductCategory":            "category_id",
+    "setProduct":                    "products_id",
+    "setProductSize":                "size_id",
+    "setProductPrice":               "product_price_id",
+    "setAssignOptions":              "product_option_id",
+    "setAdditionalOption":           "prod_add_opt_id",
+    "setAdditionalOptionAttributes": "attribute_id",
+    "setProductsAttributePrice":     "attribute_id",
+    "updateProductStock":            "stock_id",
+}
+
+
+def _normalize_mutation_response(mutation: str, resp: dict) -> dict:
+    """Add a named alias for the `id` field returned by OPS array-input mutations."""
+    alias = _MUTATION_ID_ALIAS.get(mutation)
+    if alias and "id" in resp and alias not in resp:
+        resp = dict(resp, **{alias: resp["id"]})
+    return resp
+
+
 def _mutation_to_method(mutation: str) -> str:
     mapping = {
         "setProductCategory":            "set_product_category",
@@ -833,6 +923,7 @@ def _mutation_to_method(mutation: str) -> str:
         "setAdditionalOption":           "set_additional_option",
         "setAdditionalOptionAttributes": "set_additional_option_attributes",
         "setProductsAttributePrice":     "set_products_attribute_price",
+        "setProductsImageGallery":       "set_products_image_gallery",
         "updateProductStock":            "update_product_stock",
     }
     return mapping.get(mutation, mutation)
