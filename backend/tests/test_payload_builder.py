@@ -383,13 +383,16 @@ class TestMutationPlanOrder:
         last_two = payload.plan[-2:]
         assert all(s.mutation == "updateProductStock" for s in last_two)
 
-    def test_inventory_action_is_reset(self, monkeypatch):
+    def test_inventory_action_is_add(self, monkeypatch):
+        # action=Add is used because Reset requires a pre-existing stock row
+        # and OPS rejects Reset for sizes that don't have one yet (initial pushes).
+        # Stock steps are opt-in (OPS_PUSH_INCLUDE_STOCK); enable to assert shape.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
         stock_step = next(s for s in payload.plan if s.mutation == "updateProductStock")
         # action and product_sku are top-level siblings of input (not nested)
-        assert stock_step.variables["action"] == "Reset"
+        assert stock_step.variables["action"] == "Add"
         assert stock_step.variables["product_sku"] == "PC61-WHT-M"
         assert stock_step.variables["input"]["stock_quantity"] == 42
         # action must NOT be nested inside input
@@ -404,8 +407,8 @@ class TestMutationPlanOrder:
         # Category lives on setProduct.input as category_id (Int), sourced from
         # the storefront mapping and omitted when unmapped (default ctx has none).
         setProduct = payload.plan[0]
-        assert "category_name" not in setProduct.variables["input"]
-        assert "category_id" not in setProduct.variables["input"]
+        assert "category_name" not in setProduct.variables["inputs"][0]
+        assert "category_id" not in setProduct.variables["inputs"][0]
 
 
 class TestVariantOrdering:
@@ -446,7 +449,7 @@ class TestStepDependencies:
         payload = _synthesize_payload(ctx)
         size_step = payload.plan[1]
         assert size_step.requires_response_from == [1]
-        assert size_step.variables["input"]["products_id"] == _placeholder(1, "products_id")
+        assert size_step.variables["inputs"][0]["products_id"] == _placeholder(1, "products_id")
 
     def test_price_depends_on_matching_size_step(self):
         variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M")]
@@ -458,12 +461,12 @@ class TestStepDependencies:
         price_step_1 = payload.plan[3]
         price_step_2 = payload.plan[4]
         assert 1 in price_step_1.requires_response_from
-        assert price_step_1.variables["input"]["size_id"].startswith("$step")
+        assert price_step_1.variables["inputs"][0]["size_id"].startswith("$step")
         # Verifies the wiring reads product_size_id from setProductSize's response
-        assert price_step_1.variables["input"]["size_id"].endswith(".product_size_id")
+        assert price_step_1.variables["inputs"][0]["size_id"].endswith(".size_id")
         assert 1 in price_step_2.requires_response_from
         # Sanity: the two prices reference different size steps
-        assert price_step_1.variables["input"]["size_id"] != price_step_2.variables["input"]["size_id"]
+        assert price_step_1.variables["inputs"][0]["size_id"] != price_step_2.variables["inputs"][0]["size_id"]
 
 
 # ===========================================================================
@@ -490,15 +493,15 @@ class TestMarkupApplied:
         )
         payload = _synthesize_payload(ctx)
         price_step = next(s for s in payload.plan if s.mutation == "setProductPrice")
-        assert price_step.variables["input"]["price"] == pytest.approx(15.00)
-        assert price_step.variables["input"]["vendor_price"] == pytest.approx(10.00)
+        assert price_step.variables["inputs"][0]["price"] == pytest.approx(15.00)
+        assert price_step.variables["inputs"][0]["vendor_price"] == pytest.approx(10.00)
 
     def test_qty_to_is_999999(self):
         ctx = _ctx(variants=[_variant("PC61-WHT-M")])
         payload = _synthesize_payload(ctx)
         price_step = next(s for s in payload.plan if s.mutation == "setProductPrice")
-        assert price_step.variables["input"]["qty"] == 1
-        assert price_step.variables["input"]["qty_to"] == 999999
+        assert price_step.variables["inputs"][0]["qty"] == 1
+        assert price_step.variables["inputs"][0]["qty_to"] == 999999
 
     def test_no_markup_rule_passthrough(self):
         ctx = _ctx(
@@ -567,7 +570,7 @@ class TestPushMode:
         assert payload.push_mode == "create"
         assert payload.existing_ops_product_id is None
         setProduct = payload.plan[0]
-        assert setProduct.variables["input"]["products_id"] == 0
+        assert setProduct.variables["inputs"][0]["products_id"] == 0
 
     def test_update_mode_when_mapping_exists(self):
         mapping = _push_mapping(target_ops_product_id=12345)
@@ -576,7 +579,7 @@ class TestPushMode:
         assert payload.push_mode == "update"
         assert payload.existing_ops_product_id == 12345
         setProduct = payload.plan[0]
-        assert setProduct.variables["input"]["products_id"] == 12345
+        assert setProduct.variables["inputs"][0]["products_id"] == 12345
 
 
 # ===========================================================================
@@ -594,7 +597,7 @@ class TestImagePolicy:
         assert payload.primary_image_url == "https://x/front.jpg"
         assert payload.image_warnings == []
         setProduct = payload.plan[0]
-        assert setProduct.variables["input"]["imagename"] == "https://x/front.jpg"
+        assert setProduct.variables["inputs"][0]["imagename"] == "https://x/front.jpg"
 
     def test_multiple_images_warns(self):
         ctx = _ctx(
@@ -624,7 +627,7 @@ class TestImagePolicy:
         payload = _synthesize_payload(ctx)
         assert payload.primary_image_url is None
         setProduct = payload.plan[0]
-        assert "imagename" not in setProduct.variables["input"]
+        assert "imagename" not in setProduct.variables["inputs"][0]
 
 
 # ===========================================================================
@@ -639,14 +642,14 @@ class TestTitlePrefix:
             supplier=_supplier(slug="sanmar", prefix="VG-"),
         )
         payload = _synthesize_payload(ctx)
-        title = payload.plan[0].variables["input"]["products_title"]
+        title = payload.plan[0].variables["inputs"][0]["products_title"]
         assert title.startswith("VG-")
 
     def test_falls_back_to_uppercase_slug(self):
         sup = _supplier(slug="sanmar", prefix=None)
         ctx = _ctx(variants=[_variant("PC61-WHT-M")], supplier=sup)
         payload = _synthesize_payload(ctx)
-        title = payload.plan[0].variables["input"]["products_title"]
+        title = payload.plan[0].variables["inputs"][0]["products_title"]
         assert title.startswith("SA-")
 
 
@@ -718,7 +721,7 @@ class TestSetProductVariables:
         )
         payload = _synthesize_payload(ctx)
         set_product = payload.plan[0]
-        assert set_product.variables["input"]["products_internal_title"] == "PC61"
+        assert set_product.variables["inputs"][0]["products_internal_title"] == "PC61"
 
     def test_set_product_price_vendor_price_nonzero(self):
         """B6: vendor_price (wholesale cost) must be > 0.
@@ -733,7 +736,7 @@ class TestSetProductVariables:
         )
         payload = _synthesize_payload(ctx)
         price_step = next(s for s in payload.plan if s.mutation == "setProductPrice")
-        assert price_step.variables["input"]["vendor_price"] > 0, (
+        assert price_step.variables["inputs"][0]["vendor_price"] > 0, (
             "vendor_price must be non-zero — check that base_price is written "
             "by ps_normalizer_v2.merge_pricing (Bug 1 fix)"
         )
@@ -754,7 +757,7 @@ class TestSetProductVariables:
         )
         payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
         assign_step = next(s for s in payload.plan if s.mutation == "setAssignOptions")
-        mid = assign_step.variables["input"]["master_option_id"]
+        mid = assign_step.variables["inputs"][0]["master_option_id"]
         assert isinstance(mid, int), (
             f"master_option_id must be int, got {type(mid).__name__!r} — "
             "do not cast to str in _build_setAssignOptions_step"
@@ -769,7 +772,7 @@ class TestSetProductVariables:
         """
         ctx = _ctx(variants=[_variant("PC61-WHT-M")], product=_product(category="Polos"))
         payload = _synthesize_payload(ctx)
-        inp = payload.plan[0].variables["input"]
+        inp = payload.plan[0].variables["inputs"][0]
         assert "product_description" in inp
         for forbidden in ("category_name", "brand", "products_image", "products_description"):
             assert forbidden not in inp, f"{forbidden} is not a valid ProductInput field"
@@ -786,7 +789,7 @@ class TestSetProductVariables:
             storefront_config=SimpleNamespace(pricing_overrides=None, ops_category_id="42"),
         )
         payload = _synthesize_payload(ctx)
-        assert payload.plan[0].variables["input"]["category_id"] == 42
+        assert payload.plan[0].variables["inputs"][0]["category_id"] == 42
 
     def test_category_omitted_when_unmapped(self):
         """No storefront mapping → no category in setProduct (no 'Uncategorized' fallback)."""
@@ -795,7 +798,7 @@ class TestSetProductVariables:
             product=_product(category=None),
         )
         payload = _synthesize_payload(ctx)
-        inp = payload.plan[0].variables["input"]
+        inp = payload.plan[0].variables["inputs"][0]
         assert "category_id" not in inp
         assert "category_name" not in inp
 
@@ -897,9 +900,9 @@ class TestStorefrontOverridesInPush:
         )
         plan = _synthesize_payload(ctx).plan
         price_step = next(s for s in plan if s.mutation == "setProductPrice")
-        assert price_step.variables["input"]["price"] == pytest.approx(24.99)
+        assert price_step.variables["inputs"][0]["price"] == pytest.approx(24.99)
         # vendor_price is wholesale (base_price), untouched by overrides
-        assert price_step.variables["input"]["vendor_price"] == pytest.approx(10.00)
+        assert price_step.variables["inputs"][0]["vendor_price"] == pytest.approx(10.00)
 
     def test_empty_overrides_dict_treated_as_no_override(self):
         ctx = _ctx(

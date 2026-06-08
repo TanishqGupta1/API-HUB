@@ -21,14 +21,55 @@ from .client import OpsGraphQLClient, OpsResult
 # ── set_product_category ─────────────────────────────────────────────────────
 
 _SET_PRODUCT_CATEGORY = """
-mutation SetProductCategory($input: ProductCategoryInput!) {
-  setProductCategory(input: $input) {
+mutation SetProductCategory($inputs: [ProductCategoryInput!]!) {
+  setProductCategory(inputs: $inputs) {
     result
     message
-    category_id
+    id
   }
 }
 """.strip()
+
+
+def _unwrap_list(data: dict | None, key: str) -> dict:
+    """Unwrap a list response (array-input mutations return a list) → first item."""
+    val = (data or {}).get(key)
+    if isinstance(val, list):
+        val = val[0] if val else {}
+    return val or {}
+
+
+def _check_result(data: dict, mutation_name: str) -> OpsResult | None:
+    """Detect OPS application-level failures (HTTP 200 with `result: false`).
+
+    Background — Phase 1.1 of the OPS audit:
+      OPS returns 200 OK with `{result: false, message: "...", id: null}`
+      when a mutation is rejected at the application layer (missing required
+      field, invalid value, etc.). Without this check the caller treats the
+      response as success, the gateway records the step as `ok`, and the
+      downstream id-threading silently drops to None — producing phantom
+      "successful" pushes like PC54 (id 10001) that don't actually exist
+      in OPS.
+
+    Returns:
+      An error `OpsResult` when `result is False`, else `None` (success path).
+    """
+    # `result` may come back as bool or string from different OPS deployments.
+    # Treat both False (bool) and "false" (string) as the rejection signal.
+    result_val = data.get("result")
+    is_rejected = (
+        result_val is False
+        or (isinstance(result_val, str) and result_val.lower() == "false")
+    )
+    if is_rejected:
+        msg = data.get("message") or f"OPS rejected {mutation_name}"
+        return OpsResult(
+            ok=False,
+            ops_error_code="OPS_REJECTED",
+            ops_error_message=str(msg)[:400],
+            raw={"mutation": mutation_name, "ops_response": data},
+        )
+    return None
 
 
 async def set_product_category(
@@ -40,21 +81,25 @@ async def set_product_category(
 ) -> OpsResult:
     result = await client.execute(
         _SET_PRODUCT_CATEGORY,
-        variables={"input": {"category_name": category_name, "parent_id": parent_id, "visible": visible}},
+        variables={"inputs": [{"category_name": category_name, "parent_id": parent_id, "visible": visible}]},
     )
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=(result.data or {}).get("setProductCategory") or {}, raw=result.raw)
+    data = _unwrap_list(result.data, "setProductCategory")
+    err = _check_result(data, "setProductCategory")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_product ──────────────────────────────────────────────────────────────
 
 _SET_PRODUCT = """
-mutation SetProduct($input: ProductInput!) {
-  setProduct(input: $input) {
+mutation SetProduct($inputs: [ProductInput!]!) {
+  setProduct(inputs: $inputs) {
     result
     message
-    products_id
+    id
   }
 }
 """.strip()
@@ -70,26 +115,30 @@ async def set_product(
 ) -> OpsResult:
     result = await client.execute(
         _SET_PRODUCT,
-        variables={"input": {
+        variables={"inputs": [{
             "category_id": category_id,
             "products_title": products_title,
             "products_internal_title": products_internal_title,
             "visible": visible,
-        }},
+        }]},
     )
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=(result.data or {}).get("setProduct") or {}, raw=result.raw)
+    data = _unwrap_list(result.data, "setProduct")
+    err = _check_result(data, "setProduct")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_product_size ─────────────────────────────────────────────────────────
 
 _SET_PRODUCT_SIZE = """
-mutation SetProductSize($input: ProductSizeInput!) {
-  setProductSize(input: $input) {
+mutation SetProductSize($inputs: [ProductSizeInput!]!) {
+  setProductSize(inputs: $inputs) {
     result
     message
-    product_size_id
+    id
   }
 }
 """.strip()
@@ -99,34 +148,34 @@ async def set_product_size(
     *,
     client: OpsGraphQLClient,
     products_id: int,
-    size_name: str,
-    color_name: str,
-    products_sku: str,
+    size_title: str,
     visible: int = 1,
 ) -> OpsResult:
     result = await client.execute(
         _SET_PRODUCT_SIZE,
-        variables={"input": {
+        variables={"inputs": [{
             "products_id": products_id,
-            "size_name": size_name,
-            "color_name": color_name,
-            "products_sku": products_sku,
+            "size_title": size_title,
             "visible": visible,
-        }},
+        }]},
     )
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=(result.data or {}).get("setProductSize") or {}, raw=result.raw)
+    data = _unwrap_list(result.data, "setProductSize")
+    err = _check_result(data, "setProductSize")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_product_price ────────────────────────────────────────────────────────
 
 _SET_PRODUCT_PRICE = """
-mutation SetProductPrice($input: ProductPriceInput!) {
-  setProductPrice(input: $input) {
+mutation SetProductPrice($inputs: [ProductPriceInput!]!) {
+  setProductPrice(inputs: $inputs) {
     result
     message
-    product_price_id
+    id
   }
 }
 """.strip()
@@ -143,7 +192,6 @@ async def set_product_price(
     qty_to: int | None = None,
     visible: int = 1,
 ) -> OpsResult:
-    # price / vendor_price are strings to preserve Decimal precision
     input_dict: dict = {
         "products_id": products_id,
         "size_id": size_id,
@@ -154,20 +202,24 @@ async def set_product_price(
     }
     if qty_to is not None:
         input_dict["qty_to"] = qty_to
-    result = await client.execute(_SET_PRODUCT_PRICE, variables={"input": input_dict})
+    result = await client.execute(_SET_PRODUCT_PRICE, variables={"inputs": [input_dict]})
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=(result.data or {}).get("setProductPrice") or {}, raw=result.raw)
+    data = _unwrap_list(result.data, "setProductPrice")
+    err = _check_result(data, "setProductPrice")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_assign_options ───────────────────────────────────────────────────────
 
 _SET_ASSIGN_OPTIONS = """
-mutation SetAssignOptions($input: AssignOptionsInput!) {
-  setAssignOptions(input: $input) {
+mutation SetAssignOptions($inputs: [AssignOptionsInput!]!) {
+  setAssignOptions(inputs: $inputs) {
     result
     message
-    product_option_id
+    id
   }
 }
 """.strip()
@@ -177,25 +229,29 @@ async def set_assign_options(
     *,
     client: OpsGraphQLClient,
     products_id: int,
-    options_id: list[int],
+    master_option_id: int,
 ) -> OpsResult:
     result = await client.execute(
         _SET_ASSIGN_OPTIONS,
-        variables={"input": {"products_id": products_id, "options_id": options_id}},
+        variables={"inputs": [{"products_id": products_id, "master_option_id": master_option_id}]},
     )
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=(result.data or {}).get("setAssignOptions") or {}, raw=result.raw)
+    data = _unwrap_list(result.data, "setAssignOptions")
+    err = _check_result(data, "setAssignOptions")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_additional_option ────────────────────────────────────────────────────
 
 _SET_ADDITIONAL_OPTION = """
-mutation SetAdditionalOption($input: AdditionalOptionInput!) {
-  setAdditionalOption(input: $input) {
+mutation SetAdditionalOption($inputs: [AdditionalOptionInput!]!) {
+  setAdditionalOption(inputs: $inputs) {
     result
     message
-    prod_add_opt_id
+    id
   }
 }
 """.strip()
@@ -204,27 +260,39 @@ mutation SetAdditionalOption($input: AdditionalOptionInput!) {
 async def set_additional_option(
     *,
     client: OpsGraphQLClient,
-    options_name: str,
+    products_id: int,
+    option_key: str,
+    title: str,
     options_type: str,
-    visible: int = 1,
+    sort_order: int = 0,
 ) -> OpsResult:
     result = await client.execute(
         _SET_ADDITIONAL_OPTION,
-        variables={"input": {"options_name": options_name, "options_type": options_type, "visible": visible}},
+        variables={"inputs": [{
+            "products_id": products_id,
+            "option_key": option_key,
+            "title": title,
+            "options_type": options_type,
+            "sort_order": sort_order,
+        }]},
     )
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=(result.data or {}).get("setAdditionalOption") or {}, raw=result.raw)
+    data = _unwrap_list(result.data, "setAdditionalOption")
+    err = _check_result(data, "setAdditionalOption")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_additional_option_attributes ─────────────────────────────────────────
 
 _SET_ADDITIONAL_OPTION_ATTRIBUTES = """
-mutation SetAdditionalOptionAttributes($input: AdditionalOptionAttributesInput!) {
-  setAdditionalOptionAttributes(input: $input) {
+mutation SetAdditionalOptionAttributes($inputs: [AdditionalOptionAttributesInput!]!) {
+  setAdditionalOptionAttributes(inputs: $inputs) {
     result
     message
-    attribute_id
+    id
   }
 }
 """.strip()
@@ -233,35 +301,39 @@ mutation SetAdditionalOptionAttributes($input: AdditionalOptionAttributesInput!)
 async def set_additional_option_attributes(
     *,
     client: OpsGraphQLClient,
-    options_id: int,
-    options_values_name: str,
-    visible: int = 1,
+    prod_add_opt_id: int,
+    attribute_key: str,
+    label: str,
+    setup_cost: float = 0.0,
+    multiplier: float = 1.0,
 ) -> OpsResult:
     result = await client.execute(
         _SET_ADDITIONAL_OPTION_ATTRIBUTES,
-        variables={"input": {
-            "options_id": options_id,
-            "options_values_name": options_values_name,
-            "visible": visible,
-        }},
+        variables={"inputs": [{
+            "prod_add_opt_id": prod_add_opt_id,
+            "attribute_key": attribute_key,
+            "label": label,
+            "setup_cost": setup_cost,
+            "multiplier": multiplier,
+        }]},
     )
     if not result.ok:
         return result
-    return OpsResult(
-        ok=True,
-        data=(result.data or {}).get("setAdditionalOptionAttributes") or {},
-        raw=result.raw,
-    )
+    data = _unwrap_list(result.data, "setAdditionalOptionAttributes")
+    err = _check_result(data, "setAdditionalOptionAttributes")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_products_attribute_price ──────────────────────────────────────────────
 
 _SET_PRODUCTS_ATTRIBUTE_PRICE = """
-mutation SetProductsAttributePrice($input: ProductsAttributePriceInput!) {
-  setProductsAttributePrice(input: $input) {
+mutation SetProductsAttributePrice($inputs: [ProductsAttributePriceInput!]!) {
+  setProductsAttributePrice(inputs: $inputs) {
     result
     message
-    attribute_id
+    id
   }
 }
 """.strip()
@@ -270,29 +342,31 @@ mutation SetProductsAttributePrice($input: ProductsAttributePriceInput!) {
 async def set_products_attribute_price(
     *,
     client: OpsGraphQLClient,
-    products_id: int,
-    options_id: int,
-    options_values_id: int,
-    price: str,
-    visible: int = 1,
+    product_id: int,
+    attribute_id: int,
+    size_id: int,
+    attributes_price: str,
+    vendor_price: str | None = None,
 ) -> OpsResult:
+    inp: dict = {
+        "product_id": product_id,
+        "attribute_id": attribute_id,
+        "size_id": size_id,
+        "attributes_price": attributes_price,
+    }
+    if vendor_price is not None:
+        inp["vendor_price"] = vendor_price
     result = await client.execute(
         _SET_PRODUCTS_ATTRIBUTE_PRICE,
-        variables={"input": {
-            "products_id": products_id,
-            "options_id": options_id,
-            "options_values_id": options_values_id,
-            "price": price,
-            "visible": visible,
-        }},
+        variables={"inputs": [inp]},
     )
     if not result.ok:
         return result
-    return OpsResult(
-        ok=True,
-        data=(result.data or {}).get("setProductsAttributePrice") or {},
-        raw=result.raw,
-    )
+    data = _unwrap_list(result.data, "setProductsAttributePrice")
+    err = _check_result(data, "setProductsAttributePrice")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── update_product_stock ─────────────────────────────────────────────────────
@@ -302,7 +376,7 @@ mutation UpdateProductStock($stock_id: Int, $product_sku: String, $action: Updat
   updateProductStock(stock_id: $stock_id, product_sku: $product_sku, action: $action, input: $input) {
     result
     message
-    stock_id
+    id
     stock_quantity
   }
 }
@@ -331,7 +405,14 @@ async def update_product_stock(
     result = await client.execute(_UPDATE_PRODUCT_STOCK, variables=variables)
     if not result.ok:
         return result
-    return OpsResult(ok=True, data=(result.data or {}).get("updateProductStock") or {}, raw=result.raw)
+    # updateProductStock is the one mutation that doesn't use array inputs;
+    # its response is a single dict, not a list. Still subject to the same
+    # application-level result-checking.
+    data = (result.data or {}).get("updateProductStock") or {}
+    err = _check_result(data, "updateProductStock")
+    if err is not None:
+        return err
+    return OpsResult(ok=True, data=data, raw=result.raw)
 
 
 # ── set_product_design ───────────────────────────────────────────────────────

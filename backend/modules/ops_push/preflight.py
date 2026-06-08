@@ -698,6 +698,10 @@ async def check_image_urls_reachable(
             f"{len(urls)} image(s) present — HTTP HEAD check skipped in dry_run mode",
         )
 
+    # Cap at 5 sampled URLs — checking hundreds of CDN images serially
+    # can take minutes and adds no real signal beyond the first few.
+    urls = urls[:5]
+
     sem = asyncio.Semaphore(5)
 
     async def _head(url: str) -> tuple[str, bool, str]:

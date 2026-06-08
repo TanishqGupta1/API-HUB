@@ -8,6 +8,10 @@ Verifies:
 import pytest
 from modules.ops_client.client import OpsAuth, OpsResult, OpsGraphQLClient
 
+# Hermetic — no DB, no network. Opt out of the autouse DB-cleanup fixture
+# in conftest.py so these tests pass standalone without Postgres running.
+pytestmark = pytest.mark.no_db
+
 
 # ── OpsAuth tests ────────────────────────────────────────────────────────────
 
@@ -92,4 +96,6 @@ async def test_client_has_graphql_path():
         client_secret="b",
     )
     client = OpsGraphQLClient(auth=auth)
+    # OPS exposes GraphQL at /api/ (verified live against visualgraphx staging).
+    # The /graphql path returns the storefront HTML page, not the GraphQL API.
     assert client.GRAPHQL_PATH == "/api/"

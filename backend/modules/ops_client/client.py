@@ -210,9 +210,10 @@ class OpsGraphQLClient:
             json={"query": query, "variables": variables},
         )
 
-        # OPS revoked the token early — refresh once and retry
-        if resp.status_code == 401 and allow_retry:
-            log.debug("OPS 401 — invalidating cached token and retrying once")
+        # OPS revoked/expired the token — refresh once and retry.
+        # Some OPS deployments return 403 instead of 401 for expired tokens.
+        if resp.status_code in (401, 403) and allow_retry:
+            log.debug("OPS %s — invalidating cached token and retrying once", resp.status_code)
             await self._invalidate_token()
             return await self._execute_once(query, variables=variables, allow_retry=False)
 
