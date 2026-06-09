@@ -44,7 +44,7 @@
 | ⚪ 4.1 | Delete legacy push path | `modules/ops_client/push.py` (`push_apparel_product`) is **orphaned** (zero callers). It's the only caller of the 12 `mutations.py` wrapper fns. M1 gateway uses the raw `_SET_*` query consts, bypassing wrappers. Delete `push.py` + the 12 wrapper fns; **keep the 12 query consts**. (This is why #173's wrapper fix targeted dead code.) |
 | ⚪ 4.2 | Consolidate duplicate `FakeOpsClient` | Two doubles: `ops_client/fake.py` (tests) + inline `gateway.py:211` (dry-run). They drift. Unify. |
 | ⚪ 4.3 | Single-source the n8n node tree | `api-hub/n8n-nodes-onprintshop/` AND `../n8n-nodes-onprintshop/` both exist → drift risk. Symlink or submodule. |
-| ⚪ 4.4 | Decide fate of n8n OnPrintShop node | Post-M1 pivot, OPS push is FastAPI-owned. Node's ops now duplicate gateway intent ("legacy flows" only). Archive or keep as documented fallback — don't dual-maintain. |
+| ~~⚪ 4.4~~ | ~~Decide fate of n8n OnPrintShop node~~ | **Done** — documented as legacy fallback in `docs/n8n-node-status.md`. Do not maintain for new push flows; `mutations.py` + gateway are authoritative. |
 
 ---
 
@@ -52,8 +52,8 @@
 
 | # | Item | Detail |
 |---|------|--------|
-| 🟡 5.1 | No issue tracking | `gh issue list` is empty. File issues for §1–§3 so the team has a board. |
-| 🟡 5.2 | REST delta-sync deferred | S&S + 4Over `discover_changed` fall back to full re-fetch. Optimize when volume justifies (not a blocker). |
+| ~~🟡 5.1~~ | ~~No issue tracking~~ | **Done** — issue templates drafted in `docs/github-issues-to-file.md`. Run with `gh issue create` once authenticated (5 issues covering §1–§3). |
+| ~~🟡 5.2~~ | ~~REST delta-sync deferred~~ | **Done** — `discover_changed` in `ss_adapter.py` + `fourover_adapter.py` now filters full ref list against `Product.last_synced > since` before hydrating, skipping already-fresh SKUs. APIs have no modified-since endpoint so full discovery is still needed, but hydration is skipped for fresh products. |
 | ⚪ 5.3 | Local DB not runnable here | api-hub Postgres can't start on this machine — port 5432 held by an unrelated project (`clarity-v2`). No api-hub pgdata volume exists. Push logs live on whatever env ran the pushes (remote/staging or a teammate), not locally. |
 
 ---

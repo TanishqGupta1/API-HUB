@@ -163,8 +163,21 @@ class FourOverAdapter(BaseAdapter):
         )
 
     async def discover_changed(self, since: datetime) -> list[ProductRef]:
-        # 4Over has no modified-since endpoint — return all sellable products
-        return await self.discover(DiscoveryMode.FULL_SELLABLE)
+        # 4Over has no modified-since API. Discover all sellable refs (cheap),
+        # then filter out SKUs we already imported more recently than `since` to
+        # avoid redundant full hydrations on every delta run.
+        all_refs = await self.discover(DiscoveryMode.FULL_SELLABLE)
+        if not all_refs:
+            return []
+        from sqlalchemy import select
+        from modules.catalog.models import Product
+        result = await self.db.execute(
+            select(Product.supplier_sku)
+            .where(Product.supplier_id == self.supplier.id)
+            .where(Product.last_synced > since)
+        )
+        fresh_skus = {row[0] for row in result}
+        return [r for r in all_refs if r.supplier_sku not in fresh_skus]
 
 
 register_adapter("FourOverAdapter", FourOverAdapter)

@@ -175,8 +175,21 @@ class SSAdapter(BaseAdapter):
         return _ps_product_to_ingest(products[0], inventories, prices, media)
 
     async def discover_changed(self, since) -> list[ProductRef]:
-        # S&S has no modified-since endpoint — return full list
-        return await self.discover(DiscoveryMode.FULL)
+        # S&S has no modified-since API. Discover all refs (cheap — no hydration),
+        # then filter out SKUs we already imported more recently than `since` to
+        # avoid redundant full hydrations on every delta run.
+        all_refs = await self.discover(DiscoveryMode.FULL)
+        if not all_refs:
+            return []
+        from sqlalchemy import select
+        from modules.catalog.models import Product
+        result = await self.db.execute(
+            select(Product.supplier_sku)
+            .where(Product.supplier_id == self.supplier.id)
+            .where(Product.last_synced > since)
+        )
+        fresh_skus = {row[0] for row in result}
+        return [r for r in all_refs if r.supplier_sku not in fresh_skus]
 
     async def close(self) -> None:
         await self._client.aclose()
