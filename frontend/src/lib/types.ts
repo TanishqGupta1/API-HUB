@@ -266,6 +266,11 @@ export interface Customer {
   created_at: string;
   products_pushed: number;
   markup_rules_count: number;
+  // Per-customer fallback OPS category for product pushes. Used when a
+  // product has no per-product storefront-config category. Without this,
+  // products are created uncategorized and hidden from OPS admin's
+  // default browse view.
+  default_ops_category_id: number | null;
 }
 
 /* ─── Markup Rules ───────────────────────────────────────────────────────── */

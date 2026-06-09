@@ -22,6 +22,7 @@ from modules.integrations.schemas import PushRequest, PushRequestAccepted, PushR
 from modules.markup.engine import calculate_price
 from modules.ops_client import mutations as _m
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
+from modules.ops_client.fake import FakeOpsClient
 from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
 from modules.ops_push.preflight import run_preflight
 from modules.ops_push.verify import verify_pushed_product
@@ -310,91 +311,6 @@ class OpsClientAdapter:
             return data
 
         return _invoke
-
-
-class FakeOpsClient:
-    """Dry-run client — fabricates IDs and records calls. No OPS traffic."""
-
-    is_dry_run: bool = True  # sentinel checked by _resolve_stock_id_for_size
-
-    def __init__(self) -> None:
-        self.calls: list[dict] = []
-        self._counter = 10000
-
-    async def aclose(self) -> None:
-        pass
-
-    async def execute(self, query: str, *, variables: dict | None = None) -> OpsResult:
-        """Dry-run has no real OPS to query. Report 'no existing product' so the
-        dedup path treats every dry-run as a create (mirrors the empty-result
-        contract of get_product_by_sku). Prevents the AttributeError that used to
-        make dry-run dedup silently no-op."""
-        return OpsResult(ok=True, data={"getProductBySku": {}})
-
-    def _next_id(self) -> int:
-        self._counter += 1
-        return self._counter
-
-    def _record(self, method: str, variables: dict, response: dict) -> None:
-        self.calls.append({"method": method, "input": variables, "response": response})
-
-    # All array-input mutations return `id` (matching live OPS contract).
-    # _normalize_mutation_response in execute_push aliases `id` to the named
-    # field downstream placeholders expect (products_id, size_id, etc.).
-
-    async def set_product_category(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product_category", variables, r)
-        return r
-
-    async def set_product(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product", variables, r)
-        return r
-
-    async def set_product_size(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product_size", variables, r)
-        return r
-
-    async def set_product_price(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product_price", variables, r)
-        return r
-
-    async def set_assign_options(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_assign_options", variables, r)
-        return r
-
-    async def set_additional_option(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_additional_option", variables, r)
-        return r
-
-    async def set_additional_option_attributes(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_additional_option_attributes", variables, r)
-        return r
-
-    async def set_products_attribute_price(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_products_attribute_price", variables, r)
-        return r
-
-    async def set_products_image_gallery(self, variables: dict) -> dict:
-        # Gallery returns {result, message} (no id) — mirror that shape.
-        r = {"result": True, "message": "dry-run image gallery ok"}
-        self._record("set_products_image_gallery", variables, r)
-        return r
-
-    async def update_product_stock(self, variables: dict) -> dict:
-        r = {
-            "stock_id": self._counter,
-            "stock_quantity": (variables.get("input") or {}).get("stock_quantity", 0),
-        }
-        self._record("update_product_stock", variables, r)
-        return r
 
 
 def _build_live_client(customer: Customer) -> OpsClientAdapter:
@@ -787,12 +703,76 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             final_status = "pushed" if not push_log.dry_run else "dry_run_pushed"
             cleanup_targets: Optional[dict] = None
 
+            # ── Phase 5: step-resumption — skip steps that already succeeded
+            # in a prior partial push for this (customer, product). Looks
+            # only at live pushes (dry-runs use a separate FakeOpsClient
+            # universe of IDs). Match by source_key, which is stable across
+            # plan attempts for the same logical mutation.
+            prior_ok_by_source_key: dict[str, tuple[uuid_mod.UUID, dict]] = {}
+            if not push_log.dry_run:
+                prior_pushes = (await db.execute(
+                    select(ProductPushLog)
+                    .where(
+                        ProductPushLog.customer_id == push_log.customer_id,
+                        ProductPushLog.product_id == push_log.product_id,
+                        ProductPushLog.id != push_log_id,
+                        ProductPushLog.dry_run.is_(False),
+                        ProductPushLog.status.in_(("partial_failure", "failed")),
+                    )
+                    .order_by(ProductPushLog.pushed_at.desc())
+                    .limit(5)
+                )).scalars().all()
+                # Most recent OK step per source_key wins (newer prior pushes
+                # supersede older ones in case the OPS IDs differ).
+                seen_keys: set[str] = set()
+                for prior in prior_pushes:
+                    for s in (prior.step_results or []):
+                        if not isinstance(s, dict):
+                            continue
+                        sk = s.get("source_key")
+                        if not sk or sk in seen_keys:
+                            continue
+                        if s.get("status") == "ok" and s.get("ops_ids"):
+                            prior_ok_by_source_key[sk] = (prior.id, s["ops_ids"])
+                            seen_keys.add(sk)
+                if prior_ok_by_source_key:
+                    logger.info(
+                        "step-resumption: found %d resumable steps from prior push(es) for product=%s customer=%s",
+                        len(prior_ok_by_source_key), push_log.product_id, push_log.customer_id,
+                    )
+
             # ── Execute plan sequentially ──
             import hashlib, json as _json
             for step_num, step in enumerate(plan, start=1):
                 mutation = step.get("mutation", "")
                 raw_variables = step.get("variables", {})
+                source_key = step.get("source_key", "")
                 t_start = datetime.now(timezone.utc)
+
+                # Phase 5: step-resumption — if this exact source_key already
+                # succeeded in a prior push, skip the OPS call and inherit
+                # the returned IDs so downstream placeholder steps still
+                # resolve correctly.
+                prior_match = prior_ok_by_source_key.get(source_key)
+                if prior_match is not None:
+                    prior_push_id, prior_ops_ids = prior_match
+                    # Rebuild step_responses entry from the prior ops_ids so
+                    # any `$stepN.field` referencing this step still resolves.
+                    # Strip the "_id" suffix conversion that ops_ids used.
+                    step_responses[step_num] = dict(prior_ops_ids)
+                    if "products_id" in prior_ops_ids and prior_ops_ids["products_id"]:
+                        ops_product_id = str(prior_ops_ids["products_id"])
+                    step_results.append({
+                        "step": step_num,
+                        "mutation": mutation,
+                        "source_key": source_key,
+                        "status": "skipped",
+                        "ops_ids": prior_ops_ids,
+                        "attempted_at": t_start.isoformat(),
+                        "request_fingerprint": "",
+                        "reused_from_push": str(prior_push_id),
+                    })
+                    continue
 
                 # Resolve $stepN.field placeholders to real IDs returned by
                 # earlier steps before sending to OPS.
@@ -802,6 +782,7 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     step_results.append({
                         "step": step_num,
                         "mutation": mutation,
+                        "source_key": source_key,
                         "status": "failed",
                         "ops_ids": {},
                         "attempted_at": t_start.isoformat(),
@@ -854,6 +835,7 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                             step_results.append({
                                 "step": step_num,
                                 "mutation": mutation,
+                                "source_key": source_key,
                                 "status": "warning",
                                 "ops_ids": {},
                                 "attempted_at": t_start.isoformat(),
@@ -898,6 +880,7 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     step_results.append({
                         "step": step_num,
                         "mutation": mutation,
+                        "source_key": source_key,
                         "status": "ok",
                         "ops_ids": ops_ids,
                         "attempted_at": t_start.isoformat(),
@@ -914,6 +897,7 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     step_results.append({
                         "step": step_num,
                         "mutation": mutation,
+                        "source_key": source_key,
                         "status": "warning" if is_warn_only else "failed",
                         "ops_ids": {},
                         "attempted_at": t_start.isoformat(),
