@@ -1,34 +1,32 @@
-"""OPS GraphQL mutation + query wrappers — one function per operation.
+"""OPS GraphQL operation strings + the wrappers still in use.
 
-ID threading order for apparel push:
-  set_product_category → category_id
-  set_product(category_id) → products_id
-  set_product_size(products_id) → size_id  (once per variant)
-  set_product_price(products_id, size_id)  (once per variant)
-  set_assign_options(products_id)
-  set_additional_option / set_additional_option_attributes / set_products_attribute_price
-  update_product_stock(products_id)
-  set_product_design(products_id)
+The M1 Integration Gateway (`modules/ops_push/gateway.py`) sends OPS mutations
+by dispatching the raw query CONSTANTS below (`_SET_*` / `_UPDATE_*`) through its
+own adapter — it does not call per-operation wrapper functions for the push.
 
-Queries (P2.2 — read-back / dedup):
-  get_product_by_sku(products_sku) → products_id | None
+What remains here and why:
+  * `_SET_*` / `_UPDATE_*` / `_GET_*` query constants — single source of truth
+    for OPS field shapes; referenced by the gateway's `_MUTATION_DISPATCH`.
+  * `get_product_by_sku()` — live: used by the gateway dedup/verify paths.
+  * `set_product` / `set_product_size` / `set_product_price` /
+    `update_product_stock` — retained as the reference implementation +
+    regression coverage for OPS application-level `result:false` rejection
+    (the PC54/PC61 silent-failure scenario, tested in
+    `test_ops_push_normalization.py`). This `_check_result` logic is what the
+    gateway silent-failure guard (PENDING-WORK §1.2) needs to adopt.
+  * `_unwrap_list()` / `_check_result()` — array-response unwrap + rejection
+    detection used by the wrappers above.
+
+Removed (no production callers, no remaining tests): the legacy
+`set_product_category`, `set_products_image_gallery`, `set_assign_options`,
+`set_additional_option`, `set_additional_option_attributes`,
+`set_products_attribute_price`, `set_product_design` wrappers, and
+`modules/ops_client/push.py`. Their query constants are kept (the gateway
+dispatches them directly).
 """
 from __future__ import annotations
 
 from .client import OpsGraphQLClient, OpsResult
-
-
-# ── set_product_category ─────────────────────────────────────────────────────
-
-_SET_PRODUCT_CATEGORY = """
-mutation SetProductCategory($inputs: [ProductCategoryInput!]!) {
-  setProductCategory(inputs: $inputs) {
-    result
-    message
-    id
-  }
-}
-""".strip()
 
 
 def _unwrap_list(data: dict | None, key: str) -> dict:
@@ -72,27 +70,21 @@ def _check_result(data: dict, mutation_name: str) -> OpsResult | None:
     return None
 
 
-async def set_product_category(
-    *,
-    client: OpsGraphQLClient,
-    category_name: str,
-    parent_id: int = 0,
-    visible: int = 1,
-) -> OpsResult:
-    result = await client.execute(
-        _SET_PRODUCT_CATEGORY,
-        variables={"inputs": [{"category_name": category_name, "parent_id": parent_id, "visible": visible}]},
-    )
-    if not result.ok:
-        return result
-    data = _unwrap_list(result.data, "setProductCategory")
-    err = _check_result(data, "setProductCategory")
-    if err is not None:
-        return err
-    return OpsResult(ok=True, data=data, raw=result.raw)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# OPS mutation query constants — dispatched by gateway._MUTATION_DISPATCH.
+# Single source of truth for OPS input field shapes. Keep all of these even
+# where the wrapper function was removed; the gateway sends them directly.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-
-# ── set_product ──────────────────────────────────────────────────────────────
+_SET_PRODUCT_CATEGORY = """
+mutation SetProductCategory($inputs: [ProductCategoryInput!]!) {
+  setProductCategory(inputs: $inputs) {
+    result
+    message
+    id
+  }
+}
+""".strip()
 
 _SET_PRODUCT = """
 mutation SetProduct($inputs: [ProductInput!]!) {
@@ -104,6 +96,99 @@ mutation SetProduct($inputs: [ProductInput!]!) {
 }
 """.strip()
 
+_SET_PRODUCTS_IMAGE_GALLERY = """
+mutation SetProductsImageGallery($products_id: Int!, $optimizeimg: Int, $input: ProductsImageGalleryBulkInput!) {
+  setProductsImageGallery(products_id: $products_id, optimizeimg: $optimizeimg, input: $input) {
+    result
+    message
+  }
+}
+""".strip()
+
+_SET_PRODUCT_SIZE = """
+mutation SetProductSize($inputs: [ProductSizeInput!]!) {
+  setProductSize(inputs: $inputs) {
+    result
+    message
+    id
+  }
+}
+""".strip()
+
+_SET_PRODUCT_PRICE = """
+mutation SetProductPrice($inputs: [ProductPriceInput!]!) {
+  setProductPrice(inputs: $inputs) {
+    result
+    message
+    id
+  }
+}
+""".strip()
+
+_SET_ASSIGN_OPTIONS = """
+mutation SetAssignOptions($inputs: [AssignOptionsInput!]!) {
+  setAssignOptions(inputs: $inputs) {
+    result
+    message
+    id
+  }
+}
+""".strip()
+
+_SET_ADDITIONAL_OPTION = """
+mutation SetAdditionalOption($inputs: [AdditionalOptionInput!]!) {
+  setAdditionalOption(inputs: $inputs) {
+    result
+    message
+    id
+  }
+}
+""".strip()
+
+_SET_ADDITIONAL_OPTION_ATTRIBUTES = """
+mutation SetAdditionalOptionAttributes($inputs: [AdditionalOptionAttributesInput!]!) {
+  setAdditionalOptionAttributes(inputs: $inputs) {
+    result
+    message
+    id
+  }
+}
+""".strip()
+
+_SET_PRODUCTS_ATTRIBUTE_PRICE = """
+mutation SetProductsAttributePrice($inputs: [ProductsAttributePriceInput!]!) {
+  setProductsAttributePrice(inputs: $inputs) {
+    result
+    message
+    id
+  }
+}
+""".strip()
+
+_UPDATE_PRODUCT_STOCK = """
+mutation UpdateProductStock($stock_id: Int, $product_sku: String, $action: UpdateProductStockActionEnum!, $input: UpdateProductStockInput!) {
+  updateProductStock(stock_id: $stock_id, product_sku: $product_sku, action: $action, input: $input) {
+    result
+    message
+    id
+    stock_quantity
+  }
+}
+""".strip()
+
+_SET_PRODUCT_DESIGN = """
+mutation SetProductDesign($input: setProductDesign_input!) {
+  setProductDesign(input: $input) {
+    products_id
+  }
+}
+""".strip()
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Retained wrappers — reference impl + silent-failure (`result:false`)
+# regression coverage (PENDING-WORK §1.2). Not on the production push path.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async def set_product(
     *,
@@ -131,62 +216,6 @@ async def set_product(
     return OpsResult(ok=True, data=data, raw=result.raw)
 
 
-# ── set_products_image_gallery ───────────────────────────────────────────────
-
-_SET_PRODUCTS_IMAGE_GALLERY = """
-mutation SetProductsImageGallery($products_id: Int!, $optimizeimg: Int, $input: ProductsImageGalleryBulkInput!) {
-  setProductsImageGallery(products_id: $products_id, optimizeimg: $optimizeimg, input: $input) {
-    result
-    message
-  }
-}
-""".strip()
-
-
-async def set_products_image_gallery(
-    *,
-    client: OpsGraphQLClient,
-    products_id: int,
-    image_arr: list[dict],
-    optimizeimg: int = 1,
-) -> OpsResult:
-    """Attach product images via the gallery.
-
-    OPS has NO file-upload mutation — images are referenced by URL in each
-    item's `products_large_image_name`, and OPS fetches + optimizes the URL
-    server-side when `optimizeimg=1` (verified live against staging; see
-    `scripts/ops_image_spike.py`). Returns `[{result, message}]` (no id).
-    """
-    result = await client.execute(
-        _SET_PRODUCTS_IMAGE_GALLERY,
-        variables={
-            "products_id": products_id,
-            "optimizeimg": optimizeimg,
-            "input": {"image_arr": image_arr},
-        },
-    )
-    if not result.ok:
-        return result
-    data = _unwrap_list(result.data, "setProductsImageGallery")
-    err = _check_result(data, "setProductsImageGallery")
-    if err is not None:
-        return err
-    return OpsResult(ok=True, data=data, raw=result.raw)
-
-
-# ── set_product_size ─────────────────────────────────────────────────────────
-
-_SET_PRODUCT_SIZE = """
-mutation SetProductSize($inputs: [ProductSizeInput!]!) {
-  setProductSize(inputs: $inputs) {
-    result
-    message
-    id
-  }
-}
-""".strip()
-
-
 async def set_product_size(
     *,
     client: OpsGraphQLClient,
@@ -209,19 +238,6 @@ async def set_product_size(
     if err is not None:
         return err
     return OpsResult(ok=True, data=data, raw=result.raw)
-
-
-# ── set_product_price ────────────────────────────────────────────────────────
-
-_SET_PRODUCT_PRICE = """
-mutation SetProductPrice($inputs: [ProductPriceInput!]!) {
-  setProductPrice(inputs: $inputs) {
-    result
-    message
-    id
-  }
-}
-""".strip()
 
 
 async def set_product_price(
@@ -263,177 +279,6 @@ async def set_product_price(
     return OpsResult(ok=True, data=data, raw=result.raw)
 
 
-# ── set_assign_options ───────────────────────────────────────────────────────
-
-_SET_ASSIGN_OPTIONS = """
-mutation SetAssignOptions($inputs: [AssignOptionsInput!]!) {
-  setAssignOptions(inputs: $inputs) {
-    result
-    message
-    id
-  }
-}
-""".strip()
-
-
-async def set_assign_options(
-    *,
-    client: OpsGraphQLClient,
-    products_id: int,
-    master_option_id: int,
-) -> OpsResult:
-    result = await client.execute(
-        _SET_ASSIGN_OPTIONS,
-        variables={"inputs": [{"products_id": products_id, "master_option_id": master_option_id}]},
-    )
-    if not result.ok:
-        return result
-    data = _unwrap_list(result.data, "setAssignOptions")
-    err = _check_result(data, "setAssignOptions")
-    if err is not None:
-        return err
-    return OpsResult(ok=True, data=data, raw=result.raw)
-
-
-# ── set_additional_option ────────────────────────────────────────────────────
-
-_SET_ADDITIONAL_OPTION = """
-mutation SetAdditionalOption($inputs: [AdditionalOptionInput!]!) {
-  setAdditionalOption(inputs: $inputs) {
-    result
-    message
-    id
-  }
-}
-""".strip()
-
-
-async def set_additional_option(
-    *,
-    client: OpsGraphQLClient,
-    products_id: int,
-    option_key: str,
-    title: str,
-    options_type: str,
-    sort_order: int = 0,
-) -> OpsResult:
-    result = await client.execute(
-        _SET_ADDITIONAL_OPTION,
-        variables={"inputs": [{
-            "products_id": products_id,
-            "option_key": option_key,
-            "title": title,
-            "options_type": options_type,
-            "sort_order": sort_order,
-        }]},
-    )
-    if not result.ok:
-        return result
-    data = _unwrap_list(result.data, "setAdditionalOption")
-    err = _check_result(data, "setAdditionalOption")
-    if err is not None:
-        return err
-    return OpsResult(ok=True, data=data, raw=result.raw)
-
-
-# ── set_additional_option_attributes ─────────────────────────────────────────
-
-_SET_ADDITIONAL_OPTION_ATTRIBUTES = """
-mutation SetAdditionalOptionAttributes($inputs: [AdditionalOptionAttributesInput!]!) {
-  setAdditionalOptionAttributes(inputs: $inputs) {
-    result
-    message
-    id
-  }
-}
-""".strip()
-
-
-async def set_additional_option_attributes(
-    *,
-    client: OpsGraphQLClient,
-    prod_add_opt_id: int,
-    attribute_key: str,
-    label: str,
-    setup_cost: float = 0.0,
-    multiplier: float = 1.0,
-) -> OpsResult:
-    result = await client.execute(
-        _SET_ADDITIONAL_OPTION_ATTRIBUTES,
-        variables={"inputs": [{
-            "prod_add_opt_id": prod_add_opt_id,
-            "attribute_key": attribute_key,
-            "label": label,
-            "setup_cost": setup_cost,
-            "multiplier": multiplier,
-        }]},
-    )
-    if not result.ok:
-        return result
-    data = _unwrap_list(result.data, "setAdditionalOptionAttributes")
-    err = _check_result(data, "setAdditionalOptionAttributes")
-    if err is not None:
-        return err
-    return OpsResult(ok=True, data=data, raw=result.raw)
-
-
-# ── set_products_attribute_price ──────────────────────────────────────────────
-
-_SET_PRODUCTS_ATTRIBUTE_PRICE = """
-mutation SetProductsAttributePrice($inputs: [ProductsAttributePriceInput!]!) {
-  setProductsAttributePrice(inputs: $inputs) {
-    result
-    message
-    id
-  }
-}
-""".strip()
-
-
-async def set_products_attribute_price(
-    *,
-    client: OpsGraphQLClient,
-    product_id: int,
-    attribute_id: int,
-    size_id: int,
-    attributes_price: str,
-    vendor_price: str | None = None,
-) -> OpsResult:
-    inp: dict = {
-        "product_id": product_id,
-        "attribute_id": attribute_id,
-        "size_id": size_id,
-        "attributes_price": attributes_price,
-    }
-    if vendor_price is not None:
-        inp["vendor_price"] = vendor_price
-    result = await client.execute(
-        _SET_PRODUCTS_ATTRIBUTE_PRICE,
-        variables={"inputs": [inp]},
-    )
-    if not result.ok:
-        return result
-    data = _unwrap_list(result.data, "setProductsAttributePrice")
-    err = _check_result(data, "setProductsAttributePrice")
-    if err is not None:
-        return err
-    return OpsResult(ok=True, data=data, raw=result.raw)
-
-
-# ── update_product_stock ─────────────────────────────────────────────────────
-
-_UPDATE_PRODUCT_STOCK = """
-mutation UpdateProductStock($stock_id: Int, $product_sku: String, $action: UpdateProductStockActionEnum!, $input: UpdateProductStockInput!) {
-  updateProductStock(stock_id: $stock_id, product_sku: $product_sku, action: $action, input: $input) {
-    result
-    message
-    id
-    stock_quantity
-  }
-}
-""".strip()
-
-
 async def update_product_stock(
     *,
     client: OpsGraphQLClient,
@@ -466,43 +311,18 @@ async def update_product_stock(
     return OpsResult(ok=True, data=data, raw=result.raw)
 
 
-# ── set_product_design ───────────────────────────────────────────────────────
-
-_SET_PRODUCT_DESIGN = """
-mutation SetProductDesign($input: setProductDesign_input!) {
-  setProductDesign(input: $input) {
-    products_id
-  }
-}
-""".strip()
-
-
-async def set_product_design(
-    *,
-    client: OpsGraphQLClient,
-    products_id: int,
-    design_url: str,
-    design_type: str | None = None,
-) -> OpsResult:
-    input_dict: dict = {"products_id": products_id, "design_url": design_url}
-    if design_type is not None:
-        input_dict["design_type"] = design_type
-    result = await client.execute(_SET_PRODUCT_DESIGN, variables={"input": input_dict})
-    if not result.ok:
-        return result
-    return OpsResult(ok=True, data=(result.data or {}).get("setProductDesign") or {}, raw=result.raw)
-
-
-# ── get_product_by_sku (P2.2 dedup) ─────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# get_product_by_sku (P2.2 dedup) — live wrapper.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #
 # Used pre-push to ask OPS "do you already have a product with this SKU?" so
 # a retry of a previously-failed push doesn't create a duplicate row in OPS.
 #
 # Schema is PROVISIONAL — confirm against the OPS Postman collection when
-# Christian shares it. The function returns Optional[int] (products_id) so
-# the dedup caller never sees raw schema details; only the wrapper has to
-# change if OPS uses a different operation name (e.g. getProductsList with
-# a SKU filter) or different field names.
+# Christian shares it. The function returns the wrapper's data dict so the
+# dedup caller never sees raw schema details; only the wrapper has to change
+# if OPS uses a different operation name (e.g. getProductsList with a SKU
+# filter) or different field names.
 
 _GET_PRODUCT_BY_SKU = """
 query GetProductBySku($products_sku: String!) {
