@@ -235,13 +235,43 @@ export default function CustomerSettingsPage() {
                 <label className="text-[10px] font-black uppercase tracking-widest text-[#888894]">Base URL (OnPrintShop)</label>
                 <div className="relative">
                   <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888894]" />
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={currentCustomer.ops_base_url}
                     onChange={(e) => setCustomer(prev => prev ? {...prev, ops_base_url: e.target.value} : null)}
                     className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#cfccc8] text-sm font-bold font-mono text-[#1e4d92] focus:border-[#1e4d92] outline-none transition-all"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[#888894]">
+                  Default OPS Category ID
+                </label>
+                <div className="relative">
+                  <LayoutGrid className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888894]" />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={currentCustomer.default_ops_category_id ?? ""}
+                    placeholder="e.g. 539"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setCustomer(prev => prev ? {
+                        ...prev,
+                        default_ops_category_id: v === "" ? null : Number(v),
+                      } : null);
+                    }}
+                    className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#cfccc8] text-sm font-bold font-mono focus:border-[#1e4d92] outline-none transition-all"
+                  />
+                </div>
+                <p className="text-[11px] text-[#888894] leading-relaxed">
+                  Fallback category for product pushes when no per-product
+                  category is set. Without this, OPS hides products from the
+                  default browse view. Create the category in OPS admin first,
+                  then enter the numeric category_id here.
+                </p>
               </div>
 
             </div>
