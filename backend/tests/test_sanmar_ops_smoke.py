@@ -213,7 +213,9 @@ async def test_dry_run_step_results_shape(client, smoke_scaffold, smoke_key):
     for step in steps:
         assert isinstance(step["step"], int), f"step must be int, got {step.get('step')!r}"
         assert isinstance(step["mutation"], str), "mutation must be str"
-        assert step["status"] in ("ok", "failed"), f"unexpected status: {step.get('status')!r}"
+        # "warning" added as a valid status for non-blocking failures
+        # (e.g. updateProductStock when OPS has no stock entry yet — Phase 6).
+        assert step["status"] in ("ok", "failed", "warning"), f"unexpected status: {step.get('status')!r}"
         assert isinstance(step["ops_ids"], dict), "ops_ids must be dict"
         assert isinstance(step["attempted_at"], str), "attempted_at must be str"
         assert isinstance(step["request_fingerprint"], str), "request_fingerprint must be str"

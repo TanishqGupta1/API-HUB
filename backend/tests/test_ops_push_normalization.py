@@ -14,6 +14,7 @@ that gap (per PR review #171).
 from __future__ import annotations
 
 import pytest
+from unittest.mock import AsyncMock
 
 from modules.ops_push.gateway import (
     _normalize_mutation_response,
@@ -23,6 +24,7 @@ from modules.ops_client.mutations import (
     _check_result,
     _unwrap_list,
 )
+from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
 
 pytestmark = pytest.mark.no_db
 
@@ -187,3 +189,168 @@ class TestCheckResult:
         assert err.raw is not None
         assert err.raw["mutation"] == "setProduct"
         assert err.raw["ops_response"] == opsd
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Gateway-level silent-failure detection (Phase 1.1 — second pass)
+# ───────────────────────────────────────────────────────────────────────────
+# OpsClientAdapter._invoke talks to OPS directly, bypassing the wrapper
+# _check_result functions. The same check must live in _invoke or silent
+# failures slip through the production push path.
+
+
+class TestOpsClientAdapterRejectsResultFalse:
+    @pytest.mark.asyncio
+    async def test_invoke_raises_on_result_false(self):
+        """OPS returning result:false at app layer must raise from _invoke
+        so the gateway records the step as `failed`, not `ok`. This is the
+        root cause of the PC54 phantom (id:10001) and the missing 558
+        prices on PC61 — both went through the gateway, not the wrappers."""
+        from modules.ops_push.gateway import OpsClientAdapter
+        from unittest.mock import AsyncMock
+
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"setProductPrice": [{
+                "result": False,
+                "message": "Price Defining method is required.",
+                "id": None,
+            }]},
+        ))
+        adapter = OpsClientAdapter(client)
+        with pytest.raises(RuntimeError, match="OPS_REJECTED"):
+            await adapter.set_product_price({"inputs": [{"products_id": 1, "size_id": 2, "price": 10, "vendor_price": 5}]})
+
+    @pytest.mark.asyncio
+    async def test_invoke_passes_through_on_success(self):
+        from modules.ops_push.gateway import OpsClientAdapter
+        from unittest.mock import AsyncMock
+
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"setProduct": [{"result": True, "message": "ok", "id": 540}]},
+        ))
+        adapter = OpsClientAdapter(client)
+        resp = await adapter.set_product({"inputs": [{"products_title": "T"}]})
+        assert resp["id"] == 540
+
+    @pytest.mark.asyncio
+    async def test_invoke_detects_string_false(self):
+        """Belt-and-suspenders: OPS sometimes returns result as string."""
+        from modules.ops_push.gateway import OpsClientAdapter
+        from unittest.mock import AsyncMock
+
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"setProductSize": [{"result": "false", "message": "no good", "id": None}]},
+        ))
+        adapter = OpsClientAdapter(client)
+        with pytest.raises(RuntimeError, match="OPS_REJECTED"):
+            await adapter.set_product_size({"inputs": [{}]})
+
+    @pytest.mark.asyncio
+    async def test_invoke_no_result_field_is_success(self):
+        """Some mutations (e.g. updateProductStock in some shapes) may
+        omit `result`. Absence != failure."""
+        from modules.ops_push.gateway import OpsClientAdapter
+        from unittest.mock import AsyncMock
+
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"setProduct": [{"id": 540}]},  # no result field
+        ))
+        adapter = OpsClientAdapter(client)
+        resp = await adapter.set_product({"inputs": [{}]})
+        assert resp["id"] == 540
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Phase 6 — stock_id read-back helper
+# ───────────────────────────────────────────────────────────────────────────
+
+
+class TestResolveStockIdForSize:
+    """Verifies the gateway's read-back step resolves the right stock_id
+    from a productStocks query before sending updateProductStock."""
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_product_id_missing(self):
+        from modules.ops_push.gateway import _resolve_stock_id_for_size
+        from unittest.mock import AsyncMock
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock()
+        result = await _resolve_stock_id_for_size(client, product_id=None, size_id=10)
+        assert result is None
+        client.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_synthetic_id_for_fake_client(self):
+        """Dry-run uses FakeOpsClient which has per-mutation methods but
+        no .execute() — return a deterministic synthetic id so dry-runs
+        exercise the full plan rather than warning on every stock step."""
+        from modules.ops_push.gateway import _resolve_stock_id_for_size, FakeOpsClient
+        fake = FakeOpsClient()
+        result = await _resolve_stock_id_for_size(fake, product_id=540, size_id=42)
+        assert result == 99042  # 99000 + size_id
+        # Different size_id → different synthetic id (distinct per variant)
+        result2 = await _resolve_stock_id_for_size(fake, product_id=540, size_id=43)
+        assert result2 != result
+
+    @pytest.mark.asyncio
+    async def test_resolves_from_ops_stocks(self):
+        """Live path: query OPS, build size_id->stock_id map, return match."""
+        from modules.ops_push.gateway import _resolve_stock_id_for_size, _clear_stock_lookup_cache
+        from unittest.mock import AsyncMock
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"productStocks": {"productStocks": [
+                {"stock_id": 1, "size_id": 230, "stock_quantity": 5},
+                {"stock_id": 3, "size_id": 231, "stock_quantity": 0},
+            ]}},
+        ))
+        _clear_stock_lookup_cache(218)
+        result = await _resolve_stock_id_for_size(client, product_id=218, size_id=230)
+        assert result == 1
+        # Same product → cached, no second query
+        result2 = await _resolve_stock_id_for_size(client, product_id=218, size_id=231)
+        assert result2 == 3
+        assert client.execute.call_count == 1, "Stock map must be cached per product"
+        _clear_stock_lookup_cache(218)
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_match(self):
+        """When OPS has stock entries for the product but not for THIS
+        size_id (i.e. admin hasn't initialized stock for this variant),
+        return None so caller records a clear warning."""
+        from modules.ops_push.gateway import _resolve_stock_id_for_size, _clear_stock_lookup_cache
+        from unittest.mock import AsyncMock
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"productStocks": {"productStocks": [{"stock_id": 1, "size_id": 230}]}},
+        ))
+        _clear_stock_lookup_cache(999)
+        result = await _resolve_stock_id_for_size(client, product_id=999, size_id=42)
+        assert result is None
+        _clear_stock_lookup_cache(999)
+
+    @pytest.mark.asyncio
+    async def test_data_not_found_treated_as_empty(self):
+        """OPS returns DATA_NOT_FOUND when product has zero stock entries.
+        Must NOT propagate as an error — treat as 'no match' so the push
+        proceeds with a clean warning instead of crashing."""
+        from modules.ops_client.mutations import get_product_stocks
+        from unittest.mock import AsyncMock
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=False, ops_error_code="DATA_NOT_FOUND",
+            ops_error_message="Data not found!",
+        ))
+        result = await get_product_stocks(client=client, product_id=544)
+        assert result.ok is True
+        assert result.data["productStocks"] == []

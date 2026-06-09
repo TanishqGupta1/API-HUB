@@ -384,17 +384,29 @@ class TestMutationPlanOrder:
         assert all(s.mutation == "updateProductStock" for s in last_two)
 
     def test_inventory_action_is_add(self, monkeypatch):
-        # action=Add is used because Reset requires a pre-existing stock row
-        # and OPS rejects Reset for sizes that don't have one yet (initial pushes).
+        # action=Add increments existing stock. Phase 6: OPS has no per-size
+        # SKU field anywhere in its schema, so updateProductStock identifies
+        # the variant by stock_id. The stock_id is resolved at execute time
+        # by the gateway from a productStocks(product_id) read-back.
+        #
+        # The plan step does NOT carry stock_id directly — it carries a
+        # gateway-only sentinel `_size_id_ref` (a placeholder) that the
+        # gateway uses to look up the stock_id for that variant's size.
         # Stock steps are opt-in (OPS_PUSH_INCLUDE_STOCK); enable to assert shape.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
         stock_step = next(s for s in payload.plan if s.mutation == "updateProductStock")
-        # action and product_sku are top-level siblings of input (not nested)
         assert stock_step.variables["action"] == "Add"
-        assert stock_step.variables["product_sku"] == "PC61-WHT-M"
         assert stock_step.variables["input"]["stock_quantity"] == 42
+        # _size_id_ref is the gateway lookup hint — must reference a
+        # setProductSize step's size_id response.
+        assert stock_step.variables["_size_id_ref"].startswith("$step")
+        assert stock_step.variables["_size_id_ref"].endswith(".size_id")
+        # product_sku is gone — OPS can't match it without a per-size SKU
+        # field, so threading it does nothing useful and is misleading.
+        assert "product_sku" not in stock_step.variables
+        assert "stock_id" not in stock_step.variables  # filled by gateway
         # action must NOT be nested inside input
         assert "action" not in stock_step.variables["input"]
         assert "product_sku" not in stock_step.variables["input"]
@@ -598,10 +610,37 @@ class TestImagePolicy:
             images=[_image("https://x/front.jpg", image_type="front")],
         )
         payload = _synthesize_payload(ctx)
+        # payload.primary_image_url keeps the full URL for downstream readers
+        # (e.g. preflight image-reachability check, audit log).
         assert payload.primary_image_url == "https://x/front.jpg"
         assert payload.image_warnings == []
         setProduct = payload.plan[0]
-        assert setProduct.variables["inputs"][0]["imagename"] == "https://x/front.jpg"
+        # But the mutation receives just the filename — OPS prepends its CDN
+        # base path at serve time; sending a full URL produces a double-prefix.
+        assert setProduct.variables["inputs"][0]["imagename"] == "front.jpg"
+
+    def test_imagename_strips_to_filename_for_deep_paths(self):
+        """SanMar URLs have multi-segment paths like /imglib/mresjpg/2013/f14/PC61_aqua_back.jpg.
+        Everything before the last '/' must be dropped — OPS only wants the leaf."""
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            images=[_image(
+                "https://cdnm.sanmar.com/imglib/mresjpg/2013/f14/PC61_aquaticblue_flat_back.jpg",
+                image_type="front",
+            )],
+        )
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["imagename"] == "PC61_aquaticblue_flat_back.jpg"
+
+    def test_imagename_passes_through_when_already_a_filename(self):
+        """If primary_image_url is already a bare filename (no slashes),
+        rsplit('/', 1)[-1] returns it unchanged."""
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            images=[_image("PC61_front.jpg", image_type="front")],
+        )
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["imagename"] == "PC61_front.jpg"
 
     def test_multiple_images_warns(self):
         ctx = _ctx(
@@ -843,7 +882,8 @@ class TestSetProductVariables:
         assert payload.plan[0].variables["inputs"][0]["category_id"] == 42
 
     def test_category_omitted_when_unmapped(self):
-        """No storefront mapping → no category in setProduct (no 'Uncategorized' fallback)."""
+        """No storefront mapping AND no customer default → no category in setProduct
+        (no silent 'Uncategorized' fallback)."""
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
             product=_product(category=None),
@@ -852,6 +892,45 @@ class TestSetProductVariables:
         inp = payload.plan[0].variables["inputs"][0]
         assert "category_id" not in inp
         assert "category_name" not in inp
+
+    def test_falls_back_to_customer_default_category(self):
+        """Phase 2 of the OPS push audit: when no per-product storefront
+        config has a category, use customer.default_ops_category_id so
+        products aren't created uncategorized (which OPS admin hides)."""
+        cust = _customer()
+        cust.default_ops_category_id = 539  # mimic the column we added
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            product=_product(category=None),
+            customer=cust,
+        )
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["category_id"] == 539
+
+    def test_storefront_override_beats_customer_default(self):
+        """When BOTH storefront config and customer default are set, the
+        per-product storefront override wins — more specific."""
+        cust = _customer()
+        cust.default_ops_category_id = 539
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            product=_product(category=None),
+            customer=cust,
+            storefront_config=SimpleNamespace(pricing_overrides=None, ops_category_id="42"),
+        )
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["category_id"] == 42
+
+    def test_customer_without_default_does_not_set_category(self):
+        """Customer fixture without default_ops_category_id attr at all
+        (e.g. pre-migration) must not crash and must omit the field."""
+        cust = _customer()  # no default_ops_category_id set
+        # Force the attr to be missing entirely (simulates an older SimpleNamespace)
+        if hasattr(cust, "default_ops_category_id"):
+            del cust.default_ops_category_id
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], customer=cust)
+        payload = _synthesize_payload(ctx)
+        assert "category_id" not in payload.plan[0].variables["inputs"][0]
 
 
 # ===========================================================================
