@@ -479,12 +479,21 @@ def _build_setProduct_step(
     #     mapping; omitted when unmapped (category is optional) so the push
     #     isn't blocked while category mapping is still being set up.
     #   - `brand` dropped — ProductInput has no brand field.
+    # Description fan-out: OPS has multiple description fields. `product_description`
+    # ends up in OPS's `short_description` (visible only in admin), while the
+    # storefront PDP renders `long_description`. Reference product 361 leaves
+    # short_description empty and uses long_description for the customer-visible
+    # copy — we mirror that. Sending the same supplier blurb to both fields is
+    # safe: if a future storefront theme switches to short_description, we're
+    # still covered.
+    _desc = ctx.product.description or ""
     inp: dict[str, Any] = {
         "products_id": existing_ops_id if push_mode == "update" else 0,
         "products_title": title,
         "products_internal_title": ctx.product.supplier_sku,
         "visible": 1,
-        "product_description": ctx.product.description or "",
+        "product_description": _desc,
+        "long_description": _desc,
         # ── Required OPS ProductInput fields for all products ──────────
         # Phase 1 audit findings (June 2026):
         #   * predefined_product_type — silent reject when null

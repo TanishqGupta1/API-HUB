@@ -945,6 +945,25 @@ class TestSetProductVariables:
         for forbidden in ("category_name", "brand", "products_image", "products_description"):
             assert forbidden not in inp, f"{forbidden} is not a valid ProductInput field"
 
+    def test_description_fans_out_to_long_description(self):
+        """setProduct.input must send the description to BOTH product_description
+        AND long_description.
+
+        OPS stores `product_description` as the admin-visible `short_description`,
+        but the storefront PDP renders `long_description`. Reference product 361
+        keeps short_description empty and uses long_description for customer-
+        visible copy. Sending to both fields covers either rendering path.
+        Verified live: F236 / product 556 push left long_description empty,
+        which hid the description from the storefront PDP.
+        """
+        prod = _product()
+        prod.description = "The comfort of a sweater joins the unbeatable warmth of fleece."
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], product=prod)
+        payload = _synthesize_payload(ctx)
+        inp = payload.plan[0].variables["inputs"][0]
+        assert inp["product_description"] == prod.description
+        assert inp["long_description"] == prod.description
+
     def test_category_id_present_when_mapped(self):
         """setProduct.input.category_id is the mapped OPS category id (Int).
 
