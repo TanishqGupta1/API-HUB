@@ -13,7 +13,7 @@
 
 | # | Item | Owner | Detail |
 |---|------|-------|--------|
-| 🔴 1.1 | `setProduct` returns `INTERNAL_SERVER_ERROR` on OPS staging for **every** payload | OPS | Same token creates categories + runs queries fine → server-side resolver bug. Needs OPS Express app-server log. See `docs/ops-staging-setproduct-issue.md`. **Nothing creates in OPS until fixed.** |
+| ✅ 1.1 | ~~`setProduct` returns `INTERNAL_SERVER_ERROR` on OPS staging~~ | OPS + DEV | **Resolved 2026-06-09.** Root cause was payload-shape gaps on our side, not an OPS server bug: missing required fields on `setProduct` (`enable_stock_management`, `product_type`) and on `setAdditionalOption` (`price_calculate_type`, `hire_designer_option`, `applicable_for`). After adding them, 5 live products (552–556) pushed cleanly to OPS staging via the gateway. |
 | ✅ 1.2 | ~~Gateway records OPS `result:false` as `ok` (silent failure)~~ | DEV | Fixed in #172 + #177. `_invoke` now checks `result:false` and raises. `_check_result` + `TestCheckResult` unit tests added. Silent-failure guard closed. |
 
 ---
@@ -54,23 +54,24 @@
 | # | Item | Detail |
 |---|------|--------|
 | ✅ 5.1 | ~~No issue tracking~~ | Done by Sinchana — issues filed on GitHub board. |
-| 🟡 5.2 | REST delta-sync deferred | S&S + 4Over `discover_changed` fall back to full re-fetch. Optimize when volume justifies (not a blocker). |
+| ✅ 5.2 | ~~REST delta-sync deferred~~ | Done in #178 — `discover_changed` in `ss_adapter.py` + `fourover_adapter.py` now filters the full ref list against `Product.last_synced > since` before hydrating; APIs have no modified-since endpoint so full discovery is still needed, but hydration is skipped for fresh products. |
 | — | 5.3 | Not actionable — local port conflict on the audit machine (5432 held by `clarity-v2`). No action needed. |
 
 ---
 
 ## Recommended next steps
-1. **Chase 1.1** — draft message to Christian with exact repro for `setProduct` 500. Nothing ships until OPS fixes this.
-2. **Ask Christian** — does PROD `setProduct` work? If yes, you're closer than staging signals suggest.
-3. **Write standalone repro script** — env-driven, no DB, one command for Christian to reproduce + retest.
-4. **Hold** on 3.1 / 3.2 / 3.3 — all gated on Christian's answers (apparel model, store binding, image upload path).
+1. **Merge PR #179** — FakeOpsClient consolidation + Phase 5 step resumption + default_ops_category_id UI + setProduct-500 repro script. Scope was narrowed per review (Phase 8 apparel rewrite split off into a dedicated PR).
+2. **3.1 apparel-model PR** — confirm with Christian, sign off APPAREL_VOLUME_TIERS as pricing policy, then land Phase 8 + 6-tier curve as its own PR. Phase 8 commit (`0612991`) preserved in git history for the cherry-pick.
+3. **Auto stale-mapping cleanup** — pre-check OPS for product existence before UPDATE mode; auto-clear stale mapping and fall back to CREATE. Removes the manual SQL we ran ~5× during today's testing.
+4. **Hold** on 3.2 / 3.3 — gated on Christian's answers (image-fetch path, stock-init API).
 
 ---
 
 ## Shipped (closed this sprint)
+- ✅ #178 merged — REST delta-sync optimisation + tech-debt closure (4.4, 5.1, 5.2)
 - ✅ #172 merged — default category + stock read-back + silent-failure guard
 - ✅ #177 merged — dead-code cleanup (`push.py`), B7 verify wiring, migration 0012
 - ✅ #174 merged — ops-config authz dedupe + docstring fix
 - ✅ #173 merged — `price_defining_method` on M1 price step, float coercion, `verify.py`
 - ✅ #169 merged — lazy-image removal, 4Over button, SafeImage, OAuth token flow, dedup fix, CI gate
-- ✅ #168 merged — Sinchana: n8n node fate decision, issue tracking (4.4, 5.1, 5.2)
+- ✅ #168 merged — Sinchana: n8n node fate decision, issue tracking
