@@ -532,7 +532,11 @@ class TestOptionStrategies:
         payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
         mutations = [s.mutation for s in payload.plan]
         assert "setAssignOptions" in mutations
-        assert "setAdditionalOption" not in mutations
+        # setAdditionalOption IS present (variant colour/size options are always
+        # emitted regardless of decoration strategy).  What MASTER_OPTION_ATTACH
+        # must NOT produce is setAdditionalOptionAttributes — that's the
+        # product-local decoration pattern; master attachment uses setAssignOptions.
+        assert "setAdditionalOptionAttributes" not in mutations
 
     def test_product_local_uses_setAdditionalOption(self):
         opt = _option(
@@ -726,12 +730,15 @@ class TestPC61Smoke:
         )
         payload = _synthesize_payload(ctx)
 
-        # 1 setProduct + 56 sizes + 56 prices + 1 option + 1 image gallery
-        # + 56 stock = 171 steps (default _ctx supplies one front image)
-        assert len(payload.plan) == 1 + 56 + 56 + 1 + 1 + 56
+        # 1 setProduct + 56 sizes + 56 prices
+        # + 15 variant-options (7 unique colours + 8 unique sizes as setAdditionalOption)
+        # + 1 setAssignOptions (embroidery master-attach) + 1 image gallery
+        # + 56 stock = 186 steps (default _ctx supplies one front image)
+        assert len(payload.plan) == 1 + 56 + 56 + 15 + 1 + 1 + 56
         mutations = [s.mutation for s in payload.plan]
         assert mutations.count("setProductSize") == 56
         assert mutations.count("setProductPrice") == 56
+        assert mutations.count("setAdditionalOption") == 7 + 8   # 7 colours + 8 sizes
         assert mutations.count("setAssignOptions") == 1
         assert mutations.count("setProductsImageGallery") == 1
         assert mutations.count("updateProductStock") == 56
