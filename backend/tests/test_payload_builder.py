@@ -357,107 +357,57 @@ class TestMutationPlanOrder:
         assert payload.plan[0].mutation == "setProduct"
         assert payload.plan[0].step == 1
 
-    def test_single_placeholder_setProductSize(self):
-        # Phase 8 apparel rewrite: ONE placeholder setProductSize (not per-variant)
+    def test_sizes_follow_setProduct(self):
         variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M"), _variant("PC61-WHT-L")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        size_steps = [s for s in payload.plan if s.mutation == "setProductSize"]
-        assert len(size_steps) == 1, "Apparel flow emits a single placeholder size"
-        assert size_steps[0].step == 2
-        assert size_steps[0].variables["inputs"][0]["size_title"] == "Default"
+        # Steps 2, 3, 4 are sizes
+        assert all(payload.plan[i].mutation == "setProductSize" for i in (1, 2, 3))
 
-    def test_six_tier_setProductPrice(self):
-        # Phase 8 + volume tiers: 6 setProductPrice rows mirroring reference
-        # product 361's tier table (1-11, 12-50, 51-500, 501-1000, 1001-5000,
-        # 5001-9999). Base price = cheapest variant; each row scales by the
-        # APPAREL_VOLUME_TIERS factor.
-        variants = [
-            _variant("PC61-WHT-S", base_price=Decimal("10.00")),
-            _variant("PC61-WHT-M", base_price=Decimal("8.00")),
-        ]
-        ctx = _ctx(variants=variants, markup_rules=[])
-        payload = _synthesize_payload(ctx)
-        price_steps = [s for s in payload.plan if s.mutation == "setProductPrice"]
-        assert len(price_steps) == 6
-        # Tier 1: qty 1-11, full price ($8.00 base)
-        t1 = price_steps[0].variables["inputs"][0]
-        assert (t1["qty"], t1["qty_to"]) == (1, 11)
-        assert t1["vendor_price"] == pytest.approx(8.00)
-        # Tier 6: qty 5001-9999 at 90% ($7.20)
-        t6 = price_steps[5].variables["inputs"][0]
-        assert (t6["qty"], t6["qty_to"]) == (5001, 9999)
-        assert t6["vendor_price"] == pytest.approx(7.20)
-
-    def test_each_size_emits_its_own_option(self):
-        # Phase 8 (reference product 361): every unique size becomes its own
-        # setAdditionalOption row — no grouping, no attribute children.
-        # sort_order drives ordering; absent it, _variant_sort_key falls back
-        # to lex (color, size, sku) — so size order here is alphabetical.
-        variants = [
-            _variant("PC61-WHT-S", color="White", size="S"),
-            _variant("PC61-WHT-M", color="White", size="M"),
-            _variant("PC61-WHT-L", color="White", size="L"),
-        ]
+    def test_prices_follow_sizes(self):
+        variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        opt_titles = [
-            s.variables["inputs"][0]["title"]
-            for s in payload.plan if s.mutation == "setAdditionalOption"
-        ]
-        # Color first (1 color), then each unique size as its own option
-        assert opt_titles[0] == "White"
-        assert set(opt_titles[1:]) == {"S", "M", "L"}
-        # No attribute children — flat per-value model.
-        attr_steps = [s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"]
-        assert attr_steps == []
+        # After 1 setProduct + 2 sizes, next 2 are prices
+        assert payload.plan[3].mutation == "setProductPrice"
+        assert payload.plan[4].mutation == "setProductPrice"
 
-    def test_colors_before_sizes_each_as_own_option(self):
-        variants = [
-            _variant("v1", color="Black", size="S"),
-            _variant("v2", color="Black", size="M"),
-            _variant("v3", color="White", size="S"),
-            _variant("v4", color="White", size="M"),
-        ]
-        ctx = _ctx(variants=variants)
-        payload = _synthesize_payload(ctx)
-        opt_titles = [
-            s.variables["inputs"][0]["title"]
-            for s in payload.plan if s.mutation == "setAdditionalOption"
-        ]
-        # 2 colors emitted first, then 2 sizes — total 4 options
-        assert opt_titles[:2] == ["Black", "White"]  # colors block
-        assert set(opt_titles[2:]) == {"S", "M"}      # sizes block
-        attr_steps = [s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"]
-        assert attr_steps == []
-
-    def test_inventory_collapses_to_single_write(self, monkeypatch):
-        # Phase 8: stock collapses to ONE write against the placeholder size.
-        # Total inventory = sum of variant inventories.
+    def test_inventory_is_last(self, monkeypatch):
+        # Stock steps are deferred by default (OPS sizes carry no SKU to target);
+        # opt in to assert the full plan shape.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
-        variants = [
-            _variant("PC61-WHT-S", inventory=10),
-            _variant("PC61-WHT-M", inventory=20),
-        ]
+        variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        stock_steps = [s for s in payload.plan if s.mutation == "updateProductStock"]
-        assert len(stock_steps) == 1
-        assert stock_steps[0].variables["input"]["stock_quantity"] == 30
+        # The final N steps must be updateProductStock (N=2 here)
+        last_two = payload.plan[-2:]
+        assert all(s.mutation == "updateProductStock" for s in last_two)
 
     def test_inventory_action_is_add(self, monkeypatch):
-        # action=Add increments existing stock. Stock is opt-in.
+        # action=Add increments existing stock. Phase 6: OPS has no per-size
+        # SKU field anywhere in its schema, so updateProductStock identifies
+        # the variant by stock_id. The stock_id is resolved at execute time
+        # by the gateway from a productStocks(product_id) read-back.
+        #
+        # The plan step does NOT carry stock_id directly — it carries a
+        # gateway-only sentinel `_size_id_ref` (a placeholder) that the
+        # gateway uses to look up the stock_id for that variant's size.
+        # Stock steps are opt-in (OPS_PUSH_INCLUDE_STOCK); enable to assert shape.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
         stock_step = next(s for s in payload.plan if s.mutation == "updateProductStock")
         assert stock_step.variables["action"] == "Add"
         assert stock_step.variables["input"]["stock_quantity"] == 42
-        # _size_id_ref points to the placeholder size step (step 2).
+        # _size_id_ref is the gateway lookup hint — must reference a
+        # setProductSize step's size_id response.
         assert stock_step.variables["_size_id_ref"].startswith("$step")
         assert stock_step.variables["_size_id_ref"].endswith(".size_id")
+        # product_sku is gone — OPS can't match it without a per-size SKU
+        # field, so threading it does nothing useful and is misleading.
         assert "product_sku" not in stock_step.variables
         assert "stock_id" not in stock_step.variables  # filled by gateway
+        # action must NOT be nested inside input
         assert "action" not in stock_step.variables["input"]
         assert "product_sku" not in stock_step.variables["input"]
 
@@ -513,26 +463,22 @@ class TestStepDependencies:
         assert size_step.requires_response_from == [1]
         assert size_step.variables["inputs"][0]["products_id"] == _placeholder(1, "products_id")
 
-    def test_price_depends_on_placeholder_size_step(self):
-        # Phase 8: single setProductPrice references the single placeholder
-        # setProductSize (step 2) via $step2.size_id.
+    def test_price_depends_on_matching_size_step(self):
         variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        price_step = next(s for s in payload.plan if s.mutation == "setProductPrice")
-        assert 1 in price_step.requires_response_from
-        assert 2 in price_step.requires_response_from
-        assert price_step.variables["inputs"][0]["size_id"] == "$step2.size_id"
-
-    def test_each_option_depends_on_setProduct(self):
-        # Phase 8 flat model: every setAdditionalOption row depends on the
-        # parent setProduct (step 1) for products_id resolution.
-        variants = [_variant("v1", color="Red", size="S"), _variant("v2", color="Red", size="M")]
-        ctx = _ctx(variants=variants)
-        payload = _synthesize_payload(ctx)
-        for opt_step in [s for s in payload.plan if s.mutation == "setAdditionalOption"]:
-            assert opt_step.requires_response_from == [1]
-            assert opt_step.variables["inputs"][0]["products_id"] == "$step1.products_id"
+        # Step 2 = size of PC61-WHT-M (lex first), Step 3 = size of PC61-WHT-S
+        # Step 4 = price for first variant, depends on size step 2
+        # Step 5 = price for second variant, depends on size step 3
+        price_step_1 = payload.plan[3]
+        price_step_2 = payload.plan[4]
+        assert 1 in price_step_1.requires_response_from
+        assert price_step_1.variables["inputs"][0]["size_id"].startswith("$step")
+        # Verifies the wiring reads product_size_id from setProductSize's response
+        assert price_step_1.variables["inputs"][0]["size_id"].endswith(".size_id")
+        assert 1 in price_step_2.requires_response_from
+        # Sanity: the two prices reference different size steps
+        assert price_step_1.variables["inputs"][0]["size_id"] != price_step_2.variables["inputs"][0]["size_id"]
 
 
 # ===========================================================================
@@ -552,29 +498,22 @@ class TestMarkupApplied:
         assert p.final_price == pytest.approx(12.48)
         assert p.markup_pct == pytest.approx(50.0)
 
-    def test_setProductPrice_uses_min_final_price(self):
-        # Phase 8: single setProductPrice carries the cheapest variant's price
-        # as the base; per-attribute price variation lands in Phase 8.1.B.
+    def test_setProductPrice_uses_final_price(self):
         ctx = _ctx(
-            variants=[
-                _variant("PC61-WHT-S", base_price=Decimal("12.00")),
-                _variant("PC61-WHT-M", base_price=Decimal("10.00")),
-            ],
+            variants=[_variant("PC61-WHT-M", base_price=Decimal("10.00"))],
             markup_rules=[_markup_rule(pct=Decimal("50.0"))],
         )
         payload = _synthesize_payload(ctx)
         price_step = next(s for s in payload.plan if s.mutation == "setProductPrice")
-        # Min vendor=10.00, min final after 50% markup=15.00
         assert price_step.variables["inputs"][0]["price"] == pytest.approx(15.00)
         assert price_step.variables["inputs"][0]["vendor_price"] == pytest.approx(10.00)
 
-    def test_first_tier_starts_at_qty_1(self):
-        # The first volume tier always covers qty 1-11.
+    def test_qty_to_is_999999(self):
         ctx = _ctx(variants=[_variant("PC61-WHT-M")])
         payload = _synthesize_payload(ctx)
         price_step = next(s for s in payload.plan if s.mutation == "setProductPrice")
         assert price_step.variables["inputs"][0]["qty"] == 1
-        assert price_step.variables["inputs"][0]["qty_to"] == 11
+        assert price_step.variables["inputs"][0]["qty_to"] == 999999
 
     def test_no_markup_rule_passthrough(self):
         ctx = _ctx(
@@ -594,88 +533,41 @@ class TestMarkupApplied:
 # ===========================================================================
 
 
-class TestApparelAttributeFlow:
-    """Phase 8 rewrite — the apparel push emits ONE setAdditionalOption row
-    per unique color and per unique size value (reference product 361 in
-    visualgraphx OPS staging). No grouping, no attribute children."""
-
-    def test_no_setAssignOptions_emitted(self):
-        # setAssignOptions path was for the master_option_attach strategy and
-        # is no longer wired into the apparel flow.
+class TestOptionStrategies:
+    def test_master_option_attach_uses_setAssignOptions(self):
         ctx = _ctx(
-            variants=[_variant("v1", color="Red", size="S")],
+            variants=[_variant("PC61-WHT-M")],
             push_mapping_options=[
                 _push_mapping_option("embroidery", target_ops_option_id=42),
             ],
         )
         payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
+        mutations = [s.mutation for s in payload.plan]
+        assert "setAssignOptions" in mutations
+        assert "setAdditionalOption" not in mutations
+
+    def test_product_local_uses_setAdditionalOption(self):
+        opt = _option(
+            "embroidery",
+            attributes=[_option_attribute("gloss"), _option_attribute("matte")],
+        )
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], options=[opt])
+        payload = _synthesize_payload(ctx, OptionStrategy.PRODUCT_LOCAL_OPTION_CREATE)
+        mutations = [s.mutation for s in payload.plan]
+        assert "setAdditionalOption" in mutations
+        assert mutations.count("setAdditionalOptionAttributes") == 2
+        assert "setAssignOptions" not in mutations
+
+    def test_master_skips_unmapped_options(self):
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            push_mapping_options=[
+                _push_mapping_option("embroidery", target_ops_option_id=None),
+            ],
+        )
+        payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
+        # Unmapped row is skipped (preflight should have blocked anyway)
         assert not any(s.mutation == "setAssignOptions" for s in payload.plan)
-
-    def test_option_keys_are_safe_slugs(self):
-        # Values like "Athletic Heather" become slug-safe option_keys so OPS
-        # can store them; the human-readable label still rides in `title`.
-        variants = [_variant("v1", color="Athletic Heather", size="2XL")]
-        ctx = _ctx(variants=variants)
-        payload = _synthesize_payload(ctx)
-        opt_steps = [s for s in payload.plan if s.mutation == "setAdditionalOption"]
-        keys = {o.variables["inputs"][0]["option_key"] for o in opt_steps}
-        titles = {o.variables["inputs"][0]["title"] for o in opt_steps}
-        assert "athletic_heather" in keys
-        assert "Athletic Heather" in titles
-        assert "2xl" in keys
-        assert "2XL" in titles
-
-    def test_options_type_is_textmp_for_apparel(self):
-        # Reference product 361's options all use options_type=textmp.
-        variants = [_variant("v1", color="Red", size="S")]
-        ctx = _ctx(variants=variants)
-        payload = _synthesize_payload(ctx)
-        for opt in [s for s in payload.plan if s.mutation == "setAdditionalOption"]:
-            assert opt.variables["inputs"][0]["options_type"] == "textmp"
-
-    def test_no_attribute_children_emitted(self):
-        # Flat per-value model: each option IS the variant value — no
-        # setAdditionalOptionAttributes rows attached to it.
-        variants = [_variant("v1", color="Red", size="S"), _variant("v2", color="Red", size="M")]
-        ctx = _ctx(variants=variants)
-        payload = _synthesize_payload(ctx)
-        attr_steps = [s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"]
-        assert attr_steps == []
-
-    def test_size_multiplier_reflects_per_size_price(self):
-        # Per-size price variation rides on each size option's multiplier:
-        #   multiplier = size_price / base_price
-        # Base = $8 (cheapest), 2XL = $10 → multiplier 1.25 (+25%).
-        variants = [
-            _variant("v1", color="Red", size="S", base_price=Decimal("8.00")),
-            _variant("v2", color="Red", size="2XL", base_price=Decimal("10.00")),
-        ]
-        ctx = _ctx(variants=variants, markup_rules=[])
-        payload = _synthesize_payload(ctx)
-        size_opts = {
-            s.variables["inputs"][0]["title"]: s.variables["inputs"][0]
-            for s in payload.plan
-            if s.mutation == "setAdditionalOption" and s.source_key.startswith("apparel_option:size/")
-        }
-        assert size_opts["S"]["multiplier"] == pytest.approx(1.0)
-        assert size_opts["2XL"]["multiplier"] == pytest.approx(1.25)
-        assert size_opts["S"]["multiplier_type"] == "1"
-
-    def test_color_multiplier_is_flat_one(self):
-        # Color doesn't drive price — multiplier stays 1.0 even when sizes vary.
-        variants = [
-            _variant("v1", color="Red", size="S", base_price=Decimal("8.00")),
-            _variant("v2", color="Blue", size="2XL", base_price=Decimal("10.00")),
-        ]
-        ctx = _ctx(variants=variants, markup_rules=[])
-        payload = _synthesize_payload(ctx)
-        color_opts = [
-            s.variables["inputs"][0]
-            for s in payload.plan
-            if s.mutation == "setAdditionalOption" and s.source_key.startswith("apparel_option:color/")
-        ]
-        for opt in color_opts:
-            assert opt["multiplier"] == pytest.approx(1.0)
 
 
 # ===========================================================================
@@ -848,14 +740,10 @@ class TestTitlePrefix:
 
 class TestPC61Smoke:
     def test_pc61_plan_shape(self, monkeypatch):
-        # Phase 8 apparel rewrite (flat per-value model, reference product 361):
-        # PC61 with 7 colors × 8 sizes = 56 variants collapses to:
-        # 1 setProduct + 1 placeholder size + 1 base price
-        # + 7 setAdditionalOption rows for colors
-        # + 8 setAdditionalOption rows for sizes
-        # + 1 image gallery + 1 stock = 20 steps.
+        # Opt into stock + image steps so the smoke covers the full mutation shape.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
+        # Match the SanMar PC61 contour: 56 variants, 1 mapped option
         colors = ["Black", "White", "Red", "Royal", "Navy", "Ash", "Heather Gray"]
         sizes = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL"]
         variants = [
@@ -869,18 +757,23 @@ class TestPC61Smoke:
             )
             for i, (c, s) in enumerate((c, s) for c in colors for s in sizes)
         ]
-        ctx = _ctx(variants=variants)
+        ctx = _ctx(
+            variants=variants,
+            push_mapping_options=[
+                _push_mapping_option("embroidery", target_ops_option_id=42),
+            ],
+        )
         payload = _synthesize_payload(ctx)
 
+        # 1 setProduct + 56 sizes + 56 prices + 1 option + 1 image gallery
+        # + 56 stock = 171 steps (default _ctx supplies one front image)
+        assert len(payload.plan) == 1 + 56 + 56 + 1 + 1 + 56
         mutations = [s.mutation for s in payload.plan]
-        assert mutations.count("setProduct") == 1
-        assert mutations.count("setProductSize") == 1            # placeholder
-        assert mutations.count("setProductPrice") == 6           # APPAREL_VOLUME_TIERS
-        assert mutations.count("setAdditionalOption") == 7 + 8   # 7 colors + 8 sizes
-        assert mutations.count("setAdditionalOptionAttributes") == 0
+        assert mutations.count("setProductSize") == 56
+        assert mutations.count("setProductPrice") == 56
+        assert mutations.count("setAssignOptions") == 1
         assert mutations.count("setProductsImageGallery") == 1
-        assert mutations.count("updateProductStock") == 1        # collapsed
-        assert "setAssignOptions" not in mutations
+        assert mutations.count("updateProductStock") == 56
 
 
 # ===========================================================================
@@ -929,6 +822,28 @@ class TestSetProductVariables:
         assert price_step.variables["inputs"][0]["vendor_price"] > 0, (
             "vendor_price must be non-zero — check that base_price is written "
             "by ps_normalizer_v2.merge_pricing (Bug 1 fix)"
+        )
+
+    def test_master_option_id_is_integer(self):
+        """B6: setAssignOptions.master_option_id must be an int, not a string.
+
+        OPS GraphQL rejects the mutation if master_option_id is passed as
+        a string.  push_mapping_options.target_ops_option_id is stored as
+        INTEGER in the DB; this test verifies no accidental str() coercion
+        happens in the builder.
+        """
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            push_mapping_options=[
+                _push_mapping_option("size", target_ops_option_id=7),
+            ],
+        )
+        payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
+        assign_step = next(s for s in payload.plan if s.mutation == "setAssignOptions")
+        mid = assign_step.variables["inputs"][0]["master_option_id"]
+        assert isinstance(mid, int), (
+            f"master_option_id must be int, got {type(mid).__name__!r} — "
+            "do not cast to str in _build_setAssignOptions_step"
         )
 
     def test_set_product_uses_ops_field_names(self):
