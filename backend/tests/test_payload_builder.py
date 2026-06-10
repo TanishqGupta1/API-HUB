@@ -35,6 +35,7 @@ from modules.ops_push.payload_builder import (
     OPSPushPayload,
     OptionStrategy,
     _PushContext,
+    _build_setProductsImageGallery_step,
     _placeholder,
     _request_fingerprint,
     _synthesize_payload,
@@ -97,6 +98,7 @@ def _variant(
     base_price: Decimal | None = Decimal("8.32"),
     inventory: int | None = 50,
     sort_order: int = 0,
+    prices: list | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
@@ -107,10 +109,30 @@ def _variant(
         inventory=inventory,
         warehouse="GA",
         sort_order=sort_order,
+        prices=prices or [],
     )
 
 
-def _image(url: str, image_type: str = "front", sort_order: int = 0) -> SimpleNamespace:
+def _price_tier(
+    price_type: str = "Net",
+    quantity_min: int = 1,
+    quantity_max: int | None = None,
+    price: Decimal = Decimal("8.32"),
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        price_type=price_type,
+        quantity_min=quantity_min,
+        quantity_max=quantity_max,
+        price=price,
+    )
+
+
+def _image(
+    url: str,
+    image_type: str = "front",
+    sort_order: int = 0,
+    ops_filename: str | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
         url=url,
@@ -119,6 +141,7 @@ def _image(url: str, image_type: str = "front", sort_order: int = 0) -> SimpleNa
         color=None,
         sort_order=sort_order,
         checksum=None,
+        ops_filename=ops_filename,
     )
 
 
@@ -673,13 +696,16 @@ class TestImagePolicy:
         assert "imagename" not in setProduct.variables["inputs"][0]
 
     def test_image_gallery_step_present_when_opted_in(self, monkeypatch):
-        # Images are opt-in (OPS_PUSH_INCLUDE_IMAGES); OPS can't fetch URLs yet.
+        # Images are opt-in (OPS_PUSH_INCLUDE_IMAGES); only images with
+        # ops_filename set are pushed (Approach B — OPS admin pre-upload).
         monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
             images=[
-                _image("https://x/front.jpg", image_type="front", sort_order=0),
-                _image("https://x/back.jpg", image_type="back", sort_order=1),
+                _image("https://x/front.jpg", image_type="front", sort_order=0,
+                       ops_filename="pc61-white-front.jpg"),
+                _image("https://x/back.jpg", image_type="back", sort_order=1,
+                       ops_filename="pc61-white-back.jpg"),
             ],
         )
         payload = _synthesize_payload(ctx)
@@ -691,9 +717,10 @@ class TestImagePolicy:
         assert step.variables["optimizeimg"] == 1
         assert step.requires_response_from == [1]
         arr = step.variables["input"]["image_arr"]
+        # products_large_image_name is the OPS filename, NOT the supplier URL
         assert [i["products_large_image_name"] for i in arr] == [
-            "https://x/front.jpg",
-            "https://x/back.jpg",
+            "pc61-white-front.jpg",
+            "pc61-white-back.jpg",
         ]
         assert all(i["products_image_gallery_id"] == 0 for i in arr)
 
@@ -771,15 +798,17 @@ class TestPC61Smoke:
 
         # 1 setProduct + 56 sizes + 56 prices
         # + 15 variant-options (7 unique colours + 8 unique sizes as setAdditionalOption)
-        # + 1 setAssignOptions (embroidery master-attach) + 1 image gallery
-        # + 56 stock = 186 steps (default _ctx supplies one front image)
-        assert len(payload.plan) == 1 + 56 + 56 + 15 + 1 + 1 + 56
+        # + 1 setAssignOptions (embroidery master-attach)
+        # + 56 stock = 185 steps
+        # Image gallery is skipped: default _ctx image has no ops_filename set
+        # (Approach B — gallery only fires after OPS admin upload + ops_filename tagged)
+        assert len(payload.plan) == 1 + 56 + 56 + 15 + 1 + 56
         mutations = [s.mutation for s in payload.plan]
         assert mutations.count("setProductSize") == 56
         assert mutations.count("setProductPrice") == 56
         assert mutations.count("setAdditionalOption") == 7 + 8   # 7 colours + 8 sizes
         assert mutations.count("setAssignOptions") == 1
-        assert mutations.count("setProductsImageGallery") == 1
+        assert mutations.count("setProductsImageGallery") == 0
         assert mutations.count("updateProductStock") == 56
 
 
@@ -1054,3 +1083,199 @@ class TestStorefrontOverridesInPush:
         # If a refactor moves one but not the other, this import breaks.
         assert push_helper.apply_pricing_overrides is not None
         assert hasattr(quote_path, "_apply_storefront_override")
+
+
+# ===========================================================================
+# Image gallery step — Approach B (ops_filename)
+# ===========================================================================
+
+
+class TestImageGalleryStep:
+    """_build_setProductsImageGallery_step uses ops_filename, not img.url.
+
+    Only images with ops_filename set are pushed — images without it are
+    silently skipped so we never create broken gallery rows in OPS.
+    """
+
+    def _ctx_with_images(self, images):
+        return _ctx(variants=[_variant("BG77-BLK-OSFA")], images=images)
+
+    def test_returns_none_when_no_images(self):
+        ctx = self._ctx_with_images([])
+        assert _build_setProductsImageGallery_step(2, ctx) is None
+
+    def test_returns_none_when_no_ops_filename_set(self):
+        """All images have urls but none have ops_filename — step skipped."""
+        ctx = self._ctx_with_images([
+            _image("https://cdn.sanmar.com/bg77_black.jpg", ops_filename=None),
+            _image("https://cdn.sanmar.com/bg77_navy.jpg", ops_filename=None),
+        ])
+        assert _build_setProductsImageGallery_step(2, ctx) is None
+
+    def test_uses_ops_filename_not_url(self):
+        """Step fires when ops_filename is set; products_large_image_name is the filename."""
+        ctx = self._ctx_with_images([
+            _image("https://cdn.sanmar.com/bg77_black.jpg", ops_filename="bg77-black-front.jpg"),
+        ])
+        step = _build_setProductsImageGallery_step(2, ctx)
+        assert step is not None
+        assert step.mutation == "setProductsImageGallery"
+        arr = step.variables["input"]["image_arr"]
+        assert len(arr) == 1
+        assert arr[0]["products_large_image_name"] == "bg77-black-front.jpg"
+
+    def test_skips_images_without_ops_filename(self):
+        """Mixed: only images with ops_filename appear in the gallery array."""
+        ctx = self._ctx_with_images([
+            _image("https://cdn.sanmar.com/bg77_black.jpg", ops_filename="bg77-black-front.jpg"),
+            _image("https://cdn.sanmar.com/bg77_navy.jpg", ops_filename=None),
+            _image("https://cdn.sanmar.com/bg77_red.jpg", ops_filename="bg77-red-front.jpg"),
+        ])
+        step = _build_setProductsImageGallery_step(2, ctx)
+        assert step is not None
+        arr = step.variables["input"]["image_arr"]
+        assert len(arr) == 2
+        filenames = [item["products_large_image_name"] for item in arr]
+        assert "bg77-black-front.jpg" in filenames
+        assert "bg77-red-front.jpg" in filenames
+
+    def test_gallery_step_included_in_plan_when_flag_set(self):
+        """End-to-end: setProductsImageGallery appears in plan when
+        OPS_PUSH_INCLUDE_IMAGES=1 AND at least one image has ops_filename."""
+        import os
+        ctx = self._ctx_with_images([
+            _image("https://cdn.sanmar.com/bg77_black.jpg", ops_filename="bg77-black.jpg"),
+        ])
+        prev = os.environ.get("OPS_PUSH_INCLUDE_IMAGES", "0")
+        try:
+            os.environ["OPS_PUSH_INCLUDE_IMAGES"] = "1"
+            plan = _synthesize_payload(ctx).plan
+            mutations = [s.mutation for s in plan]
+            assert "setProductsImageGallery" in mutations
+        finally:
+            os.environ["OPS_PUSH_INCLUDE_IMAGES"] = prev
+
+    def test_gallery_step_absent_when_flag_off(self):
+        """Default OPS_PUSH_INCLUDE_IMAGES=0: gallery step never emitted."""
+        import os
+        ctx = self._ctx_with_images([
+            _image("https://cdn.sanmar.com/bg77_black.jpg", ops_filename="bg77-black.jpg"),
+        ])
+        prev = os.environ.get("OPS_PUSH_INCLUDE_IMAGES", "0")
+        try:
+            os.environ["OPS_PUSH_INCLUDE_IMAGES"] = "0"
+            plan = _synthesize_payload(ctx).plan
+            mutations = [s.mutation for s in plan]
+            assert "setProductsImageGallery" not in mutations
+        finally:
+            os.environ["OPS_PUSH_INCLUDE_IMAGES"] = prev
+
+
+# ===========================================================================
+# Quantity-tiered pricing
+# ===========================================================================
+
+
+class TestTieredPricing:
+    """When variant_prices rows exist, the plan emits one setProductPrice per
+    tier (with correct qty/qty_to bounds) instead of the flat 1-999999 row.
+    Markup is applied independently to each tier's price.
+    """
+
+    _TIERS = [
+        _price_tier("Net", quantity_min=1,    quantity_max=11,   price=Decimal("13.25")),
+        _price_tier("Net", quantity_min=12,   quantity_max=50,   price=Decimal("12.98")),
+        _price_tier("Net", quantity_min=51,   quantity_max=500,  price=Decimal("12.72")),
+        _price_tier("Net", quantity_min=501,  quantity_max=1000, price=Decimal("12.46")),
+        _price_tier("Net", quantity_min=1001, quantity_max=None, price=Decimal("12.19")),
+    ]
+
+    def _tiered_ctx(self, tiers=None):
+        return _ctx(
+            variants=[_variant("YST470LS-BLK-XL", prices=tiers or self._TIERS)],
+            markup_rules=[],   # no markup — vendor_price == final_price for clarity
+        )
+
+    def test_no_tiers_emits_flat_price_row(self):
+        """No prices → single flat 1-999999 row (legacy behaviour preserved)."""
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")])  # prices=[] by default
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        assert len(price_steps) == 1
+        inp = price_steps[0].variables["inputs"][0]
+        assert inp["qty"] == 1
+        assert inp["qty_to"] == 999999
+
+    def test_tiers_produce_one_step_per_tier(self):
+        """5 tiers → 5 setProductPrice steps for that variant."""
+        ctx = self._tiered_ctx()
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        assert len(price_steps) == len(self._TIERS)
+
+    def test_tier_qty_bounds_correct(self):
+        """qty and qty_to are taken from the tier, not overridden to 1/999999."""
+        ctx = self._tiered_ctx()
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        bounds = [(s.variables["inputs"][0]["qty"], s.variables["inputs"][0]["qty_to"]) for s in price_steps]
+        assert bounds == [
+            (1,    11),
+            (12,   50),
+            (51,   500),
+            (501,  1000),
+            (1001, 999999),   # None → 999999 fallback
+        ]
+
+    def test_tier_vendor_prices_correct(self):
+        """vendor_price reflects the supplier's per-tier wholesale cost."""
+        ctx = self._tiered_ctx()
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        vendor_prices = [s.variables["inputs"][0]["vendor_price"] for s in price_steps]
+        expected = [float(t.price) for t in self._TIERS]
+        assert vendor_prices == expected
+
+    def test_tier_markup_applied_per_tier(self):
+        """Each tier's final price has markup applied independently."""
+        tiers = [
+            _price_tier("Net", quantity_min=1,  quantity_max=11,  price=Decimal("10.00")),
+            _price_tier("Net", quantity_min=12, quantity_max=None, price=Decimal("9.00")),
+        ]
+        ctx = _ctx(
+            variants=[_variant("SKU-A-M", prices=tiers)],
+            markup_rules=[_markup_rule(pct=Decimal("50.0"))],  # 50% markup
+        )
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        assert len(price_steps) == 2
+        assert price_steps[0].variables["inputs"][0]["price"] == pytest.approx(15.0, abs=0.01)
+        assert price_steps[1].variables["inputs"][0]["price"] == pytest.approx(13.5, abs=0.01)
+
+    def test_mixed_variants_flat_and_tiered(self):
+        """Variant A has tiers, Variant B does not — each gets correct treatment."""
+        tiers = [
+            _price_tier("Net", quantity_min=1,  quantity_max=11,  price=Decimal("10.00")),
+            _price_tier("Net", quantity_min=12, quantity_max=None, price=Decimal("9.00")),
+        ]
+        ctx = _ctx(
+            variants=[
+                _variant("SKU-A-M", prices=tiers),
+                _variant("SKU-B-L"),              # no tiers → flat
+            ],
+            markup_rules=[],
+        )
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        # A gets 2 tier steps, B gets 1 flat step
+        assert len(price_steps) == 3
+        # B's step (last) must be flat 1-999999
+        b_step = price_steps[-1]
+        assert b_step.variables["inputs"][0]["qty"] == 1
+        assert b_step.variables["inputs"][0]["qty_to"] == 999999
+
+    def test_tiers_sorted_by_quantity_min(self):
+        """Tiers stored out of order are sorted ascending by quantity_min."""
+        tiers = [
+            _price_tier("Net", quantity_min=12, quantity_max=50,   price=Decimal("9.00")),
+            _price_tier("Net", quantity_min=1,  quantity_max=11,   price=Decimal("10.00")),
+            _price_tier("Net", quantity_min=51, quantity_max=None, price=Decimal("8.50")),
+        ]
+        ctx = _ctx(variants=[_variant("SKU-A-M", prices=tiers)], markup_rules=[])
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        qty_mins = [s.variables["inputs"][0]["qty"] for s in price_steps]
+        assert qty_mins == [1, 12, 51]

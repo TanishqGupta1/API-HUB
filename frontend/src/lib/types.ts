@@ -117,6 +117,7 @@ export interface ProductImage {
   image_type: string;
   color: string | null;
   sort_order: number;
+  ops_filename: string | null;
 }
 
 export interface ProductOptionAttribute {

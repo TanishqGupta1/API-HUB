@@ -52,6 +52,7 @@ from modules.catalog.models import (
     ProductOption,
     ProductOptionAttribute,
     ProductVariant,
+    VariantPrice,
 )
 from modules.customers.models import Customer
 from modules.decorations.models import CustomerProductDecoration
@@ -343,7 +344,7 @@ async def _load_context(
             select(Product)
             .where(Product.id == product_id)
             .options(
-                selectinload(Product.variants),
+                selectinload(Product.variants).selectinload(ProductVariant.prices),
                 selectinload(Product.images),
                 selectinload(Product.options).selectinload(
                     ProductOption.attributes
@@ -573,10 +574,19 @@ def _build_setProductPrice_step(
     variant_sku: str,
     base_price: float,
     final_price: float,
+    *,
+    qty: int = 1,
+    qty_to: int = 999999,
 ) -> OPSMutationStep:
-    """One setProductPrice per variant. Spec contract for beta:
-    qty=1, qty_to=999999, single visible price row. Depends on the
-    matching setProductSize step for `size_id`."""
+    """One setProductPrice per variant (or per quantity tier when tiers are present).
+
+    When variant_prices rows exist for this variant, _synthesize_payload calls
+    this once per tier with the appropriate qty/qty_to bounds and the tier's
+    markup-adjusted price. When no tiers exist it falls back to the beta default:
+    qty=1, qty_to=999999 (single flat row).
+
+    Depends on the matching setProductSize step for `size_id`.
+    """
     return OPSMutationStep(
         step=step_num,
         mutation="setProductPrice",
@@ -586,8 +596,8 @@ def _build_setProductPrice_step(
                 "products_id": _placeholder(1, "products_id"),
                 # OPS returns `id` from setProductSize, normalized to `size_id` in gateway.
                 "size_id": _placeholder(size_step, "size_id"),
-                "qty": 1,
-                "qty_to": 999999,
+                "qty": qty,
+                "qty_to": qty_to,
                 "price": final_price,
                 "vendor_price": base_price,
                 "visible": "1",  # OPS ProductPriceInput.visible is String
@@ -777,14 +787,16 @@ def _build_setProductsImageGallery_step(
 ) -> Optional[OPSMutationStep]:
     """One setProductsImageGallery for the whole product.
 
-    OPS has no file-upload mutation; images are referenced by URL in each
-    item's `products_large_image_name`, and OPS fetches + optimizes them
-    server-side when optimizeimg=1 (verified live against staging — see
-    `scripts/ops_image_spike.py`). Depends on step 1 for products_id; OPS
-    returns that id as a string but this mutation needs a top-level Int!, so
-    the gateway coerces it at execute time.
+    Approach B image support: only images with ops_filename set are pushed.
+    ops_filename is the bare filename assigned by OPS after a human uploads
+    the image via the OPS admin UI (e.g. "bg77-black-front.jpg"). OPS then
+    serves it from its own CDN — external URLs stored as-is are never fetched.
 
-    Returns None when the product has no usable image URLs (nothing to push).
+    Images without ops_filename are silently skipped (no broken gallery rows).
+    Returns None when no images have ops_filename set (nothing to push).
+
+    Future Approach A: replace ops_filename with the result of an OPS upload
+    API call — same shape, no further changes needed here.
     """
     if not ctx.images:
         return None
@@ -794,12 +806,12 @@ def _build_setProductsImageGallery_step(
             "products_image_gallery_id": 0,  # 0 = create
             "delete": 0,
             "title": title,
-            "products_large_image_name": img.url,
+            "products_large_image_name": img.ops_filename,
             "sort_order": (img.sort_order or idx),
             "status": "1",
         }
         for idx, img in enumerate(ctx.images)
-        if img.url
+        if img.ops_filename  # only images manually tagged after OPS admin upload
     ]
     if not image_arr:
         return None
@@ -942,15 +954,44 @@ def _synthesize_payload(
         size_step_by_sku[price.variant_sku] = next_step
         next_step += 1
 
-    # Steps 2+N..1+2N: setProductPrice × N (depends on matching size step)
-    for price in computed_prices:
+    # Steps 2+N..1+2N: setProductPrice × N (or × N×T when quantity tiers present)
+    #
+    # If variant_prices rows exist for a variant, emit one setProductPrice per
+    # tier with the supplier's quantity breaks and per-tier markup-adjusted price.
+    # This produces the same quantity-tiered grid in OPS that manually-configured
+    # products (e.g. product #568 YST470LS) show.  Fall back to one flat
+    # qty=1/qty_to=999999 row when no tiers are stored (legacy / bags).
+    for v, price in zip(ordered_variants, computed_prices):
         size_step = size_step_by_sku[price.variant_sku]
-        plan.append(
-            _build_setProductPrice_step(
-                next_step, size_step, price.variant_sku, price.base_price, price.final_price
-            )
+        tiers: list[VariantPrice] = sorted(
+            getattr(v, "prices", None) or [],
+            key=lambda t: t.quantity_min,
         )
-        next_step += 1
+        if tiers:
+            for tier in tiers:
+                tier_base = _to_float(tier.price) or 0.0
+                tier_final_raw = apply_markup(tier.price, rule)
+                if tier_final_raw is not None and overrides_dict:
+                    tier_final_raw, _ = apply_pricing_overrides(tier_final_raw, overrides_dict)
+                    tier_final_raw = to_cents(tier_final_raw)
+                tier_final = _to_float(tier_final_raw) or tier_base
+                plan.append(
+                    _build_setProductPrice_step(
+                        next_step, size_step, price.variant_sku,
+                        tier_base, tier_final,
+                        qty=tier.quantity_min,
+                        qty_to=tier.quantity_max or 999999,
+                    )
+                )
+                next_step += 1
+        else:
+            plan.append(
+                _build_setProductPrice_step(
+                    next_step, size_step, price.variant_sku,
+                    price.base_price, price.final_price,
+                )
+            )
+            next_step += 1
 
     # ── Variant Additional Options (colours + sizes) ───────────────────────
     # One setAdditionalOption per unique colour, then one per unique size.

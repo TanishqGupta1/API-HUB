@@ -117,6 +117,9 @@ class ProductImage(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     checksum: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     mirrored_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    ops_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Set via PATCH /api/images/{id}/ops-filename after manually uploading the
+    # image to OPS admin UI. Used by payload_builder as products_large_image_name.
 
     product: Mapped["Product"] = relationship(back_populates="images")
 
