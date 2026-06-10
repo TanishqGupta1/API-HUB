@@ -172,7 +172,7 @@ export function BrandingPanel({ product, customer, onUpdate }: Props) {
                   <>
                     {/* Product Image Base */}
                     <NextImage
-                        src={product.image_url || "/placeholder-product.png"}
+                        src={product.images?.find(img => img.image_type === "front")?.url || product.image_url || "/placeholder-product.png"}
                         alt="Preview Base"
                         fill
                         sizes="300px"

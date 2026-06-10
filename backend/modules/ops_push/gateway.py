@@ -22,8 +22,10 @@ from modules.integrations.schemas import PushRequest, PushRequestAccepted, PushR
 from modules.markup.engine import calculate_price
 from modules.ops_client import mutations as _m
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
+from modules.ops_client.fake import FakeOpsClient
 from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
 from modules.ops_push.preflight import run_preflight
+from modules.ops_push.verify import verify_pushed_product
 from modules.push_log.models import ProductPushLog
 from modules.push_mappings.models import PushMapping
 from modules.suppliers.models import Supplier
@@ -119,6 +121,91 @@ async def _verify_post_push(
         )
 
 
+async def _verify_b7_readback(ops: Any, ops_product_id: Any) -> None:
+    """Full B7 read-back: sizes, stock, images, prices. Opt-in via OPS_POST_PUSH_VERIFY=1.
+    Never blocks or raises — logs only."""
+    import os as _os
+    if _os.getenv("OPS_POST_PUSH_VERIFY", "0") != "1":
+        return
+    try:
+        pid = int(ops_product_id)
+    except (TypeError, ValueError):
+        logger.warning("verify[B7]: non-numeric ops_product_id=%r, skipping", ops_product_id)
+        return
+    try:
+        report = await verify_pushed_product(ops, pid)
+        if not report.get("exists"):
+            logger.warning(
+                "verify[B7]: product NOT found in OPS after push — products_id=%s", pid
+            )
+        else:
+            logger.info(
+                "verify[B7]: products_id=%s sizes=%d stock_rows=%d images=%d prices=%d/%d",
+                pid,
+                report["size_count"],
+                report["stock_rows"],
+                report["image_count"],
+                report["price_check"]["with_price_rows"],
+                report["price_check"]["sizes_sampled"],
+            )
+    except Exception:
+        logger.exception("verify[B7]: raised for products_id=%s", pid)
+
+
+# Per-product cache of (size_id -> stock_id) maps. Populated lazily on the
+# first updateProductStock call of a product so we only query OPS once per
+# product per push (not once per variant).
+_stock_lookup_cache: dict[int, dict[int, int]] = {}
+
+
+async def _resolve_stock_id_for_size(
+    client: Any, *, product_id: Optional[int], size_id: int
+) -> Optional[int]:
+    """Find the OPS stock_id for a given (product_id, size_id) pair.
+
+    Phase 6: OPS's updateProductStock requires a stock_id but provides no
+    API to create initial stock entries — those must be initialized via
+    the OPS admin UI. This helper queries OPS once per product for its
+    existing stock entries, caches the size_id -> stock_id map, and
+    returns the matching stock_id (or None when no entry exists yet).
+
+    Defensive: returns None on any error so the caller records an
+    actionable warning instead of aborting the push.
+    """
+    if product_id is None:
+        return None
+    # Dry-run path: FakeOpsClient.execute() returns a GetProductBySku stub,
+    # not a productStocks result — detect via the sentinel instead of duck-typing.
+    if getattr(client, "is_dry_run", False):
+        return 99000 + int(size_id)  # stable fake id, distinct per variant
+    cache_key = product_id
+    if cache_key not in _stock_lookup_cache:
+        try:
+            r = await _m.get_product_stocks(client=client, product_id=product_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("stock-lookup: get_product_stocks raised for product_id=%s", product_id)
+            return None
+        if not r.ok:
+            logger.warning(
+                "stock-lookup: get_product_stocks not OK for product_id=%s: %s",
+                product_id, r.ops_error_message,
+            )
+            return None
+        entries = (r.data or {}).get("productStocks") or []
+        _stock_lookup_cache[cache_key] = {
+            int(e["size_id"]): int(e["stock_id"])
+            for e in entries
+            if e.get("size_id") is not None and e.get("stock_id") is not None
+        }
+    return _stock_lookup_cache[cache_key].get(int(size_id))
+
+
+def _clear_stock_lookup_cache(product_id: int) -> None:
+    """Forget the cached stock map for a product. Call after the push so a
+    later push for the same product sees freshly-initialized entries."""
+    _stock_lookup_cache.pop(product_id, None)
+
+
 async def _ensure_push_mapping_for_dedup(
     db: AsyncSession,
     customer: Customer,
@@ -203,92 +290,27 @@ class OpsClientAdapter:
             data = (result.data or {}).get(response_root)
             if isinstance(data, list):
                 data = data[0] if data else {}
-            return data or {}
+            data = data or {}
+            # ── Application-level silent-failure detection ────────────
+            # OPS returns HTTP 200 + result:false when a mutation is
+            # rejected at the app layer (missing required field, etc.).
+            # The wrapper functions in mutations.py have _check_result,
+            # but THIS path bypasses those wrappers and talks directly
+            # to OPS. Without this check the gateway records steps as
+            # `ok` while OPS silently drops the data — exactly what
+            # happened to setProductPrice (id:null for all 558 calls)
+            # and PC54's setProduct (phantom id:10001).
+            result_val = data.get("result")
+            is_rejected = (
+                result_val is False
+                or (isinstance(result_val, str) and result_val.lower() == "false")
+            )
+            if is_rejected:
+                ops_msg = data.get("message") or f"OPS rejected {response_root}"
+                raise RuntimeError(f"OPS_REJECTED: {str(ops_msg)[:400]}")
+            return data
 
         return _invoke
-
-
-class FakeOpsClient:
-    """Dry-run client — fabricates IDs and records calls. No OPS traffic."""
-
-    def __init__(self) -> None:
-        self.calls: list[dict] = []
-        self._counter = 10000
-
-    async def aclose(self) -> None:
-        pass
-
-    async def execute(self, query: str, *, variables: dict | None = None) -> OpsResult:
-        """Dry-run has no real OPS to query. Report 'no existing product' so the
-        dedup path treats every dry-run as a create (mirrors the empty-result
-        contract of get_product_by_sku). Prevents the AttributeError that used to
-        make dry-run dedup silently no-op."""
-        return OpsResult(ok=True, data={"getProductBySku": {}})
-
-    def _next_id(self) -> int:
-        self._counter += 1
-        return self._counter
-
-    def _record(self, method: str, variables: dict, response: dict) -> None:
-        self.calls.append({"method": method, "input": variables, "response": response})
-
-    # All array-input mutations return `id` (matching live OPS contract).
-    # _normalize_mutation_response in execute_push aliases `id` to the named
-    # field downstream placeholders expect (products_id, size_id, etc.).
-
-    async def set_product_category(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product_category", variables, r)
-        return r
-
-    async def set_product(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product", variables, r)
-        return r
-
-    async def set_product_size(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product_size", variables, r)
-        return r
-
-    async def set_product_price(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_product_price", variables, r)
-        return r
-
-    async def set_assign_options(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_assign_options", variables, r)
-        return r
-
-    async def set_additional_option(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_additional_option", variables, r)
-        return r
-
-    async def set_additional_option_attributes(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_additional_option_attributes", variables, r)
-        return r
-
-    async def set_products_attribute_price(self, variables: dict) -> dict:
-        r = {"id": self._next_id()}
-        self._record("set_products_attribute_price", variables, r)
-        return r
-
-    async def set_products_image_gallery(self, variables: dict) -> dict:
-        # Gallery returns {result, message} (no id) — mirror that shape.
-        r = {"result": True, "message": "dry-run image gallery ok"}
-        self._record("set_products_image_gallery", variables, r)
-        return r
-
-    async def update_product_stock(self, variables: dict) -> dict:
-        r = {
-            "stock_id": self._counter,
-            "stock_quantity": (variables.get("input") or {}).get("stock_quantity", 0),
-        }
-        self._record("update_product_stock", variables, r)
-        return r
 
 
 def _build_live_client(customer: Customer) -> OpsClientAdapter:
@@ -681,12 +703,76 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             final_status = "pushed" if not push_log.dry_run else "dry_run_pushed"
             cleanup_targets: Optional[dict] = None
 
+            # ── Phase 5: step-resumption — skip steps that already succeeded
+            # in a prior partial push for this (customer, product). Looks
+            # only at live pushes (dry-runs use a separate FakeOpsClient
+            # universe of IDs). Match by source_key, which is stable across
+            # plan attempts for the same logical mutation.
+            prior_ok_by_source_key: dict[str, tuple[uuid_mod.UUID, dict]] = {}
+            if not push_log.dry_run:
+                prior_pushes = (await db.execute(
+                    select(ProductPushLog)
+                    .where(
+                        ProductPushLog.customer_id == push_log.customer_id,
+                        ProductPushLog.product_id == push_log.product_id,
+                        ProductPushLog.id != push_log_id,
+                        ProductPushLog.dry_run.is_(False),
+                        ProductPushLog.status.in_(("partial_failure", "failed")),
+                    )
+                    .order_by(ProductPushLog.pushed_at.desc())
+                    .limit(5)
+                )).scalars().all()
+                # Most recent OK step per source_key wins (newer prior pushes
+                # supersede older ones in case the OPS IDs differ).
+                seen_keys: set[str] = set()
+                for prior in prior_pushes:
+                    for s in (prior.step_results or []):
+                        if not isinstance(s, dict):
+                            continue
+                        sk = s.get("source_key")
+                        if not sk or sk in seen_keys:
+                            continue
+                        if s.get("status") == "ok" and s.get("ops_ids"):
+                            prior_ok_by_source_key[sk] = (prior.id, s["ops_ids"])
+                            seen_keys.add(sk)
+                if prior_ok_by_source_key:
+                    logger.info(
+                        "step-resumption: found %d resumable steps from prior push(es) for product=%s customer=%s",
+                        len(prior_ok_by_source_key), push_log.product_id, push_log.customer_id,
+                    )
+
             # ── Execute plan sequentially ──
             import hashlib, json as _json
             for step_num, step in enumerate(plan, start=1):
                 mutation = step.get("mutation", "")
                 raw_variables = step.get("variables", {})
+                source_key = step.get("source_key", "")
                 t_start = datetime.now(timezone.utc)
+
+                # Phase 5: step-resumption — if this exact source_key already
+                # succeeded in a prior push, skip the OPS call and inherit
+                # the returned IDs so downstream placeholder steps still
+                # resolve correctly.
+                prior_match = prior_ok_by_source_key.get(source_key)
+                if prior_match is not None:
+                    prior_push_id, prior_ops_ids = prior_match
+                    # Rebuild step_responses entry from the prior ops_ids so
+                    # any `$stepN.field` referencing this step still resolves.
+                    # Strip the "_id" suffix conversion that ops_ids used.
+                    step_responses[step_num] = dict(prior_ops_ids)
+                    if "products_id" in prior_ops_ids and prior_ops_ids["products_id"]:
+                        ops_product_id = str(prior_ops_ids["products_id"])
+                    step_results.append({
+                        "step": step_num,
+                        "mutation": mutation,
+                        "source_key": source_key,
+                        "status": "skipped",
+                        "ops_ids": prior_ops_ids,
+                        "attempted_at": t_start.isoformat(),
+                        "request_fingerprint": "",
+                        "reused_from_push": str(prior_push_id),
+                    })
+                    continue
 
                 # Resolve $stepN.field placeholders to real IDs returned by
                 # earlier steps before sending to OPS.
@@ -696,6 +782,7 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     step_results.append({
                         "step": step_num,
                         "mutation": mutation,
+                        "source_key": source_key,
                         "status": "failed",
                         "ops_ids": {},
                         "attempted_at": t_start.isoformat(),
@@ -721,6 +808,49 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 # 0.1s gives ~10 req/s — fast enough for 1675 steps in ~3 min.
                 if step_num > 1:
                     await asyncio.sleep(0.1)
+
+                # ── Phase 6: updateProductStock stock_id resolution ──
+                # Strip the gateway-only `_size_id_ref` sentinel (it's not
+                # a real OPS arg), then look up the stock_id for that size.
+                # OPS's updateProductStock needs stock_id — there is no
+                # per-size SKU field anywhere in OPS's schema, so the only
+                # way to identify a variant for stock is via stock_id from
+                # an existing stock entry. If no entry exists for the size,
+                # we skip the step with a clear warning so the operator
+                # knows to initialize stock in OPS admin first.
+                if mutation == "updateProductStock":
+                    size_id_for_lookup = variables.pop("_size_id_ref", None)
+                    if size_id_for_lookup is not None:
+                        raw_client = getattr(client, "_client", client)
+                        stock_id = await _resolve_stock_id_for_size(
+                            raw_client,
+                            product_id=int(ops_product_id) if ops_product_id else None,
+                            size_id=int(size_id_for_lookup),
+                        )
+                        if stock_id is None:
+                            # Initial stock entry doesn't exist in OPS for
+                            # this size — record an actionable warning and
+                            # move on. OPS API has no way to create one;
+                            # admin must initialize via the OPS UI.
+                            step_results.append({
+                                "step": step_num,
+                                "mutation": mutation,
+                                "source_key": source_key,
+                                "status": "warning",
+                                "ops_ids": {},
+                                "attempted_at": t_start.isoformat(),
+                                "request_fingerprint": fingerprint,
+                                "error": (
+                                    f"No OPS stock entry exists for size_id={size_id_for_lookup}. "
+                                    "Initialize stock for this variant in OPS admin (Stock "
+                                    "Management → Add Initial Stock) before re-pushing — OPS's "
+                                    "updateProductStock API can only update existing entries."
+                                ),
+                            })
+                            continue
+                        # Use the resolved stock_id; drop product_sku if any
+                        variables["stock_id"] = stock_id
+                        variables.pop("product_sku", None)
 
                 try:
                     method = getattr(client, _mutation_to_method(mutation), None)
@@ -750,6 +880,7 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     step_results.append({
                         "step": step_num,
                         "mutation": mutation,
+                        "source_key": source_key,
                         "status": "ok",
                         "ops_ids": ops_ids,
                         "attempted_at": t_start.isoformat(),
@@ -766,6 +897,7 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     step_results.append({
                         "step": step_num,
                         "mutation": mutation,
+                        "source_key": source_key,
                         "status": "warning" if is_warn_only else "failed",
                         "ops_ids": {},
                         "attempted_at": t_start.isoformat(),
@@ -788,12 +920,22 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 and not push_log.dry_run
                 and push_log.supplier_sku
             ):
-                await _verify_post_push(getattr(client, "_client", client), push_log.supplier_sku, ops_product_id)
+                raw_client = getattr(client, "_client", client)
+                await _verify_post_push(raw_client, push_log.supplier_sku, ops_product_id)
+                await _verify_b7_readback(raw_client, ops_product_id)
 
             # ── Persist results ──
             push_log.step_results = _redact_auth(step_results)
             push_log.status = final_status
             push_log.cleanup_targets = cleanup_targets
+            # Clear the per-product stock-lookup cache so a later push for
+            # the same product sees freshly-initialized stock entries
+            # (Phase 6 — admin may have run "Add Initial Stock" between pushes).
+            if ops_product_id:
+                try:
+                    _clear_stock_lookup_cache(int(ops_product_id))
+                except (TypeError, ValueError):
+                    pass
             # Save ops_product_id for both success and partial_failure so
             # retries can use update mode instead of creating a duplicate product.
             if ops_product_id and final_status in ("pushed", "partial_failure"):

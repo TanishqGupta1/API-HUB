@@ -502,14 +502,31 @@ def _build_setProduct_step(
         "enable_stock_management": "1",
         "product_type": "1",
     }
-    _cat = ctx.storefront_config.ops_category_id if ctx.storefront_config else None
+    # Category resolution: per-product storefront override wins; if absent,
+    # fall back to the per-customer default_ops_category_id (Phase 2 of the
+    # OPS push audit). Without a category, OPS hides the product from the
+    # admin's default browse view, so we want a sensible fallback.
+    _cat = (ctx.storefront_config.ops_category_id if ctx.storefront_config else None) \
+        or getattr(ctx.customer, "default_ops_category_id", None)
     if _cat:
         try:
             inp["category_id"] = int(_cat)
         except (TypeError, ValueError):
             pass
     if primary_image_url:
-        inp["imagename"] = primary_image_url
+        # OPS stores `imagename` as a relative filename and prepends its own
+        # CDN base path (e.g. ".../images/product/{filename}") at serve time.
+        # Sending a full URL like "https://cdnm.sanmar.com/.../PC61.jpg" causes
+        # OPS to double-prefix it into garbage. Strip to the filename only.
+        #
+        # NOTE: this only fixes the URL format. The image file must still
+        # exist on OPS's CDN — currently it doesn't, because we have no
+        # upload pipeline to push the bytes (Phase 3 partial fix). Customers
+        # see a clean broken-image link instead of a malformed URL. Full fix
+        # requires either: (a) Christian opens OPS's CDN to fetch from
+        # SanMar's IP, or (b) we add a media upload step via OPS's REST
+        # upload endpoint (no GraphQL mutation exists for binary upload).
+        inp["imagename"] = primary_image_url.rsplit("/", 1)[-1]
     variables: dict[str, Any] = {"inputs": [inp]}
 
     return OPSMutationStep(
@@ -570,7 +587,16 @@ def _build_setProductPrice_step(
                 "price": final_price,
                 "vendor_price": base_price,
                 "visible": "1",  # OPS ProductPriceInput.visible is String
-                # Required by OPS; omitting causes "Price Defining method is required".
+                # user_type_id is required by OPS. Without it OPS returns
+                # result:true with id:null and silently drops the price.
+                # "1" = default/all-users user type (matches existing OPS
+                # products). Verified live against staging.visualgraphx
+                # (a direct setProductPrice without this field returns
+                # id:null; adding "1" returns a real id).
+                "user_type_id": "1",
+                # price_defining_method MUST be set on each price too — not
+                # just on the parent product. OPS validation message:
+                # "Price Defining method is required."
                 "price_defining_method": "1",
             }]
         },
@@ -648,17 +674,31 @@ def _build_setAdditionalOptionAttributes_step(
 
 
 def _build_updateProductStock_step(
-    step_num: int, variant_sku: str, inventory: int
+    step_num: int, size_step: int, variant_sku: str, inventory: int
 ) -> OPSMutationStep:
     """Inventory LAST step per Rev 1 §"PC61 outbound mutation sequence".
 
-    action=Add for the initial stock entry. OPS rejects "Reset" when no
-    prior stock row exists ("Invalid Product SKU or initial stock not
-    added!"). product_sku is the stable identifier.
+    Phase 6 — stock_id resolution via read-back:
+      OPS's updateProductStock identifies the variant by stock_id (or by
+      product_sku). There is NO per-size SKU field in OPS's schema, so
+      product_sku never matches anything for products we created via API.
+      Instead the gateway runs a productStocks(product_id) read-back
+      after setProductSize completes and resolves the right stock_id
+      from a `(product_id, size_id) -> stock_id` map.
 
-    Note: setProductSize does NOT accept a SKU field, so OPS auto-derives
-    the SKU from products_internal_title + size_title. variant_sku here
-    must match that derivation for OPS to find the right row.
+      This step carries:
+        * `_size_id_ref` — placeholder resolved to the OPS size_id of the
+          matching setProductSize step, used by the gateway as the lookup
+          key into the stock-read-back map.
+        * `stock_id` — pre-populated to None; the gateway overwrites it
+          at execute time with the looked-up stock_id, or skips the step
+          with a clear warning when no stock entry exists for that size
+          (admin must initialize stock in OPS UI first; the API has no
+          way to create initial stock entries).
+
+      action=Add increments existing stock; for fresh products with zero
+      starting stock the admin-initialized entry will be 0 and Add brings
+      it to the desired quantity.
     """
     return OPSMutationStep(
         step=step_num,
@@ -666,12 +706,15 @@ def _build_updateProductStock_step(
         source_key=f"variant_sku:{variant_sku}",
         variables={
             "action": "Add",
-            "product_sku": variant_sku,
+            # _size_id_ref is a gateway-only sentinel (prefixed with _ to
+            # mark it as not-part-of-the-OPS-mutation). The gateway strips
+            # it before sending and uses it to find the stock_id.
+            "_size_id_ref": _placeholder(size_step, "size_id"),
             "input": {
                 "stock_quantity": inventory,
             },
         },
-        requires_response_from=[1],
+        requires_response_from=[size_step],
     )
 
 
@@ -874,14 +917,6 @@ def _synthesize_payload(
                 )
                 next_step += 1
 
-    # Final N steps: updateProductStock × N (action=Reset).
-    # Deferred by default: updateProductStock targets a stock row by
-    # `product_sku`, but OPS `ProductSizeInput` carries no SKU, so a freshly
-    # created variant has no OPS-side SKU/stock_id to match in a single push —
-    # the Reset would no-op/fail. Opt in with OPS_PUSH_INCLUDE_STOCK=1 once
-    # per-variant stock targeting (read-back of OPS SKUs/stock_ids) is wired.
-    import os as _os
-
     # Image gallery — pushes product images via setProductsImageGallery.
     # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_IMAGES=1): OPS does NOT
     # fetch external URLs — it treats `products_large_image_name` as a filename
@@ -891,17 +926,25 @@ def _synthesize_payload(
     # rows. The step is wired and ready; enable it once images are uploaded into
     # OPS media and we pass bare OPS filenames. Placed before stock so inventory
     # stays the final step (Rev 1 contract). Best-effort/warn-only in the gateway.
+    import os as _os
+
     if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") == "1":
         gallery_step = _build_setProductsImageGallery_step(next_step, ctx, products_id_step=1)
         if gallery_step is not None:
             plan.append(gallery_step)
             next_step += 1
 
+    # Final N steps: updateProductStock × N (action=Add, with stock_id
+    # resolved by gateway read-back — see _build_updateProductStock_step).
+    # Deferred by default: opt in with OPS_PUSH_INCLUDE_STOCK=1.
     if _os.getenv("OPS_PUSH_INCLUDE_STOCK", "0") == "1":
         for v, price in zip(ordered_variants, computed_prices):
             plan.append(
                 _build_updateProductStock_step(
-                    next_step, price.variant_sku, v.inventory or 0
+                    next_step,
+                    size_step_by_sku[price.variant_sku],
+                    price.variant_sku,
+                    v.inventory or 0,
                 )
             )
             next_step += 1

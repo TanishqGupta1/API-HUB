@@ -1,32 +1,31 @@
-"""OPS GraphQL operation strings + the wrappers still in use.
+"""OPS GraphQL mutation + query constants — single source of truth for all OPS query strings.
 
-The M1 Integration Gateway (`modules/ops_push/gateway.py`) sends OPS mutations
-by dispatching the raw query CONSTANTS below (`_SET_*` / `_UPDATE_*`) through its
-own adapter — it does not call per-operation wrapper functions for the push.
+The gateway (modules/ops_push/gateway.py) dispatches plan steps via _MUTATION_DISPATCH,
+which maps mutation names to (query_string, response_root_key) pairs defined here.
 
-What remains here and why:
-  * `_SET_*` / `_UPDATE_*` / `_GET_*` query constants — single source of truth
-    for OPS field shapes; referenced by the gateway's `_MUTATION_DISPATCH`.
-  * `get_product_by_sku()` — live: used by the gateway dedup/verify paths.
-  * `set_product` / `set_product_size` / `set_product_price` /
-    `update_product_stock` — retained as the reference implementation +
-    regression coverage for OPS application-level `result:false` rejection
-    (the PC54/PC61 silent-failure scenario, tested in
-    `test_ops_push_normalization.py`). This `_check_result` logic is what the
-    gateway silent-failure guard (PENDING-WORK §1.2) needs to adopt.
-  * `_unwrap_list()` / `_check_result()` — array-response unwrap + rejection
-    detection used by the wrappers above.
+_check_result and _unwrap_list are utility helpers available to any caller that
+receives a raw OPS response dict and needs to detect application-level rejection
+(HTTP 200 + result:false) or unwrap array-input responses.
 
-Removed (no production callers, no remaining tests): the legacy
-`set_product_category`, `set_products_image_gallery`, `set_assign_options`,
-`set_additional_option`, `set_additional_option_attributes`,
-`set_products_attribute_price`, `set_product_design` wrappers, and
-`modules/ops_client/push.py`. Their query constants are kept (the gateway
-dispatches them directly).
+Queries:
+  get_product_by_sku — dedup / post-push verify (called from gateway via _dedup_lookup_in_ops)
 """
 from __future__ import annotations
 
 from .client import OpsGraphQLClient, OpsResult
+
+
+# ── set_product_category ─────────────────────────────────────────────────────
+
+_SET_PRODUCT_CATEGORY = """
+mutation SetProductCategory($inputs: [ProductCategoryInput!]!) {
+  setProductCategory(inputs: $inputs) {
+    result
+    message
+    id
+  }
+}
+""".strip()
 
 
 def _unwrap_list(data: dict | None, key: str) -> dict:
@@ -70,21 +69,7 @@ def _check_result(data: dict, mutation_name: str) -> OpsResult | None:
     return None
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# OPS mutation query constants — dispatched by gateway._MUTATION_DISPATCH.
-# Single source of truth for OPS input field shapes. Keep all of these even
-# where the wrapper function was removed; the gateway sends them directly.
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-_SET_PRODUCT_CATEGORY = """
-mutation SetProductCategory($inputs: [ProductCategoryInput!]!) {
-  setProductCategory(inputs: $inputs) {
-    result
-    message
-    id
-  }
-}
-""".strip()
+# ── set_product ──────────────────────────────────────────────────────────────
 
 _SET_PRODUCT = """
 mutation SetProduct($inputs: [ProductInput!]!) {
@@ -96,6 +81,9 @@ mutation SetProduct($inputs: [ProductInput!]!) {
 }
 """.strip()
 
+
+# ── set_products_image_gallery ───────────────────────────────────────────────
+
 _SET_PRODUCTS_IMAGE_GALLERY = """
 mutation SetProductsImageGallery($products_id: Int!, $optimizeimg: Int, $input: ProductsImageGalleryBulkInput!) {
   setProductsImageGallery(products_id: $products_id, optimizeimg: $optimizeimg, input: $input) {
@@ -104,6 +92,9 @@ mutation SetProductsImageGallery($products_id: Int!, $optimizeimg: Int, $input: 
   }
 }
 """.strip()
+
+
+# ── set_product_size ─────────────────────────────────────────────────────────
 
 _SET_PRODUCT_SIZE = """
 mutation SetProductSize($inputs: [ProductSizeInput!]!) {
@@ -115,6 +106,9 @@ mutation SetProductSize($inputs: [ProductSizeInput!]!) {
 }
 """.strip()
 
+
+# ── set_product_price ────────────────────────────────────────────────────────
+
 _SET_PRODUCT_PRICE = """
 mutation SetProductPrice($inputs: [ProductPriceInput!]!) {
   setProductPrice(inputs: $inputs) {
@@ -124,6 +118,9 @@ mutation SetProductPrice($inputs: [ProductPriceInput!]!) {
   }
 }
 """.strip()
+
+
+# ── set_assign_options ───────────────────────────────────────────────────────
 
 _SET_ASSIGN_OPTIONS = """
 mutation SetAssignOptions($inputs: [AssignOptionsInput!]!) {
@@ -135,6 +132,9 @@ mutation SetAssignOptions($inputs: [AssignOptionsInput!]!) {
 }
 """.strip()
 
+
+# ── set_additional_option ────────────────────────────────────────────────────
+
 _SET_ADDITIONAL_OPTION = """
 mutation SetAdditionalOption($inputs: [AdditionalOptionInput!]!) {
   setAdditionalOption(inputs: $inputs) {
@@ -144,6 +144,9 @@ mutation SetAdditionalOption($inputs: [AdditionalOptionInput!]!) {
   }
 }
 """.strip()
+
+
+# ── set_additional_option_attributes ─────────────────────────────────────────
 
 _SET_ADDITIONAL_OPTION_ATTRIBUTES = """
 mutation SetAdditionalOptionAttributes($inputs: [AdditionalOptionAttributesInput!]!) {
@@ -155,6 +158,9 @@ mutation SetAdditionalOptionAttributes($inputs: [AdditionalOptionAttributesInput
 }
 """.strip()
 
+
+# ── set_products_attribute_price ─────────────────────────────────────────────
+
 _SET_PRODUCTS_ATTRIBUTE_PRICE = """
 mutation SetProductsAttributePrice($inputs: [ProductsAttributePriceInput!]!) {
   setProductsAttributePrice(inputs: $inputs) {
@@ -164,6 +170,9 @@ mutation SetProductsAttributePrice($inputs: [ProductsAttributePriceInput!]!) {
   }
 }
 """.strip()
+
+
+# ── update_product_stock ─────────────────────────────────────────────────────
 
 _UPDATE_PRODUCT_STOCK = """
 mutation UpdateProductStock($stock_id: Int, $product_sku: String, $action: UpdateProductStockActionEnum!, $input: UpdateProductStockInput!) {
@@ -176,6 +185,10 @@ mutation UpdateProductStock($stock_id: Int, $product_sku: String, $action: Updat
 }
 """.strip()
 
+
+# ── set_product_design ───────────────────────────────────────────────────────
+# Dormant — real OPS schema differs from this stub; needs a rewrite before use.
+
 _SET_PRODUCT_DESIGN = """
 mutation SetProductDesign($input: setProductDesign_input!) {
   setProductDesign(input: $input) {
@@ -185,144 +198,15 @@ mutation SetProductDesign($input: setProductDesign_input!) {
 """.strip()
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Retained wrappers — reference impl + silent-failure (`result:false`)
-# regression coverage (PENDING-WORK §1.2). Not on the production push path.
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async def set_product(
-    *,
-    client: OpsGraphQLClient,
-    category_id: int,
-    products_title: str,
-    products_internal_title: str,
-    visible: int = 1,
-) -> OpsResult:
-    result = await client.execute(
-        _SET_PRODUCT,
-        variables={"inputs": [{
-            "category_id": category_id,
-            "products_title": products_title,
-            "products_internal_title": products_internal_title,
-            "visible": visible,
-        }]},
-    )
-    if not result.ok:
-        return result
-    data = _unwrap_list(result.data, "setProduct")
-    err = _check_result(data, "setProduct")
-    if err is not None:
-        return err
-    return OpsResult(ok=True, data=data, raw=result.raw)
-
-
-async def set_product_size(
-    *,
-    client: OpsGraphQLClient,
-    products_id: int,
-    size_title: str,
-    visible: int = 1,
-) -> OpsResult:
-    result = await client.execute(
-        _SET_PRODUCT_SIZE,
-        variables={"inputs": [{
-            "products_id": products_id,
-            "size_title": size_title,
-            "visible": visible,
-        }]},
-    )
-    if not result.ok:
-        return result
-    data = _unwrap_list(result.data, "setProductSize")
-    err = _check_result(data, "setProductSize")
-    if err is not None:
-        return err
-    return OpsResult(ok=True, data=data, raw=result.raw)
-
-
-async def set_product_price(
-    *,
-    client: OpsGraphQLClient,
-    products_id: int,
-    size_id: int,
-    price: str,
-    vendor_price: str,
-    qty: int = 1,
-    qty_to: int | None = None,
-    visible: int = 1,
-    price_defining_method: str = "1",
-) -> OpsResult:
-    # OPS requires:
-    # - price/vendor_price as Float (not string) — string causes INVALID_USER_INPUT
-    # - price_defining_method — missing causes "Price Defining method is required"
-    if price is None or vendor_price is None:
-        return OpsResult(ok=False, ops_error_code="MISSING_PRICE",
-                         ops_error_message="price and vendor_price must not be None")
-    input_dict: dict = {
-        "products_id": products_id,
-        "size_id": size_id,
-        "qty": qty,
-        "price": float(price),
-        "vendor_price": float(vendor_price),
-        "visible": str(visible),
-        "price_defining_method": price_defining_method,
-    }
-    if qty_to is not None:
-        input_dict["qty_to"] = qty_to
-    result = await client.execute(_SET_PRODUCT_PRICE, variables={"inputs": [input_dict]})
-    if not result.ok:
-        return result
-    data = _unwrap_list(result.data, "setProductPrice")
-    err = _check_result(data, "setProductPrice")
-    if err is not None:
-        return err
-    return OpsResult(ok=True, data=data, raw=result.raw)
-
-
-async def update_product_stock(
-    *,
-    client: OpsGraphQLClient,
-    action: str,
-    stock_quantity: int,
-    stock_id: int | None = None,
-    product_sku: str | None = None,
-    comment: str | None = None,
-) -> OpsResult:
-    variables: dict = {
-        "action": action,
-        "input": {"stock_quantity": stock_quantity},
-    }
-    if stock_id is not None:
-        variables["stock_id"] = stock_id
-    if product_sku is not None:
-        variables["product_sku"] = product_sku
-    if comment is not None:
-        variables["input"]["comment"] = comment
-    result = await client.execute(_UPDATE_PRODUCT_STOCK, variables=variables)
-    if not result.ok:
-        return result
-    # updateProductStock is the one mutation that doesn't use array inputs;
-    # its response is a single dict, not a list. Still subject to the same
-    # application-level result-checking.
-    data = (result.data or {}).get("updateProductStock") or {}
-    err = _check_result(data, "updateProductStock")
-    if err is not None:
-        return err
-    return OpsResult(ok=True, data=data, raw=result.raw)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# get_product_by_sku (P2.2 dedup) — live wrapper.
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ── get_product_by_sku (dedup / post-push verify) ────────────────────────────
 #
-# Used pre-push to ask OPS "do you already have a product with this SKU?" so
-# a retry of a previously-failed push doesn't create a duplicate row in OPS.
+# Used pre-push (_dedup_lookup_in_ops) to ask OPS whether it already has a
+# product with this SKU, so a retry of a failed push doesn't create a duplicate.
+# Also used post-push by _verify_post_push to confirm the write persisted.
 #
 # Schema is PROVISIONAL — confirm against the OPS Postman collection when
-# Christian shares it. The function returns the wrapper's data dict so the
-# dedup caller never sees raw schema details; only the wrapper has to change
-# if OPS uses a different operation name (e.g. getProductsList with a SKU
-# filter) or different field names.
+# Christian shares it. The function returns Optional[int] (products_id) so
+# the dedup caller never sees raw schema details.
 
 _GET_PRODUCT_BY_SKU = """
 query GetProductBySku($products_sku: String!) {
@@ -339,10 +223,10 @@ async def get_product_by_sku(
     client: OpsGraphQLClient,
     products_sku: str,
 ) -> OpsResult:
-    """Look up an existing OPS product by SKU. Returns the wrapper's data
-    dict containing products_id when found, or an empty dict when not.
+    """Look up an existing OPS product by SKU. Returns data dict containing
+    products_id when found, or an empty dict when not found.
 
-    Callers should check result.ok AND result.data.get('products_id').
+    Callers must check result.ok AND result.data.get('products_id').
     A missing products_id is a successful 'not found', not a failure.
     """
     result = await client.execute(
@@ -351,7 +235,65 @@ async def get_product_by_sku(
     )
     if not result.ok:
         return result
-    # OPS convention nests the operation result under the operation name;
-    # mirror the unwrap pattern from the mutation helpers.
     payload = (result.data or {}).get("getProductBySku") or {}
     return OpsResult(ok=True, data=payload, raw=result.raw)
+
+
+# ── get_product_stocks (Phase 6 — stock_id read-back) ───────────────────────
+#
+# OPS's updateProductStock requires either stock_id or product_sku to identify
+# the variant. The catch:
+#   * There is no per-size SKU field anywhere in OPS's product / size schema;
+#     OPS appears to assume SKUs were assigned via the admin UI.
+#   * stock entries (stock_id rows) only exist for variants where an admin
+#     manually initialized stock through the OPS UI. They are NOT auto-created
+#     by setProductSize or by enabling enable_stock_management.
+#
+# This query lets the gateway read the existing stock entries for a product
+# after setProductSize completes, then thread the stock_id into each
+# updateProductStock step (instead of the supplier SKU that OPS doesn't know
+# about). Variants without a stock entry are skipped with an actionable
+# warning so an operator can initialize them in OPS admin.
+
+_GET_PRODUCT_STOCKS = """
+query GetProductStocks($product_id: Int, $limit: Int, $offset: Int) {
+  productStocks(product_id: $product_id, limit: $limit, offset: $offset) {
+    productStocks {
+      stock_id
+      size_id
+      size_title
+      stock_quantity
+    }
+  }
+}
+""".strip()
+
+
+async def get_product_stocks(
+    *,
+    client: OpsGraphQLClient,
+    product_id: int,
+    limit: int = 500,
+) -> OpsResult:
+    """Return the list of existing OPS stock entries for a product.
+
+    Returns ``OpsResult.data = {"productStocks": [...]}`` on success
+    (possibly empty list when no entries exist). The "Data not found"
+    error OPS returns for products with zero stock entries is mapped to
+    an empty list so callers don't need to special-case the error path.
+    """
+    result = await client.execute(
+        _GET_PRODUCT_STOCKS, variables={"product_id": product_id, "limit": limit, "offset": 0},
+    )
+    if not result.ok:
+        # OPS returns DATA_NOT_FOUND when no stock entries exist — treat
+        # as "empty list" so callers can iterate cleanly.
+        if (result.ops_error_code or "") == "DATA_NOT_FOUND":
+            return OpsResult(ok=True, data={"productStocks": []}, raw=result.raw)
+        return result
+    payload = (result.data or {}).get("productStocks") or {}
+    return OpsResult(
+        ok=True,
+        data={"productStocks": payload.get("productStocks") or []},
+        raw=result.raw,
+    )
