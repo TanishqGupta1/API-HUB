@@ -112,7 +112,10 @@ async def update_customer(
         return await _with_counts(db, customer)
 
     # vg_admin
-    for field in ("name", "ops_base_url", "ops_token_url", "ops_client_id", "is_active"):
+    for field in (
+        "name", "ops_base_url", "ops_token_url", "ops_client_id",
+        "is_active", "default_ops_category_id",
+    ):
         if field in body:
             setattr(customer, field, body[field])
     if "ops_client_secret" in body and body["ops_client_secret"]:

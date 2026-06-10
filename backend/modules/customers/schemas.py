@@ -24,5 +24,10 @@ class CustomerRead(BaseModel):
     created_at: datetime
     products_pushed: int = 0
     markup_rules_count: int = 0
+    # Per-customer fallback OPS category for product pushes (Phase 2 of
+    # the OPS push audit). When set, products without a per-product
+    # storefront category land in OPS under this category instead of
+    # being uncategorized (which OPS admin hides from default views).
+    default_ops_category_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)

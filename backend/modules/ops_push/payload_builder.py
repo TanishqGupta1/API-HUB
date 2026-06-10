@@ -458,22 +458,6 @@ def _customer_prefix(customer: Customer, supplier: Supplier) -> str:
     return supplier.push_name_prefix or f"{supplier.slug[:2].upper()}-"
 
 
-def _slugify(text: str) -> str:
-    """Convert a product title into a clean URL slug.
-
-    e.g. "SA-Port Authority Xcape Computer Backpack. BG100"
-         → "sa-port-authority-xcape-computer-backpack-bg100"
-
-    Replaces any non-alphanumeric run with a single dash, lowercases,
-    strips leading/trailing dashes.  Passed as `products_url` in setProduct
-    so OPS never auto-generates a slug with a trailing dedup counter like
-    `-3` (which appears when multiple pushes create products with the same
-    auto-derived URL).
-    """
-    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return slug
-
-
 # ---------------------------------------------------------------------------
 # Mutation step builders
 # ---------------------------------------------------------------------------
