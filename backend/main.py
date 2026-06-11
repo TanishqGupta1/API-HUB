@@ -224,7 +224,7 @@ import os
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173").split(",")
 
-app = FastAPI(title="API-HUB", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="GraphX Connect", version="0.1.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -298,7 +298,7 @@ app.include_router(integrations_admin_router, dependencies=_auth)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "api-hub"}
+    return {"status": "ok", "service": "graphx-connect"}
 
 
 @app.get("/api/stats")
