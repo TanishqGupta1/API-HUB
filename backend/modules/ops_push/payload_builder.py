@@ -677,7 +677,7 @@ def _all_variants_same_price(
     one section per color/size combination.
     """
     if not ordered_variants:
-        return True
+        return False
     first_tiers = _effective_tiers(ordered_variants[0])
     first_base = float(computed_prices[0].base_price or 0)
     for v, price in zip(ordered_variants[1:], computed_prices[1:]):
