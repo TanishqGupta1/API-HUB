@@ -759,8 +759,13 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     prior_push_id, prior_ops_ids = prior_match
                     # Rebuild step_responses entry from the prior ops_ids so
                     # any `$stepN.field` referencing this step still resolves.
-                    # Strip the "_id" suffix conversion that ops_ids used.
-                    step_responses[step_num] = dict(prior_ops_ids)
+                    # ops_ids stores values as str(); coerce numeric strings back
+                    # to int so downstream mutations with Int! fields (e.g.
+                    # setAdditionalOption.products_id) don't get a type error.
+                    step_responses[step_num] = {
+                        k: (int(v) if isinstance(v, str) and v.lstrip("-").isdigit() else v)
+                        for k, v in prior_ops_ids.items()
+                    }
                     if "products_id" in prior_ops_ids and prior_ops_ids["products_id"]:
                         ops_product_id = str(prior_ops_ids["products_id"])
                     step_results.append({
@@ -853,41 +858,100 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                         variables["stock_id"] = stock_id
                         variables.pop("product_sku", None)
 
-                try:
-                    method = getattr(client, _mutation_to_method(mutation), None)
-                    if method is None:
-                        raise NotImplementedError(f"No client method for {mutation}")
-                    resp = await method(variables)
-                    # All array-input mutations return {index,result,message,id}.
-                    # Downstream placeholders use named aliases; add them here.
-                    resp = _normalize_mutation_response(mutation, resp)
-                    # setProduct may return id=null when the product already exists
-                    # in OPS from a prior partial push. Fall back to a SKU lookup.
-                    if mutation == "setProduct" and not resp.get("products_id"):
-                        raw_client = getattr(client, "_client", client)
-                        sku_result = await _m.get_product_by_sku(
-                            client=raw_client, products_sku=push_log.supplier_sku
+                # Retry loop: attempt the mutation up to _MAX_STEP_ATTEMPTS times.
+                # OPS staging sometimes returns a transient empty-error (no message,
+                # no status code info) on high-mutation pushes — a short backoff and
+                # retry recovers without aborting the whole push.
+                _MAX_STEP_ATTEMPTS = 3
+                _step_succeeded = False
+                _last_exc: Exception | None = None
+                for _attempt in range(_MAX_STEP_ATTEMPTS):
+                    if _attempt > 0:
+                        backoff = 2.0 * _attempt
+                        logger.warning(
+                            "Step %d %s — retry %d/%d after %.1fs (prev error: %s)",
+                            step_num, mutation, _attempt, _MAX_STEP_ATTEMPTS - 1,
+                            backoff, repr(_last_exc),
                         )
-                        if sku_result.ok and sku_result.data.get("products_id"):
-                            resp = dict(resp, products_id=sku_result.data["products_id"])
-                            logger.info(
-                                "setProduct returned null id — resolved via SKU lookup: %s → products_id=%s",
-                                push_log.supplier_sku, resp["products_id"],
+                        await asyncio.sleep(backoff)
+                    try:
+                        method = getattr(client, _mutation_to_method(mutation), None)
+                        if method is None:
+                            raise NotImplementedError(f"No client method for {mutation}")
+                        resp = await method(variables)
+                        # All array-input mutations return {index,result,message,id}.
+                        # Downstream placeholders use named aliases; add them here.
+                        resp = _normalize_mutation_response(mutation, resp)
+                        # setProduct may return id=null when the product already exists
+                        # in OPS from a prior partial push. Fall back to a SKU lookup.
+                        if mutation == "setProduct" and not resp.get("products_id"):
+                            raw_client = getattr(client, "_client", client)
+                            sku_result = await _m.get_product_by_sku(
+                                client=raw_client, products_sku=push_log.supplier_sku
                             )
-                    step_responses[step_num] = resp
-                    if "products_id" in resp and resp["products_id"]:
-                        ops_product_id = str(resp["products_id"])
-                    ops_ids = {k: str(v) for k, v in resp.items() if k.endswith("_id")}
-                    step_results.append({
-                        "step": step_num,
-                        "mutation": mutation,
-                        "source_key": source_key,
-                        "status": "ok",
-                        "ops_ids": ops_ids,
-                        "attempted_at": t_start.isoformat(),
-                        "request_fingerprint": fingerprint,
-                    })
-                except Exception as e:
+                            if sku_result.ok and sku_result.data.get("products_id"):
+                                pid = sku_result.data["products_id"]
+                                if isinstance(pid, str) and pid.lstrip("-").isdigit():
+                                    pid = int(pid)
+                                resp = dict(resp, products_id=pid)
+                                logger.info(
+                                    "setProduct returned null id — resolved via SKU lookup: %s → products_id=%s",
+                                    push_log.supplier_sku, resp["products_id"],
+                                )
+                        # Coerce all numeric-string ID fields to int so downstream
+                        # mutations that declare ``*_id: Int!`` never get a string.
+                        # OPS's PHP GraphQL layer sometimes returns IDs as strings
+                        # even though the downstream schema expects Int.
+                        resp = {
+                            k: (int(v) if isinstance(v, str) and v.lstrip("-").isdigit() and k.endswith("_id") else v)
+                            for k, v in resp.items()
+                        }
+                        step_responses[step_num] = resp
+                        if "products_id" in resp and resp["products_id"]:
+                            ops_product_id = str(resp["products_id"])
+                        ops_ids = {k: str(v) for k, v in resp.items() if k.endswith("_id")}
+                        step_results.append({
+                            "step": step_num,
+                            "mutation": mutation,
+                            "source_key": source_key,
+                            "status": "ok",
+                            "ops_ids": ops_ids,
+                            "attempted_at": t_start.isoformat(),
+                            "request_fingerprint": fingerprint,
+                        })
+                        _step_succeeded = True
+                        break  # success — exit retry loop
+                    except Exception as e:
+                        _last_exc = e
+                        logger.warning(
+                            "Step %d %s attempt %d failed — %s: %r",
+                            step_num, mutation, _attempt + 1,
+                            type(e).__qualname__, str(e),
+                        )
+                        # setProduct "not found" in update mode means OPS soft-deleted
+                        # the product but its SKU still appears in the dedup lookup.
+                        # Strip products_id from the variables and retry as a CREATE.
+                        err_str = str(e)
+                        if (mutation == "setProduct"
+                                and "not found" in err_str.lower()
+                                and "products_id" in variables.get("inputs", [{}])[0]):
+                            logger.warning(
+                                "setProduct update rejected (products_id=%s not found in OPS) "
+                                "— retrying as fresh create",
+                                variables["inputs"][0].get("products_id"),
+                            )
+                            inp = dict(variables["inputs"][0])
+                            inp.pop("products_id", None)
+                            variables = dict(variables, inputs=[inp])
+                            continue  # retry without products_id
+                        # Only retry on empty/transient errors. A well-formed OPS
+                        # rejection (RuntimeError with a message) is a data error —
+                        # retrying won't help and would just duplicate writes.
+                        if err_str:
+                            break  # non-empty error: don't retry
+
+                if not _step_succeeded:
+                    e = _last_exc
                     # Stock + image-gallery writes are best-effort. Stock: OPS
                     # exposes no SKU field on ProductSizeInput, so our supplier
                     # SKUs can't be matched. Images: a bad/unreachable URL
@@ -895,6 +959,7 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     # warnings but don't abort — the product + sizes + prices
                     # are the critical writes.
                     is_warn_only = mutation in ("updateProductStock", "setProductsImageGallery")
+                    err_str = str(e) if e and str(e) else f"{type(e).__qualname__}(empty)" if e else "unknown"
                     step_results.append({
                         "step": step_num,
                         "mutation": mutation,
@@ -903,7 +968,7 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                         "ops_ids": {},
                         "attempted_at": t_start.isoformat(),
                         "request_fingerprint": fingerprint,
-                        "error": str(e),
+                        "error": err_str,
                     })
                     if is_warn_only:
                         continue  # keep iterating over remaining stock updates
@@ -1049,10 +1114,20 @@ _MUTATION_ID_ALIAS: dict[str, str] = {
 
 
 def _normalize_mutation_response(mutation: str, resp: dict) -> dict:
-    """Add a named alias for the `id` field returned by OPS array-input mutations."""
+    """Add a named alias for the `id` field returned by OPS array-input mutations.
+
+    OPS GraphQL sometimes returns numeric IDs as JSON strings instead of
+    integers (schema is loosely typed in PHP). We coerce numeric string `id`
+    values to int here so downstream mutations that declare ``products_id: Int!``
+    (e.g. setAdditionalOption) don't get a GraphQL type-error.
+    """
     alias = _MUTATION_ID_ALIAS.get(mutation)
     if alias and "id" in resp and alias not in resp:
-        resp = dict(resp, **{alias: resp["id"]})
+        id_val = resp["id"]
+        if isinstance(id_val, str) and id_val.lstrip("-").isdigit():
+            id_val = int(id_val)
+            resp = dict(resp, id=id_val)
+        resp = dict(resp, **{alias: id_val})
     return resp
 
 
