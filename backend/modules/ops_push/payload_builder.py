@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import re
 from dataclasses import dataclass, field
@@ -45,6 +46,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+log = logging.getLogger(__name__)
 
 from modules.catalog.models import (
     Product,
@@ -437,6 +440,23 @@ def _request_fingerprint(variables: dict[str, Any]) -> str:
     return hashlib.sha256(canon.encode("utf-8")).hexdigest()[:16]
 
 
+def _select_primary_image(images: list) -> Optional[Any]:
+    """Pick the best single image for setProduct.imagename.
+
+    Preference order: image_type='primary' (the main product photo from
+    SanMar, typically a model or flat-lay shot) → first 'front' → first
+    available. Per-color swatch 'front' images are too small for a product
+    description thumbnail.
+    """
+    primary = [img for img in images if img.image_type == "primary"]
+    if primary:
+        return primary[0]
+    front = [img for img in images if (img.image_type or "front") == "front"]
+    if front:
+        return front[0]
+    return images[0] if images else None
+
+
 def _variant_sort_key(v: ProductVariant) -> tuple[int, str, str, str]:
     """Sort variants by `sort_order` ASC, then lex `(color, size, sku)`.
 
@@ -464,7 +484,12 @@ def _customer_prefix(customer: Customer, supplier: Supplier) -> str:
 
 
 def _build_setProduct_step(
-    ctx: _PushContext, push_mode: str, existing_ops_id: Optional[int], primary_image_url: Optional[str]
+    ctx: _PushContext,
+    push_mode: str,
+    existing_ops_id: Optional[int],
+    primary_image_url: Optional[str],
+    primary_staged_filename: Optional[str] = None,
+    category_id_override: Optional[int] = None,
 ) -> OPSMutationStep:
     """setProduct is always step 1 (no more separate setProductCategory).
 
@@ -494,6 +519,19 @@ def _build_setProduct_step(
         "visible": 1,
         "product_description": _desc,
         "long_description": _desc,
+        # ── SKU + external reference (OPS ProductInput, verified against
+        #    the client's live Postman collection, June 2026) ────────────
+        #   * main_sku — String. OPS stores this as the product's main SKU
+        #     (with size_id=0). This is the canonical SKU field; there is no
+        #     SKU field on ProductSizeInput. Empty string would clear it, so
+        #     we only send it when supplier_sku is set.
+        #   * external_ref — String (max 255). OPS's dedicated slot for a
+        #     third-party system's own id. We send the supplier SKU so OPS
+        #     rows carry a stable back-reference to our catalog, and
+        #     setProduct echoes it back in the response (index/result/
+        #     message/id/external_ref) for write-confirmation.
+        **({"main_sku": ctx.product.supplier_sku} if ctx.product.supplier_sku else {}),
+        **({"external_ref": ctx.product.supplier_sku} if ctx.product.supplier_sku else {}),
         # ── Required OPS ProductInput fields for all products ──────────
         # Phase 1 audit findings (June 2026):
         #   * predefined_product_type — silent reject when null
@@ -505,37 +543,51 @@ def _build_setProduct_step(
         #     to find variants; without it, all stock writes fail
         #   * product_type — working OPS products always have this set;
         #     null may hide the product from some admin UI filters
+        #   * product_service_type — client Postman (2026-06-15) marks this
+        #     Required with the note "Must be 1 always". Not sent before;
+        #     OPS likely defaulted it for products 552-556, but the schema
+        #     says required, so send the fixed value to be safe.
         "predefined_product_type": "1",
         "price_defining_method": "1",
         "measurement_unit_id": 1,
         "enable_stock_management": "1",
         "product_type": "1",
+        "product_service_type": "1",
     }
-    # Category resolution: per-product storefront override wins; if absent,
-    # fall back to the per-customer default_ops_category_id (Phase 2 of the
-    # OPS push audit). Without a category, OPS hides the product from the
-    # admin's default browse view, so we want a sensible fallback.
-    _cat = (ctx.storefront_config.ops_category_id if ctx.storefront_config else None) \
+    # Category resolution order:
+    #   1. category_id_override — the gateway's auto-category resolver created/
+    #      looked up the OPS category matching this product's category name.
+    #   2. per-product storefront config override.
+    #   3. per-customer default_ops_category_id.
+    # Without a category, OPS hides the product from the storefront, so we
+    # always want a resolved id (preflight's check_category_resolvable gates this).
+    _cat = category_id_override \
+        or (ctx.storefront_config.ops_category_id if ctx.storefront_config else None) \
         or getattr(ctx.customer, "default_ops_category_id", None)
     if _cat:
         try:
             inp["category_id"] = int(_cat)
         except (TypeError, ValueError):
             pass
-    if primary_image_url:
-        # OPS stores `imagename` as a relative filename and prepends its own
-        # CDN base path (e.g. ".../images/product/{filename}") at serve time.
-        # Sending a full URL like "https://cdnm.sanmar.com/.../PC61.jpg" causes
-        # OPS to double-prefix it into garbage. Strip to the filename only.
+    if primary_staged_filename:
+        # Image pre-staged to OPS's product/ folder in the shared S3 bucket
+        # (ctmediaon_staging/images/product/) — send bare filename so OPS
+        # can prepend its CDN path without producing a double-URL.
         #
-        # NOTE: this only fixes the URL format. The image file must still
-        # exist on OPS's CDN — currently it doesn't, because we have no
-        # upload pipeline to push the bytes (Phase 3 partial fix). Customers
-        # see a clean broken-image link instead of a malformed URL. Full fix
-        # requires either: (a) Christian opens OPS's CDN to fetch from
-        # SanMar's IP, or (b) we add a media upload step via OPS's REST
-        # upload endpoint (no GraphQL mutation exists for binary upload).
-        inp["imagename"] = primary_image_url.rsplit("/", 1)[-1]
+        # OPS has two image slots on the description tab:
+        #   - `imagename`          → "Small Image" (PDP thumbnail)
+        #   - `product_desc_image` → "Large Image" (PDP zoom / hero)
+        # Both point at the same staged file — our mirrored WebPs are
+        # already sized for both uses (max 1200px).
+        inp["imagename"] = primary_staged_filename
+        inp["product_desc_image"] = primary_staged_filename
+    elif primary_image_url:
+        # Fallback (no staging): strip to bare filename. OPS still prepends
+        # its CDN path, so the file must already exist there for the image to
+        # render — this path produces a broken link until the file is staged.
+        bare = primary_image_url.rsplit("/", 1)[-1]
+        inp["imagename"] = bare
+        inp["product_desc_image"] = bare
     variables: dict[str, Any] = {"inputs": [inp]}
 
     return OPSMutationStep(
@@ -556,6 +608,10 @@ def _build_setProductSize_placeholder_step(step_num: int) -> OPSMutationStep:
     row even when the customer-facing variant selection comes from the
     Additional Options panel — without it OPS hides the product from
     the storefront's "Add to cart" flow.
+
+    Note: the product SKU is NOT set here. OPS stores it as `main_sku` on
+    ProductInput (size_id=0) via setProduct — ProductSizeInput has no SKU
+    field. See _build_setProduct_step.
     """
     return OPSMutationStep(
         step=step_num,
@@ -848,30 +904,47 @@ def _build_setProductsImageGallery_step(
 ) -> Optional[OPSMutationStep]:
     """One setProductsImageGallery for the whole product.
 
-    OPS has no file-upload mutation; images are referenced by URL in each
-    item's `products_large_image_name`, and OPS fetches + optimizes them
-    server-side when optimizeimg=1 (verified live against staging — see
-    `scripts/ops_image_spike.py`). Depends on step 1 for products_id; OPS
-    returns that id as a string but this mutation needs a top-level Int!, so
-    the gateway coerces it at execute time.
+    OPS does NOT fetch external URLs — `products_large_image_name` is a bare
+    filename inside the OPS media folder, and OPS prepends its own CDN path
+    to whatever string it receives (verified live 2026-06-12). When
+    OPS_MEDIA_IMAGE_PREFIX is configured, images are pre-staged into that
+    folder by `build_push_payload` (see `ops_media.py`) and only staged
+    filenames are sent; unstaged images are skipped. Without the prefix this
+    falls back to legacy URL behavior (known-broken against current OPS —
+    kept only so dry-runs surface the full plan).
 
-    Returns None when the product has no usable image URLs (nothing to push).
+    Depends on step 1 for products_id; OPS returns that id as a string but
+    this mutation needs a top-level Int!, so the gateway coerces it at
+    execute time.
+
+    Returns None when the product has no usable images (nothing to push).
     """
     if not ctx.images:
         return None
+    from modules.ops_push.ops_media import media_prefix
+
+    use_media = bool(media_prefix())
     title = ctx.product.product_name or ctx.product.supplier_sku
-    image_arr = [
-        {
-            "products_image_gallery_id": 0,  # 0 = create
-            "delete": 0,
-            "title": title,
-            "products_large_image_name": img.url,
-            "sort_order": (img.sort_order or idx),
-            "status": "1",
-        }
-        for idx, img in enumerate(ctx.images)
-        if img.url
-    ]
+    image_arr = []
+    for idx, img in enumerate(ctx.images):
+        if not img.url:
+            continue
+        if use_media:
+            name = getattr(img, "ops_media_filename", None)
+            if not name:
+                continue  # not staged into OPS media — a URL would 404
+        else:
+            name = img.url
+        image_arr.append(
+            {
+                "products_image_gallery_id": 0,  # 0 = create
+                "delete": 0,
+                "title": title,
+                "products_large_image_name": name,
+                "sort_order": (img.sort_order or idx),
+                "status": "1",
+            }
+        )
     if not image_arr:
         return None
     return OPSMutationStep(
@@ -898,20 +971,126 @@ async def build_push_payload(
     product_id: UUID,
     *,
     option_strategy: OptionStrategy = OptionStrategy.MASTER_OPTION_ATTACH,
+    dry_run: bool = False,
+    category_id_override: Optional[int] = None,
 ) -> OPSPushPayload:
     """Async DB wrapper. Loads context, then calls `_synthesize_payload`.
 
     Splitting the DB load from the pure synthesis lets unit tests build
     the payload without a live session by constructing a `_PushContext`
     directly (see test_payload_builder.py).
+
+    dry_run: when True, SKIP the S3 image mirror + OPS-media staging steps.
+    Those make real network round-trips (downloading supplier images and
+    uploading to S3 / OPS media) — for a 20-image product that's ~17s, long
+    enough that the synchronous dry-run HTTP request times out in the browser
+    ("Failed to fetch") and the push_log row is left stuck at 'accepted'.
+    A dry-run is a read-only PREVIEW: it must be fast and must not push files
+    to S3. The gallery step simply won't include images in the preview plan —
+    an acceptable fidelity trade for a side-effect-free, instant preview.
+
+    category_id_override: when set, this OPS category_id wins over the
+    storefront-config / customer-default resolution. The gateway's auto-category
+    resolver passes the id it created/looked up for the product's category name.
     """
     ctx = await _load_context(db, customer_id, product_id)
-    return _synthesize_payload(ctx, option_strategy)
+    if not dry_run:
+        await _mirror_unmirrored_images(ctx, db)
+        await _stage_images_for_ops_media(ctx)
+    return _synthesize_payload(ctx, option_strategy, category_id_override=category_id_override)
+
+
+async def _mirror_unmirrored_images(ctx: _PushContext, db: AsyncSession) -> None:
+    """Auto-mirror supplier images to our CDN before staging to OPS.
+
+    Without this, products whose images live only on the supplier's CDN (the
+    default for newly-ingested products) push to OPS with no images at all —
+    the staging step needs files in our bucket to copy into OPS's media folder.
+    Running mirror here means "push to OPS" is a single user action that always
+    Just Works, instead of a two-step (mirror, then push) operator workflow.
+
+    Skipped unless OPS_PUSH_INCLUDE_IMAGES=1. Best-effort: failures are logged
+    but don't block the push (the gallery step will simply skip unstaged images).
+    Idempotent — `mirror_product_images` no-ops images already on our CDN.
+    """
+    import os as _os
+
+    if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") != "1" or not ctx.images:
+        return
+    from modules.images.storage import is_own_cdn
+
+    needs_mirror = any(img.url and not is_own_cdn(img.url) for img in ctx.images)
+    if not needs_mirror:
+        return
+
+    from modules.images.mirror import mirror_product_images
+    try:
+        result = await mirror_product_images(ctx.product.id, db)
+        log.info(
+            "auto-mirror sku=%s mirrored=%s skipped=%s failed=%s",
+            ctx.product.supplier_sku, result.get("mirrored"),
+            result.get("skipped"), result.get("failed"),
+        )
+        # Reload images so the staging step sees the new ctmediaimg URLs.
+        from sqlalchemy import select
+        from modules.catalog.models import ProductImage
+        refreshed = (await db.execute(
+            select(ProductImage).where(ProductImage.product_id == ctx.product.id)
+        )).scalars().all()
+        ctx.images = sorted(refreshed, key=lambda i: i.sort_order or 0)
+    except Exception as exc:
+        log.warning("auto-mirror failed [sku=%s]: %s", ctx.product.supplier_sku, exc)
+
+
+async def _stage_images_for_ops_media(ctx: _PushContext) -> None:
+    """Copy mirrored images into OPS media folders ahead of the gallery and product steps.
+
+    Sets on each image:
+      - ``ops_media_filename``   — staged to gallery folder (setProductsImageGallery)
+      - ``ops_product_filename`` — staged to product/ folder (setProduct.imagename),
+                                    set only on the primary front image
+
+    No-op unless OPS_PUSH_INCLUDE_IMAGES=1. Each folder is independently
+    gated by its own env prefix. Idempotent: content-addressed filenames.
+    """
+    import os as _os
+
+    if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") != "1" or not ctx.images:
+        return
+    from modules.ops_push.ops_media import (
+        media_prefix,
+        stage_image_for_ops,
+        product_media_prefix,
+        stage_product_image_for_ops,
+    )
+
+    has_gallery = bool(media_prefix())
+    has_product = bool(product_media_prefix())
+    if not has_gallery and not has_product:
+        return
+
+    sku = ctx.product.supplier_sku
+    primary_img = _select_primary_image(ctx.images)
+
+    for img in ctx.images:
+        if not img.url:
+            continue
+        try:
+            if has_gallery:
+                img.ops_media_filename = await stage_image_for_ops(img.url, sku)
+            if has_product and img is primary_img:
+                img.ops_product_filename = await stage_product_image_for_ops(img.url, sku)
+        except Exception as exc:  # staging is best-effort; callers skip Nones
+            log.warning("OPS media staging failed [sku=%s url=%s]: %s", sku, img.url, exc)
+            img.ops_media_filename = None
+            img.ops_product_filename = None
 
 
 def _synthesize_payload(
     ctx: _PushContext,
     option_strategy: OptionStrategy = OptionStrategy.MASTER_OPTION_ATTACH,
+    *,
+    category_id_override: Optional[int] = None,
 ) -> OPSPushPayload:
     """Pure synthesis from a loaded `_PushContext`.
 
@@ -985,22 +1164,19 @@ def _synthesize_payload(
         existing_ops_id = int(ctx.push_mapping.target_ops_product_id)
         push_mode = "update"
 
-    # ---- Image policy (beta = single primary front image) ----
+    # ---- Image policy (beta = single primary product image) ----
     primary_image_url: Optional[str] = None
+    primary_staged_filename: Optional[str] = None
     image_warnings: list[str] = []
-    front_images = [img for img in ctx.images if (img.image_type or "front") == "front"]
-    if front_images:
-        primary_image_url = front_images[0].url
+    primary_candidate = _select_primary_image(ctx.images)
+    if primary_candidate:
+        primary_image_url = primary_candidate.url
+        primary_staged_filename = getattr(primary_candidate, "ops_product_filename", None)
         if len(ctx.images) > 1:
             image_warnings.append(
-                f"Beta sends only the primary front image. "
-                f"{len(ctx.images) - 1} additional image(s) ignored."
+                f"Beta sends only the primary product image. "
+                f"{len(ctx.images) - 1} additional image(s) sent to gallery."
             )
-    elif ctx.images:
-        primary_image_url = ctx.images[0].url
-        image_warnings.append(
-            "No front-type image found; using first available image."
-        )
 
     # ---- Compose the mutation plan ----
     #
@@ -1013,7 +1189,7 @@ def _synthesize_payload(
     plan: list[OPSMutationStep] = []
 
     # Step 1: setProduct
-    plan.append(_build_setProduct_step(ctx, push_mode, existing_ops_id, primary_image_url))
+    plan.append(_build_setProduct_step(ctx, push_mode, existing_ops_id, primary_image_url, primary_staged_filename, category_id_override))
 
     # Step 2: setProductSize placeholder (OPS requires at least one size row
     # even when variant selection comes from Additional Options).

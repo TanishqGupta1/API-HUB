@@ -22,8 +22,8 @@ class FakeOpsClient:
 
     • Allocates monotonic synthetic IDs starting at 1000.
     • Records every call on ``self.calls`` for test assertions.
-    • ``existing_products_by_sku``: pre-seed the simulated OPS catalog so
-      GetProductBySku returns a match (dedup path testing).
+    • ``existing_products_by_sku``: pre-seed the simulated OPS catalog so the
+      paginated `products` dedup scan finds a match (dedup path testing).
     • ``is_dry_run = True``: sentinel read by _resolve_stock_id_for_size to
       return a synthetic stock_id instead of querying OPS.
     """
@@ -33,10 +33,16 @@ class FakeOpsClient:
     def __init__(
         self,
         existing_products_by_sku: Optional[dict[str, int]] = None,
+        deleted_ops_ids: Optional[set[int]] = None,
     ) -> None:
         self.calls: list[dict[str, Any]] = []
         self._next_id = 1000
         self.existing_products_by_sku: dict[str, int] = dict(existing_products_by_sku or {})
+        # set_product called in UPDATE mode (products_id in this set) raises the
+        # OPS "not found, skipping update" rejection — simulates a product that
+        # was deleted in the OPS admin while a stale push_mapping still points to
+        # it, so tests can exercise the gateway's stale-mapping auto-recovery.
+        self.deleted_ops_ids: set[int] = set(deleted_ops_ids or [])
 
     def _allocate_id(self) -> int:
         i = self._next_id
@@ -75,14 +81,21 @@ class FakeOpsClient:
             return OpsResult(ok=True, data={"setProductsImageGallery": {"result": True, "message": "dry-run"}})
         if name == "UpdateProductStock":
             return OpsResult(ok=True, data={"updateProductStock": {"id": self._allocate_id(), "result": True}})
-        if name == "GetProductBySku":
-            sku = (variables or {}).get("products_sku")
-            existing = self.existing_products_by_sku.get(sku)
-            if existing is None:
-                return OpsResult(ok=True, data={"getProductBySku": {}})
-            return OpsResult(ok=True, data={"getProductBySku": {
-                "products_id": existing,
-                "products_sku": sku,
+        if name == "products":
+            # Dedup lookup paginates this query and matches external_ref/main_sku
+            # client-side. Simulate the catalog from existing_products_by_sku,
+            # honoring limit/offset so pagination logic is exercised in tests.
+            limit = int((variables or {}).get("limit", 200))
+            offset = int((variables or {}).get("offset", 0))
+            rows = [
+                {"product_id": pid, "main_sku": sku, "external_ref": sku}
+                for sku, pid in self.existing_products_by_sku.items()
+            ]
+            page = rows[offset:offset + limit]
+            return OpsResult(ok=True, data={"products": {
+                "products": page,
+                "totalProducts": len(rows),
+                "currentCount": len(page),
             }})
         return OpsResult(
             ok=False,
@@ -99,6 +112,16 @@ class FakeOpsClient:
         return {"id": self._allocate_id()}
 
     async def set_product(self, variables: dict) -> dict:
+        inputs = variables.get("inputs") or [{}]
+        pid = inputs[0].get("products_id") if inputs else None
+        try:
+            pid_int = int(pid) if pid is not None else 0
+        except (TypeError, ValueError):
+            pid_int = 0
+        if pid_int and pid_int in self.deleted_ops_ids:
+            raise RuntimeError(
+                f"OPS_REJECTED: Product with id {pid_int} not found, skipping update."
+            )
         return {"id": self._allocate_id()}
 
     async def set_product_size(self, variables: dict) -> dict:

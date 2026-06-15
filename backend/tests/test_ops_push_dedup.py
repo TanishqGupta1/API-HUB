@@ -26,29 +26,44 @@ pytestmark = [pytest.mark.no_db, pytest.mark.asyncio]
 
 
 # ---------------------------------------------------------------------------
-# FakeOpsClient.GetProductBySku
+# FakeOpsClient `products` dedup scan
 # ---------------------------------------------------------------------------
 
 
-async def test_fake_client_returns_match_when_sku_pre_seeded():
+async def test_fake_client_products_returns_seeded_catalog():
     c = FakeOpsClient(existing_products_by_sku={"PC61": 42})
     r = await c.execute(
-        "query GetProductBySku($products_sku: String!) { getProductBySku(products_sku: $products_sku) { products_id } }",
-        variables={"products_sku": "PC61"},
+        "query products ($limit: Int, $offset: Int) { products (limit: $limit, offset: $offset) { products { product_id main_sku external_ref } totalProducts currentCount } }",
+        variables={"limit": 200, "offset": 0},
     )
     assert r.ok is True
-    assert r.data["getProductBySku"]["products_id"] == 42
+    block = r.data["products"]
+    assert block["totalProducts"] == 1
+    row = block["products"][0]
+    assert row["product_id"] == 42
+    assert row["external_ref"] == "PC61"
+    assert row["main_sku"] == "PC61"
 
 
-async def test_fake_client_returns_empty_when_sku_not_seeded():
+async def test_fake_client_products_empty_when_not_seeded():
     c = FakeOpsClient()  # no existing_products_by_sku
     r = await c.execute(
-        "query GetProductBySku($products_sku: String!) { getProductBySku(products_sku: $products_sku) { products_id } }",
-        variables={"products_sku": "PC61"},
+        "query products ($limit: Int, $offset: Int) { products (limit: $limit, offset: $offset) { products { product_id } totalProducts } }",
+        variables={"limit": 200, "offset": 0},
     )
     assert r.ok is True
-    # Empty result body — caller treats absence of products_id as 'not found'
-    assert r.data["getProductBySku"] == {}
+    assert r.data["products"]["products"] == []
+    assert r.data["products"]["totalProducts"] == 0
+
+
+async def test_fake_client_products_paginates():
+    """offset/limit are honored so the dedup scan's pagination is exercised."""
+    c = FakeOpsClient(existing_products_by_sku={"A": 1, "B": 2, "C": 3})
+    page1 = await c.execute("query products{x}", variables={"limit": 2, "offset": 0})
+    page2 = await c.execute("query products{x}", variables={"limit": 2, "offset": 2})
+    assert len(page1.data["products"]["products"]) == 2
+    assert len(page2.data["products"]["products"]) == 1
+    assert page1.data["products"]["totalProducts"] == 3
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +85,26 @@ async def test_dedup_returns_none_when_ops_has_no_product():
     client = FakeOpsClient()
     discovered = await _dedup_lookup_in_ops(client, "UNKNOWN-SKU")
     assert discovered is None
+
+
+async def test_get_product_by_sku_paginates_to_find_match():
+    """Target on a later page is still found — proves the scan pages through
+    the catalog (page_size=1 forces one product per page)."""
+    from modules.ops_client import mutations as _m
+
+    client = FakeOpsClient(existing_products_by_sku={"A": 1, "B": 2, "PC61": 9000})
+    result = await _m.get_product_by_sku(client=client, products_sku="PC61", page_size=1)
+    assert result.ok is True
+    assert result.data["products_id"] == 9000
+
+
+async def test_get_product_by_sku_returns_empty_when_absent():
+    from modules.ops_client import mutations as _m
+
+    client = FakeOpsClient(existing_products_by_sku={"A": 1, "B": 2})
+    result = await _m.get_product_by_sku(client=client, products_sku="MISSING", page_size=1)
+    assert result.ok is True
+    assert result.data == {}
 
 
 async def test_dedup_swallows_query_exceptions(caplog):

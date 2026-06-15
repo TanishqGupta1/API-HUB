@@ -61,6 +61,7 @@ from modules.customers.models import Customer
 from modules.decorations.models import CustomerProductDecoration
 from modules.markup.engine import resolve_rule
 from modules.markup.models import MarkupRule
+from modules.ops_config.models import ProductStorefrontConfig
 from modules.push_mappings.models import PushMapping, PushMappingOption
 from modules.suppliers.models import Supplier
 
@@ -267,6 +268,7 @@ class _PreflightContext:
     push_mapping: Optional[PushMapping]
     push_mapping_options: list[PushMappingOption]
     decoration_options: list[dict]
+    storefront_config: Optional[ProductStorefrontConfig]
 
 
 async def _load_context(
@@ -326,6 +328,15 @@ async def _load_context(
         list(decoration_row.decoration_options) if decoration_row else []
     )
 
+    storefront_config = (
+        await db.execute(
+            select(ProductStorefrontConfig).where(
+                ProductStorefrontConfig.customer_id == customer_id,
+                ProductStorefrontConfig.product_id == product_id,
+            )
+        )
+    ).scalar_one_or_none()
+
     return _PreflightContext(
         customer=customer,
         product=product,
@@ -337,6 +348,7 @@ async def _load_context(
         push_mapping=push_mapping,
         push_mapping_options=push_mapping_options,
         decoration_options=decoration_options,
+        storefront_config=storefront_config,
     )
 
 
@@ -841,6 +853,60 @@ def check_required_fields(ctx: _PreflightContext) -> CheckResult:
     )
 
 
+def check_category_resolvable(ctx: _PreflightContext) -> CheckResult:
+    """7b. A category_id must resolve for this (customer, product).
+
+    OPS marks `category_id` as Required on ProductInput (client Postman,
+    2026-06-15). The payload builder resolves it from, in order:
+      1. product_storefront_configs.ops_category_id  (per-product override)
+      2. customer.default_ops_category_id            (per-customer fallback)
+    If neither yields a valid integer, setProduct goes out with NO category
+    and OPS silently rejects it mid-push. Block here so the operator gets a
+    clear, fixable message before any mutation fires — this is the #1 thing
+    that breaks onboarding a brand-new customer (Phase 4 zero-code goal).
+
+    Mirrors `_build_setProduct_step`'s resolution byte-for-byte so preflight
+    and the builder never disagree.
+    """
+    raw = (
+        (ctx.storefront_config.ops_category_id if ctx.storefront_config else None)
+        or getattr(ctx.customer, "default_ops_category_id", None)
+    )
+    resolved: Optional[int] = None
+    if raw is not None:
+        try:
+            resolved = int(raw)
+        except (TypeError, ValueError):
+            resolved = None
+
+    if resolved is None:
+        return CheckResult(
+            "category_resolvable",
+            False,
+            (
+                f"no OPS category resolves for customer '{ctx.customer.name}' "
+                f"× product '{ctx.product.supplier_sku}' — category_id is "
+                f"required by OPS"
+            ),
+            field="customer.default_ops_category_id",
+            suggestion=(
+                f"Set a default OPS category for customer "
+                f"'{ctx.customer.name}' (Customer Settings → default_ops_category_id), "
+                f"or map a per-product category in its storefront config."
+            ),
+        )
+    source = (
+        "product storefront config"
+        if (ctx.storefront_config and ctx.storefront_config.ops_category_id)
+        else "customer default"
+    )
+    return CheckResult(
+        "category_resolvable",
+        True,
+        f"category_id={resolved} (from {source})",
+    )
+
+
 def check_data_freshness(ctx: _PreflightContext) -> CheckResult:
     """Warning-only: flag if product data is older than 30 minutes.
 
@@ -1003,6 +1069,10 @@ async def run_preflight(
     checks.append(await check_prefix_collision(ctx, ops_query_fn=ops_query_fn))
     # 7
     checks.append(check_required_fields(ctx))
+    # 7b — category_id is required by OPS; block when none resolves (runs in
+    #      both modes — it's a config gap, not a network call, and a dry-run
+    #      that "passes" but would fail live is misleading).
+    checks.append(check_category_resolvable(ctx))
     # 8 — skip decoration check in dry_run (no real push happens)
     if dry_run:
         checks.append(_skip("decoration_attached"))
@@ -1032,6 +1102,7 @@ __all__ = [
     "check_data_freshness",
     "check_prefix_collision",
     "check_required_fields",
+    "check_category_resolvable",
     "check_decoration_attached",
     "run_preflight",
 ]

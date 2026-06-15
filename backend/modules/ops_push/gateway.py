@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -23,6 +23,7 @@ from modules.markup.engine import calculate_price
 from modules.ops_client import mutations as _m
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
 from modules.ops_client.fake import FakeOpsClient
+from modules.ops_config.models import OpsCategoryMapping
 from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
 from modules.ops_push.preflight import run_preflight
 from modules.ops_push.verify import verify_pushed_product
@@ -50,6 +51,12 @@ async def _dedup_lookup_in_ops(
     client: Any, supplier_sku: str
 ) -> Optional[int]:
     """Ask OPS whether it already has a product with this SKU.
+
+    Catches the crash-recovery case: an earlier push wrote the product to OPS
+    but died before persisting the push_mapping — without this, the retry would
+    create a DUPLICATE. `get_product_by_sku` paginates OPS's `products` query and
+    matches on external_ref (= our supplier SKU, written on setProduct) since OPS
+    has no server-side SKU filter.
 
     Defensive: any error (auth, schema mismatch, transport) is logged and
     returns None so the push falls through to its normal create-or-update
@@ -239,6 +246,114 @@ async def _ensure_push_mapping_for_dedup(
         updated_at=now,
         status="active",
     ))
+
+
+# Matches OPS's rejection when an UPDATE targets a products_id that no longer
+# exists in OPS (deleted in the admin while our push_mapping still points to it).
+# e.g. "OPS_REJECTED: Product with id 556 not found, skipping update."
+_PRODUCT_NOT_FOUND_RE = re.compile(r"not found.*skipping update", re.IGNORECASE)
+
+
+def _force_setproduct_create(variables: dict) -> dict:
+    """Return a copy of setProduct variables with products_id forced to 0
+    (create mode) on every input row — used by stale-mapping recovery."""
+    out = dict(variables)
+    inputs = [dict(i) for i in out.get("inputs", [])]
+    for i in inputs:
+        i["products_id"] = 0
+    out["inputs"] = inputs
+    return out
+
+
+async def _clear_stale_mapping(
+    db: AsyncSession, customer_id: Any, product_id: Any
+) -> None:
+    """Delete the push_mapping for (customer, product) after OPS reports the
+    mapped product no longer exists. With no mapping, the rebuilt plan runs in
+    create mode so the product is recreated instead of failing forever."""
+    await db.execute(
+        delete(PushMapping).where(
+            PushMapping.customer_id == customer_id,
+            PushMapping.source_product_id == product_id,
+        )
+    )
+    await db.flush()
+
+
+def _normalize_category_key(name: str) -> str:
+    """Lower-case + collapse whitespace so 'T-Shirts ' and 't-shirts' match."""
+    return re.sub(r"\s+", " ", name).strip().lower()[:150]
+
+
+async def _resolve_ops_category(
+    db: AsyncSession,
+    client: Any,
+    customer: Customer,
+    product: Product,
+    *,
+    dry_run: bool,
+) -> Optional[int]:
+    """Auto-resolve the OPS category id for `product.category`.
+
+    Looks up our cached (customer, category_key) → ops_category_id mapping; on a
+    miss (and only for live pushes) creates the category in OPS once via
+    setProductCategory, caches the mapping, and returns the new id. Returns None
+    on any failure or for dry-runs with no cached mapping — the builder then
+    falls back to the storefront-config / customer-default category, so this can
+    never BLOCK a push.
+    """
+    raw_name = (getattr(product, "category", None) or "").strip()
+    if not raw_name:
+        return None
+    key = _normalize_category_key(raw_name)
+
+    existing = (await db.execute(
+        select(OpsCategoryMapping).where(
+            OpsCategoryMapping.customer_id == customer.id,
+            OpsCategoryMapping.category_key == key,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        return existing.ops_category_id
+
+    # Don't create OPS categories during a read-only preview.
+    if dry_run:
+        return None
+
+    raw_client = getattr(client, "_client", client)
+    external_ref = f"apihub:cat:{key}"
+    try:
+        result = await _m.create_product_category(
+            client=raw_client, category_name=raw_name, external_ref=external_ref,
+        )
+    except Exception:  # noqa: BLE001 — defensive; never block a push
+        logger.exception("auto-category: create raised for %r", raw_name)
+        return None
+    if not result.ok or not (result.data or {}).get("category_id"):
+        logger.warning(
+            "auto-category: create not OK for %r: %s",
+            raw_name, getattr(result, "ops_error_message", None),
+        )
+        return None
+    try:
+        cat_id = int(result.data["category_id"])
+    except (TypeError, ValueError):
+        logger.warning("auto-category: non-numeric id for %r: %r", raw_name, result.data)
+        return None
+
+    now = datetime.now(timezone.utc)
+    db.add(OpsCategoryMapping(
+        customer_id=customer.id,
+        category_key=key,
+        category_name=raw_name,
+        ops_category_id=cat_id,
+        external_ref=external_ref,
+        created_at=now,
+        updated_at=now,
+    ))
+    await db.flush()
+    logger.info("auto-category: created OPS category %r → id=%s", raw_name, cat_id)
+    return cat_id
 
 
 _MUTATION_DISPATCH: dict[str, tuple[str, str]] = {
@@ -523,18 +638,40 @@ async def prepare_push_intent(
             })
 
     # ── Concurrency guard ──
-    in_flight = (await db.execute(
-        select(ProductPushLog).where(
-            ProductPushLog.customer_id == customer_id,
-            ProductPushLog.product_id == product.id,
-            ProductPushLog.status == "processing",
-        )
-    )).scalar_one_or_none()
-    if in_flight:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail={
-            "code": "IN_FLIGHT",
-            "message": "Another push for this product is currently processing"
-        })
+    # Auto-recover orphaned rows: a `processing` push older than 5 minutes is
+    # almost certainly dead (worker crashed, backend was reloaded mid-push,
+    # OPS hung). Mark them failed so they don't permanently block re-pushes.
+    # We do this BEFORE the in-flight check so a stuck row from a prior
+    # reload doesn't keep blocking new pushes forever.
+    await db.execute(text(
+        """
+        UPDATE product_push_log
+           SET status = 'failed'
+         WHERE customer_id = :cid AND product_id = :pid
+           AND status IN ('processing', 'accepted', 'queued')
+           AND EXTRACT(EPOCH FROM (now() - pushed_at)) > 300
+        """
+    ), {"cid": customer_id, "pid": product.id})
+    await db.commit()
+
+    # Dry-runs are read-only previews. They should never block live pushes,
+    # and they shouldn't block each other (the preview page may fire several
+    # back-to-back as the user adjusts settings). Only live pushes contend
+    # for the same product/customer slot.
+    if not req.dry_run:
+        in_flight = (await db.execute(
+            select(ProductPushLog).where(
+                ProductPushLog.customer_id == customer_id,
+                ProductPushLog.product_id == product.id,
+                ProductPushLog.status == "processing",
+                ProductPushLog.dry_run.is_(False),
+            )
+        )).scalar_one_or_none()
+        if in_flight:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail={
+                "code": "IN_FLIGHT",
+                "message": "Another push for this product is currently processing"
+            })
 
     # ── Preflight (Task 7: 8 real checks + token cache) ──
     preflight = await run_preflight(db, customer_id, product.id, dry_run=req.dry_run)
@@ -693,8 +830,26 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                         )
                         await db.flush()
 
+            # ── Auto-category: resolve (and create-on-first-use) the OPS
+            # category matching the product's category name, so the product
+            # lands in the right storefront category automatically instead of
+            # needing a manual pick. Falls back to the customer default on any
+            # failure — never blocks the push.
+            resolved_category_id: Optional[int] = None
+            if customer is not None and product is not None:
+                resolved_category_id = await _resolve_ops_category(
+                    db, client, customer, product, dry_run=push_log.dry_run
+                )
+
             # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
-            payload = await build_push_payload(db, push_log.customer_id, push_log.product_id)
+            # dry_run skips slow S3 image mirror/staging so the preview is fast
+            # and side-effect-free (otherwise a 20-image product takes ~17s and
+            # the synchronous dry-run request times out → "Failed to fetch").
+            payload = await build_push_payload(
+                db, push_log.customer_id, push_log.product_id,
+                dry_run=push_log.dry_run,
+                category_id_override=resolved_category_id,
+            )
             plan = [step.model_dump(mode="json") for step in payload.plan]
 
             step_results: list[dict] = []
@@ -702,13 +857,19 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             ops_product_id: Optional[str] = None
             final_status = "pushed" if not push_log.dry_run else "dry_run_pushed"
             cleanup_targets: Optional[dict] = None
+            # Guard: only attempt stale-mapping recovery once per push so a
+            # persistent OPS rejection can't loop.
+            stale_recovery_done = False
 
             # ── Phase 5: step-resumption — skip steps that already succeeded
             # in a prior partial push for this (customer, product). Looks
             # only at live pushes (dry-runs use a separate FakeOpsClient
             # universe of IDs). Match by source_key, which is stable across
             # plan attempts for the same logical mutation.
-            prior_ok_by_source_key: dict[str, tuple[uuid_mod.UUID, dict]] = {}
+            # Map source_key → (prior_push_id, prior_ops_ids, prior_fingerprint).
+            # Skip resumption only when the new step's fingerprint matches —
+            # if the payload changed (e.g. a new ProductInput field), re-execute.
+            prior_ok_by_source_key: dict[str, tuple[uuid_mod.UUID, dict, str]] = {}
             if not push_log.dry_run:
                 prior_pushes = (await db.execute(
                     select(ProductPushLog)
@@ -722,8 +883,6 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     .order_by(ProductPushLog.pushed_at.desc())
                     .limit(5)
                 )).scalars().all()
-                # Most recent OK step per source_key wins (newer prior pushes
-                # supersede older ones in case the OPS IDs differ).
                 seen_keys: set[str] = set()
                 for prior in prior_pushes:
                     for s in (prior.step_results or []):
@@ -733,7 +892,9 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                         if not sk or sk in seen_keys:
                             continue
                         if s.get("status") == "ok" and s.get("ops_ids"):
-                            prior_ok_by_source_key[sk] = (prior.id, s["ops_ids"])
+                            prior_ok_by_source_key[sk] = (
+                                prior.id, s["ops_ids"], s.get("request_fingerprint", "")
+                            )
                             seen_keys.add(sk)
                 if prior_ok_by_source_key:
                     logger.info(
@@ -749,33 +910,11 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 source_key = step.get("source_key", "")
                 t_start = datetime.now(timezone.utc)
 
-                # Phase 5: step-resumption — if this exact source_key already
-                # succeeded in a prior push, skip the OPS call and inherit
-                # the returned IDs so downstream placeholder steps still
-                # resolve correctly.
-                prior_match = prior_ok_by_source_key.get(source_key)
-                if prior_match is not None:
-                    prior_push_id, prior_ops_ids = prior_match
-                    # Rebuild step_responses entry from the prior ops_ids so
-                    # any `$stepN.field` referencing this step still resolves.
-                    # Strip the "_id" suffix conversion that ops_ids used.
-                    step_responses[step_num] = dict(prior_ops_ids)
-                    if "products_id" in prior_ops_ids and prior_ops_ids["products_id"]:
-                        ops_product_id = str(prior_ops_ids["products_id"])
-                    step_results.append({
-                        "step": step_num,
-                        "mutation": mutation,
-                        "source_key": source_key,
-                        "status": "skipped",
-                        "ops_ids": prior_ops_ids,
-                        "attempted_at": t_start.isoformat(),
-                        "request_fingerprint": "",
-                        "reused_from_push": str(prior_push_id),
-                    })
-                    continue
-
-                # Resolve $stepN.field placeholders to real IDs returned by
-                # earlier steps before sending to OPS.
+                # Resolve $stepN.field placeholders FIRST so the fingerprint
+                # below is over the same shape as prior steps stored. Prior
+                # step_responses are already populated (either from a skip-
+                # reuse a few lines down, or from a live execute earlier in
+                # this loop), so placeholder resolution succeeds.
                 try:
                     variables = _resolve_placeholders(raw_variables, step_responses)
                 except ValueError as e:
@@ -804,9 +943,37 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 fingerprint = hashlib.sha256(
                     _json.dumps({"mutation": mutation, "variables": variables}, sort_keys=True).encode()
                 ).hexdigest()[:16]
+
+                # Phase 5: step-resumption — skip when source_key AND
+                # fingerprint both match a prior successful step. Source_key
+                # alone is unsafe: if the payload changed (e.g. a new
+                # ProductInput field), the prior result is stale and we
+                # must re-execute. Fingerprints are over resolved variables.
+                prior_match = prior_ok_by_source_key.get(source_key)
+                if prior_match is not None:
+                    prior_push_id, prior_ops_ids, prior_fp = prior_match
+                    if prior_fp and prior_fp == fingerprint:
+                        step_responses[step_num] = dict(prior_ops_ids)
+                        if "products_id" in prior_ops_ids and prior_ops_ids["products_id"]:
+                            ops_product_id = str(prior_ops_ids["products_id"])
+                        step_results.append({
+                            "step": step_num,
+                            "mutation": mutation,
+                            "source_key": source_key,
+                            "status": "skipped",
+                            "ops_ids": prior_ops_ids,
+                            "attempted_at": t_start.isoformat(),
+                            "request_fingerprint": prior_fp,
+                            "reused_from_push": str(prior_push_id),
+                        })
+                        continue
+                    logger.info(
+                        "step-resumption: re-executing step %d source_key=%s — payload changed (prior_fp=%s new_fp=%s)",
+                        step_num, source_key, prior_fp, fingerprint,
+                    )
                 # Brief throttle between mutations to avoid OPS rate-limiting.
-                # 0.1s gives ~10 req/s — fast enough for 1675 steps in ~3 min.
-                if step_num > 1:
+                # Skip in dry_run — FakeOpsClient has no rate limit.
+                if step_num > 1 and not push_log.dry_run:
                     await asyncio.sleep(0.1)
 
                 # ── Phase 6: updateProductStock stock_id resolution ──
@@ -887,6 +1054,46 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                         "request_fingerprint": fingerprint,
                     })
                 except Exception as e:
+                    # ── Stale-mapping auto-recovery ──────────────────────────
+                    # OPS rejects an UPDATE with "Product with id N not found,
+                    # skipping update" when the mapped OPS product was deleted
+                    # in the admin but our push_mappings row still points to it.
+                    # Clear the stale mapping and retry setProduct ONCE as a
+                    # create (products_id=0) so the product is recreated instead
+                    # of the whole push failing. (Was a manual DB delete before.)
+                    if (
+                        mutation == "setProduct"
+                        and not stale_recovery_done
+                        and _PRODUCT_NOT_FOUND_RE.search(str(e))
+                    ):
+                        stale_recovery_done = True
+                        logger.warning(
+                            "stale-mapping recovery: %s — clearing mapping for "
+                            "product=%s customer=%s and retrying setProduct as create",
+                            str(e), push_log.product_id, push_log.customer_id,
+                        )
+                        await _clear_stale_mapping(db, push_log.customer_id, push_log.product_id)
+                        try:
+                            create_vars = _force_setproduct_create(variables)
+                            resp = _normalize_mutation_response(mutation, await method(create_vars))
+                            step_responses[step_num] = resp
+                            if resp.get("products_id"):
+                                ops_product_id = str(resp["products_id"])
+                            ops_ids = {k: str(v) for k, v in resp.items() if k.endswith("_id")}
+                            step_results.append({
+                                "step": step_num,
+                                "mutation": mutation,
+                                "source_key": source_key,
+                                "status": "ok",
+                                "ops_ids": ops_ids,
+                                "attempted_at": t_start.isoformat(),
+                                "request_fingerprint": fingerprint,
+                                "note": "recreated after stale-mapping cleanup",
+                            })
+                            continue
+                        except Exception as e_retry:
+                            e = e_retry  # fall through to normal failure handling
+
                     # Stock + image-gallery writes are best-effort. Stock: OPS
                     # exposes no SKU field on ProductSizeInput, so our supplier
                     # SKUs can't be matched. Images: a bad/unreachable URL

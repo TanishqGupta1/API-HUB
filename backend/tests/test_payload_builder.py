@@ -366,6 +366,32 @@ class TestMutationPlanOrder:
         assert len(size_steps) == 1, "Apparel flow emits a single placeholder size"
         assert size_steps[0].step == 2
         assert size_steps[0].variables["inputs"][0]["size_title"] == "Default"
+        # The SKU lives on setProduct (main_sku), NOT the size row —
+        # ProductSizeInput has no SKU field per the OPS schema.
+        assert "products_sku" not in size_steps[0].variables["inputs"][0]
+        assert "main_sku" not in size_steps[0].variables["inputs"][0]
+
+    def test_main_sku_set_on_setProduct(self):
+        # OPS stores the product SKU as `main_sku` on ProductInput (size_id=0).
+        # Verified against the client's live Postman collection (June 2026).
+        # external_ref carries the same SKU as a third-party back-reference.
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")])
+        payload = _synthesize_payload(ctx)
+        set_product = payload.plan[0]
+        assert set_product.mutation == "setProduct"
+        inp = set_product.variables["inputs"][0]
+        assert inp["main_sku"] == "PC61"
+        assert inp["external_ref"] == "PC61"
+        # product_service_type is Required ("Must be 1 always") per OPS schema.
+        assert inp["product_service_type"] == "1"
+
+    def test_category_id_override_wins_on_setProduct(self):
+        # The gateway's auto-category resolver passes the OPS category id it
+        # created/looked up; it must win over storefront-config/customer-default.
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")])
+        payload = _synthesize_payload(ctx, category_id_override=4242)
+        inp = payload.plan[0].variables["inputs"][0]
+        assert inp["category_id"] == 4242
 
     def test_six_tier_setProductPrice(self):
         # Phase 8 + volume tiers: 6 setProductPrice rows mirroring reference
@@ -758,7 +784,7 @@ class TestImagePolicy:
         payload = _synthesize_payload(ctx)
         assert payload.primary_image_url == "https://x/front.jpg"
         assert len(payload.image_warnings) == 1
-        assert "2 additional image(s) ignored" in payload.image_warnings[0]
+        assert "2 additional image(s) sent to gallery" in payload.image_warnings[0]
 
     def test_no_front_falls_back_to_first(self):
         ctx = _ctx(
@@ -767,7 +793,6 @@ class TestImagePolicy:
         )
         payload = _synthesize_payload(ctx)
         assert payload.primary_image_url == "https://x/lifestyle.jpg"
-        assert any("No front-type image" in w for w in payload.image_warnings)
 
     def test_no_images(self):
         ctx = _ctx(variants=[_variant("PC61-WHT-M")], images=[])
@@ -777,8 +802,9 @@ class TestImagePolicy:
         assert "imagename" not in setProduct.variables["inputs"][0]
 
     def test_image_gallery_step_present_when_opted_in(self, monkeypatch):
-        # Images are opt-in (OPS_PUSH_INCLUDE_IMAGES); OPS can't fetch URLs yet.
+        # Legacy URL mode: no OPS media prefix configured → URLs pass through.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
+        monkeypatch.delenv("OPS_MEDIA_IMAGE_PREFIX", raising=False)
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
             images=[
@@ -800,6 +826,36 @@ class TestImagePolicy:
             "https://x/back.jpg",
         ]
         assert all(i["products_image_gallery_id"] == 0 for i in arr)
+
+    def test_image_gallery_sends_staged_filenames_in_media_mode(self, monkeypatch):
+        # Media mode: OPS_MEDIA_IMAGE_PREFIX set → only staged images are sent,
+        # as bare filenames (OPS prepends its own CDN path; URLs would break).
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
+        monkeypatch.setenv(
+            "OPS_MEDIA_IMAGE_PREFIX", "ctmediaon_staging/images/products_gallery_images"
+        )
+        staged = _image("https://x/front.jpg", image_type="front", sort_order=0)
+        staged.ops_media_filename = "pc61_abc123.webp"
+        unstaged = _image("https://x/back.jpg", image_type="back", sort_order=1)
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], images=[staged, unstaged])
+        payload = _synthesize_payload(ctx)
+        gallery = [s for s in payload.plan if s.mutation == "setProductsImageGallery"]
+        assert len(gallery) == 1
+        arr = gallery[0].variables["input"]["image_arr"]
+        # unstaged image skipped; staged one sent as bare filename
+        assert [i["products_large_image_name"] for i in arr] == ["pc61_abc123.webp"]
+
+    def test_image_gallery_omitted_when_nothing_staged_in_media_mode(self, monkeypatch):
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
+        monkeypatch.setenv(
+            "OPS_MEDIA_IMAGE_PREFIX", "ctmediaon_staging/images/products_gallery_images"
+        )
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            images=[_image("https://x/front.jpg", image_type="front", sort_order=0)],
+        )
+        payload = _synthesize_payload(ctx)
+        assert not any(s.mutation == "setProductsImageGallery" for s in payload.plan)
 
     def test_no_image_gallery_when_no_images(self, monkeypatch):
         monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
@@ -856,6 +912,7 @@ class TestPC61Smoke:
         # + 1 image gallery + 1 stock = 20 steps.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
+        monkeypatch.delenv("OPS_MEDIA_IMAGE_PREFIX", raising=False)
         colors = ["Black", "White", "Red", "Royal", "Navy", "Ash", "Heather Gray"]
         sizes = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL"]
         variants = [

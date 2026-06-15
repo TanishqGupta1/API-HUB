@@ -6,6 +6,9 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response as StarletteResponse
 
 from limiter import limiter
 
@@ -247,8 +250,43 @@ _cors_kwargs: dict = dict(
 if not _IS_PRODUCTION:
     _cors_kwargs["allow_origin_regex"] = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
 
+class _PrivateNetworkAccessMiddleware(BaseHTTPMiddleware):
+    """Chrome 98+ sends Access-Control-Request-Private-Network: true on
+    localhost-to-localhost preflights. Starlette's CORSMiddleware returns 400
+    for these requests because it doesn't recognise the header. We intercept
+    them here and return the correct 200 + Access-Control-Allow-Private-Network
+    response so Chrome allows the actual request through.
+    """
+    _ALLOW_HEADERS = (
+        "Accept, Accept-Language, Authorization, Content-Language, "
+        "Content-Type, Idempotency-Key, X-Ingest-Secret, X-Orchestrator-Key"
+    )
+    _ALLOW_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        if (
+            request.method == "OPTIONS"
+            and request.headers.get("Access-Control-Request-Private-Network") == "true"
+        ):
+            origin = request.headers.get("Origin", "*")
+            return StarletteResponse(
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Private-Network": "true",
+                    "Access-Control-Allow-Methods": self._ALLOW_METHODS,
+                    "Access-Control-Allow-Headers": self._ALLOW_HEADERS,
+                    "Access-Control-Max-Age": "600",
+                    "Vary": "Origin",
+                },
+            )
+        return await call_next(request)
+
+
 app.add_middleware(CORSMiddleware, **_cors_kwargs)
 app.add_middleware(AuditLogMiddleware)
+app.add_middleware(_PrivateNetworkAccessMiddleware)  # outermost — handles Chrome PNA before CORS sees it
 
 # Public routers — no JWT cookie required
 app.include_router(auth_router)                # /api/auth/{login,logout,me,setup}

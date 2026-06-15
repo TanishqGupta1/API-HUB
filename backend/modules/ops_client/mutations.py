@@ -12,7 +12,11 @@ Queries:
 """
 from __future__ import annotations
 
+import logging
+
 from .client import OpsGraphQLClient, OpsResult
+
+log = logging.getLogger(__name__)
 
 
 # ── set_product_category ─────────────────────────────────────────────────────
@@ -34,6 +38,42 @@ def _unwrap_list(data: dict | None, key: str) -> dict:
     if isinstance(val, list):
         val = val[0] if val else {}
     return val or {}
+
+
+async def create_product_category(
+    *,
+    client: OpsGraphQLClient,
+    category_name: str,
+    external_ref: str | None = None,
+    parent_id: int = -1,
+    status: str = "1",
+    sort_order: int = 0,
+) -> OpsResult:
+    """Create an OPS storefront category and return its new id.
+
+    Used by the gateway's auto-category resolver to create-on-first-use the
+    category matching a product's category name. Returns
+    OpsResult(ok=True, data={"category_id": <int>}) on success, or an error
+    OpsResult (caller falls back to the customer default category).
+    """
+    inp: dict = {
+        "category_id": 0,  # 0 = insert
+        "category_name": category_name,
+        "parent_id": parent_id,  # -1 = root level
+        "status": status,        # "1" = active/visible in storefront
+        "sort_order": sort_order,
+        "delete": 0,
+    }
+    if external_ref:
+        inp["external_ref"] = external_ref
+    result = await client.execute(_SET_PRODUCT_CATEGORY, variables={"inputs": [inp]})
+    if not result.ok:
+        return result
+    data = _unwrap_list(result.data, "setProductCategory")
+    rejected = _check_result(data, "setProductCategory")
+    if rejected is not None:
+        return rejected
+    return OpsResult(ok=True, data={"category_id": data.get("id")}, raw=result.raw)
 
 
 def _check_result(data: dict, mutation_name: str) -> OpsResult | None:
@@ -202,17 +242,31 @@ mutation SetProductDesign($input: setProductDesign_input!) {
 #
 # Used pre-push (_dedup_lookup_in_ops) to ask OPS whether it already has a
 # product with this SKU, so a retry of a failed push doesn't create a duplicate.
-# Also used post-push by _verify_post_push to confirm the write persisted.
+# Also used post-push by _verify_post_push to confirm the write persisted, and
+# by the setProduct-null-id fallback in execute_push.
 #
-# Schema is PROVISIONAL — confirm against the OPS Postman collection when
-# Christian shares it. The function returns Optional[int] (products_id) so
-# the dedup caller never sees raw schema details.
+# IMPORTANT (confirmed against the client's Postman collection, 2026-06-15):
+# OPS has NO reverse "find product by SKU" query. The `products` query filters
+# only by products_id (plus limit/offset) — there is no main_sku/external_ref
+# filter. So we PAGINATE the catalog and match client-side on external_ref
+# (our own back-reference, written on setProduct) first, then main_sku.
+#
+# Cost note: this scan runs whenever a push has no push_mapping yet (first push
+# of a product, or crash recovery). For very large OPS catalogs a bulk onboarding
+# does one scan per product — acceptable for now; a cached external_ref→id map or
+# the reconciliation job (docs/backlog-ops-additional-options.md) is the follow-up
+# optimization if it becomes a bottleneck.
 
-_GET_PRODUCT_BY_SKU = """
-query GetProductBySku($products_sku: String!) {
-  getProductBySku(products_sku: $products_sku) {
-    products_id
-    products_sku
+_PRODUCTS_LIST = """
+query products ($limit: Int, $offset: Int) {
+  products (limit: $limit, offset: $offset) {
+    products {
+      product_id
+      main_sku
+      external_ref
+    }
+    totalProducts
+    currentCount
   }
 }
 """.strip()
@@ -222,21 +276,53 @@ async def get_product_by_sku(
     *,
     client: OpsGraphQLClient,
     products_sku: str,
+    page_size: int = 200,
+    max_pages: int = 50,
 ) -> OpsResult:
-    """Look up an existing OPS product by SKU. Returns data dict containing
-    products_id when found, or an empty dict when not found.
+    """Find an existing OPS product whose external_ref or main_sku == products_sku.
+
+    Paginates the `products` query (OPS has no server-side SKU filter) and
+    matches client-side. Returns:
+      - OpsResult(ok=True, data={"products_id": <int>})  on a match
+      - OpsResult(ok=True, data={})                       when not found
+      - the upstream error OpsResult                      if a page query fails
 
     Callers must check result.ok AND result.data.get('products_id').
     A missing products_id is a successful 'not found', not a failure.
     """
-    result = await client.execute(
-        _GET_PRODUCT_BY_SKU,
-        variables={"products_sku": products_sku},
-    )
-    if not result.ok:
-        return result
-    payload = (result.data or {}).get("getProductBySku") or {}
-    return OpsResult(ok=True, data=payload, raw=result.raw)
+    offset = 0
+    for _page in range(max_pages):
+        result = await client.execute(
+            _PRODUCTS_LIST, variables={"limit": page_size, "offset": offset}
+        )
+        if not result.ok:
+            return result
+        block = (result.data or {}).get("products") or {}
+        rows = block.get("products") or []
+        if not rows:
+            break
+        for row in rows:
+            ref = row.get("external_ref")
+            msku = row.get("main_sku")
+            if (ref and str(ref) == products_sku) or (msku and str(msku) == products_sku):
+                return OpsResult(
+                    ok=True,
+                    data={"products_id": row.get("product_id")},
+                    raw=result.raw,
+                )
+        total = block.get("totalProducts")
+        offset += page_size
+        if total is not None and offset >= int(total):
+            break
+    else:
+        # Loop ran the full max_pages without a `break` → the catalog may be
+        # larger than we scanned, so a real match could have been missed.
+        # Surface it so a silent "not found" can't mask a truncated scan.
+        log.warning(
+            "dedup scan reached max_pages=%d (page_size=%d) without finding sku=%s",
+            max_pages, page_size, products_sku,
+        )
+    return OpsResult(ok=True, data={})
 
 
 # ── get_product_stocks (Phase 6 — stock_id read-back) ───────────────────────
