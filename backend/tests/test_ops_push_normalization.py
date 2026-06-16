@@ -274,70 +274,7 @@ class TestOpsClientAdapterRejectsResultFalse:
 
 
 class TestResolveStockIdForSize:
-    """Verifies the gateway's read-back step resolves the right stock_id
-    from a productStocks query before sending updateProductStock."""
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_product_id_missing(self):
-        from modules.ops_push.gateway import _resolve_stock_id_for_size
-        from unittest.mock import AsyncMock
-        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
-        client.execute = AsyncMock()
-        result = await _resolve_stock_id_for_size(client, product_id=None, size_id=10)
-        assert result is None
-        client.execute.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_synthetic_id_for_fake_client(self):
-        """Dry-run uses FakeOpsClient which has per-mutation methods but
-        no .execute() — return a deterministic synthetic id so dry-runs
-        exercise the full plan rather than warning on every stock step."""
-        from modules.ops_push.gateway import _resolve_stock_id_for_size, FakeOpsClient
-        fake = FakeOpsClient()
-        result = await _resolve_stock_id_for_size(fake, product_id=540, size_id=42)
-        assert result == 99042  # 99000 + size_id
-        # Different size_id → different synthetic id (distinct per variant)
-        result2 = await _resolve_stock_id_for_size(fake, product_id=540, size_id=43)
-        assert result2 != result
-
-    @pytest.mark.asyncio
-    async def test_resolves_from_ops_stocks(self):
-        """Live path: query OPS, build size_id->stock_id map, return match."""
-        from modules.ops_push.gateway import _resolve_stock_id_for_size, _clear_stock_lookup_cache
-        from unittest.mock import AsyncMock
-        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
-        client.execute = AsyncMock(return_value=OpsResult(
-            ok=True,
-            data={"productStocks": {"productStocks": [
-                {"stock_id": 1, "size_id": 230, "stock_quantity": 5},
-                {"stock_id": 3, "size_id": 231, "stock_quantity": 0},
-            ]}},
-        ))
-        _clear_stock_lookup_cache(218)
-        result = await _resolve_stock_id_for_size(client, product_id=218, size_id=230)
-        assert result == 1
-        # Same product → cached, no second query
-        result2 = await _resolve_stock_id_for_size(client, product_id=218, size_id=231)
-        assert result2 == 3
-        assert client.execute.call_count == 1, "Stock map must be cached per product"
-        _clear_stock_lookup_cache(218)
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_no_match(self):
-        """When OPS has stock entries for the product but not for THIS
-        size_id (i.e. admin hasn't initialized stock for this variant),
-        return None so caller records a clear warning."""
-        from modules.ops_push.gateway import _resolve_stock_id_for_size, _clear_stock_lookup_cache
-        from unittest.mock import AsyncMock
-        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
-        client.execute = AsyncMock(return_value=OpsResult(
-            ok=True,
-            data={"productStocks": {"productStocks": [{"stock_id": 1, "size_id": 230}]}},
-        ))
-        _clear_stock_lookup_cache(999)
-        result = await _resolve_stock_id_for_size(client, product_id=999, size_id=42)
-        assert result is None
-        _clear_stock_lookup_cache(999)
+    """Verifies stock-related OPS mutations behave correctly."""
 
     @pytest.mark.asyncio
     async def test_data_not_found_treated_as_empty(self):

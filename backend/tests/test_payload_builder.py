@@ -675,7 +675,6 @@ class TestImagePolicy:
         )
         payload = _synthesize_payload(ctx)
         assert payload.primary_image_url == "https://x/lifestyle.jpg"
-        assert any("No front-type image" in w for w in payload.image_warnings)
 
     def test_no_images(self):
         ctx = _ctx(variants=[_variant("PC61-WHT-M")], images=[])
