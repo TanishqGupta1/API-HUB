@@ -720,6 +720,97 @@ async def prepare_push_intent(
     )
 
 
+# ── Idempotent re-push cleanup ──────────────────────────────────────────────
+# OPS inserts child records (additional options, sizes, gallery images) with
+# id=0 on EVERY push, so re-pushing the same product APPENDS duplicate children
+# rather than replacing them (verified 2026-06-16: a second push of KP155 left
+# 42 options / 2 sizes instead of 21 / 1). On an UPDATE push we therefore delete
+# the product's existing children first, then the plan re-creates them fresh.
+#
+# Only clears the child types the current plan will RE-ADD — e.g. an images-off
+# push (no setProductsImageGallery step) must NOT wipe the gallery, or it would
+# delete images without restoring them.
+_EXISTING_OPTIONS_Q = (
+    "query($id:Int){ productAdditionalOptions(products_id:$id, limit:1000)"
+    "{ productAdditionalOptions { prod_add_opt_id } } }"
+)
+_EXISTING_SIZES_Q = (
+    "query($id:Int){ productSize(products_id:$id, limit:1000)"
+    "{ productSize { size_id } } }"
+)
+_EXISTING_GALLERY_Q = (
+    "query($id:Int){ productsImageGallery(products_id:$id, limit:1000)"
+    "{ productsImageGallery { products_image_gallery_id } } }"
+)
+
+
+async def _clear_existing_children(
+    raw_client: Any, ops_product_id: int, plan_mutations: set[str]
+) -> dict:
+    """Delete a product's existing options/sizes/gallery before an update re-adds
+    them (idempotent re-push). Best-effort: logs and continues on any failure so
+    a cleanup hiccup never blocks the push itself."""
+    deleted = {"options": 0, "sizes": 0, "gallery": 0}
+
+    if "setAdditionalOption" in plan_mutations:
+        try:
+            r = await raw_client.execute(_EXISTING_OPTIONS_Q, variables={"id": ops_product_id})
+            rows = ((r.data or {}).get("productAdditionalOptions") or {}).get("productAdditionalOptions") or [] if r.ok else []
+            for o in rows:
+                oid = o.get("prod_add_opt_id")
+                if not oid:
+                    continue
+                res = await raw_client.execute(
+                    _m._SET_ADDITIONAL_OPTION,
+                    variables={"inputs": [{"prod_add_opt_id": oid, "products_id": ops_product_id, "delete": 1}]},
+                )
+                if res.ok:
+                    deleted["options"] += 1
+                await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.warning("idempotent cleanup (options) failed for ops_product=%s: %s", ops_product_id, e)
+
+    if "setProductSize" in plan_mutations:
+        try:
+            r = await raw_client.execute(_EXISTING_SIZES_Q, variables={"id": ops_product_id})
+            rows = ((r.data or {}).get("productSize") or {}).get("productSize") or [] if r.ok else []
+            for s in rows:
+                sid = s.get("size_id")
+                if not sid:
+                    continue
+                res = await raw_client.execute(
+                    _m._SET_PRODUCT_SIZE,
+                    variables={"inputs": [{"size_id": sid, "products_id": ops_product_id, "delete": 1}]},
+                )
+                if res.ok:
+                    deleted["sizes"] += 1
+                await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.warning("idempotent cleanup (sizes) failed for ops_product=%s: %s", ops_product_id, e)
+
+    if "setProductsImageGallery" in plan_mutations:
+        try:
+            r = await raw_client.execute(_EXISTING_GALLERY_Q, variables={"id": ops_product_id})
+            rows = ((r.data or {}).get("productsImageGallery") or {}).get("productsImageGallery") or [] if r.ok else []
+            gids = [g.get("products_image_gallery_id") for g in rows if g.get("products_image_gallery_id")]
+            if gids:
+                # Gallery deletes batch into one mutation via image_arr.
+                res = await raw_client.execute(
+                    _m._SET_PRODUCTS_IMAGE_GALLERY,
+                    variables={
+                        "products_id": ops_product_id,
+                        "optimizeimg": 0,
+                        "input": {"image_arr": [{"products_image_gallery_id": g, "delete": 1} for g in gids]},
+                    },
+                )
+                if res.ok:
+                    deleted["gallery"] = len(gids)
+        except Exception as e:
+            logger.warning("idempotent cleanup (gallery) failed for ops_product=%s: %s", ops_product_id, e)
+
+    return deleted
+
+
 async def execute_push(push_log_id: uuid_mod.UUID) -> None:
     """Stage 2: execute mutation plan against OPS (or FakeOpsClient for dry_run).
 
@@ -851,6 +942,26 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 category_id_override=resolved_category_id,
             )
             plan = [step.model_dump(mode="json") for step in payload.plan]
+
+            # ── Idempotent re-push: clear existing children before re-adding ──
+            # On an UPDATE of a product that already exists in OPS, delete its
+            # current options/sizes/gallery first so this push REPLACES them
+            # instead of appending duplicates. Only clears child types this plan
+            # will re-add. Skipped for dry-run (FakeOpsClient / no real product).
+            if (
+                not push_log.dry_run
+                and payload.push_mode == "update"
+                and payload.existing_ops_product_id
+            ):
+                raw_client = getattr(client, "_client", client)
+                plan_mutations = {s.get("mutation", "") for s in plan}
+                cleared = await _clear_existing_children(
+                    raw_client, int(payload.existing_ops_product_id), plan_mutations
+                )
+                logger.info(
+                    "idempotent re-push: cleared existing children for ops_product=%s: %s",
+                    payload.existing_ops_product_id, cleared,
+                )
 
             step_results: list[dict] = []
             step_responses: dict[int, dict] = {}

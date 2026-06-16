@@ -415,11 +415,10 @@ class TestMutationPlanOrder:
         assert (t6["qty"], t6["qty_to"]) == (5001, 9999)
         assert t6["vendor_price"] == pytest.approx(7.20)
 
-    def test_each_size_emits_its_own_option(self):
-        # Phase 8 (reference product 361): every unique size becomes its own
-        # setAdditionalOption row — no grouping, no attribute children.
-        # sort_order drives ordering; absent it, _variant_sort_key falls back
-        # to lex (color, size, sku) — so size order here is alphabetical.
+    def test_sizes_grouped_into_one_size_option(self):
+        # Grouped model (2026-06-16): variants become TWO dropdown options —
+        # "Color" and "Size" — each with one attribute per value. The sizes do
+        # NOT each become their own option (the storefront-duplication bug).
         variants = [
             _variant("PC61-WHT-S", color="White", size="S"),
             _variant("PC61-WHT-M", color="White", size="M"),
@@ -431,14 +430,14 @@ class TestMutationPlanOrder:
             s.variables["inputs"][0]["title"]
             for s in payload.plan if s.mutation == "setAdditionalOption"
         ]
-        # Color first (1 color), then each unique size as its own option
-        assert opt_titles[0] == "White"
-        assert set(opt_titles[1:]) == {"S", "M", "L"}
-        # No attribute children — flat per-value model.
+        assert opt_titles == ["Color", "Size"]
+        # One attribute-set per option; the Size set carries all 3 sizes.
         attr_steps = [s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"]
-        assert attr_steps == []
+        assert len(attr_steps) == 2
+        size_attr = next(s for s in attr_steps if s.source_key == "apparel_attrs:size")
+        assert {a["label"] for a in size_attr.variables["inputs"]} == {"S", "M", "L"}
 
-    def test_colors_before_sizes_each_as_own_option(self):
+    def test_colors_and_sizes_grouped_into_two_options(self):
         variants = [
             _variant("v1", color="Black", size="S"),
             _variant("v2", color="Black", size="M"),
@@ -451,11 +450,11 @@ class TestMutationPlanOrder:
             s.variables["inputs"][0]["title"]
             for s in payload.plan if s.mutation == "setAdditionalOption"
         ]
-        # 2 colors emitted first, then 2 sizes — total 4 options
-        assert opt_titles[:2] == ["Black", "White"]  # colors block
-        assert set(opt_titles[2:]) == {"S", "M"}      # sizes block
-        attr_steps = [s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"]
-        assert attr_steps == []
+        # Exactly two grouped options: Color then Size.
+        assert opt_titles == ["Color", "Size"]
+        attr_steps = {s.source_key: s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"}
+        assert {a["label"] for a in attr_steps["apparel_attrs:color"].variables["inputs"]} == {"Black", "White"}
+        assert {a["label"] for a in attr_steps["apparel_attrs:size"].variables["inputs"]} == {"S", "M"}
 
     def test_inventory_collapses_to_single_write(self, monkeypatch):
         # Phase 8: stock collapses to ONE write against the placeholder size.
@@ -621,9 +620,10 @@ class TestMarkupApplied:
 
 
 class TestApparelAttributeFlow:
-    """Phase 8 rewrite — the apparel push emits ONE setAdditionalOption row
-    per unique color and per unique size value (reference product 361 in
-    visualgraphx OPS staging). No grouping, no attribute children."""
+    """Grouped model (2026-06-16) — the apparel push emits TWO grouped
+    'combo' options ("Color" + "Size"), each with one attribute per value,
+    so the storefront shows a Color dropdown and a Size dropdown (reference
+    product 309's combo options) instead of ~20 flat quantity boxes."""
 
     def test_no_setAssignOptions_emitted(self):
         # setAssignOptions path was for the master_option_attach strategy and
@@ -637,39 +637,39 @@ class TestApparelAttributeFlow:
         payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
         assert not any(s.mutation == "setAssignOptions" for s in payload.plan)
 
-    def test_option_keys_are_safe_slugs(self):
-        # Values like "Athletic Heather" become slug-safe option_keys so OPS
-        # can store them; the human-readable label still rides in `title`.
+    def test_option_keys_are_grouped_titles(self):
+        # The two options are the dimension names; per-value slugs live on the
+        # attributes (attribute_key), with the human label in `label`.
         variants = [_variant("v1", color="Athletic Heather", size="2XL")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
         opt_steps = [s for s in payload.plan if s.mutation == "setAdditionalOption"]
-        keys = {o.variables["inputs"][0]["option_key"] for o in opt_steps}
-        titles = {o.variables["inputs"][0]["title"] for o in opt_steps}
-        assert "athletic_heather" in keys
-        assert "Athletic Heather" in titles
-        assert "2xl" in keys
-        assert "2XL" in titles
+        assert {o.variables["inputs"][0]["option_key"] for o in opt_steps} == {"color", "size"}
+        assert {o.variables["inputs"][0]["title"] for o in opt_steps} == {"Color", "Size"}
+        attr_steps = {s.source_key: s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"}
+        color_attr = attr_steps["apparel_attrs:color"].variables["inputs"][0]
+        assert color_attr["attribute_key"] == "athletic_heather"
+        assert color_attr["label"] == "Athletic Heather"
 
-    def test_options_type_is_textmp_for_apparel(self):
-        # Reference product 361's options all use options_type=textmp.
+    def test_options_type_is_combo_for_apparel(self):
+        # Grouped dropdowns use options_type=combo (reference product 309).
         variants = [_variant("v1", color="Red", size="S")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
         for opt in [s for s in payload.plan if s.mutation == "setAdditionalOption"]:
-            assert opt.variables["inputs"][0]["options_type"] == "textmp"
+            assert opt.variables["inputs"][0]["options_type"] == "combo"
 
-    def test_no_attribute_children_emitted(self):
-        # Flat per-value model: each option IS the variant value — no
-        # setAdditionalOptionAttributes rows attached to it.
+    def test_attribute_children_emitted_per_value(self):
+        # Grouped model: each option has attribute children (one per value).
         variants = [_variant("v1", color="Red", size="S"), _variant("v2", color="Red", size="M")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        attr_steps = [s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"]
-        assert attr_steps == []
+        attr_steps = {s.source_key: s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"}
+        assert {a["label"] for a in attr_steps["apparel_attrs:color"].variables["inputs"]} == {"Red"}
+        assert {a["label"] for a in attr_steps["apparel_attrs:size"].variables["inputs"]} == {"S", "M"}
 
     def test_size_multiplier_reflects_per_size_price(self):
-        # Per-size price variation rides on each size option's multiplier:
+        # Per-size price variation now rides on each size ATTRIBUTE's multiplier:
         #   multiplier = size_price / base_price
         # Base = $8 (cheapest), 2XL = $10 → multiplier 1.25 (+25%).
         variants = [
@@ -678,30 +678,29 @@ class TestApparelAttributeFlow:
         ]
         ctx = _ctx(variants=variants, markup_rules=[])
         payload = _synthesize_payload(ctx)
-        size_opts = {
-            s.variables["inputs"][0]["title"]: s.variables["inputs"][0]
-            for s in payload.plan
-            if s.mutation == "setAdditionalOption" and s.source_key.startswith("apparel_option:size/")
-        }
-        assert size_opts["S"]["multiplier"] == pytest.approx(1.0)
-        assert size_opts["2XL"]["multiplier"] == pytest.approx(1.25)
-        assert size_opts["S"]["multiplier_type"] == "1"
+        size_attr = next(
+            s for s in payload.plan
+            if s.mutation == "setAdditionalOptionAttributes" and s.source_key == "apparel_attrs:size"
+        )
+        by_label = {a["label"]: a for a in size_attr.variables["inputs"]}
+        assert by_label["S"]["multiplier"] == pytest.approx(1.0)
+        assert by_label["2XL"]["multiplier"] == pytest.approx(1.25)
+        assert by_label["S"]["multiplier_type"] == "1"
 
     def test_color_multiplier_is_flat_one(self):
-        # Color doesn't drive price — multiplier stays 1.0 even when sizes vary.
+        # Color doesn't drive price — every colour attribute multiplier is 1.0.
         variants = [
             _variant("v1", color="Red", size="S", base_price=Decimal("8.00")),
             _variant("v2", color="Blue", size="2XL", base_price=Decimal("10.00")),
         ]
         ctx = _ctx(variants=variants, markup_rules=[])
         payload = _synthesize_payload(ctx)
-        color_opts = [
-            s.variables["inputs"][0]
-            for s in payload.plan
-            if s.mutation == "setAdditionalOption" and s.source_key.startswith("apparel_option:color/")
-        ]
-        for opt in color_opts:
-            assert opt["multiplier"] == pytest.approx(1.0)
+        color_attr = next(
+            s for s in payload.plan
+            if s.mutation == "setAdditionalOptionAttributes" and s.source_key == "apparel_attrs:color"
+        )
+        for a in color_attr.variables["inputs"]:
+            assert a["multiplier"] == pytest.approx(1.0)
 
 
 # ===========================================================================
@@ -904,12 +903,10 @@ class TestTitlePrefix:
 
 class TestPC61Smoke:
     def test_pc61_plan_shape(self, monkeypatch):
-        # Phase 8 apparel rewrite (flat per-value model, reference product 361):
-        # PC61 with 7 colors × 8 sizes = 56 variants collapses to:
-        # 1 setProduct + 1 placeholder size + 1 base price
-        # + 7 setAdditionalOption rows for colors
-        # + 8 setAdditionalOption rows for sizes
-        # + 1 image gallery + 1 stock = 20 steps.
+        # Grouped model (2026-06-16): PC61 with 7 colors × 8 sizes = 56 variants
+        # collapses to: 1 setProduct + 1 placeholder size + 6 price tiers
+        # + 2 setAdditionalOption (Color, Size) + 2 setAdditionalOptionAttributes
+        # (7 colour attrs, 8 size attrs) + 1 image gallery + 1 stock.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
         monkeypatch.delenv("OPS_MEDIA_IMAGE_PREFIX", raising=False)
@@ -933,8 +930,12 @@ class TestPC61Smoke:
         assert mutations.count("setProduct") == 1
         assert mutations.count("setProductSize") == 1            # placeholder
         assert mutations.count("setProductPrice") == 6           # APPAREL_VOLUME_TIERS
-        assert mutations.count("setAdditionalOption") == 7 + 8   # 7 colors + 8 sizes
-        assert mutations.count("setAdditionalOptionAttributes") == 0
+        assert mutations.count("setAdditionalOption") == 2       # Color + Size
+        assert mutations.count("setAdditionalOptionAttributes") == 2
+        # Each grouped option carries one attribute per value.
+        attr_by_key = {s.source_key: s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"}
+        assert len(attr_by_key["apparel_attrs:color"].variables["inputs"]) == 7
+        assert len(attr_by_key["apparel_attrs:size"].variables["inputs"]) == 8
         assert mutations.count("setProductsImageGallery") == 1
         assert mutations.count("updateProductStock") == 1        # collapsed
         assert "setAssignOptions" not in mutations

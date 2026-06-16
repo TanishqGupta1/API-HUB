@@ -547,11 +547,24 @@ def _build_setProduct_step(
         #     Required with the note "Must be 1 always". Not sent before;
         #     OPS likely defaulted it for products 552-556, but the schema
         #     says required, so send the fixed value to be safe.
-        "predefined_product_type": "1",
+        # product_type is a COMMA-SEPARATED list of OPS "design mode" codes:
+        #   1=Custom Design, 2=Upload Centre, 3=Browse Design, 8=Hire Designer,
+        #   15=Add to cart. A product whose list is "0"/contains only 15 shows
+        #   under OPS admin "Ready To Buy Products"; a product carrying design
+        #   modes (1/2/3) shows under "Print Products" and opens the design studio.
+        #   Verified live 2026-06-15 via inspect_ops_product309.py:
+        #     - print product 309 (Custom Pole Flag): product_type "3,1,2", predefined "0"
+        #     - our old SanMar push 596 (F236):        product_type "0",     predefined "1"  → Ready-to-Buy
+        #   Decorated apparel (SanMar) must be a print product, so we send the
+        #   design modes + predefined "0" to mirror the working print product.
+        #   NOTE: this is CLASSIFICATION only. A fully working design studio also
+        #   needs design pages (setProductPages) + a print area, and embroidery/
+        #   print decorations need setAdditionalOption — both tracked as follow-ups.
+        "predefined_product_type": "0",
         "price_defining_method": "1",
         "measurement_unit_id": 1,
-        "enable_stock_management": "1",
-        "product_type": "1",
+        "enable_stock_management": "0",
+        "product_type": "1,2,3",
         "product_service_type": "1",
     }
     # Category resolution order:
@@ -621,7 +634,7 @@ def _build_setProductSize_placeholder_step(step_num: int) -> OPSMutationStep:
             "inputs": [{
                 "products_id": _placeholder(1, "products_id"),
                 "size_title": "Default",
-                "visible": "1",  # OPS ProductSizeInput.visible is String
+                "visible": "1",  # must be visible — OPS hides the entire purchase panel if no visible size exists
             }]
         },
         requires_response_from=[1],
@@ -661,62 +674,76 @@ def _extract_attribute_values(
     return colors, sizes
 
 
-def _build_apparel_setAdditionalOption_step(
-    step_num: int, kind: str, value: str, sort_order: int, multiplier: float = 1.0
+def _build_apparel_grouped_option_step(
+    step_num: int, title: str, sort_order: int, required: str = "1"
 ) -> OPSMutationStep:
-    """Create ONE Additional Option row for a single variant value.
+    """ONE grouped Additional Option (a 'combo' dropdown) for an apparel
+    dimension — "Color" or "Size". Its individual values are attached as
+    attributes via _build_apparel_option_attributes_step.
 
-    Reference product 361 (visualgraphx OPS staging) shows each size as its
-    own setAdditionalOption row — not attributes under a "Size" group. We
-    mirror that model: every unique color and every unique size becomes its
-    own option row.
-
-    Input fields below mirror a live read-back of product 361's
-    productAdditionalOptions (verified via OPS GraphQL). Anything missing
-    is rejected with "Column X cannot be null" / "X is required":
-      - options_type="textmp"         → flat-label dropdown in storefront
-      - price_calculate_type="0"      → no calc (reference value)
-      - apply_multiplication="1"      → matches reference
-      - applicable_for="0"            → all customers (reference value)
-      - status="1"                    → enabled
-      - required="1"                  → variant pick required at checkout
-      - hire_designer_option="0"      → NOT NULL on OPS staging DB
-      - description=""                → matches reference (empty)
-      - size_id=0, master_option_id=0 → defaults; reference uses 0
-      - multiplier (Float) + multiplier_type="1" → percent-style modifier
-                                        on top of the base setProductPrice.
-                                        For sizes: multiplier = size_price /
-                                        base_price (so 2XL @ $10 with base
-                                        $8 → 1.25, +25%). For colors: 1.0.
-
-    `kind` ("color" / "size") is local only — used for source_key uniqueness.
+    options_type="combo" renders as a SINGLE dropdown (verified live against
+    reference product 309's Graphic/Pole/Finishing options), whereas the old
+    per-value "textmp" rows rendered every colour/size as its own quantity box
+    (the bug this replaces — see product 600's pre-fix storefront).
     """
-    safe_key = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "opt"
+    safe_key = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_") or "opt"
     return OPSMutationStep(
         step=step_num,
         mutation="setAdditionalOption",
-        source_key=f"apparel_option:{kind}/{safe_key}",
+        source_key=f"apparel_option:{safe_key}",
         variables={
             "inputs": [{
                 "products_id": _placeholder(1, "products_id"),
                 "option_key": safe_key,
-                "title": value,
+                "title": title,
                 "description": "",
-                "options_type": "textmp",
+                "options_type": "combo",
                 "price_calculate_type": "0",
                 "apply_multiplication": "1",
                 "applicable_for": "0",
                 "status": "1",
-                "required": "1",
+                "required": required,
                 "hire_designer_option": "0",
                 "size_id": 0,
                 "master_option_id": 0,
                 "sort_order": sort_order,
-                "multiplier": round(float(multiplier), 4),
-                "multiplier_type": "1",
             }]
         },
         requires_response_from=[1],
+    )
+
+
+def _build_apparel_option_attributes_step(
+    step_num: int, option_step: int, dimension: str, values: list[tuple[str, float]]
+) -> OPSMutationStep:
+    """Attach all values of one apparel dimension as attributes of a single
+    grouped option (one batched setAdditionalOptionAttributes call — `inputs`
+    is an array). `values` is a list of (label, multiplier): the multiplier is
+    the size price multiplier (size_price / base_price) for sizes, 1.0 for
+    colours. The first value is the default attribute. Shape mirrors a live
+    read-back of product 309's attributes (attribute_key/default_attribute/
+    sort_order/status/multiplier).
+    """
+    inputs: list[dict[str, Any]] = []
+    for i, (label, mult) in enumerate(values):
+        attr_key = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "attr"
+        inputs.append({
+            "prod_add_opt_id": _placeholder(option_step, "prod_add_opt_id"),
+            "label": label,
+            "attribute_key": attr_key,
+            "default_attribute": "1" if i == 0 else "0",
+            "sort_order": i + 1,
+            "status": "1",
+            "setup_cost": 0.0,
+            "multiplier": round(float(mult), 4),
+            "multiplier_type": "1",
+        })
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setAdditionalOptionAttributes",
+        source_key=f"apparel_attrs:{dimension}",
+        variables={"inputs": inputs},
+        requires_response_from=[option_step],
     )
 
 
@@ -1239,22 +1266,37 @@ def _synthesize_payload(
             existing = size_to_price.get(sz)
             size_to_price[sz] = min(existing, p.final_price) if existing is not None else p.final_price
 
+    # Variants become TWO grouped dropdown options ("Color" + "Size"), each
+    # with one attribute per value — NOT one flat option per value. This is
+    # what makes the storefront show a Color dropdown and a Size dropdown
+    # instead of ~20 separate quantity boxes (the pre-2026-06-16 bug).
     sort_order = 0
     colors, sizes = _extract_attribute_values(ordered_variants)
-    for value in colors:
-        plan.append(
-            _build_apparel_setAdditionalOption_step(next_step, "color", value, sort_order, multiplier=1.0)
-        )
+    if colors:
+        color_opt_step = next_step
+        plan.append(_build_apparel_grouped_option_step(next_step, "Color", sort_order))
         next_step += 1
         sort_order += 1
-    for value in sizes:
-        size_price = size_to_price.get(value, base_final)
-        mult = (size_price / base_final) if base_final > 0 else 1.0
         plan.append(
-            _build_apparel_setAdditionalOption_step(next_step, "size", value, sort_order, multiplier=mult)
+            _build_apparel_option_attributes_step(
+                next_step, color_opt_step, "color", [(c, 1.0) for c in colors]
+            )
         )
         next_step += 1
+    if sizes:
+        size_opt_step = next_step
+        plan.append(_build_apparel_grouped_option_step(next_step, "Size", sort_order))
+        next_step += 1
         sort_order += 1
+        # Each size attribute carries its price multiplier (size_price / base).
+        size_attrs = [
+            (s, (size_to_price.get(s, base_final) / base_final) if base_final > 0 else 1.0)
+            for s in sizes
+        ]
+        plan.append(
+            _build_apparel_option_attributes_step(next_step, size_opt_step, "size", size_attrs)
+        )
+        next_step += 1
 
     # Image gallery — pushes product images via setProductsImageGallery.
     # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_IMAGES=1): OPS does NOT
