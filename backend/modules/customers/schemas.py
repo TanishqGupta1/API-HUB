@@ -29,5 +29,6 @@ class CustomerRead(BaseModel):
     # storefront category land in OPS under this category instead of
     # being uncategorized (which OPS admin hides from default views).
     default_ops_category_id: int | None = None
+    ops_associated_category_ids: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

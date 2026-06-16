@@ -392,14 +392,13 @@ class TestMutationPlanOrder:
         variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        # setProduct → 1 Default size → 1 Default price (both variants same price)
+        # setProduct → Default size → setProductPrice
         assert payload.plan[1].mutation == "setProductSize"
         assert payload.plan[2].mutation == "setProductPrice"
         assert payload.plan[3].mutation != "setProductPrice"  # only 1 price step
 
     def test_inventory_is_last(self, monkeypatch):
-        # Stock steps are deferred by default (OPS sizes carry no SKU to target);
-        # opt in to assert the full plan shape.
+        # Stock steps are opt-in; enable to assert they land at the end.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M")]
         ctx = _ctx(variants=variants)
@@ -407,33 +406,22 @@ class TestMutationPlanOrder:
         # Same-price variants → 1 Default size → 1 stock step as last step
         assert payload.plan[-1].mutation == "updateProductStock"
 
-    def test_inventory_action_is_add(self, monkeypatch):
-        # action=Add increments existing stock. Phase 6: OPS has no per-size
-        # SKU field anywhere in its schema, so updateProductStock identifies
-        # the variant by stock_id. The stock_id is resolved at execute time
-        # by the gateway from a productStocks(product_id) read-back.
-        #
-        # The plan step does NOT carry stock_id directly — it carries a
-        # gateway-only sentinel `_size_id_ref` (a placeholder) that the
-        # gateway uses to look up the stock_id for that variant's size.
-        # Stock steps are opt-in (OPS_PUSH_INCLUDE_STOCK); enable to assert shape.
+    def test_inventory_action_is_set(self, monkeypatch):
+        # action=SET writes an absolute quantity (valid enum: CREDIT/DEBIT/SET).
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
         stock_step = next(s for s in payload.plan if s.mutation == "updateProductStock")
-        assert stock_step.variables["action"] == "Add"
+        assert stock_step.variables["action"] == "Reset"
         assert stock_step.variables["input"]["stock_quantity"] == 42
-        # _size_id_ref is the gateway lookup hint — must reference a
-        # setProductSize step's size_id response.
-        assert stock_step.variables["_size_id_ref"].startswith("$step")
-        assert stock_step.variables["_size_id_ref"].endswith(".size_id")
-        # product_sku is gone — OPS can't match it without a per-size SKU
-        # field, so threading it does nothing useful and is misleading.
-        assert "product_sku" not in stock_step.variables
-        assert "stock_id" not in stock_step.variables  # filled by gateway
+        assert "product_sku" in stock_step.variables
+        assert "_size_id_ref" not in stock_step.variables
+        assert "stock_id" not in stock_step.variables
         # action must NOT be nested inside input
         assert "action" not in stock_step.variables["input"]
         assert "product_sku" not in stock_step.variables["input"]
+        # no dependency on any prior step (product_sku is embedded directly)
+        assert stock_step.requires_response_from == []
 
     def test_no_setProductCategory_step(self):
         # Old spec had a separate setProductCategory step; new spec does not.
@@ -638,13 +626,13 @@ class TestImagePolicy:
         assert payload.primary_image_url == "https://x/front.jpg"
         assert payload.image_warnings == []
         setProduct = payload.plan[0]
-        # But the mutation receives just the filename — OPS prepends its CDN
-        # base path at serve time; sending a full URL produces a double-prefix.
-        assert setProduct.variables["inputs"][0]["imagename"] == "front.jpg"
+        # Full URL sent to OPS so it references the supplier CDN directly
+        # instead of processing to S3 (which causes 403 on staging).
+        assert setProduct.variables["inputs"][0]["imagename"] == "https://x/front.jpg"
 
-    def test_imagename_strips_to_filename_for_deep_paths(self):
-        """SanMar URLs have multi-segment paths like /imglib/mresjpg/2013/f14/PC61_aqua_back.jpg.
-        Everything before the last '/' must be dropped — OPS only wants the leaf."""
+    def test_imagename_sends_full_url(self):
+        """Full SanMar URL is passed as-is — OPS uses it directly as the image src
+        instead of downloading and storing in S3."""
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
             images=[_image(
@@ -653,7 +641,8 @@ class TestImagePolicy:
             )],
         )
         payload = _synthesize_payload(ctx)
-        assert payload.plan[0].variables["inputs"][0]["imagename"] == "PC61_aquaticblue_flat_back.jpg"
+        assert payload.plan[0].variables["inputs"][0]["imagename"] == \
+            "https://cdnm.sanmar.com/imglib/mresjpg/2013/f14/PC61_aquaticblue_flat_back.jpg"
 
     def test_imagename_passes_through_when_already_a_filename(self):
         """If primary_image_url is already a bare filename (no slashes),
@@ -729,7 +718,8 @@ class TestImagePolicy:
         payload = _synthesize_payload(ctx)
         assert not any(s.mutation == "setProductsImageGallery" for s in payload.plan)
 
-    def test_image_gallery_off_by_default(self):
+    def test_image_gallery_off_by_default(self, monkeypatch):
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "0")
         # Default is opt-out: OPS doesn't fetch external URLs, so the step is
         # deferred until images are uploaded into OPS media (see payload_builder).
         ctx = _ctx(
@@ -1092,7 +1082,7 @@ class TestImageGalleryStep:
     """_build_setProductsImageGallery_step name resolution:
 
       1. ops_filename (manual OPS admin upload) — takes priority when set.
-      2. img.url (supplier CDN URL) — automation fallback; OPS fetches via optimizeimg=1.
+      2. img.url (supplier CDN URL) — automation fallback; stored as URL (optimizeimg=0).
 
     Images with neither are skipped. Returns None when nothing is pushable.
     """
