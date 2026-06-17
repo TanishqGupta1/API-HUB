@@ -248,3 +248,21 @@ async def test_bulk_backfill_one_supplier(db, seed_supplier):
     assert totals["products"] == 2
     assert totals["color_options"] == 2
     assert totals["size_options"] == 2
+
+
+@pytest.mark.asyncio
+async def test_route_derive_single_product(client, db, seed_supplier):
+    p = await _mk_product(db, seed_supplier, [("Red", "M"), ("Navy", "L")])
+    r = await client.post(f"/api/products/{p.id}/derive-options")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["colors"] == 1 and body["sizes"] == 1
+    assert body["color_attrs"] == 2 and body["size_attrs"] == 2
+
+
+@pytest.mark.asyncio
+async def test_route_derive_bulk(client, db, seed_supplier):
+    await _mk_product(db, seed_supplier, [("Red", "M")], sku="A", name="A")
+    r = await client.post(f"/api/products/derive-options?supplier_id={seed_supplier.id}")
+    assert r.status_code == 200
+    assert r.json()["products"] >= 1
