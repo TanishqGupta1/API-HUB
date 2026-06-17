@@ -26,14 +26,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "product_variants",
-        sa.Column("part_id", sa.String(length=100), nullable=True),
+    # IF NOT EXISTS: on a fresh DB, Base.metadata.create_all has already
+    # created this column/index from the model before migrations replay.
+    op.execute(
+        "ALTER TABLE product_variants "
+        "ADD COLUMN IF NOT EXISTS part_id VARCHAR(100)"
     )
-    op.create_index(
-        "ix_product_variants_part_id",
-        "product_variants",
-        ["part_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_product_variants_part_id "
+        "ON product_variants (part_id)"
     )
 
 

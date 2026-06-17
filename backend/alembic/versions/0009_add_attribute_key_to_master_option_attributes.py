@@ -21,9 +21,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "master_option_attributes",
-        sa.Column("attribute_key", sa.String(length=100), nullable=True),
+    # IF NOT EXISTS: on a fresh DB, Base.metadata.create_all has already
+    # created this column from the model before migrations replay.
+    op.execute(
+        "ALTER TABLE master_option_attributes "
+        "ADD COLUMN IF NOT EXISTS attribute_key VARCHAR(100)"
     )
 
 

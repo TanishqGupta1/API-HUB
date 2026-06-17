@@ -39,7 +39,10 @@ What is confirmed working:
 - Auth hardened ✅
 
 Known gaps:
-1. **Images** — S3/R2 not configured; `OPS_PUSH_INCLUDE_IMAGES=0`
+1. **Images** — `OPS_PUSH_INCLUDE_IMAGES=0`. OPS does **not** fetch image URLs
+   (confirmed via `ops_image_readback.py` → `PENDING-WORK.md:35`), so the binary
+   upload client `ops_client/image_uploader.py` is required but incomplete (GAP A
+   presign-key + GAP B finalize uncaptured). See corrected Phase 1.
 2. **SKU dedup** — untested against real OPS storefront
 3. **Stock** — `OPS_PUSH_INCLUDE_STOCK=0`; `updateProductStock` never run live
 4. **Print push path** — `payload_builder.py` has no print branch; 4Over products
@@ -68,51 +71,86 @@ Known gaps:
 
 ---
 
-## Phase 1 — Image Pipeline (S3 / R2)
+## Phase 1 — Image Pipeline
 
-**Why this is first:** OPS product listings without images are incomplete and get rejected or look
-wrong in the storefront. Images are the visual foundation everything else depends on.
+**Status correction (2026-06-15):** The original Phase 1 assumed images work by
+configuring Cloudflare R2 and handing OPS a `CDN_BASE_URL/...` URL via
+`setProductsImageGallery`. That assumption is **wrong** — see the investigation below.
+The codebase contains two competing image strategies that contradict each other; this
+phase resolves which one OPS actually supports and builds it.
+
+**The contradiction — and its resolution:**
+
+- **Path A — URL reference.** `payload_builder.py` step 8
+  (`_build_setProductsImageGallery_step`) builds `setProductsImageGallery` with
+  `products_large_image_name = <url>` and `optimizeimg = 1`. Its docstring claims OPS
+  fetches + optimizes the URL server-side, "verified live against staging — see
+  `scripts/ops_image_spike.py`".
+- **Path B — binary admin upload.** `PENDING-WORK.md:35`, the project memory, and the
+  new `backend/modules/ops_client/image_uploader.py` all assert the opposite: OPS
+  GraphQL **cannot** ingest image binaries, never fetches the URL, and has no upload
+  mutation.
+
+> **Resolved → Path B is correct.** The `ops_image_spike.py` named in the Path-A
+> docstring **does not exist in the repo**, so the "verified live" claim is
+> unsubstantiated. The script that *does* exist — `backend/scripts/ops_image_readback.py`
+> — was written to answer exactly this question (reads back product #547's stored
+> image fields) and its conclusion is recorded in `PENDING-WORK.md:35`: OPS "stores
+> `products_large_image_name` string verbatim, never fetches URLs." The Path-A
+> docstring at `payload_builder.py:726` is stale and must be corrected (task 1.0.2).
+> Path A (§1.A) is retained only as a quick re-confirm gate; the real work is §1.B.
 
 **What the code already has:**
-- `backend/modules/images/mirror.py` — downloads supplier image URLs, converts to WebP (1200px,
-  85% quality, alpha-channel preserved), uploads to S3/R2 with content-addressed keys
-- `backend/modules/ops_push/payload_builder.py` step 8 — `setProductsImageGallery` mutation is
-  built and part of the 9-step plan
-- `OPS_PUSH_INCLUDE_IMAGES` env flag — currently defaults to `0`
+- `ops_push/image_pipeline.py` — `process_image(url)`: SSRF-guarded download → resize
+  to 800×800 → WebP q85, returns raw bytes. (The older `images/mirror.py` does 1200px
+  + content-addressed R2 upload; the two overlap — pick one in §1.B.3.)
+- `ops_push/payload_builder.py` step 8 — `setProductsImageGallery` built and in the
+  9-step plan (Path A).
+- `ops_client/image_uploader.py` (untracked) — `OpsImageUploader`: admin login (session
+  + CSRF cookie) → presign → S3 PUT → finalize (Path B). **Incomplete:**
+  - **GAP A** (`_build_presign_key`): the 264-char presign `key` token is built
+    client-side by OPS's admin JS (`getUploadParameters`) and is not yet captured;
+    `upload()` raises `OpsUploadNotConfirmed` here.
+  - **GAP B** (`_finalize`): the `common_upload_response.php` finalize request/response
+    shape is not yet captured.
+  - Deterministic parts (login, CSRF, S3 PUT, SSRF guard, loud-failure on A/B) are
+    covered by `tests/test_ops_image_uploader.py`.
+- `OPS_PUSH_INCLUDE_IMAGES` env flag — defaults to `0` (`payload_builder.py:931`).
 
-**What is missing / needs configuring:**
-- [ ] **1.1** — Set S3/R2 environment variables in `.env`:
-  ```
-  S3_ACCESS_KEY_ID=<from Cloudflare R2 dashboard>
-  S3_SECRET_ACCESS_KEY=<from Cloudflare R2 dashboard>
-  S3_REGION=auto
-  S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
-  S3_PRODUCT_IMAGES_BUCKET=graphx-product-images
-  CDN_BASE_URL=https://images.graphxcpi.com
-  ```
-- [ ] **1.2** — Align bucket name with Christian's existing image upload bucket (graphxcpi.com).
-  If they share a bucket: same `CDN_BASE_URL`, zero code change. If separate: leave as-is.
-- [ ] **1.3** — Enable images in push: set `OPS_PUSH_INCLUDE_IMAGES=1` in env
-- [ ] **1.4** — Run image mirror for one SanMar product:
-  ```
-  POST /api/images/mirror/{product_id}
-  ```
-  Verify: CDN URL returned, image accessible at `CDN_BASE_URL/products/sanmar/...`
-- [ ] **1.5** — Trigger a dry-run push with images:
-  ```
-  POST /api/integrations/v1/push-requests
-  { "customer_id": "...", "product_id": "...", "dry_run": true }
-  ```
-  Inspect `step_results[7]` (setProductsImageGallery) — confirm CDN URLs are in the payload
-- [ ] **1.6** — Trigger a live push to OPS staging. Verify image appears in storefront.
-- [ ] **1.7** — Run batch mirror for all SanMar products:
-  ```
-  POST /api/images/mirror-batch
-  { "product_ids": [...] }
-  ```
+### 1.0 — Decision gate: confirm OPS image behaviour on the live customer staging
+- [ ] **1.0.1** — Run `backend/scripts/ops_image_readback.py` against the customer's OPS
+  staging (set `OPS_SPIKE_CUSTOMER_ID` / `OPS_SPIKE_PRODUCT_ID`). Confirm OPS stored the
+  gallery string verbatim and did **not** fetch the URL (expected, per the resolution above).
+- [ ] **1.0.2** — Correct the misleading docstring at `payload_builder.py:726` (it cites a
+  non-existent `ops_image_spike.py` and claims server-side URL fetch). If 1.0.1 somehow
+  shows OPS *does* fetch → follow §1.A and fix `PENDING-WORK.md:35` instead.
 
-**Exit criteria:** A SanMar product pushed to OPS staging shows at least one image loaded from the
-CDN. Mirror status endpoint returns `mirrored > 0` for the product.
+### 1.B — Binary admin upload (primary path)
+- [ ] **1.B.1** — Capture **GAP A**: read OPS admin upload JS (`getUploadParameters` / the
+  function building the `key` field) and implement `_build_presign_key()`.
+- [ ] **1.B.2** — Capture **GAP B**: grab the `common_upload_response.php` request body +
+  response from the Network tab; implement `_finalize()` and return the permanent
+  `media_path` in `UploadResult`.
+- [ ] **1.B.3** — Wire the pipeline: `image_pipeline.process_image()` (or `mirror.py`) →
+  `OpsImageUploader.upload()` → use the returned `media_path` for `ProductInput.imagename`,
+  replacing the bare-filename guess at `payload_builder.py:529` and the URL value in step 8.
+- [ ] **1.B.4** — Add `admin_email` + `admin_password` to the customer's `ops_auth_config`
+  (EncryptedJSON) — required by `build_uploader_from_customer()`.
+- [ ] **1.B.5** — Set `OPS_PUSH_INCLUDE_IMAGES=1`. Live push; confirm the uploaded image is
+  attached to the product and renders in storefront.
+- [ ] **1.B.6** — Extend `test_ops_image_uploader.py` to cover the now-confirmed GAP A / GAP
+  B happy paths (remove the "fails loudly" guards for those steps).
+
+### 1.A — URL reference (fallback only — use ONLY if 1.0.1 proves OPS fetches URLs)
+- [ ] **1.A.1** — Mirror to a URL **we** control (not a raw supplier URL): `images/mirror.py`
+  → R2, feed the resulting `CDN_BASE_URL` into `ctx.images[].url`. Configure R2 env vars
+  (`S3_*`, `CDN_BASE_URL`) only in this branch.
+- [ ] **1.A.2** — Set `OPS_PUSH_INCLUDE_IMAGES=1`; dry-run push; confirm CDN URLs in the
+  `setProductsImageGallery` step; then live push and confirm the image renders.
+
+**Exit criteria:** A SanMar product pushed to the customer's OPS staging shows at least one
+image in the storefront via the confirmed path (Path B unless 1.0.1 proves otherwise), and the
+stale `payload_builder.py:726` docstring has been corrected so the next reader isn't misled.
 
 ---
 
@@ -486,7 +524,7 @@ Phase 6 done. A written security sign-off note is added to this plan doc.
 ## Milestone Summary
 
 ```
-Week 1   [Phase 1] Images → S3/R2 configured, SanMar products push with images ✓
+Week 1   [Phase 1] Images → OPS binary upload (image_uploader GAP A/B), SanMar products push with images ✓
          [Phase 2] SKU dedup verified, no duplicate OPS products ✓
 
 Week 2   [Phase 3] Stock live, delta sync updates inventory in OPS ✓
@@ -512,8 +550,10 @@ Week 5   [Phase 6] Full security audit — all 6 areas green ✓
 
 | Blocker | Needed For | Owner | Type |
 |---------|-----------|-------|------|
-| Cloudflare R2 bucket credentials | Phase 1 | Vidhi / DevOps | Config |
-| CDN domain (`images.graphxcpi.com`) pointing to R2 | Phase 1 | Vidhi / DevOps | Config |
+| **Capture OPS upload GAP A** (presign `key` token JS) for `image_uploader.py` | Phase 1 (1.B) | Dev team | **Code** |
+| **Capture OPS upload GAP B** (finalize payload) for `image_uploader.py` | Phase 1 (1.B) | Dev team | **Code** |
+| OPS admin login creds (`admin_email` + `admin_password`) in `ops_auth_config` | Phase 1 (1.B) | Christian | Credentials |
+| Cloudflare R2 bucket creds + CDN domain | Phase 1 (1.A fallback only) | Vidhi / DevOps | Config |
 | SanMar API credentials (`username` + `password`) | Phase 1–4 | Christian | Credentials |
 | OPS staging OAuth2 credentials | Phase 1–5C | Christian | Credentials |
 | S&S credentials: `account_number` + `api_key` (HTTP Basic) | Phase 5A | Christian | Credentials |
@@ -523,7 +563,7 @@ Week 5   [Phase 6] Full security audit — all 6 areas green ✓
 | **Add product-type preflight checks** in `preflight.py` | Phase 5B | Dev team | **Code** |
 | **Build 4Over decoration mapping** in `fourover_normalizer.py` | Phase 5B | Dev team | **Code** |
 | OPS staging storefront with OAuth2 creds | Phase 1–5 | Christian |
-| Confirm R2 bucket shared with graphxcpi.com image upload | Phase 1 | Christian + Vidhi |
+| Confirm R2 bucket shared with graphxcpi.com image upload | Phase 1 (1.A fallback only) | Christian + Vidhi |
 
 ---
 
