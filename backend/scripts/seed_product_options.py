@@ -3,10 +3,8 @@ Seed 12 master option groups with realistic price modifiers for the
 Performance Tech Hoodie (OPS test product), then configure per-product
 prices via the existing save_product_config service.
 
-Run inside the api container:
-  docker compose run --rm --no-deps \
-    -e POSTGRES_URL='postgresql+asyncpg://vg_user:vg_pass@postgres:5432/vg_hub' \
-    api python scripts/seed_product_options.py
+Run inside the api container (POSTGRES_URL is read from .env):
+  docker compose run --rm --no-deps api python scripts/seed_product_options.py
 """
 import asyncio
 from decimal import Decimal

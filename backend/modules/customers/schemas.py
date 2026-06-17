@@ -30,5 +30,6 @@ class CustomerRead(BaseModel):
     # being uncategorized (which OPS admin hides from default views).
     default_ops_category_id: int | None = None
     ops_associated_category_ids: str | None = None
+    ops_predefined_product_type: int | None = None
 
     model_config = ConfigDict(from_attributes=True)

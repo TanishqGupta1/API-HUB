@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -65,6 +66,7 @@ from modules.markup.models import MarkupRule
 from modules.push_mappings.models import PushMapping, PushMappingOption
 from modules.suppliers.models import Supplier
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Option strategy — spec §"PC61 outbound mutation sequence" / Preflight gates
@@ -1223,9 +1225,7 @@ def _synthesize_payload(
     # check OPS gallery results before enabling in production.
     # Placed before stock so inventory stays the final step (Rev 1 contract).
     # Best-effort/warn-only in the gateway.
-    import os as _os
-
-    if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") == "1":
+    if os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") == "1":
         gallery_step = _build_setProductsImageGallery_step(next_step, ctx, products_id_step=1)
         if gallery_step is not None:
             plan.append(gallery_step)
@@ -1234,7 +1234,7 @@ def _synthesize_payload(
     # Final N steps: updateProductStock × N (action=Add, with stock_id
     # resolved by gateway read-back — see _build_updateProductStock_step).
     # Deferred by default: opt in with OPS_PUSH_INCLUDE_STOCK=1.
-    if _os.getenv("OPS_PUSH_INCLUDE_STOCK", "0") == "1":
+    if os.getenv("OPS_PUSH_INCLUDE_STOCK", "0") == "1":
         if use_default_pricing:
             # Single stock step for the Default size; aggregate inventory across variants.
             # product_sku targeting is best-effort; see docstring on _build_updateProductStock_step.

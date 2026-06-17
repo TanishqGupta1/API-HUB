@@ -115,6 +115,7 @@ async def update_customer(
     for field in (
         "name", "ops_base_url", "ops_token_url", "ops_client_id",
         "is_active", "default_ops_category_id", "ops_associated_category_ids",
+        "ops_predefined_product_type",
     ):
         if field in body:
             setattr(customer, field, body[field])

@@ -407,7 +407,7 @@ class TestMutationPlanOrder:
         assert payload.plan[-1].mutation == "updateProductStock"
 
     def test_inventory_action_is_set(self, monkeypatch):
-        # action=SET writes an absolute quantity (valid enum: CREDIT/DEBIT/SET).
+        # action=Reset writes an absolute quantity to the stock entry (OPS enum value).
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
