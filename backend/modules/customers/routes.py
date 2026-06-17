@@ -13,6 +13,9 @@ from modules.auth.dependencies import CurrentUser, VGAdmin, require_customer_acc
 from modules.markup.models import MarkupRule
 from modules.push_log.models import ProductPushLog
 
+from modules.ops_client.client import OpsAuth, OpsGraphQLClient
+from modules.ops_client.mutations import get_product_category
+
 from .models import Customer
 from .schemas import CustomerCreate, CustomerRead
 
@@ -179,3 +182,83 @@ async def test_customer(customer_id: UUID, _: VGAdmin, db: AsyncSession = Depend
             "token_endpoint": customer.ops_token_url,
             "error_code": "TOKEN_REQUEST_FAILED",
         }
+
+
+# V1G-01 — OPS Storefront Config
+#
+# Backend half of the storefront-config page. Replaces the operator's manual
+# "log into OPS admin, copy the category id, paste it back here" loop with a
+# real dropdown populated from OPS via the productCategory query added in
+# V1C-02. Closes the most common category_resolvable preflight blocker.
+
+@router.get("/{customer_id}/ops-categories")
+async def list_ops_categories(
+    customer_id: UUID,
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+    limit: int = 200,
+):
+    """Fetch the OPS category list for this customer's storefront.
+
+    Returns a flattened, UI-friendly shape — id + name + parent_id + status —
+    so the frontend can render a dropdown without further reshaping. Failures
+    (missing creds, OPS unreachable) surface as a {"ok": false, error_code, ...}
+    envelope so the page can render an inline error instead of a thrown toast.
+    """
+    customer = (
+        await db.execute(select(Customer).where(Customer.id == customer_id))
+    ).scalar_one_or_none()
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+
+    secret = (customer.ops_auth_config or {}).get("client_secret", "")
+    if not (customer.ops_base_url and customer.ops_token_url and customer.ops_client_id and secret):
+        return {
+            "ok": False,
+            "error_code": "OPS_CREDS_MISSING",
+            "message": "Customer is missing one or more OPS credential fields.",
+            "categories": [],
+        }
+
+    auth = OpsAuth(
+        base_url=customer.ops_base_url,
+        token_url=customer.ops_token_url,
+        client_id=customer.ops_client_id,
+        client_secret=secret,
+    )
+    try:
+        async with OpsGraphQLClient(auth) as ops:
+            res = await get_product_category(client=ops, limit=limit, offset=0)
+    except Exception as exc:  # noqa: BLE001 — render error inline rather than 500
+        logger.warning("ops-categories: connection failed customer=%s: %s", customer_id, exc)
+        return {
+            "ok": False,
+            "error_code": "OPS_UNREACHABLE",
+            "message": f"Could not connect to OPS: {exc}",
+            "categories": [],
+        }
+
+    if not res.ok:
+        return {
+            "ok": False,
+            "error_code": res.ops_error_code or "OPS_ERROR",
+            "message": res.ops_error_message or "OPS rejected the category query.",
+            "categories": [],
+        }
+
+    rows = (res.data or {}).get("productCategory") or []
+    return {
+        "ok": True,
+        "total": (res.data or {}).get("totalProductCategorySize") or len(rows),
+        "categories": [
+            {
+                "id": r.get("category_id"),
+                "name": r.get("category_name") or "",
+                "parent_id": r.get("parent_id"),
+                "status": r.get("status"),
+                "internal_name": r.get("category_internal_name") or "",
+            }
+            for r in rows
+            if r.get("category_id") is not None
+        ],
+    }
