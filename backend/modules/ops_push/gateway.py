@@ -366,6 +366,7 @@ _MUTATION_DISPATCH: dict[str, tuple[str, str]] = {
     "set_additional_option_attributes": (_m._SET_ADDITIONAL_OPTION_ATTRIBUTES, "setAdditionalOptionAttributes"),
     "set_products_attribute_price":    (_m._SET_PRODUCTS_ATTRIBUTE_PRICE,    "setProductsAttributePrice"),
     "set_products_image_gallery":      (_m._SET_PRODUCTS_IMAGE_GALLERY,      "setProductsImageGallery"),
+    "set_product_sku":                 (_m._SET_PRODUCT_SKU,                 "setProductSku"),
     "update_product_stock":            (_m._UPDATE_PRODUCT_STOCK,            "updateProductStock"),
 }
 

@@ -325,6 +325,109 @@ async def get_product_by_sku(
     return OpsResult(ok=True, data={})
 
 
+# ── set_product_sku ──────────────────────────────────────────────────────────
+#
+# Registers per-size (size_wise) or per-size×option (size_option_wise) variant
+# SKUs in OPS. Must be called AFTER setProductSize and BEFORE updateProductStock.
+# Inputs come from getProductSkuMatrix — pass the size_id / attribute_ids from
+# the matrix so OPS recognises each combo as stock-eligible.
+#
+# Contract: batch array inputs:[ProductSkuInput!]!
+# sku_type MUST match enable_stock_management on the parent product:
+#   enable_stock_management=1 ↔ sku_type="size_wise"
+#   enable_stock_management=2 ↔ sku_type="size_option_wise"
+
+_SET_PRODUCT_SKU = """
+mutation SetProductSku($inputs: [ProductSkuInput!]!) {
+  setProductSku(inputs: $inputs) {
+    index
+    result
+    message
+    id
+  }
+}
+""".strip()
+
+
+async def set_product_sku(
+    *,
+    client: OpsGraphQLClient,
+    inputs: list[dict],
+) -> OpsResult:
+    """Register variant SKUs in OPS (batch). Returns OpsResult with raw list.
+
+    Each element in `inputs` must include at minimum:
+      products_id, sku_type, size_id (and for size_option_wise: prod_add_opt_ids,
+      attribute_ids). Obtain size_id + attribute_ids from get_product_sku_matrix.
+    """
+    result = await client.execute(_SET_PRODUCT_SKU, variables={"inputs": inputs})
+    if not result.ok:
+        return result
+    rows = (result.data or {}).get("setProductSku") or []
+    rejected = [r for r in rows if r.get("result") is False or str(r.get("result", "")).lower() == "false"]
+    if rejected:
+        msgs = "; ".join(r.get("message") or "rejected" for r in rejected)
+        return OpsResult(
+            ok=False,
+            ops_error_code="OPS_REJECTED",
+            ops_error_message=msgs[:400],
+            raw=result.raw,
+        )
+    return OpsResult(ok=True, data={"setProductSku": rows}, raw=result.raw)
+
+
+# ── get_product_sku_matrix ────────────────────────────────────────────────────
+#
+# Returns the valid size / size×option combinations for a product. Use this
+# BEFORE setProductSku to get the size_id / attribute_ids pairs that OPS will
+# accept. Without this step, setProductSku calls land on invalid combos and
+# updateProductStock later fails with "Invalid Product SKU".
+#
+# prod_add_opt_ids: omit (or pass None) for size-wise matrix (one row per size);
+#                  pass comma-separated option ids for size×option matrix.
+
+_GET_PRODUCT_SKU_MATRIX = """
+query GetProductSkuMatrix($products_id: Int!, $prod_add_opt_ids: String) {
+  getProductSkuMatrix(products_id: $products_id, prod_add_opt_ids: $prod_add_opt_ids) {
+    matrix {
+      size_id
+      prod_add_opt_ids
+      attribute_ids
+    }
+    totalRecords
+  }
+}
+""".strip()
+
+
+async def get_product_sku_matrix(
+    *,
+    client: OpsGraphQLClient,
+    products_id: int,
+    prod_add_opt_ids: str | None = None,
+) -> OpsResult:
+    """Fetch the valid size / size×option combos for a product.
+
+    Returns OpsResult.data = {"matrix": [...], "totalRecords": N} on success.
+    Pass prod_add_opt_ids (comma-separated) only when sku_type is size_option_wise.
+    """
+    variables: dict = {"products_id": products_id}
+    if prod_add_opt_ids:
+        variables["prod_add_opt_ids"] = prod_add_opt_ids
+    result = await client.execute(_GET_PRODUCT_SKU_MATRIX, variables=variables)
+    if not result.ok:
+        return result
+    payload = (result.data or {}).get("getProductSkuMatrix") or {}
+    return OpsResult(
+        ok=True,
+        data={
+            "matrix": payload.get("matrix") or [],
+            "totalRecords": payload.get("totalRecords") or 0,
+        },
+        raw=result.raw,
+    )
+
+
 # ── get_product_stocks (Phase 6 — stock_id read-back) ───────────────────────
 #
 # OPS's updateProductStock requires either stock_id or product_sku to identify

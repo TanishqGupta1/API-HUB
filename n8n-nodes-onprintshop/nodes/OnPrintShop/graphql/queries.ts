@@ -51,3 +51,16 @@ export const getProductAdditionalOptionsQuery = `
     }
   }
 `;
+
+export const getProductSkuMatrixQuery = `
+  query getProductSkuMatrix($products_id: Int!, $prod_add_opt_ids: String) {
+    getProductSkuMatrix(products_id: $products_id, prod_add_opt_ids: $prod_add_opt_ids) {
+      matrix {
+        size_id
+        prod_add_opt_ids
+        attribute_ids
+      }
+      totalRecords
+    }
+  }
+`;

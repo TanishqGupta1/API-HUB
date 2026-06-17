@@ -1,27 +1,29 @@
 export const setProductMutation = `
-  mutation setProduct($input: ProductInput!) {
-    setProduct(input: $input) {
+  mutation setProduct($inputs: [ProductInput!]!) {
+    setProduct(inputs: $inputs) {
+      result
+      message
       id
-      title
-      status
     }
   }
 `;
 
 export const setProductPriceMutation = `
-  mutation setProductPrice($input: ProductPriceInput!) {
-    setProductPrice(input: $input) {
-      status
+  mutation setProductPrice($inputs: [ProductPriceInput!]!) {
+    setProductPrice(inputs: $inputs) {
+      result
       message
+      id
     }
   }
 `;
 
 export const setProductSizeMutation = `
-  mutation setProductSize($input: ProductSizeInput!) {
-    setProductSize(input: $input) {
-      status
+  mutation setProductSize($inputs: [ProductSizeInput!]!) {
+    setProductSize(inputs: $inputs) {
+      result
       message
+      id
     }
   }
 `;
@@ -36,10 +38,11 @@ export const setProductPagesMutation = `
 `;
 
 export const setProductCategoryMutation = `
-  mutation setProductCategory($input: ProductCategoryInput!) {
-    setProductCategory(input: $input) {
-      status
+  mutation setProductCategory($inputs: [ProductCategoryInput!]!) {
+    setProductCategory(inputs: $inputs) {
+      result
       message
+      id
     }
   }
 `;
@@ -54,10 +57,43 @@ export const setProductDesignMutation = `
 `;
 
 export const setAssignOptionsMutation = `
-  mutation setAssignOptions($input: AssignOptionsInput!) {
-    setAssignOptions(input: $input) {
-      status
+  mutation setAssignOptions($inputs: [AssignOptionsInput!]!) {
+    setAssignOptions(inputs: $inputs) {
+      result
       message
+      id
+    }
+  }
+`;
+
+export const setProductSkuMutation = `
+  mutation setProductSku($inputs: [ProductSkuInput!]!) {
+    setProductSku(inputs: $inputs) {
+      index
+      result
+      message
+      id
+    }
+  }
+`;
+
+export const updateProductStockMutation = `
+  mutation updateProductStock(
+    $stock_id: Int
+    $product_sku: String
+    $action: UpdateProductStockActionEnum!
+    $input: UpdateProductStockInput!
+  ) {
+    updateProductStock(
+      stock_id: $stock_id
+      product_sku: $product_sku
+      action: $action
+      input: $input
+    ) {
+      result
+      message
+      id
+      stock_quantity
     }
   }
 `;
