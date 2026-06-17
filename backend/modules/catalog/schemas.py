@@ -336,6 +336,30 @@ class VariantPreview(BaseModel):
     inventory: Optional[int]
 
 
+class PreflightCheckPreview(BaseModel):
+    """One preflight check's result, flattened for the preview page."""
+    name: str
+    ok: bool
+    detail: str
+    field: Optional[str] = None
+    suggestion: Optional[str] = None
+    warn: bool = False
+
+
+class PushReadiness(BaseModel):
+    """Customer-scoped preflight summary surfaced on the preview page.
+
+    Populated only when /preview is called with a customer_id. Lets the
+    operator see push-blocking config gaps (missing markup rule, OPS creds,
+    push mappings, category) BEFORE clicking Push and getting a 422.
+    """
+    customer_id: UUID
+    ok: bool
+    blockers: list[str]
+    warnings: list[PreflightCheckPreview]
+    checks: list[PreflightCheckPreview]
+
+
 class ProductPreview(BaseModel):
     id: UUID
     title: str
@@ -345,3 +369,4 @@ class ProductPreview(BaseModel):
     images: list[ProductImageRead]
     variants: list[VariantPreview]
     missing_fields: list[str]
+    push_readiness: Optional[PushReadiness] = None

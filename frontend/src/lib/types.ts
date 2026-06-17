@@ -173,6 +173,23 @@ export interface VariantPreview {
   inventory: number | null;
 }
 
+export interface PreflightCheckPreview {
+  name: string;
+  ok: boolean;
+  detail: string;
+  field: string | null;
+  suggestion: string | null;
+  warn: boolean;
+}
+
+export interface PushReadiness {
+  customer_id: string;
+  ok: boolean;
+  blockers: string[];
+  warnings: PreflightCheckPreview[];
+  checks: PreflightCheckPreview[];
+}
+
 export interface ProductPreview {
   id: string;
   title: string;
@@ -182,6 +199,7 @@ export interface ProductPreview {
   images: ProductImage[];
   variants: VariantPreview[];
   missing_fields: string[];
+  push_readiness: PushReadiness | null;
 }
 
 export interface ProductPushStatus {
