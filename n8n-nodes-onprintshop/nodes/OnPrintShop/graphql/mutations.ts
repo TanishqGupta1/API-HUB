@@ -66,6 +66,58 @@ export const setAssignOptionsMutation = `
   }
 `;
 
+export const setAdditionalOptionMutation = `
+  mutation setAdditionalOption($inputs: [AdditionalOptionInput!]!) {
+    setAdditionalOption(inputs: $inputs) {
+      index
+      result
+      message
+      id
+    }
+  }
+`;
+
+export const setAdditionalOptionAttributesMutation = `
+  mutation setAdditionalOptionAttributes($inputs: [AdditionalOptionAttributesInput!]!) {
+    setAdditionalOptionAttributes(inputs: $inputs) {
+      index
+      result
+      message
+      id
+    }
+  }
+`;
+
+export const setProductsAttributePriceMutation = `
+  mutation setProductsAttributePrice($inputs: [ProductsAttributePriceInput!]!) {
+    setProductsAttributePrice(inputs: $inputs) {
+      index
+      result
+      message
+      id
+    }
+  }
+`;
+
+export const setProductsImageGalleryMutation = `
+  mutation setProductsImageGallery(
+    $products_id: Int!
+    $optimizeimg: Int
+    $input: ProductsImageGalleryBulkInput!
+  ) {
+    setProductsImageGallery(
+      products_id: $products_id
+      optimizeimg: $optimizeimg
+      input: $input
+    ) {
+      index
+      result
+      message
+      id
+    }
+  }
+`;
+
 export const setProductSkuMutation = `
   mutation setProductSku($inputs: [ProductSkuInput!]!) {
     setProductSku(inputs: $inputs) {

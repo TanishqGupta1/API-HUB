@@ -428,6 +428,165 @@ async def get_product_sku_matrix(
     )
 
 
+# ── products_details (dedup + post-push verify) ─────────────────────────────
+#
+# The dedup replacement called out in the apparel-push plan: filters by
+# products_id and returns full product details including main_sku / external_ref
+# (for dedup matching) and the nested product_size / product_additional_options
+# arrays (for post-push verify).
+#
+# Why not just use `products`?
+#   `products` returns product_id + main_sku + external_ref only — fine for
+#   "does this exist?" but no shape info for verify. `productsDetails` is the
+#   richer call when the gateway wants to confirm OPS actually persisted the
+#   sizes/options it just sent.
+
+_PRODUCTS_DETAILS = """
+query ProductsDetails(
+  $products_id: Int
+  $limit: Int
+  $offset: Int
+  $status: Int
+  $all_store: Int
+  $external_catalogue: Int
+) {
+  productsDetails(
+    products_id: $products_id
+    limit: $limit
+    offset: $offset
+    status: $status
+    all_store: $all_store
+    external_catalogue: $external_catalogue
+  ) {
+    products {
+      product_id
+      product_name
+      main_sku
+      external_ref
+      status
+      default_category_id
+      product_type
+      price_defining_method
+      product_size {
+        size_id
+        size_title
+        size_width
+        size_height
+        default_size
+      }
+      product_additional_options {
+        prod_add_opt_id
+        title
+        options_type
+        option_key
+        master_option_id
+      }
+    }
+    totalProducts
+    currentCount
+  }
+}
+""".strip()
+
+
+async def get_products_details(
+    *,
+    client: OpsGraphQLClient,
+    products_id: int | None = None,
+    limit: int = 10,
+    offset: int = 0,
+    status: int | None = None,
+    all_store: int | None = None,
+    external_catalogue: int | None = None,
+) -> OpsResult:
+    """Fetch full product details from OPS.
+
+    Returns OpsResult.data = {"products": [...], "totalProducts": N, "currentCount": M}.
+    Only the filters explicitly passed are forwarded — passing products_id=0
+    would filter for product 0, not "no filter."
+    """
+    variables: dict = {"limit": limit, "offset": offset}
+    if products_id is not None:
+        variables["products_id"] = products_id
+    if status is not None:
+        variables["status"] = status
+    if all_store is not None:
+        variables["all_store"] = all_store
+    if external_catalogue is not None:
+        variables["external_catalogue"] = external_catalogue
+    result = await client.execute(_PRODUCTS_DETAILS, variables=variables)
+    if not result.ok:
+        return result
+    payload = (result.data or {}).get("productsDetails") or {}
+    return OpsResult(
+        ok=True,
+        data={
+            "products": payload.get("products") or [],
+            "totalProducts": payload.get("totalProducts") or 0,
+            "currentCount": payload.get("currentCount") or 0,
+        },
+        raw=result.raw,
+    )
+
+
+# ── product_category (list / lookup OPS categories) ─────────────────────────
+#
+# Read-side companion to set_product_category. Operators may need to discover
+# existing OPS category ids before mapping a customer/product to them — the
+# category_resolvable preflight check currently fails closed when no mapping
+# exists, and this query is how the operator finds the right id without
+# clicking through the OPS admin UI.
+
+_PRODUCT_CATEGORY = """
+query ProductCategory($category_id: Int, $limit: Int, $offset: Int) {
+  productCategory(category_id: $category_id, limit: $limit, offset: $offset) {
+    productCategory {
+      category_id
+      sort_order
+      status
+      parent_id
+      category_name
+      category_url
+      category_internal_name
+      external_ref
+    }
+    totalProductCategorySize
+    currentCount
+  }
+}
+""".strip()
+
+
+async def get_product_category(
+    *,
+    client: OpsGraphQLClient,
+    category_id: int | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> OpsResult:
+    """Fetch OPS product categories.
+
+    Returns OpsResult.data = {"productCategory": [...], "totalProductCategorySize": N}.
+    Pass category_id to look up one category; omit to list.
+    """
+    variables: dict = {"limit": limit, "offset": offset}
+    if category_id is not None:
+        variables["category_id"] = category_id
+    result = await client.execute(_PRODUCT_CATEGORY, variables=variables)
+    if not result.ok:
+        return result
+    payload = (result.data or {}).get("productCategory") or {}
+    return OpsResult(
+        ok=True,
+        data={
+            "productCategory": payload.get("productCategory") or [],
+            "totalProductCategorySize": payload.get("totalProductCategorySize") or 0,
+            "currentCount": payload.get("currentCount") or 0,
+        },
+        raw=result.raw,
+    )
+
+
 # ── get_product_stocks (Phase 6 — stock_id read-back) ───────────────────────
 #
 # OPS's updateProductStock requires either stock_id or product_sku to identify
