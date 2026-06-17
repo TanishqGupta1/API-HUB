@@ -2,6 +2,15 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+# Configure root logging so application log.warning/error/info actually surface
+# in stdout. Without this the app has no handler on the root logger and Python's
+# lastResort drops everything below the default level — background-task warnings
+# (e.g. SanMar SOAP faults during category import) were silently swallowed.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler

@@ -926,6 +926,7 @@ class TestPC61Smoke:
         assert mutations.count("setAdditionalOption") == 2          # Color + Size groups
         assert mutations.count("setAdditionalOptionAttributes") == 7 + 8   # 7 colors + 8 sizes
         assert mutations.count("setProductsAttributePrice") == 8    # per-size pricing
+        assert mutations.count("setProductSku") == 0                # gated by OPS_PUSH_INCLUDE_SKU=1
         assert mutations.count("setProductsImageGallery") == 1
         assert mutations.count("updateProductStock") == 1           # collapsed
         assert "setAssignOptions" not in mutations

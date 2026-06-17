@@ -856,6 +856,46 @@ def _build_setAdditionalOptionAttributes_step(
     )
 
 
+def _build_setProductSku_step(
+    step_num: int,
+    size_step: int,
+    variant_sku: str,
+    *,
+    option_step: Optional[int] = None,
+    attribute_step: Optional[int] = None,
+) -> OPSMutationStep:
+    """Assign a per-variant SKU to the OPS product (setProductSku).
+
+    ``size_wise`` when the variant has no option-attribute mapping (every
+    current SanMar product — colors aren't modeled as OPS options yet, each
+    variant is a size). ``size_option_wise`` when the variant maps to a single
+    local option-attribute, in which case prod_add_opt_ids / attribute_ids are
+    placeholders resolved to the OPS ids at execute time. setProductSku declares
+    those two as String!, so the gateway stringifies the resolved ints.
+    """
+    inp: dict[str, Any] = {
+        "products_id": _placeholder(1, "products_id"),
+        "size_id": _placeholder(size_step, "size_id"),
+        "sku": variant_sku,
+        "delete": 0,
+    }
+    requires = [1, size_step]
+    if option_step is not None and attribute_step is not None:
+        inp["sku_type"] = "size_option_wise"
+        inp["prod_add_opt_ids"] = _placeholder(option_step, "prod_add_opt_id")
+        inp["attribute_ids"] = _placeholder(attribute_step, "attribute_id")
+        requires += [option_step, attribute_step]
+    else:
+        inp["sku_type"] = "size_wise"
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setProductSku",
+        source_key=f"sku:{variant_sku}",
+        variables={"inputs": [inp]},
+        requires_response_from=requires,
+    )
+
+
 def _build_updateProductStock_step(
     step_num: int, size_step: int, variant_sku: str, inventory: int
 ) -> OPSMutationStep:
@@ -1118,6 +1158,10 @@ def _synthesize_payload(
     #      attribute_id — this replaces the invalid multiplier/multiplier_type
     #      approach (those fields do not exist on AdditionalOptionInput).
     #   Colors have no price variation; only Size gets attribute price steps.
+    #
+    # attr_step_by_value tracks size attribute steps by size label (lowercased)
+    # so the setProductSku stage below can reference (size_group, size_attr) ids
+    # via size_option_wise placeholders.
 
     colors, sizes = _extract_attribute_values(ordered_variants)
 
@@ -1144,17 +1188,23 @@ def _synthesize_payload(
         next_step += 1
 
     # Size group + size attributes + per-size price steps.
+    # Track attr_step_by_value[size_label] = (size_group_step, size_attr_step)
+    # for the setProductSku stage (size_option_wise: each variant SKU keyed by
+    # the placeholder size_id + the Size option-attribute it belongs to).
     size_group_step = next_step
     plan.append(_build_apparel_option_group_step(
         size_group_step, "size", "Size", sort_order=len(colors)
     ))
     next_step += 1
+    attr_step_by_value: dict[str, tuple[int, int]] = {}
     size_attr_steps: list[tuple[str, int]] = []  # (size_value, attr_step_num)
     for i, size_val in enumerate(sizes):
+        attr_step = next_step
         plan.append(_build_apparel_option_attribute_step(
-            next_step, size_group_step, "size", size_val, sort_order=i
+            attr_step, size_group_step, "size", size_val, sort_order=i
         ))
-        size_attr_steps.append((size_val, next_step))
+        size_attr_steps.append((size_val, attr_step))
+        attr_step_by_value[size_val.strip().lower()] = (size_group_step, attr_step)
         next_step += 1
 
     # setProductsAttributePrice per size — depends on each size attribute step.
@@ -1165,6 +1215,31 @@ def _synthesize_payload(
         ))
         next_step += 1
 
+    import os as _os
+
+    # Per-variant SKU assignment via setProductSku.
+    # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_SKU=1). Maps each
+    # variant's supplier SKU to its OPS size_id — and, when the variant's color
+    # matches a local option-attribute, to that (prod_add_opt_id, attribute_id)
+    # via size_option_wise. Placed after option/attribute steps so their ids are
+    # resolvable, and before stock so inventory stays the final stage.
+    if _os.getenv("OPS_PUSH_INCLUDE_SKU", "0") == "1":
+        for v, price in zip(ordered_variants, computed_prices):
+            # Phase 8 uses a single placeholder size row; all variants share
+            # placeholder_size_step. The size attribute step (size_option_wise)
+            # differentiates variants within the Size option group.
+            opt_attr = attr_step_by_value.get((price.size or "").strip().lower())
+            plan.append(
+                _build_setProductSku_step(
+                    next_step,
+                    placeholder_size_step,
+                    price.variant_sku,
+                    option_step=opt_attr[0] if opt_attr else None,
+                    attribute_step=opt_attr[1] if opt_attr else None,
+                )
+            )
+            next_step += 1
+
     # Image gallery — pushes product images via setProductsImageGallery.
     # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_IMAGES=1): OPS does NOT
     # fetch external URLs — it treats `products_large_image_name` as a filename
@@ -1174,8 +1249,6 @@ def _synthesize_payload(
     # rows. The step is wired and ready; enable it once images are uploaded into
     # OPS media and we pass bare OPS filenames. Placed before stock so inventory
     # stays the final step (Rev 1 contract). Best-effort/warn-only in the gateway.
-    import os as _os
-
     if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") == "1":
         gallery_step = _build_setProductsImageGallery_step(next_step, ctx, products_id_step=1)
         if gallery_step is not None:

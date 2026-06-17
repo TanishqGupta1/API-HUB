@@ -197,6 +197,7 @@ _MUTATION_DISPATCH: dict[str, tuple[str, str]] = {
     "set_additional_option_attributes": (_m._SET_ADDITIONAL_OPTION_ATTRIBUTES, "setAdditionalOptionAttributes"),
     "set_products_attribute_price":    (_m._SET_PRODUCTS_ATTRIBUTE_PRICE,    "setProductsAttributePrice"),
     "set_products_image_gallery":      (_m._SET_PRODUCTS_IMAGE_GALLERY,      "setProductsImageGallery"),
+    "set_product_sku":                 (_m._SET_PRODUCT_SKU,                 "setProductSku"),
     "update_product_stock":            (_m._UPDATE_PRODUCT_STOCK,            "updateProductStock"),
 }
 
@@ -777,6 +778,26 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                             await client.execute(query=_del_mut, variables={"pid": _pid, "inp": {"image_arr": _del_arr}})
                             logger.info("gallery pre-clear: deleted %d existing images for product %d", len(_existing), _pid)
 
+                # setProductSku: prod_add_opt_ids / attribute_ids are String! in
+                # the OPS schema, but placeholders resolve them to ints (the
+                # setAdditionalOption*/attribute ids). Coerce each input's
+                # option/attribute id fields back to comma-joined strings.
+                if mutation == "setProductSku":
+                    def _coerce_ids(item: dict) -> dict:
+                        out = dict(item)
+                        for f in ("prod_add_opt_ids", "attribute_ids"):
+                            v = out.get(f)
+                            if v is None:
+                                continue
+                            if isinstance(v, (list, tuple)):
+                                out[f] = ",".join(str(x) for x in v)
+                            else:
+                                out[f] = str(v)
+                        return out
+                    _inputs = variables.get("inputs")
+                    if isinstance(_inputs, list):
+                        variables = dict(variables, inputs=[_coerce_ids(i) for i in _inputs])
+
                 fingerprint = hashlib.sha256(
                     _json.dumps({"mutation": mutation, "variables": variables}, sort_keys=True).encode()
                 ).hexdigest()[:16]
@@ -1028,6 +1049,7 @@ _MUTATION_ID_ALIAS: dict[str, str] = {
     "setAdditionalOption":           "prod_add_opt_id",
     "setAdditionalOptionAttributes": "attribute_id",
     "setProductsAttributePrice":     "attribute_id",
+    "setProductSku":                 "sku_id",
     "updateProductStock":            "stock_id",
 }
 
@@ -1061,6 +1083,7 @@ def _mutation_to_method(mutation: str) -> str:
         "setAdditionalOptionAttributes": "set_additional_option_attributes",
         "setProductsAttributePrice":     "set_products_attribute_price",
         "setProductsImageGallery":       "set_products_image_gallery",
+        "setProductSku":                 "set_product_sku",
         "updateProductStock":            "update_product_stock",
     }
     return mapping.get(mutation, mutation)
