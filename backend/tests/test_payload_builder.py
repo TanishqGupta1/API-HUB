@@ -406,8 +406,9 @@ class TestMutationPlanOrder:
         # Same-price variants → 1 Default size → 1 stock step as last step
         assert payload.plan[-1].mutation == "updateProductStock"
 
-    def test_inventory_action_is_set(self, monkeypatch):
-        # action=Reset writes an absolute quantity to the stock entry (OPS enum value).
+    def test_inventory_action_is_reset(self, monkeypatch):
+        # OPS updateProductStock enum: Add / Remove / Reset.
+        # Reset writes an absolute quantity (not a delta), so action="Reset" is correct.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
