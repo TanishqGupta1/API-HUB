@@ -765,12 +765,15 @@ class TestPC61Smoke:
         )
         payload = _synthesize_payload(ctx)
 
-        # 1 setProduct + 56 sizes + 56 prices + 1 option + 1 image gallery
-        # + 56 stock = 171 steps (default _ctx supplies one front image)
-        assert len(payload.plan) == 1 + 56 + 56 + 1 + 1 + 56
+        # 1 setProduct + 56 sizes + 56 prices + 56 SKUs + 1 option
+        # + 1 image gallery + 56 stock = 227 steps (default _ctx supplies one
+        # front image). setProductSku is one per variant — it assigns each
+        # variant's SKU in OPS (size_wise / size_option_wise).
+        assert len(payload.plan) == 1 + 56 + 56 + 56 + 1 + 1 + 56
         mutations = [s.mutation for s in payload.plan]
         assert mutations.count("setProductSize") == 56
         assert mutations.count("setProductPrice") == 56
+        assert mutations.count("setProductSku") == 56
         assert mutations.count("setAssignOptions") == 1
         assert mutations.count("setProductsImageGallery") == 1
         assert mutations.count("updateProductStock") == 56

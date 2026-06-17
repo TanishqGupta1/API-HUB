@@ -681,6 +681,46 @@ def _build_setAdditionalOptionAttributes_step(
     )
 
 
+def _build_setProductSku_step(
+    step_num: int,
+    size_step: int,
+    variant_sku: str,
+    *,
+    option_step: Optional[int] = None,
+    attribute_step: Optional[int] = None,
+) -> OPSMutationStep:
+    """Assign a per-variant SKU to the OPS product (setProductSku).
+
+    ``size_wise`` when the variant has no option-attribute mapping (every
+    current SanMar product — colors aren't modeled as OPS options yet, each
+    variant is a size). ``size_option_wise`` when the variant maps to a single
+    local option-attribute, in which case prod_add_opt_ids / attribute_ids are
+    placeholders resolved to the OPS ids at execute time. setProductSku declares
+    those two as String!, so the gateway stringifies the resolved ints.
+    """
+    inp: dict[str, Any] = {
+        "products_id": _placeholder(1, "products_id"),
+        "size_id": _placeholder(size_step, "size_id"),
+        "sku": variant_sku,
+        "delete": 0,
+    }
+    requires = [1, size_step]
+    if option_step is not None and attribute_step is not None:
+        inp["sku_type"] = "size_option_wise"
+        inp["prod_add_opt_ids"] = _placeholder(option_step, "prod_add_opt_id")
+        inp["attribute_ids"] = _placeholder(attribute_step, "attribute_id")
+        requires += [option_step, attribute_step]
+    else:
+        inp["sku_type"] = "size_wise"
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setProductSku",
+        source_key=f"sku:{variant_sku}",
+        variables={"inputs": [inp]},
+        requires_response_from=requires,
+    )
+
+
 def _build_updateProductStock_step(
     step_num: int, size_step: int, variant_sku: str, inventory: int
 ) -> OPSMutationStep:
@@ -904,7 +944,11 @@ def _synthesize_payload(
         )
         next_step += 1
 
-    # Option steps — strategy-dependent
+    # Option steps — strategy-dependent. Record per-attribute step numbers in
+    # local-create mode so the optional setProductSku stage below can reference
+    # each (option, attribute) OPS id via placeholder.
+    # value (lowercased color/attr label) -> (option_step, attribute_step)
+    attr_step_by_value: dict[str, tuple[int, int]] = {}
     if option_strategy is OptionStrategy.MASTER_OPTION_ATTACH:
         for mapping in ctx.push_mapping_options:
             if mapping.target_ops_option_id is None:
@@ -918,12 +962,39 @@ def _synthesize_payload(
             plan.append(_build_setAdditionalOption_step(option_step, opt))
             next_step += 1
             for attr in opt.attributes:
+                attr_step = next_step
                 plan.append(
                     _build_setAdditionalOptionAttributes_step(
-                        next_step, option_step, opt.option_key, attr
+                        attr_step, option_step, opt.option_key, attr
                     )
                 )
+                for val in (attr.title, attr.attribute_key):
+                    if val:
+                        attr_step_by_value.setdefault(val.strip().lower(), (option_step, attr_step))
                 next_step += 1
+
+    import os as _os
+
+    # Per-variant SKU assignment via setProductSku.
+    # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_SKU=1). Maps each
+    # variant's supplier SKU to its OPS size_id — and, when the variant's color
+    # matches a local option-attribute, to that (prod_add_opt_id, attribute_id)
+    # via size_option_wise. Placed after option/attribute steps so their ids are
+    # resolvable, and before stock so inventory stays the final stage.
+    if _os.getenv("OPS_PUSH_INCLUDE_SKU", "0") == "1":
+        for v, price in zip(ordered_variants, computed_prices):
+            size_step = size_step_by_sku[price.variant_sku]
+            opt_attr = attr_step_by_value.get((v.color or "").strip().lower()) if v.color else None
+            plan.append(
+                _build_setProductSku_step(
+                    next_step,
+                    size_step,
+                    price.variant_sku,
+                    option_step=opt_attr[0] if opt_attr else None,
+                    attribute_step=opt_attr[1] if opt_attr else None,
+                )
+            )
+            next_step += 1
 
     # Image gallery — pushes product images via setProductsImageGallery.
     # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_IMAGES=1): OPS does NOT

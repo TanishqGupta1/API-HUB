@@ -172,6 +172,25 @@ mutation SetProductsAttributePrice($inputs: [ProductsAttributePriceInput!]!) {
 """.strip()
 
 
+# ── set_product_sku ──────────────────────────────────────────────────────────
+# Assigns a per-variant SKU to an OPS product. sku_type drives which dimension
+# the SKU keys on: "size_wise" (size_id only) for products with no options, or
+# "size_option_wise" (size_id + prod_add_opt_ids + attribute_ids) when the
+# variant maps to option-attributes. prod_add_opt_ids / attribute_ids are
+# comma-joined strings; delete=0 to upsert, 1 to remove.
+
+_SET_PRODUCT_SKU = """
+mutation SetProductSku($inputs: [ProductSkuInput!]!) {
+  setProductSku(inputs: $inputs) {
+    index
+    result
+    message
+    id
+  }
+}
+""".strip()
+
+
 # ── update_product_stock ─────────────────────────────────────────────────────
 
 _UPDATE_PRODUCT_STOCK = """
