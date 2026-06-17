@@ -1,6 +1,6 @@
 """Tests for the variant→option collapse pass."""
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from modules.catalog.models import (
     Product,
@@ -191,3 +191,47 @@ async def test_idempotent(db, seed_supplier):
     opts = await _options(db, p.id)
     assert len(await _attrs(db, opts["color"].id)) == 2
     assert len(await _attrs(db, opts["size"].id)) == 2
+
+
+@pytest.mark.asyncio
+async def test_prune_removed_color(db, seed_supplier):
+    """8 colors then 6 — the 2 dropped colors disappear."""
+    from modules.catalog.option_collapse import derive_options
+    eight = ["Red", "Navy", "Black", "White", "Royal", "Green", "Maroon", "Gold"]
+    p = await _mk_product(db, seed_supplier, [(c, "M") for c in eight])
+    await derive_options(db, p.id)
+    opts = await _options(db, p.id)
+    assert len(await _attrs(db, opts["color"].id)) == 8
+
+    # delete 2 colors' variants, re-derive
+    await db.execute(
+        delete(ProductVariant).where(
+            ProductVariant.product_id == p.id,
+            ProductVariant.color.in_(["Maroon", "Gold"]),
+        )
+    )
+    await db.commit()
+    await derive_options(db, p.id)
+    opts = await _options(db, p.id)
+    assert len(await _attrs(db, opts["color"].id)) == 6
+
+
+@pytest.mark.asyncio
+async def test_prune_axis_emptied(db, seed_supplier):
+    """Color option removed entirely when all color variants gone."""
+    from modules.catalog.option_collapse import derive_options
+    p = await _mk_product(db, seed_supplier, [("Red", "M"), ("Navy", "L")])
+    await derive_options(db, p.id)
+    assert "color" in await _options(db, p.id)
+
+    # null out all colors, re-derive → color option pruned, size stays
+    await db.execute(
+        ProductVariant.__table__.update()
+        .where(ProductVariant.product_id == p.id)
+        .values(color=None)
+    )
+    await db.commit()
+    await derive_options(db, p.id)
+    opts = await _options(db, p.id)
+    assert "color" not in opts
+    assert "size" in opts
