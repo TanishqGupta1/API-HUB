@@ -20,9 +20,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "customers",
-        sa.Column("default_ops_category_id", sa.Integer(), nullable=True),
+    # IF NOT EXISTS: on a fresh DB, Base.metadata.create_all has already
+    # created this column from the model before migrations replay.
+    op.execute(
+        "ALTER TABLE customers "
+        "ADD COLUMN IF NOT EXISTS default_ops_category_id INTEGER"
     )
 
 
