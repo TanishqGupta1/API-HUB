@@ -483,6 +483,14 @@ def _build_setProduct_step(
         "products_id": existing_ops_id if push_mode == "update" else 0,
         "products_title": title,
         "products_internal_title": ctx.product.supplier_sku,
+        # main_sku is OPS's product-level SKU (set via setProduct per OPS docs:
+        # "To set the main product SKU, use the setProduct mutation with the
+        # main_sku field"). This is the field getProductBySku matches on, so it
+        # MUST equal the supplier_sku — otherwise the gateway's pre-push dedup
+        # (_dedup_lookup_in_ops → getProductBySku) can never find a product we
+        # created, and a re-push without a local push_mapping creates a
+        # duplicate in OPS instead of replacing the existing product.
+        "main_sku": ctx.product.supplier_sku,
         "visible": 1,
         "product_description": ctx.product.description or "",
         # ── Required OPS ProductInput fields for all products ──────────
