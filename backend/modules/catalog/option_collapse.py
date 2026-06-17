@@ -141,3 +141,22 @@ async def derive_options(db: AsyncSession, product_id: UUID) -> CollapseResult:
         color_attrs=n_colors,
         size_attrs=n_sizes,
     )
+
+
+async def derive_options_bulk(
+    db: AsyncSession, supplier_id: Optional[UUID] = None
+) -> dict:
+    """Re-derive options for every product (optionally one supplier). Commits per
+    product so one bad product does not roll back the whole run."""
+    q = select(Product.id)
+    if supplier_id is not None:
+        q = q.where(Product.supplier_id == supplier_id)
+    ids = (await db.execute(q)).scalars().all()
+
+    totals = {"products": 0, "color_options": 0, "size_options": 0}
+    for pid in ids:
+        res = await derive_options(db, pid)
+        totals["products"] += 1
+        totals["color_options"] += res.colors
+        totals["size_options"] += res.sizes
+    return totals
