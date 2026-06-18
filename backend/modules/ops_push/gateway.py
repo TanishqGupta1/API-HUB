@@ -880,12 +880,11 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 )
 
             # ── Build mutation plan (Task 6: real builder with markup + RFC 8785) ──
-            # dry_run skips slow S3 image mirror/staging so the preview is fast
-            # and side-effect-free (otherwise a 20-image product takes ~17s and
-            # the synchronous dry-run request times out → "Failed to fetch").
+            # Phase 8 builder references image URLs directly (OPS fetches them
+            # server-side with optimizeimg=1) — no slow S3 staging step, so the
+            # dry-run preview is already fast and side-effect-free.
             payload = await build_push_payload(
                 db, push_log.customer_id, push_log.product_id,
-                dry_run=push_log.dry_run,
                 category_id_override=resolved_category_id,
             )
             plan = [step.model_dump(mode="json") for step in payload.plan]
