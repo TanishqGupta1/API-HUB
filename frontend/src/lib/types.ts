@@ -117,6 +117,7 @@ export interface ProductImage {
   image_type: string;
   color: string | null;
   sort_order: number;
+  ops_filename: string | null;
 }
 
 export interface ProductOptionAttribute {
@@ -266,6 +267,17 @@ export interface Customer {
   created_at: string;
   products_pushed: number;
   markup_rules_count: number;
+  // Per-customer fallback OPS category for product pushes. Used when a
+  // product has no per-product storefront-config category. Without this,
+  // products are created uncategorized and hidden from OPS admin's
+  // default browse view.
+  default_ops_category_id: number | null;
+  // Comma-separated OPS category IDs — products pushed for this customer
+  // appear under all these categories in addition to the default one.
+  ops_associated_category_ids: string | null;
+  // 0 = Print Products section, 1 = Ready to Buy. Controls predefined_product_type
+  // and product_type sent in setProduct during OPS push.
+  ops_predefined_product_type: number | null;
 }
 
 /* ─── Markup Rules ───────────────────────────────────────────────────────── */

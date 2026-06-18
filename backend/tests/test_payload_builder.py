@@ -846,9 +846,10 @@ class TestImagePolicy:
         payload = _synthesize_payload(ctx)
         assert not any(s.mutation == "setProductsImageGallery" for s in payload.plan)
 
-    def test_image_gallery_off_by_default(self):
+    def test_image_gallery_off_by_default(self, monkeypatch):
         # Default is opt-out: OPS doesn't fetch external URLs, so the step is
         # deferred until images are uploaded into OPS media (see payload_builder).
+        monkeypatch.delenv("OPS_PUSH_INCLUDE_IMAGES", raising=False)
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
             images=[_image("https://x/front.jpg", image_type="front")],

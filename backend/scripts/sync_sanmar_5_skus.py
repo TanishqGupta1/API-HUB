@@ -22,7 +22,7 @@ from modules.promostandards.sanmar_adapter import SanMarAdapter
 from modules.suppliers.models import Supplier
 
 
-SANMAR_SUPPLIER_ID = UUID("a73a8445-2f08-4293-9625-b3e480ddc1da")
+SANMAR_SUPPLIER_ID = UUID("0c5c0dfc-0513-48ba-a5ef-8008df4f39e2")
 SKUS = ["PC61", "L500", "ST350", "PC54", "PC78H"]
 
 
