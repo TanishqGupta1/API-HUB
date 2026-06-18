@@ -809,11 +809,11 @@ class TestSetProductVariables:
     def test_main_sku_is_supplier_sku(self):
         """setProduct.input.main_sku must equal supplier_sku.
 
-        main_sku is OPS's product-level SKU (set via setProduct per OPS docs)
-        and is the field getProductBySku matches on. If it's missing or wrong,
-        the gateway's pre-push dedup can't find a product we created, so a
-        re-push without a local push_mapping creates a duplicate in OPS instead
-        of replacing the existing product.
+        main_sku is OPS's product-level SKU (set via setProduct at size_id=0).
+        We pin it to supplier_sku so the product carries a stable,
+        supplier-traceable identity in OPS. (Dedup-by-main_sku is tracked
+        separately; getProductBySku is not a real OPS query — see
+        docs/ops/SOURCE.md.)
         """
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
