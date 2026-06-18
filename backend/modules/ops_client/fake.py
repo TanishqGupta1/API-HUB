@@ -71,6 +71,8 @@ class FakeOpsClient:
             return OpsResult(ok=True, data={"setAdditionalOptionAttributes": {"id": self._allocate_id()}})
         if name == "SetProductsAttributePrice":
             return OpsResult(ok=True, data={"setProductsAttributePrice": {"ok": True}})
+        if name == "SetProductSku":
+            return OpsResult(ok=True, data={"setProductSku": {"id": self._allocate_id(), "result": True}})
         if name == "SetProductsImageGallery":
             return OpsResult(ok=True, data={"setProductsImageGallery": {"result": True, "message": "dry-run"}})
         if name == "UpdateProductStock":
@@ -117,6 +119,9 @@ class FakeOpsClient:
         return {"id": self._allocate_id()}
 
     async def set_products_attribute_price(self, variables: dict) -> dict:
+        return {"id": self._allocate_id()}
+
+    async def set_product_sku(self, variables: dict) -> dict:
         return {"id": self._allocate_id()}
 
     async def set_products_image_gallery(self, variables: dict) -> dict:
