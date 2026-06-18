@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from database import get_db
 from modules.auth.dependencies import CurrentUser
 from modules.suppliers.models import Supplier
+from .option_collapse import derive_options, derive_options_bulk
 
 from modules.push_log.models import ProductPushLog
 from .models import Category, Product, ProductOption, ProductOptionAttribute, ProductVariant
@@ -498,3 +499,32 @@ async def bulk_save_options(
 
     await db.commit()
     return {"success": True}
+
+
+# ─── Variant → Option collapse routes ────────────────────────────────────────
+
+@router.post("/derive-options")
+async def derive_all_product_options(
+    _user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    supplier_id: Optional[UUID] = Query(default=None),
+):
+    """Backfill: (re)derive Color/Size options for all products (or one supplier)."""
+    return await derive_options_bulk(db, supplier_id)
+
+
+@router.post("/{product_id}/derive-options")
+async def derive_product_options(
+    product_id: UUID,
+    _user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """(Re)derive Color/Size options for one product from its variant matrix."""
+    res = await derive_options(db, product_id)
+    return {
+        "product_id": str(product_id),
+        "colors": res.colors,
+        "sizes": res.sizes,
+        "color_attrs": res.color_attrs,
+        "size_attrs": res.size_attrs,
+    }
