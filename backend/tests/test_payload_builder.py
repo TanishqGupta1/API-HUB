@@ -805,10 +805,10 @@ class TestSetProductVariables:
         """setProduct.input.main_sku must equal supplier_sku.
 
         main_sku is OPS's product-level SKU (set via setProduct per OPS docs)
-        and is the field getProductBySku matches on. If it's missing or wrong,
-        the gateway's pre-push dedup can't find a product we created, so a
-        re-push without a local push_mapping creates a duplicate in OPS instead
-        of replacing the existing product.
+        and is the field find_product_id_by_main_sku matches on. If it's missing
+        or wrong, the gateway's pre-push dedup can't find a product we created,
+        so a re-push without a local push_mapping creates a duplicate in OPS
+        instead of replacing the existing product.
         """
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],

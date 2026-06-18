@@ -58,13 +58,13 @@ async def _dedup_lookup_in_ops(
     Returns the OPS products_id when a match exists, else None.
     """
     try:
-        result = await _m.get_product_by_sku(client=client, products_sku=supplier_sku)
+        result = await _m.find_product_id_by_main_sku(client=client, main_sku=supplier_sku)
     except Exception:  # noqa: BLE001 — defensive
-        logger.exception("dedup: get_product_by_sku raised for sku=%s", supplier_sku)
+        logger.exception("dedup: find_product_id_by_main_sku raised for sku=%s", supplier_sku)
         return None
     if not result.ok:
         logger.warning(
-            "dedup: get_product_by_sku not OK for sku=%s: %s",
+            "dedup: find_product_id_by_main_sku not OK for sku=%s: %s",
             supplier_sku, result.ops_error_message,
         )
         return None
@@ -92,13 +92,13 @@ async def _verify_post_push(
     if _os.getenv("OPS_POST_PUSH_VERIFY", "0") != "1":
         return
     try:
-        result = await _m.get_product_by_sku(client=client, products_sku=supplier_sku)
+        result = await _m.find_product_id_by_main_sku(client=client, main_sku=supplier_sku)
     except Exception:  # noqa: BLE001
-        logger.exception("verify: get_product_by_sku raised for sku=%s", supplier_sku)
+        logger.exception("verify: find_product_id_by_main_sku raised for sku=%s", supplier_sku)
         return
     if not result.ok:
         logger.warning(
-            "verify: get_product_by_sku not OK after push sku=%s: %s",
+            "verify: find_product_id_by_main_sku not OK after push sku=%s: %s",
             supplier_sku, result.ops_error_message,
         )
         return
@@ -174,8 +174,8 @@ async def _resolve_stock_id_for_size(
     """
     if product_id is None:
         return None
-    # Dry-run path: FakeOpsClient.execute() returns a GetProductBySku stub,
-    # not a productStocks result — detect via the sentinel instead of duck-typing.
+    # Dry-run path: FakeOpsClient doesn't model productStocks rows — detect via
+    # the is_dry_run sentinel instead of duck-typing.
     if getattr(client, "is_dry_run", False):
         return 99000 + int(size_id)  # stable fake id, distinct per variant
     cache_key = product_id
@@ -325,7 +325,7 @@ class OpsClientAdapter:
 
     async def execute(self, query: str, *, variables: dict) -> OpsResult:
         """Raw GraphQL passthrough for read queries (dedup / post-push verify
-        call ``get_product_by_sku``, which calls ``client.execute``).
+        call ``find_product_id_by_main_sku``, which calls ``client.execute``).
 
         ``__getattr__`` only resolves the mutation method names, so without an
         explicit ``execute`` here every dedup/verify lookup raised
@@ -729,8 +729,8 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             # wrote to OPS but crashed before persisting the mapping —
             # without this guard, the retry creates a duplicate row in OPS.
             #
-            # Skipped for dry-run (FakeOpsClient.GetProductBySku returns the
-            # programmed dict so tests can still exercise the dedup path).
+            # Dry-run uses FakeOpsClient, whose `products` query returns the
+            # programmed catalog so tests can still exercise the dedup path.
             if customer is not None and push_log.supplier_sku:
                 existing_mapping = (await db.execute(
                     select(PushMapping).where(
@@ -970,8 +970,8 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     # in OPS from a prior partial push. Fall back to a SKU lookup.
                     if mutation == "setProduct" and not resp.get("products_id"):
                         raw_client = getattr(client, "_client", client)
-                        sku_result = await _m.get_product_by_sku(
-                            client=raw_client, products_sku=push_log.supplier_sku
+                        sku_result = await _m.find_product_id_by_main_sku(
+                            client=raw_client, main_sku=push_log.supplier_sku
                         )
                         if sku_result.ok and sku_result.data.get("products_id"):
                             resp = dict(resp, products_id=sku_result.data["products_id"])
