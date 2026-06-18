@@ -13,6 +13,7 @@ from modules.suppliers.models import Supplier
 
 from modules.push_log.models import ProductPushLog
 from .models import Category, Product, ProductOption, ProductOptionAttribute, ProductVariant
+from .exporter import build_supplier_product, push_products_to_graphx
 from .option_collapse import derive_options, derive_options_bulk
 from .schemas import (
     ProductListRead,
@@ -168,6 +169,43 @@ async def derive_product_options(
     }
 
 
+@router.post("/{product_id}/push-to-graphx")
+async def push_one_product_to_graphx(
+    product_id: UUID,
+    _user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    tenant_slug: str = Query(default="vg"),
+):
+    """Push a single product to graphx as IMPORTED_FROM_SUPPLIER."""
+    import os
+    import httpx
+    payload = await build_supplier_product(db, product_id)
+    if not payload["options"]:
+        raise HTTPException(400, "Product has no options — run derive-options first")
+    product = await db.get(Product, product_id)
+    supplier = await db.get(Supplier, product.supplier_id) if product else None
+
+    url = os.environ["GRAPHX_INGEST_URL"]
+    secret = os.environ["GRAPHX_INGEST_SECRET"]
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.post(
+            url,
+            headers={"x-ingest-secret": secret},
+            json={
+                "supplier_key": supplier.slug if supplier else "",
+                "tenant_slug": tenant_slug,
+                "products": [payload],
+            },
+        )
+        body = None
+        if r.headers.get("content-type", "").startswith("application/json"):
+            try:
+                body = r.json()
+            except Exception:
+                body = None
+    return {"status": r.status_code, "body": body}
+
+
 @router.post("/{product_id}/archive")
 async def archive_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
     prod = await db.get(Product, product_id)
@@ -303,6 +341,18 @@ async def export_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
             "price_max": max(prices) if prices else None,
         },
         "images": [{"id": str(img.id), "url": img.url, "image_type": img.image_type, "color": img.color, "sort_order": img.sort_order} for img in (product.images or [])],
+        "options": [
+            {
+                "option_key": o.option_key,
+                "title": o.title,
+                "options_type": o.options_type,
+                "attributes": [
+                    {"title": a.title, "attribute_key": a.attribute_key, "sort_order": a.sort_order}
+                    for a in sorted(o.attributes or [], key=lambda a: a.sort_order)
+                ],
+            }
+            for o in sorted(product.options or [], key=lambda o: o.sort_order)
+        ],
     }
 
 

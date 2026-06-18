@@ -111,3 +111,70 @@ async def test_push_products_to_graphx(db, seed_supplier, monkeypatch):
     assert body["supplier_key"] == seed_supplier.slug
     assert len(body["products"]) == 1
     assert body["products"][0]["supplier_sku"] == "WITH"
+
+
+class _FakePushResp:
+    status_code = 200
+    headers = {"content-type": "application/json"}
+    def json(self): return {"created": 1}
+
+
+class _FakePushClient:
+    captured: dict = {}
+    def __init__(self, *a, **kw): pass
+    async def __aenter__(self): return self
+    async def __aexit__(self, *a): return False
+    async def post(self, url, *, headers, json):
+        _FakePushClient.captured = {"url": url, "headers": headers, "json": json}
+        return _FakePushResp()
+
+
+@pytest.mark.asyncio
+async def test_route_push_single_product(client, db, seed_supplier, monkeypatch):
+    import httpx
+    from modules.catalog.option_collapse import derive_options
+
+    monkeypatch.setenv("GRAPHX_INGEST_URL", "http://graphx.test/api/ingest/supplier-products")
+    monkeypatch.setenv("GRAPHX_INGEST_SECRET", "s3cret")
+    monkeypatch.setattr(httpx, "AsyncClient", _FakePushClient)
+
+    p = await _mk_product_with_variants(db, seed_supplier, sku="ONE", name="One")
+    await derive_options(db, p.id)
+
+    r = await client.post(f"/api/products/{p.id}/push-to-graphx")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == 200
+
+
+@pytest.mark.asyncio
+async def test_route_push_by_supplier(client, db, seed_supplier, monkeypatch):
+    import httpx
+    from modules.catalog.option_collapse import derive_options
+
+    monkeypatch.setenv("GRAPHX_INGEST_URL", "http://graphx.test/api/ingest/supplier-products")
+    monkeypatch.setenv("GRAPHX_INGEST_SECRET", "s3cret")
+    monkeypatch.setattr(httpx, "AsyncClient", _FakePushClient)
+
+    p = await _mk_product_with_variants(db, seed_supplier, sku="SUP", name="Sup")
+    await derive_options(db, p.id)
+
+    r = await client.post(f"/api/suppliers/{seed_supplier.id}/push-to-graphx")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["sent"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_export_includes_options(client, db, seed_supplier):
+    """GET /export now returns options as well."""
+    from modules.catalog.option_collapse import derive_options
+    p = await _mk_product_with_variants(db, seed_supplier, sku="EXP", name="Exp")
+    await derive_options(db, p.id)
+
+    r = await client.get(f"/api/products/{p.id}/export")
+    assert r.status_code == 200
+    body = r.json()
+    assert "options" in body
+    keys = {o["option_key"] for o in body["options"]}
+    assert keys == {"color", "size"}
