@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import math
 import re
 from dataclasses import dataclass, field
@@ -46,8 +45,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-log = logging.getLogger(__name__)
 
 from modules.catalog.models import (
     Product,
@@ -440,23 +437,6 @@ def _request_fingerprint(variables: dict[str, Any]) -> str:
     return hashlib.sha256(canon.encode("utf-8")).hexdigest()[:16]
 
 
-def _select_primary_image(images: list) -> Optional[Any]:
-    """Pick the best single image for setProduct.imagename.
-
-    Preference order: image_type='primary' (the main product photo from
-    SanMar, typically a model or flat-lay shot) → first 'front' → first
-    available. Per-color swatch 'front' images are too small for a product
-    description thumbnail.
-    """
-    primary = [img for img in images if img.image_type == "primary"]
-    if primary:
-        return primary[0]
-    front = [img for img in images if (img.image_type or "front") == "front"]
-    if front:
-        return front[0]
-    return images[0] if images else None
-
-
 def _variant_sort_key(v: ProductVariant) -> tuple[int, str, str, str]:
     """Sort variants by `sort_order` ASC, then lex `(color, size, sku)`.
 
@@ -484,12 +464,7 @@ def _customer_prefix(customer: Customer, supplier: Supplier) -> str:
 
 
 def _build_setProduct_step(
-    ctx: _PushContext,
-    push_mode: str,
-    existing_ops_id: Optional[int],
-    primary_image_url: Optional[str],
-    primary_staged_filename: Optional[str] = None,
-    category_id_override: Optional[int] = None,
+    ctx: _PushContext, push_mode: str, existing_ops_id: Optional[int], primary_image_url: Optional[str]
 ) -> OPSMutationStep:
     """setProduct is always step 1 (no more separate setProductCategory).
 
@@ -519,19 +494,6 @@ def _build_setProduct_step(
         "visible": 1,
         "product_description": _desc,
         "long_description": _desc,
-        # ── SKU + external reference (OPS ProductInput, verified against
-        #    the client's live Postman collection, June 2026) ────────────
-        #   * main_sku — String. OPS stores this as the product's main SKU
-        #     (with size_id=0). This is the canonical SKU field; there is no
-        #     SKU field on ProductSizeInput. Empty string would clear it, so
-        #     we only send it when supplier_sku is set.
-        #   * external_ref — String (max 255). OPS's dedicated slot for a
-        #     third-party system's own id. We send the supplier SKU so OPS
-        #     rows carry a stable back-reference to our catalog, and
-        #     setProduct echoes it back in the response (index/result/
-        #     message/id/external_ref) for write-confirmation.
-        **({"main_sku": ctx.product.supplier_sku} if ctx.product.supplier_sku else {}),
-        **({"external_ref": ctx.product.supplier_sku} if ctx.product.supplier_sku else {}),
         # ── Required OPS ProductInput fields for all products ──────────
         # Phase 1 audit findings (June 2026):
         #   * predefined_product_type — silent reject when null
@@ -543,64 +505,37 @@ def _build_setProduct_step(
         #     to find variants; without it, all stock writes fail
         #   * product_type — working OPS products always have this set;
         #     null may hide the product from some admin UI filters
-        #   * product_service_type — client Postman (2026-06-15) marks this
-        #     Required with the note "Must be 1 always". Not sent before;
-        #     OPS likely defaulted it for products 552-556, but the schema
-        #     says required, so send the fixed value to be safe.
-        # product_type is a COMMA-SEPARATED list of OPS "design mode" codes:
-        #   1=Custom Design, 2=Upload Centre, 3=Browse Design, 8=Hire Designer,
-        #   15=Add to cart. A product whose list is "0"/contains only 15 shows
-        #   under OPS admin "Ready To Buy Products"; a product carrying design
-        #   modes (1/2/3) shows under "Print Products" and opens the design studio.
-        #   Verified live 2026-06-15 via inspect_ops_product309.py:
-        #     - print product 309 (Custom Pole Flag): product_type "3,1,2", predefined "0"
-        #     - our old SanMar push 596 (F236):        product_type "0",     predefined "1"  → Ready-to-Buy
-        #   Decorated apparel (SanMar) must be a print product, so we send the
-        #   design modes + predefined "0" to mirror the working print product.
-        #   NOTE: this is CLASSIFICATION only. A fully working design studio also
-        #   needs design pages (setProductPages) + a print area, and embroidery/
-        #   print decorations need setAdditionalOption — both tracked as follow-ups.
-        "predefined_product_type": "0",
+        "predefined_product_type": "1",
         "price_defining_method": "1",
         "measurement_unit_id": 1,
-        "enable_stock_management": "0",
-        "product_type": "1,2,3",
-        "product_service_type": "1",
+        "enable_stock_management": "1",
+        "product_type": "1",
     }
-    # Category resolution order:
-    #   1. category_id_override — the gateway's auto-category resolver created/
-    #      looked up the OPS category matching this product's category name.
-    #   2. per-product storefront config override.
-    #   3. per-customer default_ops_category_id.
-    # Without a category, OPS hides the product from the storefront, so we
-    # always want a resolved id (preflight's check_category_resolvable gates this).
-    _cat = category_id_override \
-        or (ctx.storefront_config.ops_category_id if ctx.storefront_config else None) \
+    # Category resolution: per-product storefront override wins; if absent,
+    # fall back to the per-customer default_ops_category_id (Phase 2 of the
+    # OPS push audit). Without a category, OPS hides the product from the
+    # admin's default browse view, so we want a sensible fallback.
+    _cat = (ctx.storefront_config.ops_category_id if ctx.storefront_config else None) \
         or getattr(ctx.customer, "default_ops_category_id", None)
     if _cat:
         try:
             inp["category_id"] = int(_cat)
         except (TypeError, ValueError):
             pass
-    if primary_staged_filename:
-        # Image pre-staged to OPS's product/ folder in the shared S3 bucket
-        # (ctmediaon_staging/images/product/) — send bare filename so OPS
-        # can prepend its CDN path without producing a double-URL.
+    if primary_image_url:
+        # OPS stores `imagename` as a relative filename and prepends its own
+        # CDN base path (e.g. ".../images/product/{filename}") at serve time.
+        # Sending a full URL like "https://cdnm.sanmar.com/.../PC61.jpg" causes
+        # OPS to double-prefix it into garbage. Strip to the filename only.
         #
-        # OPS has two image slots on the description tab:
-        #   - `imagename`          → "Small Image" (PDP thumbnail)
-        #   - `product_desc_image` → "Large Image" (PDP zoom / hero)
-        # Both point at the same staged file — our mirrored WebPs are
-        # already sized for both uses (max 1200px).
-        inp["imagename"] = primary_staged_filename
-        inp["product_desc_image"] = primary_staged_filename
-    elif primary_image_url:
-        # Fallback (no staging): strip to bare filename. OPS still prepends
-        # its CDN path, so the file must already exist there for the image to
-        # render — this path produces a broken link until the file is staged.
-        bare = primary_image_url.rsplit("/", 1)[-1]
-        inp["imagename"] = bare
-        inp["product_desc_image"] = bare
+        # NOTE: this only fixes the URL format. The image file must still
+        # exist on OPS's CDN — currently it doesn't, because we have no
+        # upload pipeline to push the bytes (Phase 3 partial fix). Customers
+        # see a clean broken-image link instead of a malformed URL. Full fix
+        # requires either: (a) Christian opens OPS's CDN to fetch from
+        # SanMar's IP, or (b) we add a media upload step via OPS's REST
+        # upload endpoint (no GraphQL mutation exists for binary upload).
+        inp["imagename"] = primary_image_url.rsplit("/", 1)[-1]
     variables: dict[str, Any] = {"inputs": [inp]}
 
     return OPSMutationStep(
@@ -621,10 +556,6 @@ def _build_setProductSize_placeholder_step(step_num: int) -> OPSMutationStep:
     row even when the customer-facing variant selection comes from the
     Additional Options panel — without it OPS hides the product from
     the storefront's "Add to cart" flow.
-
-    Note: the product SKU is NOT set here. OPS stores it as `main_sku` on
-    ProductInput (size_id=0) via setProduct — ProductSizeInput has no SKU
-    field. See _build_setProduct_step.
     """
     return OPSMutationStep(
         step=step_num,
@@ -634,7 +565,7 @@ def _build_setProductSize_placeholder_step(step_num: int) -> OPSMutationStep:
             "inputs": [{
                 "products_id": _placeholder(1, "products_id"),
                 "size_title": "Default",
-                "visible": "1",  # must be visible — OPS hides the entire purchase panel if no visible size exists
+                "visible": "1",  # OPS ProductSizeInput.visible is String
             }]
         },
         requires_response_from=[1],
@@ -674,76 +605,120 @@ def _extract_attribute_values(
     return colors, sizes
 
 
-def _build_apparel_grouped_option_step(
-    step_num: int, title: str, sort_order: int, required: str = "1"
+def _build_apparel_option_group_step(
+    step_num: int, kind: str, title: str, sort_order: int
 ) -> OPSMutationStep:
-    """ONE grouped Additional Option (a 'combo' dropdown) for an apparel
-    dimension — "Color" or "Size". Its individual values are attached as
-    attributes via _build_apparel_option_attributes_step.
+    """Create one parent setAdditionalOption group for a Color or Size dimension.
 
-    options_type="combo" renders as a SINGLE dropdown (verified live against
-    reference product 309's Graphic/Pole/Finishing options), whereas the old
-    per-value "textmp" rows rendered every colour/size as its own quantity box
-    (the bug this replaces — see product 600's pre-fix storefront).
+    Each apparel dimension (Color, Size) becomes a single top-level option group.
+    Actual values (Red, S, 2XL …) are added as setAdditionalOptionAttributes
+    children so that setProductsAttributePrice can attach per-attribute pricing.
+
+    Fields verified against the live OPS 81-op collection (2026-06-17):
+      - `multiplier` / `multiplier_type` do NOT exist on AdditionalOptionInput.
+        Per-size pricing is handled exclusively via setProductsAttributePrice.
+      - `apply_multiplication="1"` enables the OPS multiplication path for this
+        option group; the actual per-attribute price is set downstream.
     """
-    safe_key = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_") or "opt"
+    key = re.sub(r"[^a-z0-9]+", "_", kind.lower()).strip("_") or "opt"
     return OPSMutationStep(
         step=step_num,
         mutation="setAdditionalOption",
-        source_key=f"apparel_option:{safe_key}",
+        source_key=f"apparel_group:{kind}",
         variables={
             "inputs": [{
+                "prod_add_opt_id": 0,           # 0 = create; OPS upserts on option_key
                 "products_id": _placeholder(1, "products_id"),
-                "option_key": safe_key,
+                "option_key": key,
                 "title": title,
                 "description": "",
-                "options_type": "combo",
+                "options_type": "textmp",
                 "price_calculate_type": "0",
                 "apply_multiplication": "1",
                 "applicable_for": "0",
                 "status": "1",
-                "required": required,
+                "required": "1",
                 "hire_designer_option": "0",
                 "size_id": 0,
                 "master_option_id": 0,
                 "sort_order": sort_order,
+                "delete": 0,
             }]
         },
         requires_response_from=[1],
     )
 
 
-def _build_apparel_option_attributes_step(
-    step_num: int, option_step: int, dimension: str, values: list[tuple[str, float]]
+def _build_apparel_option_attribute_step(
+    step_num: int,
+    parent_option_step: int,
+    kind: str,
+    value: str,
+    sort_order: int,
 ) -> OPSMutationStep:
-    """Attach all values of one apparel dimension as attributes of a single
-    grouped option (one batched setAdditionalOptionAttributes call — `inputs`
-    is an array). `values` is a list of (label, multiplier): the multiplier is
-    the size price multiplier (size_price / base_price) for sizes, 1.0 for
-    colours. The first value is the default attribute. Shape mirrors a live
-    read-back of product 309's attributes (attribute_key/default_attribute/
-    sort_order/status/multiplier).
+    """Create one attribute value under a parent apparel option group.
+
+    Input fields verified against live OPS collection (setAdditionalOptionAttributes,
+    AdditionalOptionAttributesInput). Returns attribute_id which is required by
+    _build_apparel_attribute_price_step for per-size pricing.
+
+    `kind` ("color" / "size") is local — used only for source_key uniqueness.
     """
-    inputs: list[dict[str, Any]] = []
-    for i, (label, mult) in enumerate(values):
-        attr_key = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "attr"
-        inputs.append({
-            "prod_add_opt_id": _placeholder(option_step, "prod_add_opt_id"),
-            "label": label,
-            "attribute_key": attr_key,
-            "default_attribute": "1" if i == 0 else "0",
-            "sort_order": i + 1,
-            "status": "1",
-            "setup_cost": 0.0,
-            "multiplier": round(float(mult), 4),
-            "multiplier_type": "1",
-        })
+    safe_key = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "val"
     return OPSMutationStep(
         step=step_num,
         mutation="setAdditionalOptionAttributes",
-        source_key=f"apparel_attrs:{dimension}",
-        variables={"inputs": inputs},
-        requires_response_from=[option_step],
+        source_key=f"apparel_attr:{kind}/{safe_key}",
+        variables={
+            "inputs": [{
+                "attribute_id": 0,              # 0 = create
+                "prod_add_opt_id": _placeholder(parent_option_step, "prod_add_opt_id"),
+                "label": value,
+                "attribute_key": safe_key,
+                "status": "1",
+                "sort_order": sort_order,
+                "setup_cost": 0,
+                "default_attribute": "0",
+                "delete": 0,
+            }]
+        },
+        requires_response_from=[parent_option_step],
+    )
+
+
+def _build_apparel_attribute_price_step(
+    step_num: int,
+    attribute_step: int,
+    variant_sku: str,
+    base_price: float,
+    final_price: float,
+) -> OPSMutationStep:
+    """Set the per-size sell price for one apparel size attribute.
+
+    Uses setProductsAttributePrice (verified live in OPS 81-op collection).
+    `attribute_id` comes from the matching setAdditionalOptionAttributes response.
+    `size_from=0, size_to=99999999` covers the entire print-size range — since
+    apparel uses a single placeholder OPS size (Default), this unconditionally
+    applies the per-size price for any print-size selection.
+
+    This replaces the invalid `multiplier`/`multiplier_type` approach: those
+    fields do not exist on AdditionalOptionInput per the live OPS schema.
+    """
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setProductsAttributePrice",
+        source_key=f"attr_price:size/{variant_sku}",
+        variables={
+            "inputs": [{
+                "attribute_id": _placeholder(attribute_step, "attribute_id"),
+                "size_from": 0,
+                "size_to": 99999999,
+                "attributes_price": final_price,
+                "vendor_price": base_price,
+                "delete": 0,
+            }]
+        },
+        requires_response_from=[attribute_step],
     )
 
 
@@ -931,47 +906,30 @@ def _build_setProductsImageGallery_step(
 ) -> Optional[OPSMutationStep]:
     """One setProductsImageGallery for the whole product.
 
-    OPS does NOT fetch external URLs — `products_large_image_name` is a bare
-    filename inside the OPS media folder, and OPS prepends its own CDN path
-    to whatever string it receives (verified live 2026-06-12). When
-    OPS_MEDIA_IMAGE_PREFIX is configured, images are pre-staged into that
-    folder by `build_push_payload` (see `ops_media.py`) and only staged
-    filenames are sent; unstaged images are skipped. Without the prefix this
-    falls back to legacy URL behavior (known-broken against current OPS —
-    kept only so dry-runs surface the full plan).
+    OPS has no file-upload mutation; images are referenced by URL in each
+    item's `products_large_image_name`, and OPS fetches + optimizes them
+    server-side when optimizeimg=1 (verified live against staging — see
+    `scripts/ops_image_spike.py`). Depends on step 1 for products_id; OPS
+    returns that id as a string but this mutation needs a top-level Int!, so
+    the gateway coerces it at execute time.
 
-    Depends on step 1 for products_id; OPS returns that id as a string but
-    this mutation needs a top-level Int!, so the gateway coerces it at
-    execute time.
-
-    Returns None when the product has no usable images (nothing to push).
+    Returns None when the product has no usable image URLs (nothing to push).
     """
     if not ctx.images:
         return None
-    from modules.ops_push.ops_media import media_prefix
-
-    use_media = bool(media_prefix())
     title = ctx.product.product_name or ctx.product.supplier_sku
-    image_arr = []
-    for idx, img in enumerate(ctx.images):
-        if not img.url:
-            continue
-        if use_media:
-            name = getattr(img, "ops_media_filename", None)
-            if not name:
-                continue  # not staged into OPS media — a URL would 404
-        else:
-            name = img.url
-        image_arr.append(
-            {
-                "products_image_gallery_id": 0,  # 0 = create
-                "delete": 0,
-                "title": title,
-                "products_large_image_name": name,
-                "sort_order": (img.sort_order or idx),
-                "status": "1",
-            }
-        )
+    image_arr = [
+        {
+            "products_image_gallery_id": 0,  # 0 = create
+            "delete": 0,
+            "title": title,
+            "products_large_image_name": img.url,
+            "sort_order": (img.sort_order or idx),
+            "status": "1",
+        }
+        for idx, img in enumerate(ctx.images)
+        if img.url
+    ]
     if not image_arr:
         return None
     return OPSMutationStep(
@@ -998,126 +956,20 @@ async def build_push_payload(
     product_id: UUID,
     *,
     option_strategy: OptionStrategy = OptionStrategy.MASTER_OPTION_ATTACH,
-    dry_run: bool = False,
-    category_id_override: Optional[int] = None,
 ) -> OPSPushPayload:
     """Async DB wrapper. Loads context, then calls `_synthesize_payload`.
 
     Splitting the DB load from the pure synthesis lets unit tests build
     the payload without a live session by constructing a `_PushContext`
     directly (see test_payload_builder.py).
-
-    dry_run: when True, SKIP the S3 image mirror + OPS-media staging steps.
-    Those make real network round-trips (downloading supplier images and
-    uploading to S3 / OPS media) — for a 20-image product that's ~17s, long
-    enough that the synchronous dry-run HTTP request times out in the browser
-    ("Failed to fetch") and the push_log row is left stuck at 'accepted'.
-    A dry-run is a read-only PREVIEW: it must be fast and must not push files
-    to S3. The gallery step simply won't include images in the preview plan —
-    an acceptable fidelity trade for a side-effect-free, instant preview.
-
-    category_id_override: when set, this OPS category_id wins over the
-    storefront-config / customer-default resolution. The gateway's auto-category
-    resolver passes the id it created/looked up for the product's category name.
     """
     ctx = await _load_context(db, customer_id, product_id)
-    if not dry_run:
-        await _mirror_unmirrored_images(ctx, db)
-        await _stage_images_for_ops_media(ctx)
-    return _synthesize_payload(ctx, option_strategy, category_id_override=category_id_override)
-
-
-async def _mirror_unmirrored_images(ctx: _PushContext, db: AsyncSession) -> None:
-    """Auto-mirror supplier images to our CDN before staging to OPS.
-
-    Without this, products whose images live only on the supplier's CDN (the
-    default for newly-ingested products) push to OPS with no images at all —
-    the staging step needs files in our bucket to copy into OPS's media folder.
-    Running mirror here means "push to OPS" is a single user action that always
-    Just Works, instead of a two-step (mirror, then push) operator workflow.
-
-    Skipped unless OPS_PUSH_INCLUDE_IMAGES=1. Best-effort: failures are logged
-    but don't block the push (the gallery step will simply skip unstaged images).
-    Idempotent — `mirror_product_images` no-ops images already on our CDN.
-    """
-    import os as _os
-
-    if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") != "1" or not ctx.images:
-        return
-    from modules.images.storage import is_own_cdn
-
-    needs_mirror = any(img.url and not is_own_cdn(img.url) for img in ctx.images)
-    if not needs_mirror:
-        return
-
-    from modules.images.mirror import mirror_product_images
-    try:
-        result = await mirror_product_images(ctx.product.id, db)
-        log.info(
-            "auto-mirror sku=%s mirrored=%s skipped=%s failed=%s",
-            ctx.product.supplier_sku, result.get("mirrored"),
-            result.get("skipped"), result.get("failed"),
-        )
-        # Reload images so the staging step sees the new ctmediaimg URLs.
-        from sqlalchemy import select
-        from modules.catalog.models import ProductImage
-        refreshed = (await db.execute(
-            select(ProductImage).where(ProductImage.product_id == ctx.product.id)
-        )).scalars().all()
-        ctx.images = sorted(refreshed, key=lambda i: i.sort_order or 0)
-    except Exception as exc:
-        log.warning("auto-mirror failed [sku=%s]: %s", ctx.product.supplier_sku, exc)
-
-
-async def _stage_images_for_ops_media(ctx: _PushContext) -> None:
-    """Copy mirrored images into OPS media folders ahead of the gallery and product steps.
-
-    Sets on each image:
-      - ``ops_media_filename``   — staged to gallery folder (setProductsImageGallery)
-      - ``ops_product_filename`` — staged to product/ folder (setProduct.imagename),
-                                    set only on the primary front image
-
-    No-op unless OPS_PUSH_INCLUDE_IMAGES=1. Each folder is independently
-    gated by its own env prefix. Idempotent: content-addressed filenames.
-    """
-    import os as _os
-
-    if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") != "1" or not ctx.images:
-        return
-    from modules.ops_push.ops_media import (
-        media_prefix,
-        stage_image_for_ops,
-        product_media_prefix,
-        stage_product_image_for_ops,
-    )
-
-    has_gallery = bool(media_prefix())
-    has_product = bool(product_media_prefix())
-    if not has_gallery and not has_product:
-        return
-
-    sku = ctx.product.supplier_sku
-    primary_img = _select_primary_image(ctx.images)
-
-    for img in ctx.images:
-        if not img.url:
-            continue
-        try:
-            if has_gallery:
-                img.ops_media_filename = await stage_image_for_ops(img.url, sku)
-            if has_product and img is primary_img:
-                img.ops_product_filename = await stage_product_image_for_ops(img.url, sku)
-        except Exception as exc:  # staging is best-effort; callers skip Nones
-            log.warning("OPS media staging failed [sku=%s url=%s]: %s", sku, img.url, exc)
-            img.ops_media_filename = None
-            img.ops_product_filename = None
+    return _synthesize_payload(ctx, option_strategy)
 
 
 def _synthesize_payload(
     ctx: _PushContext,
     option_strategy: OptionStrategy = OptionStrategy.MASTER_OPTION_ATTACH,
-    *,
-    category_id_override: Optional[int] = None,
 ) -> OPSPushPayload:
     """Pure synthesis from a loaded `_PushContext`.
 
@@ -1127,15 +979,22 @@ def _synthesize_payload(
     plan itself embeds a single base price (cheapest variant) on the
     placeholder size row.
 
-    Mutation order (Phase 8 apparel rewrite — matches reference product 361):
+    Mutation order (Phase 8 apparel rewrite — verified against live OPS
+    81-op collection 2026-06-17):
        step 1   : setProduct
-       step 2   : setProductSize × 1 (placeholder "Default")
-       step 3   : setProductPrice × 1 (base = min variant price)
-       step 4+  : setAdditionalOption × (unique colors), then
-                  setAdditionalOption × (unique sizes) — each variant value is
-                  its own top-level option (no attribute children).
+       step 2   : setProductSize × 1  (placeholder "Default")
+       steps 3-8: setProductPrice × 6 (APPAREL_VOLUME_TIERS qty-based curve)
+       step 9   : setAdditionalOption  (Color group)
+       steps 10+: setAdditionalOptionAttributes × C  (each unique color)
+       next     : setAdditionalOption  (Size group)
+       next+    : setAdditionalOptionAttributes × S  (each unique size)
+       next+    : setProductsAttributePrice × S      (per-size sell price)
        [opt]    : setProductsImageGallery   (OPS_PUSH_INCLUDE_IMAGES=1)
        [opt]    : updateProductStock × 1    (OPS_PUSH_INCLUDE_STOCK=1, total qty)
+
+    Note: `multiplier`/`multiplier_type` are NOT fields on AdditionalOptionInput
+    (verified against live schema — they do not exist). Per-size pricing is
+    handled entirely by setProductsAttributePrice keyed on attribute_id.
 
     The `option_strategy` parameter is retained for API back-compat but no
     longer branches behavior — the apparel flow is the single canonical path.
@@ -1191,19 +1050,22 @@ def _synthesize_payload(
         existing_ops_id = int(ctx.push_mapping.target_ops_product_id)
         push_mode = "update"
 
-    # ---- Image policy (beta = single primary product image) ----
+    # ---- Image policy (beta = single primary front image) ----
     primary_image_url: Optional[str] = None
-    primary_staged_filename: Optional[str] = None
     image_warnings: list[str] = []
-    primary_candidate = _select_primary_image(ctx.images)
-    if primary_candidate:
-        primary_image_url = primary_candidate.url
-        primary_staged_filename = getattr(primary_candidate, "ops_product_filename", None)
+    front_images = [img for img in ctx.images if (img.image_type or "front") == "front"]
+    if front_images:
+        primary_image_url = front_images[0].url
         if len(ctx.images) > 1:
             image_warnings.append(
-                f"Beta sends only the primary product image. "
-                f"{len(ctx.images) - 1} additional image(s) sent to gallery."
+                f"Beta sends only the primary front image. "
+                f"{len(ctx.images) - 1} additional image(s) ignored."
             )
+    elif ctx.images:
+        primary_image_url = ctx.images[0].url
+        image_warnings.append(
+            "No front-type image found; using first available image."
+        )
 
     # ---- Compose the mutation plan ----
     #
@@ -1216,7 +1078,7 @@ def _synthesize_payload(
     plan: list[OPSMutationStep] = []
 
     # Step 1: setProduct
-    plan.append(_build_setProduct_step(ctx, push_mode, existing_ops_id, primary_image_url, primary_staged_filename, category_id_override))
+    plan.append(_build_setProduct_step(ctx, push_mode, existing_ops_id, primary_image_url))
 
     # Step 2: setProductSize placeholder (OPS requires at least one size row
     # even when variant selection comes from Additional Options).
@@ -1246,56 +1108,61 @@ def _synthesize_payload(
             )
             next_step += 1
 
-    # Apparel attribute values — Color first, then Size. Each unique value
-    # becomes its OWN setAdditionalOption row (reference: product 361 in
-    # visualgraphx OPS staging). No grouping, no attribute children.
+    # ── Apparel option groups: Color + Size ───────────────────────────────────
     #
-    # Per-size pricing via `multiplier`: SanMar prices vary by size (2XL > S).
-    # The base setProductPrice carries the cheapest variant's price. Each size
-    # option's multiplier = size_price / base_price (so 2XL costs more than S
-    # at checkout). Colors don't drive price, so multiplier=1.0.
-    base_final = min((p.final_price for p in computed_prices), default=0.0)
-    size_to_price: dict[str, float] = {}
-    if base_final > 0:
-        for p in computed_prices:
-            sz = (p.size or "").strip()
-            if not sz:
-                continue
-            # Same size in different colors should share a price (SanMar);
-            # take the min if there's any divergence.
-            existing = size_to_price.get(sz)
-            size_to_price[sz] = min(existing, p.final_price) if existing is not None else p.final_price
+    # Architecture (live OPS 81-op collection, 2026-06-17):
+    #   1. One setAdditionalOption parent group per dimension (Color, Size).
+    #   2. Each value (Red, S, 2XL …) added as setAdditionalOptionAttributes
+    #      child → returns attribute_id.
+    #   3. Per-size pricing attached via setProductsAttributePrice using
+    #      attribute_id — this replaces the invalid multiplier/multiplier_type
+    #      approach (those fields do not exist on AdditionalOptionInput).
+    #   Colors have no price variation; only Size gets attribute price steps.
 
-    # Variants become TWO grouped dropdown options ("Color" + "Size"), each
-    # with one attribute per value — NOT one flat option per value. This is
-    # what makes the storefront show a Color dropdown and a Size dropdown
-    # instead of ~20 separate quantity boxes (the pre-2026-06-16 bug).
-    sort_order = 0
     colors, sizes = _extract_attribute_values(ordered_variants)
-    if colors:
-        color_opt_step = next_step
-        plan.append(_build_apparel_grouped_option_step(next_step, "Color", sort_order))
+
+    # Per-size price lookup: size label → (base_price, final_price).
+    # Same size in multiple colors → take the min (SanMar standard practice).
+    base_final = min((p.final_price for p in computed_prices), default=0.0)
+    size_to_prices: dict[str, tuple[float, float]] = {}
+    for p in computed_prices:
+        sz = (p.size or "").strip()
+        if not sz:
+            continue
+        existing = size_to_prices.get(sz)
+        if existing is None or p.final_price < existing[1]:
+            size_to_prices[sz] = (p.base_price, p.final_price)
+
+    # Color group + color attributes (no price steps needed).
+    color_group_step = next_step
+    plan.append(_build_apparel_option_group_step(color_group_step, "color", "Color", sort_order=0))
+    next_step += 1
+    for i, color in enumerate(colors):
+        plan.append(_build_apparel_option_attribute_step(
+            next_step, color_group_step, "color", color, sort_order=i
+        ))
         next_step += 1
-        sort_order += 1
-        plan.append(
-            _build_apparel_option_attributes_step(
-                next_step, color_opt_step, "color", [(c, 1.0) for c in colors]
-            )
-        )
+
+    # Size group + size attributes + per-size price steps.
+    size_group_step = next_step
+    plan.append(_build_apparel_option_group_step(
+        size_group_step, "size", "Size", sort_order=len(colors)
+    ))
+    next_step += 1
+    size_attr_steps: list[tuple[str, int]] = []  # (size_value, attr_step_num)
+    for i, size_val in enumerate(sizes):
+        plan.append(_build_apparel_option_attribute_step(
+            next_step, size_group_step, "size", size_val, sort_order=i
+        ))
+        size_attr_steps.append((size_val, next_step))
         next_step += 1
-    if sizes:
-        size_opt_step = next_step
-        plan.append(_build_apparel_grouped_option_step(next_step, "Size", sort_order))
-        next_step += 1
-        sort_order += 1
-        # Each size attribute carries its price multiplier (size_price / base).
-        size_attrs = [
-            (s, (size_to_price.get(s, base_final) / base_final) if base_final > 0 else 1.0)
-            for s in sizes
-        ]
-        plan.append(
-            _build_apparel_option_attributes_step(next_step, size_opt_step, "size", size_attrs)
-        )
+
+    # setProductsAttributePrice per size — depends on each size attribute step.
+    for size_val, attr_step in size_attr_steps:
+        base_p, final_p = size_to_prices.get(size_val, (base_final, base_final))
+        plan.append(_build_apparel_attribute_price_step(
+            next_step, attr_step, size_val, base_p, final_p
+        ))
         next_step += 1
 
     # Image gallery — pushes product images via setProductsImageGallery.
