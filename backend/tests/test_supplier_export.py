@@ -61,3 +61,53 @@ async def test_build_supplier_payload_missing(db, seed_supplier):
     with pytest.raises(HTTPException) as exc:
         await build_supplier_product(db, uuid4())
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_push_products_to_graphx(db, seed_supplier, monkeypatch):
+    """Builds the envelope, posts to GRAPHX_INGEST_URL with x-ingest-secret,
+    skips products that have no options yet."""
+    from modules.catalog.exporter import push_products_to_graphx
+    from modules.catalog.option_collapse import derive_options
+
+    monkeypatch.setenv("GRAPHX_INGEST_URL", "http://graphx.test/api/ingest/supplier-products")
+    monkeypatch.setenv("GRAPHX_INGEST_SECRET", "s3cret")
+
+    # one product WITH options (derived), one WITHOUT
+    p_yes = await _mk_product_with_variants(db, seed_supplier, sku="WITH", name="With")
+    await derive_options(db, p_yes.id)
+    p_no = await _mk_product_with_variants(db, seed_supplier, sku="WITHOUT", name="Without")
+    # do NOT derive on p_no — should be skipped
+
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+        def json(self):  # noqa: D401 — mimic httpx
+            return {"created": 1}
+
+    class _FakeClient:
+        def __init__(self, *a, **kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, url, *, headers, json):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return _Resp()
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
+
+    result = await push_products_to_graphx(db, supplier_id=seed_supplier.id)
+
+    assert result["sent"] == 1
+    assert result["skipped"] == 1
+    assert captured["url"] == "http://graphx.test/api/ingest/supplier-products"
+    assert captured["headers"]["x-ingest-secret"] == "s3cret"
+    body = captured["json"]
+    assert body["tenant_slug"] == "vg"
+    assert body["supplier_key"] == seed_supplier.slug
+    assert len(body["products"]) == 1
+    assert body["products"][0]["supplier_sku"] == "WITH"
