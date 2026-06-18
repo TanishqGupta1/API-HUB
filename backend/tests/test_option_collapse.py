@@ -236,3 +236,16 @@ async def test_prune_axis_emptied(db, seed_supplier):
     opts = await _options(db, p.id)
     assert "color" not in opts
     assert "size" in opts
+
+
+@pytest.mark.asyncio
+async def test_bulk_backfill_one_supplier(db, seed_supplier):
+    from modules.catalog.option_collapse import derive_options_bulk
+    await _mk_product(db, seed_supplier, [("Red", "M")], sku="A", name="A")
+    await _mk_product(db, seed_supplier, [("Navy", "L"), ("Navy", "XL")], sku="B", name="B")
+
+    totals = await derive_options_bulk(db, supplier_id=seed_supplier.id)
+
+    assert totals["products"] == 2
+    assert totals["color_options"] == 2
+    assert totals["size_options"] == 2
