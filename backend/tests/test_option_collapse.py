@@ -72,3 +72,24 @@ async def test_upsert_options_persists_enabled(db, seed_supplier):
     await db.commit()
     opts = await _options(db, p.id)
     assert opts["color"].enabled is True
+
+
+@pytest.mark.no_db
+def test_distinct_normalizes_and_dedups():
+    from modules.catalog.option_collapse import _distinct
+    # "Red"/"RED "/"red" collapse to one; first display form wins; alpha sort
+    assert _distinct(["Navy", "Red", "RED ", "red", None, "  "]) == ["Navy", "Red"]
+
+
+@pytest.mark.no_db
+def test_size_sort_order():
+    from modules.catalog.option_collapse import _distinct, _size_sort_key
+    out = _distinct(["XL", "S", "2XL", "M", "L", "XS"], sort_key=_size_sort_key)
+    assert out == ["XS", "S", "M", "L", "XL", "2XL"]
+
+
+@pytest.mark.no_db
+def test_slug():
+    from modules.catalog.option_collapse import _slug
+    assert _slug("Forest Green") == "forest-green"
+    assert _slug("  Heather/Grey ") == "heather-grey"
