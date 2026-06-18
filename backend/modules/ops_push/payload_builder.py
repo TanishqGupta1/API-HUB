@@ -605,46 +605,32 @@ def _extract_attribute_values(
     return colors, sizes
 
 
-def _build_apparel_setAdditionalOption_step(
-    step_num: int, kind: str, value: str, sort_order: int, multiplier: float = 1.0
+def _build_apparel_option_group_step(
+    step_num: int, kind: str, title: str, sort_order: int
 ) -> OPSMutationStep:
-    """Create ONE Additional Option row for a single variant value.
+    """Create one parent setAdditionalOption group for a Color or Size dimension.
 
-    Reference product 361 (visualgraphx OPS staging) shows each size as its
-    own setAdditionalOption row — not attributes under a "Size" group. We
-    mirror that model: every unique color and every unique size becomes its
-    own option row.
+    Each apparel dimension (Color, Size) becomes a single top-level option group.
+    Actual values (Red, S, 2XL …) are added as setAdditionalOptionAttributes
+    children so that setProductsAttributePrice can attach per-attribute pricing.
 
-    Input fields below mirror a live read-back of product 361's
-    productAdditionalOptions (verified via OPS GraphQL). Anything missing
-    is rejected with "Column X cannot be null" / "X is required":
-      - options_type="textmp"         → flat-label dropdown in storefront
-      - price_calculate_type="0"      → no calc (reference value)
-      - apply_multiplication="1"      → matches reference
-      - applicable_for="0"            → all customers (reference value)
-      - status="1"                    → enabled
-      - required="1"                  → variant pick required at checkout
-      - hire_designer_option="0"      → NOT NULL on OPS staging DB
-      - description=""                → matches reference (empty)
-      - size_id=0, master_option_id=0 → defaults; reference uses 0
-      - multiplier (Float) + multiplier_type="1" → percent-style modifier
-                                        on top of the base setProductPrice.
-                                        For sizes: multiplier = size_price /
-                                        base_price (so 2XL @ $10 with base
-                                        $8 → 1.25, +25%). For colors: 1.0.
-
-    `kind` ("color" / "size") is local only — used for source_key uniqueness.
+    Fields verified against the live OPS 81-op collection (2026-06-17):
+      - `multiplier` / `multiplier_type` do NOT exist on AdditionalOptionInput.
+        Per-size pricing is handled exclusively via setProductsAttributePrice.
+      - `apply_multiplication="1"` enables the OPS multiplication path for this
+        option group; the actual per-attribute price is set downstream.
     """
-    safe_key = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "opt"
+    key = re.sub(r"[^a-z0-9]+", "_", kind.lower()).strip("_") or "opt"
     return OPSMutationStep(
         step=step_num,
         mutation="setAdditionalOption",
-        source_key=f"apparel_option:{kind}/{safe_key}",
+        source_key=f"apparel_group:{kind}",
         variables={
             "inputs": [{
+                "prod_add_opt_id": 0,           # 0 = create; OPS upserts on option_key
                 "products_id": _placeholder(1, "products_id"),
-                "option_key": safe_key,
-                "title": value,
+                "option_key": key,
+                "title": title,
                 "description": "",
                 "options_type": "textmp",
                 "price_calculate_type": "0",
@@ -656,11 +642,83 @@ def _build_apparel_setAdditionalOption_step(
                 "size_id": 0,
                 "master_option_id": 0,
                 "sort_order": sort_order,
-                "multiplier": round(float(multiplier), 4),
-                "multiplier_type": "1",
+                "delete": 0,
             }]
         },
         requires_response_from=[1],
+    )
+
+
+def _build_apparel_option_attribute_step(
+    step_num: int,
+    parent_option_step: int,
+    kind: str,
+    value: str,
+    sort_order: int,
+) -> OPSMutationStep:
+    """Create one attribute value under a parent apparel option group.
+
+    Input fields verified against live OPS collection (setAdditionalOptionAttributes,
+    AdditionalOptionAttributesInput). Returns attribute_id which is required by
+    _build_apparel_attribute_price_step for per-size pricing.
+
+    `kind` ("color" / "size") is local — used only for source_key uniqueness.
+    """
+    safe_key = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "val"
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setAdditionalOptionAttributes",
+        source_key=f"apparel_attr:{kind}/{safe_key}",
+        variables={
+            "inputs": [{
+                "attribute_id": 0,              # 0 = create
+                "prod_add_opt_id": _placeholder(parent_option_step, "prod_add_opt_id"),
+                "label": value,
+                "attribute_key": safe_key,
+                "status": "1",
+                "sort_order": sort_order,
+                "setup_cost": 0,
+                "default_attribute": "0",
+                "delete": 0,
+            }]
+        },
+        requires_response_from=[parent_option_step],
+    )
+
+
+def _build_apparel_attribute_price_step(
+    step_num: int,
+    attribute_step: int,
+    variant_sku: str,
+    base_price: float,
+    final_price: float,
+) -> OPSMutationStep:
+    """Set the per-size sell price for one apparel size attribute.
+
+    Uses setProductsAttributePrice (verified live in OPS 81-op collection).
+    `attribute_id` comes from the matching setAdditionalOptionAttributes response.
+    `size_from=0, size_to=99999999` covers the entire print-size range — since
+    apparel uses a single placeholder OPS size (Default), this unconditionally
+    applies the per-size price for any print-size selection.
+
+    This replaces the invalid `multiplier`/`multiplier_type` approach: those
+    fields do not exist on AdditionalOptionInput per the live OPS schema.
+    """
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setProductsAttributePrice",
+        source_key=f"attr_price:size/{variant_sku}",
+        variables={
+            "inputs": [{
+                "attribute_id": _placeholder(attribute_step, "attribute_id"),
+                "size_from": 0,
+                "size_to": 99999999,
+                "attributes_price": final_price,
+                "vendor_price": base_price,
+                "delete": 0,
+            }]
+        },
+        requires_response_from=[attribute_step],
     )
 
 
@@ -921,15 +979,22 @@ def _synthesize_payload(
     plan itself embeds a single base price (cheapest variant) on the
     placeholder size row.
 
-    Mutation order (Phase 8 apparel rewrite — matches reference product 361):
+    Mutation order (Phase 8 apparel rewrite — verified against live OPS
+    81-op collection 2026-06-17):
        step 1   : setProduct
-       step 2   : setProductSize × 1 (placeholder "Default")
-       step 3   : setProductPrice × 1 (base = min variant price)
-       step 4+  : setAdditionalOption × (unique colors), then
-                  setAdditionalOption × (unique sizes) — each variant value is
-                  its own top-level option (no attribute children).
+       step 2   : setProductSize × 1  (placeholder "Default")
+       steps 3-8: setProductPrice × 6 (APPAREL_VOLUME_TIERS qty-based curve)
+       step 9   : setAdditionalOption  (Color group)
+       steps 10+: setAdditionalOptionAttributes × C  (each unique color)
+       next     : setAdditionalOption  (Size group)
+       next+    : setAdditionalOptionAttributes × S  (each unique size)
+       next+    : setProductsAttributePrice × S      (per-size sell price)
        [opt]    : setProductsImageGallery   (OPS_PUSH_INCLUDE_IMAGES=1)
        [opt]    : updateProductStock × 1    (OPS_PUSH_INCLUDE_STOCK=1, total qty)
+
+    Note: `multiplier`/`multiplier_type` are NOT fields on AdditionalOptionInput
+    (verified against live schema — they do not exist). Per-size pricing is
+    handled entirely by setProductsAttributePrice keyed on attribute_id.
 
     The `option_strategy` parameter is retained for API back-compat but no
     longer branches behavior — the apparel flow is the single canonical path.
@@ -1043,42 +1108,62 @@ def _synthesize_payload(
             )
             next_step += 1
 
-    # Apparel attribute values — Color first, then Size. Each unique value
-    # becomes its OWN setAdditionalOption row (reference: product 361 in
-    # visualgraphx OPS staging). No grouping, no attribute children.
+    # ── Apparel option groups: Color + Size ───────────────────────────────────
     #
-    # Per-size pricing via `multiplier`: SanMar prices vary by size (2XL > S).
-    # The base setProductPrice carries the cheapest variant's price. Each size
-    # option's multiplier = size_price / base_price (so 2XL costs more than S
-    # at checkout). Colors don't drive price, so multiplier=1.0.
-    base_final = min((p.final_price for p in computed_prices), default=0.0)
-    size_to_price: dict[str, float] = {}
-    if base_final > 0:
-        for p in computed_prices:
-            sz = (p.size or "").strip()
-            if not sz:
-                continue
-            # Same size in different colors should share a price (SanMar);
-            # take the min if there's any divergence.
-            existing = size_to_price.get(sz)
-            size_to_price[sz] = min(existing, p.final_price) if existing is not None else p.final_price
+    # Architecture (live OPS 81-op collection, 2026-06-17):
+    #   1. One setAdditionalOption parent group per dimension (Color, Size).
+    #   2. Each value (Red, S, 2XL …) added as setAdditionalOptionAttributes
+    #      child → returns attribute_id.
+    #   3. Per-size pricing attached via setProductsAttributePrice using
+    #      attribute_id — this replaces the invalid multiplier/multiplier_type
+    #      approach (those fields do not exist on AdditionalOptionInput).
+    #   Colors have no price variation; only Size gets attribute price steps.
 
-    sort_order = 0
     colors, sizes = _extract_attribute_values(ordered_variants)
-    for value in colors:
-        plan.append(
-            _build_apparel_setAdditionalOption_step(next_step, "color", value, sort_order, multiplier=1.0)
-        )
+
+    # Per-size price lookup: size label → (base_price, final_price).
+    # Same size in multiple colors → take the min (SanMar standard practice).
+    base_final = min((p.final_price for p in computed_prices), default=0.0)
+    size_to_prices: dict[str, tuple[float, float]] = {}
+    for p in computed_prices:
+        sz = (p.size or "").strip()
+        if not sz:
+            continue
+        existing = size_to_prices.get(sz)
+        if existing is None or p.final_price < existing[1]:
+            size_to_prices[sz] = (p.base_price, p.final_price)
+
+    # Color group + color attributes (no price steps needed).
+    color_group_step = next_step
+    plan.append(_build_apparel_option_group_step(color_group_step, "color", "Color", sort_order=0))
+    next_step += 1
+    for i, color in enumerate(colors):
+        plan.append(_build_apparel_option_attribute_step(
+            next_step, color_group_step, "color", color, sort_order=i
+        ))
         next_step += 1
-        sort_order += 1
-    for value in sizes:
-        size_price = size_to_price.get(value, base_final)
-        mult = (size_price / base_final) if base_final > 0 else 1.0
-        plan.append(
-            _build_apparel_setAdditionalOption_step(next_step, "size", value, sort_order, multiplier=mult)
-        )
+
+    # Size group + size attributes + per-size price steps.
+    size_group_step = next_step
+    plan.append(_build_apparel_option_group_step(
+        size_group_step, "size", "Size", sort_order=len(colors)
+    ))
+    next_step += 1
+    size_attr_steps: list[tuple[str, int]] = []  # (size_value, attr_step_num)
+    for i, size_val in enumerate(sizes):
+        plan.append(_build_apparel_option_attribute_step(
+            next_step, size_group_step, "size", size_val, sort_order=i
+        ))
+        size_attr_steps.append((size_val, next_step))
         next_step += 1
-        sort_order += 1
+
+    # setProductsAttributePrice per size — depends on each size attribute step.
+    for size_val, attr_step in size_attr_steps:
+        base_p, final_p = size_to_prices.get(size_val, (base_final, base_final))
+        plan.append(_build_apparel_attribute_price_step(
+            next_step, attr_step, size_val, base_p, final_p
+        ))
+        next_step += 1
 
     # Image gallery — pushes product images via setProductsImageGallery.
     # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_IMAGES=1): OPS does NOT
