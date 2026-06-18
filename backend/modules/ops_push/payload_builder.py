@@ -464,12 +464,21 @@ def _customer_prefix(customer: Customer, supplier: Supplier) -> str:
 
 
 def _build_setProduct_step(
-    ctx: _PushContext, push_mode: str, existing_ops_id: Optional[int], primary_image_url: Optional[str]
+    ctx: _PushContext,
+    push_mode: str,
+    existing_ops_id: Optional[int],
+    primary_image_url: Optional[str],
+    enable_stock_management: str = "1",
 ) -> OPSMutationStep:
     """setProduct is always step 1 (no more separate setProductCategory).
 
     create mode: products_id omitted (or 0).
     update mode: products_id = existing OPS product id from push_mappings.
+
+    `enable_stock_management` (Int enum, sent as a String) MUST align with the
+    sku_type used by every setProductSku step (AI-3): `1` (Only Size) ↔
+    `size_wise`, `2` (Size with Product Option) ↔ `size_option_wise`. The
+    caller derives it once per product and threads it here.
     """
     title = f"{_customer_prefix(ctx.customer, ctx.supplier)}{ctx.product.product_name}"
     # Field names verified against OPS's live ProductInput schema:
@@ -501,14 +510,23 @@ def _build_setProduct_step(
         #     (verified against working products on staging.visualgraphx)
         #   * measurement_unit_id — silent reject when 0/null
         #   * enable_stock_management — required for updateProductStock
-        #     to find variants; without it, all stock writes fail
+        #     to find variants; without it, all stock writes fail. Int enum
+        #     (0 None / 1 Only Size / 2 Size with Product Option); MUST match
+        #     setProductSku.sku_type (AI-3) or SKUs stay unregistered for
+        #     stock → "Invalid Product SKU".
         #   * product_type — working OPS products always have this set;
         #     null may hide the product from some admin UI filters
         "predefined_product_type": "1",
         "price_defining_method": "1",
         "measurement_unit_id": 1,
-        "enable_stock_management": "1",
+        "enable_stock_management": enable_stock_management,
         "product_type": "1",
+        # product_service_type is a REQUIRED ProductInput field per the OPS
+        # setProduct docs ("Must be 1 always"). OPS currently tolerates its
+        # absence, but the contract marks it required — send "1" explicitly
+        # so a future OPS validation tightening doesn't silently fail pushes.
+        # (String in the schema, despite the docs showing an Int example.)
+        "product_service_type": "1",
     }
     # Category resolution: per-product storefront override wins; if absent,
     # fall back to the per-customer default_ops_category_id (Phase 2 of the
@@ -686,32 +704,36 @@ def _build_setProductSku_step(
     size_step: int,
     variant_sku: str,
     *,
+    sku_type: str,
     option_step: Optional[int] = None,
     attribute_step: Optional[int] = None,
 ) -> OPSMutationStep:
     """Assign a per-variant SKU to the OPS product (setProductSku).
 
-    ``size_wise`` when the variant has no option-attribute mapping (every
-    current SanMar product — colors aren't modeled as OPS options yet, each
-    variant is a size). ``size_option_wise`` when the variant maps to a single
-    local option-attribute, in which case prod_add_opt_ids / attribute_ids are
-    placeholders resolved to the OPS ids at execute time. setProductSku declares
-    those two as String!, so the gateway stringifies the resolved ints.
+    ``sku_type`` is a PRODUCT-LEVEL decision (AI-3): OPS allows only one SKU
+    method per product and it MUST match setProduct.enable_stock_management
+    (`size_wise`↔1, `size_option_wise`↔2). The caller passes the same value
+    for every variant of a product, so the modes can never mix.
+
+    ``size_wise`` — the variant is keyed on size_id alone (every current SanMar
+    product: colors aren't modeled as OPS options yet, each variant is a size).
+    ``size_option_wise`` — the variant also keys on a local option-attribute, so
+    prod_add_opt_ids / attribute_ids are placeholders resolved to the OPS ids at
+    execute time. setProductSku declares those two as String!, so the gateway
+    stringifies the resolved ints.
     """
     inp: dict[str, Any] = {
         "products_id": _placeholder(1, "products_id"),
         "size_id": _placeholder(size_step, "size_id"),
         "sku": variant_sku,
         "delete": 0,
+        "sku_type": sku_type,
     }
     requires = [1, size_step]
-    if option_step is not None and attribute_step is not None:
-        inp["sku_type"] = "size_option_wise"
+    if sku_type == "size_option_wise" and option_step is not None and attribute_step is not None:
         inp["prod_add_opt_ids"] = _placeholder(option_step, "prod_add_opt_id")
         inp["attribute_ids"] = _placeholder(attribute_step, "attribute_id")
         requires += [option_step, attribute_step]
-    else:
-        inp["sku_type"] = "size_wise"
     return OPSMutationStep(
         step=step_num,
         mutation="setProductSku",
@@ -722,47 +744,36 @@ def _build_setProductSku_step(
 
 
 def _build_updateProductStock_step(
-    step_num: int, size_step: int, variant_sku: str, inventory: int
+    step_num: int, variant_sku: str, inventory: int
 ) -> OPSMutationStep:
-    """Inventory LAST step per Rev 1 §"PC61 outbound mutation sequence".
+    """Set available stock for one variant via updateProductStock.
 
-    Phase 6 — stock_id resolution via read-back:
-      OPS's updateProductStock identifies the variant by stock_id (or by
-      product_sku). There is NO per-size SKU field in OPS's schema, so
-      product_sku never matches anything for products we created via API.
-      Instead the gateway runs a productStocks(product_id) read-back
-      after setProductSize completes and resolves the right stock_id
-      from a `(product_id, size_id) -> stock_id` map.
+    Inventory is the LAST stage per Rev 1 §"PC61 outbound mutation sequence",
+    and it MUST run after the setProductSku stage: it identifies the variant by
+    `product_sku` — the same SKU setProductSku assigns in OPS. Because that SKU
+    now exists, we no longer need the old stock_id read-back (a
+    productStocks(product_id) lookup that skipped variants with no
+    admin-initialized stock entry). OPS resolves the variant straight from
+    product_sku.
 
-      This step carries:
-        * `_size_id_ref` — placeholder resolved to the OPS size_id of the
-          matching setProductSize step, used by the gateway as the lookup
-          key into the stock-read-back map.
-        * `stock_id` — pre-populated to None; the gateway overwrites it
-          at execute time with the looked-up stock_id, or skips the step
-          with a clear warning when no stock entry exists for that size
-          (admin must initialize stock in OPS UI first; the API has no
-          way to create initial stock entries).
-
-      action=Add increments existing stock; for fresh products with zero
-      starting stock the admin-initialized entry will be 0 and Add brings
-      it to the desired quantity.
+    action="Reset" sets the absolute available quantity to `inventory`. This
+    keeps re-pushes idempotent: now that dedup routes a re-push through update
+    mode, "Add"/"Remove" would drift the count on every push, whereas "Reset"
+    always lands on the supplier's current inventory.
     """
     return OPSMutationStep(
         step=step_num,
         mutation="updateProductStock",
-        source_key=f"variant_sku:{variant_sku}",
+        source_key=f"stock:{variant_sku}",
         variables={
-            "action": "Add",
-            # _size_id_ref is a gateway-only sentinel (prefixed with _ to
-            # mark it as not-part-of-the-OPS-mutation). The gateway strips
-            # it before sending and uses it to find the stock_id.
-            "_size_id_ref": _placeholder(size_step, "size_id"),
+            "product_sku": variant_sku,
+            "action": "Reset",
             "input": {
                 "stock_quantity": inventory,
+                "comment": "Synced from API-HUB",
             },
         },
-        requires_response_from=[size_step],
+        requires_response_from=[],
     )
 
 
@@ -920,11 +931,38 @@ def _synthesize_payload(
             "No front-type image found; using first available image."
         )
 
+    # ---- Product-level SKU/stock mode (AI-3) ----
+    # OPS allows ONE sku method per product, and setProduct.enable_stock_management
+    # MUST align with setProductSku.sku_type or the SKUs never register for stock
+    # ("Invalid Product SKU"):
+    #     1 (Only Size)             ↔ size_wise
+    #     2 (Size with Product Opt) ↔ size_option_wise
+    # We go size_option_wise only when we're creating local options AND EVERY
+    # color-bearing variant maps to one of their attributes — that guarantees no
+    # mode-mixing and that every SKU input carries its (prod_add_opt_ids,
+    # attribute_ids). Anything else stays size_wise (the current SanMar reality).
+    local_attr_values: set[str] = set()
+    if option_strategy is OptionStrategy.PRODUCT_LOCAL_OPTION_CREATE:
+        for opt in ctx.options:
+            for attr in opt.attributes:
+                for val in (attr.title, attr.attribute_key):
+                    if val:
+                        local_attr_values.add(val.strip().lower())
+    color_variants = [v for v in ordered_variants if (v.color or "").strip()]
+    all_colors_map = bool(local_attr_values) and bool(color_variants) and all(
+        (v.color or "").strip().lower() in local_attr_values for v in color_variants
+    )
+    sku_type = "size_option_wise" if all_colors_map else "size_wise"
+    enable_stock_management = "2" if sku_type == "size_option_wise" else "1"
+
     # ---- Compose the mutation plan ----
     plan: list[OPSMutationStep] = []
 
     # Step 1: setProduct
-    plan.append(_build_setProduct_step(ctx, push_mode, existing_ops_id, primary_image_url))
+    plan.append(_build_setProduct_step(
+        ctx, push_mode, existing_ops_id, primary_image_url,
+        enable_stock_management=enable_stock_management,
+    ))
 
     # Steps 2..1+N: setProductSize × N
     next_step = 2
@@ -984,12 +1022,19 @@ def _synthesize_payload(
     if _os.getenv("OPS_PUSH_INCLUDE_SKU", "0") == "1":
         for v, price in zip(ordered_variants, computed_prices):
             size_step = size_step_by_sku[price.variant_sku]
-            opt_attr = attr_step_by_value.get((v.color or "").strip().lower()) if v.color else None
+            # sku_type is the product-level decision above; option/attribute
+            # placeholders are only meaningful in size_option_wise mode.
+            opt_attr = (
+                attr_step_by_value.get((v.color or "").strip().lower())
+                if sku_type == "size_option_wise" and v.color
+                else None
+            )
             plan.append(
                 _build_setProductSku_step(
                     next_step,
                     size_step,
                     price.variant_sku,
+                    sku_type=sku_type,
                     option_step=opt_attr[0] if opt_attr else None,
                     attribute_step=opt_attr[1] if opt_attr else None,
                 )
@@ -1013,15 +1058,15 @@ def _synthesize_payload(
             plan.append(gallery_step)
             next_step += 1
 
-    # Final N steps: updateProductStock × N (action=Add, with stock_id
-    # resolved by gateway read-back — see _build_updateProductStock_step).
+    # Final N steps: updateProductStock × N (action=Reset, by product_sku —
+    # see _build_updateProductStock_step). Identifies each variant by the SKU
+    # setProductSku assigned, so it relies on the setProductSku stage above.
     # Deferred by default: opt in with OPS_PUSH_INCLUDE_STOCK=1.
     if _os.getenv("OPS_PUSH_INCLUDE_STOCK", "0") == "1":
         for v, price in zip(ordered_variants, computed_prices):
             plan.append(
                 _build_updateProductStock_step(
                     next_step,
-                    size_step_by_sku[price.variant_sku],
                     price.variant_sku,
                     v.inventory or 0,
                 )
