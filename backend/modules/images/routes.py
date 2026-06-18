@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from modules.auth.dependencies import VGAdmin
+from modules.catalog.models import ProductImage
+from modules.catalog.schemas import ProductImageOpsFilenameUpdate, ProductImageRead
 from modules.images.mirror import mirror_product_images, mirror_products_batch
 from modules.images.storage import is_own_cdn
 
@@ -75,6 +77,29 @@ async def mirror_batch(
         accepted=len(body.product_ids),
         message=f"Mirroring {len(body.product_ids)} product(s) in background",
     )
+
+
+@router.patch("/{image_id}/ops-filename", response_model=ProductImageRead)
+async def set_ops_filename(
+    image_id: UUID,
+    body: ProductImageOpsFilenameUpdate,
+    _: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ProductImageRead:
+    """Set (or clear) the OPS media filename on a product image row.
+
+    Call this after manually uploading the image via the OPS admin UI.
+    The push gateway reads ops_filename as products_large_image_name in
+    setProductsImageGallery — images without this field are skipped.
+    Pass ops_filename=null to clear a previously set value.
+    """
+    img = await db.get(ProductImage, image_id)
+    if img is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Image {image_id} not found")
+    img.ops_filename = body.ops_filename
+    await db.commit()
+    await db.refresh(img)
+    return ProductImageRead.model_validate(img)
 
 
 @router.get("/mirror-status/{product_id}", response_model=ImageMirrorStatus)

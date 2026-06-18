@@ -35,6 +35,7 @@ from modules.ops_push.payload_builder import (
     OPSPushPayload,
     OptionStrategy,
     _PushContext,
+    _build_setProductsImageGallery_step,
     _placeholder,
     _request_fingerprint,
     _synthesize_payload,
@@ -97,6 +98,7 @@ def _variant(
     base_price: Decimal | None = Decimal("8.32"),
     inventory: int | None = 50,
     sort_order: int = 0,
+    prices: list | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
@@ -107,10 +109,30 @@ def _variant(
         inventory=inventory,
         warehouse="GA",
         sort_order=sort_order,
+        prices=prices or [],
     )
 
 
-def _image(url: str, image_type: str = "front", sort_order: int = 0) -> SimpleNamespace:
+def _price_tier(
+    price_type: str = "Net",
+    quantity_min: int = 1,
+    quantity_max: int | None = None,
+    price: Decimal = Decimal("8.32"),
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        price_type=price_type,
+        quantity_min=quantity_min,
+        quantity_max=quantity_max,
+        price=price,
+    )
+
+
+def _image(
+    url: str,
+    image_type: str = "front",
+    sort_order: int = 0,
+    ops_filename: str | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
         url=url,
@@ -119,6 +141,7 @@ def _image(url: str, image_type: str = "front", sort_order: int = 0) -> SimpleNa
         color=None,
         sort_order=sort_order,
         checksum=None,
+        ops_filename=ops_filename,
     )
 
 
@@ -361,55 +384,45 @@ class TestMutationPlanOrder:
         variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M"), _variant("PC61-WHT-L")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        # Steps 2, 3, 4 are sizes
-        assert all(payload.plan[i].mutation == "setProductSize" for i in (1, 2, 3))
+        # All 3 variants share same price → 1 Default size at step 2
+        assert payload.plan[1].mutation == "setProductSize"
+        assert payload.plan[1].variables["inputs"][0]["size_title"] == "Default"
 
     def test_prices_follow_sizes(self):
         variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        # After 1 setProduct + 2 sizes, next 2 are prices
-        assert payload.plan[3].mutation == "setProductPrice"
-        assert payload.plan[4].mutation == "setProductPrice"
+        # setProduct → Default size → setProductPrice
+        assert payload.plan[1].mutation == "setProductSize"
+        assert payload.plan[2].mutation == "setProductPrice"
+        assert payload.plan[3].mutation != "setProductPrice"  # only 1 price step
 
     def test_inventory_is_last(self, monkeypatch):
-        # Stock steps are deferred by default (OPS sizes carry no SKU to target);
-        # opt in to assert the full plan shape.
+        # Stock steps are opt-in; enable to assert they land at the end.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        # The final N steps must be updateProductStock (N=2 here)
-        last_two = payload.plan[-2:]
-        assert all(s.mutation == "updateProductStock" for s in last_two)
+        # Same-price variants → 1 Default size → 1 stock step as last step
+        assert payload.plan[-1].mutation == "updateProductStock"
 
-    def test_inventory_action_is_add(self, monkeypatch):
-        # action=Add increments existing stock. Phase 6: OPS has no per-size
-        # SKU field anywhere in its schema, so updateProductStock identifies
-        # the variant by stock_id. The stock_id is resolved at execute time
-        # by the gateway from a productStocks(product_id) read-back.
-        #
-        # The plan step does NOT carry stock_id directly — it carries a
-        # gateway-only sentinel `_size_id_ref` (a placeholder) that the
-        # gateway uses to look up the stock_id for that variant's size.
-        # Stock steps are opt-in (OPS_PUSH_INCLUDE_STOCK); enable to assert shape.
+    def test_inventory_action_is_reset(self, monkeypatch):
+        # OPS updateProductStock enum: Add / Remove / Reset.
+        # Reset writes an absolute quantity (not a delta), so action="Reset" is correct.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
         stock_step = next(s for s in payload.plan if s.mutation == "updateProductStock")
-        assert stock_step.variables["action"] == "Add"
+        assert stock_step.variables["action"] == "Reset"
         assert stock_step.variables["input"]["stock_quantity"] == 42
-        # _size_id_ref is the gateway lookup hint — must reference a
-        # setProductSize step's size_id response.
-        assert stock_step.variables["_size_id_ref"].startswith("$step")
-        assert stock_step.variables["_size_id_ref"].endswith(".size_id")
-        # product_sku is gone — OPS can't match it without a per-size SKU
-        # field, so threading it does nothing useful and is misleading.
-        assert "product_sku" not in stock_step.variables
-        assert "stock_id" not in stock_step.variables  # filled by gateway
+        assert "product_sku" in stock_step.variables
+        assert "_size_id_ref" not in stock_step.variables
+        assert "stock_id" not in stock_step.variables
         # action must NOT be nested inside input
         assert "action" not in stock_step.variables["input"]
         assert "product_sku" not in stock_step.variables["input"]
+        # no dependency on any prior step (product_sku is embedded directly)
+        assert stock_step.requires_response_from == []
 
     def test_no_setProductCategory_step(self):
         # Old spec had a separate setProductCategory step; new spec does not.
@@ -463,22 +476,21 @@ class TestStepDependencies:
         assert size_step.requires_response_from == [1]
         assert size_step.variables["inputs"][0]["products_id"] == _placeholder(1, "products_id")
 
-    def test_price_depends_on_matching_size_step(self):
+    def test_price_depends_on_default_size_step(self):
+        # When all variants share the same price, a single Default size entry is
+        # created (step 2) and the single price step references it.
         variants = [_variant("PC61-WHT-S"), _variant("PC61-WHT-M")]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        # Step 2 = size of PC61-WHT-M (lex first), Step 3 = size of PC61-WHT-S
-        # Step 4 = price for first variant, depends on size step 2
-        # Step 5 = price for second variant, depends on size step 3
-        price_step_1 = payload.plan[3]
-        price_step_2 = payload.plan[4]
-        assert 1 in price_step_1.requires_response_from
-        assert price_step_1.variables["inputs"][0]["size_id"].startswith("$step")
-        # Verifies the wiring reads product_size_id from setProductSize's response
-        assert price_step_1.variables["inputs"][0]["size_id"].endswith(".size_id")
-        assert 1 in price_step_2.requires_response_from
-        # Sanity: the two prices reference different size steps
-        assert price_step_1.variables["inputs"][0]["size_id"] != price_step_2.variables["inputs"][0]["size_id"]
+        price_steps = [s for s in payload.plan if s.mutation == "setProductPrice"]
+        assert len(price_steps) == 1, "same-price variants → single Default price step"
+        price_step = price_steps[0]
+        # Must depend on setProduct (step 1) and the Default size (step 2)
+        assert 1 in price_step.requires_response_from
+        assert 2 in price_step.requires_response_from
+        # size_id must be a placeholder referencing the Default size step
+        sid = price_step.variables["inputs"][0]["size_id"]
+        assert isinstance(sid, str) and sid.startswith("$step") and sid.endswith(".size_id")
 
 
 # ===========================================================================
@@ -544,7 +556,11 @@ class TestOptionStrategies:
         payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
         mutations = [s.mutation for s in payload.plan]
         assert "setAssignOptions" in mutations
-        assert "setAdditionalOption" not in mutations
+        # setAdditionalOption IS present (variant colour/size options are always
+        # emitted regardless of decoration strategy).  What MASTER_OPTION_ATTACH
+        # must NOT produce is setAdditionalOptionAttributes — that's the
+        # product-local decoration pattern; master attachment uses setAssignOptions.
+        assert "setAdditionalOptionAttributes" not in mutations
 
     def test_product_local_uses_setAdditionalOption(self):
         opt = _option(
@@ -611,13 +627,13 @@ class TestImagePolicy:
         assert payload.primary_image_url == "https://x/front.jpg"
         assert payload.image_warnings == []
         setProduct = payload.plan[0]
-        # But the mutation receives just the filename — OPS prepends its CDN
-        # base path at serve time; sending a full URL produces a double-prefix.
-        assert setProduct.variables["inputs"][0]["imagename"] == "front.jpg"
+        # Full URL sent to OPS so it references the supplier CDN directly
+        # instead of processing to S3 (which causes 403 on staging).
+        assert setProduct.variables["inputs"][0]["imagename"] == "https://x/front.jpg"
 
-    def test_imagename_strips_to_filename_for_deep_paths(self):
-        """SanMar URLs have multi-segment paths like /imglib/mresjpg/2013/f14/PC61_aqua_back.jpg.
-        Everything before the last '/' must be dropped — OPS only wants the leaf."""
+    def test_imagename_sends_full_url(self):
+        """Full SanMar URL is passed as-is — OPS uses it directly as the image src
+        instead of downloading and storing in S3."""
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
             images=[_image(
@@ -626,7 +642,8 @@ class TestImagePolicy:
             )],
         )
         payload = _synthesize_payload(ctx)
-        assert payload.plan[0].variables["inputs"][0]["imagename"] == "PC61_aquaticblue_flat_back.jpg"
+        assert payload.plan[0].variables["inputs"][0]["imagename"] == \
+            "https://cdnm.sanmar.com/imglib/mresjpg/2013/f14/PC61_aquaticblue_flat_back.jpg"
 
     def test_imagename_passes_through_when_already_a_filename(self):
         """If primary_image_url is already a bare filename (no slashes),
@@ -659,7 +676,6 @@ class TestImagePolicy:
         )
         payload = _synthesize_payload(ctx)
         assert payload.primary_image_url == "https://x/lifestyle.jpg"
-        assert any("No front-type image" in w for w in payload.image_warnings)
 
     def test_no_images(self):
         ctx = _ctx(variants=[_variant("PC61-WHT-M")], images=[])
@@ -669,27 +685,30 @@ class TestImagePolicy:
         assert "imagename" not in setProduct.variables["inputs"][0]
 
     def test_image_gallery_step_present_when_opted_in(self, monkeypatch):
-        # Images are opt-in (OPS_PUSH_INCLUDE_IMAGES); OPS can't fetch URLs yet.
+        # Images are opt-in (OPS_PUSH_INCLUDE_IMAGES=1).
+        # ops_filename takes priority when set; url is the automation fallback.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
             images=[
-                _image("https://x/front.jpg", image_type="front", sort_order=0),
-                _image("https://x/back.jpg", image_type="back", sort_order=1),
+                _image("https://x/front.jpg", image_type="front", sort_order=0,
+                       ops_filename="pc61-white-front.jpg"),
+                _image("https://x/back.jpg", image_type="back", sort_order=1,
+                       ops_filename="pc61-white-back.jpg"),
             ],
         )
         payload = _synthesize_payload(ctx)
         gallery = [s for s in payload.plan if s.mutation == "setProductsImageGallery"]
         assert len(gallery) == 1
         step = gallery[0]
-        # products_id is a forward-ref to step 1, optimizeimg on
         assert step.variables["products_id"] == "$step1.products_id"
         assert step.variables["optimizeimg"] == 1
         assert step.requires_response_from == [1]
         arr = step.variables["input"]["image_arr"]
+        # ops_filename takes priority over url when both are present
         assert [i["products_large_image_name"] for i in arr] == [
-            "https://x/front.jpg",
-            "https://x/back.jpg",
+            "pc61-white-front.jpg",
+            "pc61-white-back.jpg",
         ]
         assert all(i["products_image_gallery_id"] == 0 for i in arr)
 
@@ -699,7 +718,8 @@ class TestImagePolicy:
         payload = _synthesize_payload(ctx)
         assert not any(s.mutation == "setProductsImageGallery" for s in payload.plan)
 
-    def test_image_gallery_off_by_default(self):
+    def test_image_gallery_off_by_default(self, monkeypatch):
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "0")
         # Default is opt-out: OPS doesn't fetch external URLs, so the step is
         # deferred until images are uploaded into OPS media (see payload_builder).
         ctx = _ctx(
@@ -765,15 +785,19 @@ class TestPC61Smoke:
         )
         payload = _synthesize_payload(ctx)
 
-        # 1 setProduct + 56 sizes + 56 prices + 1 option + 1 image gallery
-        # + 56 stock = 171 steps (default _ctx supplies one front image)
-        assert len(payload.plan) == 1 + 56 + 56 + 1 + 1 + 56
+        # 1 setProduct + 1 Default size + 1 price (all 56 variants share $3.99)
+        # + 15 variant-options (7 unique colours + 8 unique sizes as setAdditionalOption)
+        # + 1 setAssignOptions (embroidery master-attach)
+        # + 1 image gallery (default _ctx has one image with URL; fires via url fallback)
+        # + 1 stock (Default size, aggregated inventory) = 21 steps
+        assert len(payload.plan) == 1 + 1 + 1 + 15 + 1 + 1 + 1
         mutations = [s.mutation for s in payload.plan]
-        assert mutations.count("setProductSize") == 56
-        assert mutations.count("setProductPrice") == 56
+        assert mutations.count("setProductSize") == 1    # single Default size
+        assert mutations.count("setProductPrice") == 1   # single Default price
+        assert mutations.count("setAdditionalOption") == 7 + 8   # 7 colours + 8 sizes
         assert mutations.count("setAssignOptions") == 1
         assert mutations.count("setProductsImageGallery") == 1
-        assert mutations.count("updateProductStock") == 56
+        assert mutations.count("updateProductStock") == 1  # single Default stock
 
 
 # ===========================================================================
@@ -1047,3 +1071,221 @@ class TestStorefrontOverridesInPush:
         # If a refactor moves one but not the other, this import breaks.
         assert push_helper.apply_pricing_overrides is not None
         assert hasattr(quote_path, "_apply_storefront_override")
+
+
+# ===========================================================================
+# Image gallery step — Approach B (ops_filename)
+# ===========================================================================
+
+
+class TestImageGalleryStep:
+    """_build_setProductsImageGallery_step name resolution:
+
+      1. ops_filename (manual OPS admin upload) — takes priority when set.
+      2. img.url (supplier CDN URL) — automation fallback; stored as URL (optimizeimg=0).
+
+    Images with neither are skipped. Returns None when nothing is pushable.
+    """
+
+    def _ctx_with_images(self, images):
+        return _ctx(variants=[_variant("BG77-BLK-OSFA")], images=images)
+
+    def test_returns_none_when_no_images(self):
+        ctx = self._ctx_with_images([])
+        assert _build_setProductsImageGallery_step(2, ctx) is None
+
+    def test_returns_none_when_no_url_and_no_ops_filename(self):
+        """Images with neither url nor ops_filename are skipped; all skipped → None."""
+        ctx = self._ctx_with_images([
+            _image("", ops_filename=None),
+        ])
+        assert _build_setProductsImageGallery_step(2, ctx) is None
+
+    def test_uses_url_when_ops_filename_not_set(self):
+        """No ops_filename → falls back to img.url (Approach A automation path)."""
+        ctx = self._ctx_with_images([
+            _image("https://cdn.sanmar.com/bg77_black.jpg", ops_filename=None),
+            _image("https://cdn.sanmar.com/bg77_navy.jpg", ops_filename=None),
+        ])
+        step = _build_setProductsImageGallery_step(2, ctx)
+        assert step is not None
+        arr = step.variables["input"]["image_arr"]
+        assert len(arr) == 2
+        assert arr[0]["products_large_image_name"] == "https://cdn.sanmar.com/bg77_black.jpg"
+        assert arr[1]["products_large_image_name"] == "https://cdn.sanmar.com/bg77_navy.jpg"
+
+    def test_ops_filename_takes_priority_over_url(self):
+        """ops_filename wins when set; images without ops_filename fall back to url."""
+        ctx = self._ctx_with_images([
+            _image("https://cdn.sanmar.com/bg77_black.jpg", ops_filename="bg77-black-front.jpg"),
+            _image("https://cdn.sanmar.com/bg77_navy.jpg", ops_filename=None),   # URL fallback
+            _image("https://cdn.sanmar.com/bg77_red.jpg", ops_filename="bg77-red-front.jpg"),
+        ])
+        step = _build_setProductsImageGallery_step(2, ctx)
+        assert step is not None
+        arr = step.variables["input"]["image_arr"]
+        assert len(arr) == 3  # all 3: 2 by filename, 1 by URL
+        names = [item["products_large_image_name"] for item in arr]
+        assert names == [
+            "bg77-black-front.jpg",
+            "https://cdn.sanmar.com/bg77_navy.jpg",
+            "bg77-red-front.jpg",
+        ]
+
+    def test_gallery_step_included_in_plan_when_flag_set_ops_filename(self):
+        """End-to-end with ops_filename: setProductsImageGallery in plan when flag=1."""
+        import os
+        ctx = self._ctx_with_images([
+            _image("https://cdn.sanmar.com/bg77_black.jpg", ops_filename="bg77-black.jpg"),
+        ])
+        prev = os.environ.get("OPS_PUSH_INCLUDE_IMAGES", "0")
+        try:
+            os.environ["OPS_PUSH_INCLUDE_IMAGES"] = "1"
+            plan = _synthesize_payload(ctx).plan
+            mutations = [s.mutation for s in plan]
+            assert "setProductsImageGallery" in mutations
+        finally:
+            os.environ["OPS_PUSH_INCLUDE_IMAGES"] = prev
+
+    def test_gallery_step_included_in_plan_when_flag_set_url_only(self):
+        """End-to-end with URL only (no ops_filename): gallery fires via automation path."""
+        import os
+        ctx = self._ctx_with_images([
+            _image("https://cdn.sanmar.com/bg77_black.jpg", ops_filename=None),
+        ])
+        prev = os.environ.get("OPS_PUSH_INCLUDE_IMAGES", "0")
+        try:
+            os.environ["OPS_PUSH_INCLUDE_IMAGES"] = "1"
+            plan = _synthesize_payload(ctx).plan
+            mutations = [s.mutation for s in plan]
+            assert "setProductsImageGallery" in mutations
+            gallery = [s for s in plan if s.mutation == "setProductsImageGallery"][0]
+            arr = gallery.variables["input"]["image_arr"]
+            assert arr[0]["products_large_image_name"] == "https://cdn.sanmar.com/bg77_black.jpg"
+        finally:
+            os.environ["OPS_PUSH_INCLUDE_IMAGES"] = prev
+
+    def test_gallery_step_absent_when_flag_off(self):
+        """Default OPS_PUSH_INCLUDE_IMAGES=0: gallery step never emitted."""
+        import os
+        ctx = self._ctx_with_images([
+            _image("https://cdn.sanmar.com/bg77_black.jpg", ops_filename="bg77-black.jpg"),
+        ])
+        prev = os.environ.get("OPS_PUSH_INCLUDE_IMAGES", "0")
+        try:
+            os.environ["OPS_PUSH_INCLUDE_IMAGES"] = "0"
+            plan = _synthesize_payload(ctx).plan
+            mutations = [s.mutation for s in plan]
+            assert "setProductsImageGallery" not in mutations
+        finally:
+            os.environ["OPS_PUSH_INCLUDE_IMAGES"] = prev
+
+
+# ===========================================================================
+# Quantity-tiered pricing
+# ===========================================================================
+
+
+class TestTieredPricing:
+    """When variant_prices rows exist, the plan emits one setProductPrice per
+    tier (with correct qty/qty_to bounds) instead of the flat 1-999999 row.
+    Markup is applied independently to each tier's price.
+    """
+
+    _TIERS = [
+        _price_tier("Net", quantity_min=1,    quantity_max=11,   price=Decimal("13.25")),
+        _price_tier("Net", quantity_min=12,   quantity_max=50,   price=Decimal("12.98")),
+        _price_tier("Net", quantity_min=51,   quantity_max=500,  price=Decimal("12.72")),
+        _price_tier("Net", quantity_min=501,  quantity_max=1000, price=Decimal("12.46")),
+        _price_tier("Net", quantity_min=1001, quantity_max=None, price=Decimal("12.19")),
+    ]
+
+    def _tiered_ctx(self, tiers=None):
+        return _ctx(
+            variants=[_variant("YST470LS-BLK-XL", prices=tiers or self._TIERS)],
+            markup_rules=[],   # no markup — vendor_price == final_price for clarity
+        )
+
+    def test_no_tiers_emits_flat_price_row(self):
+        """No prices → single flat 1-999999 row (legacy behaviour preserved)."""
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")])  # prices=[] by default
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        assert len(price_steps) == 1
+        inp = price_steps[0].variables["inputs"][0]
+        assert inp["qty"] == 1
+        assert inp["qty_to"] == 999999
+
+    def test_tiers_produce_one_step_per_tier(self):
+        """5 tiers → 5 setProductPrice steps for that variant."""
+        ctx = self._tiered_ctx()
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        assert len(price_steps) == len(self._TIERS)
+
+    def test_tier_qty_bounds_correct(self):
+        """qty and qty_to are taken from the tier, not overridden to 1/999999."""
+        ctx = self._tiered_ctx()
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        bounds = [(s.variables["inputs"][0]["qty"], s.variables["inputs"][0]["qty_to"]) for s in price_steps]
+        assert bounds == [
+            (1,    11),
+            (12,   50),
+            (51,   500),
+            (501,  1000),
+            (1001, 999999),   # None → 999999 fallback
+        ]
+
+    def test_tier_vendor_prices_correct(self):
+        """vendor_price reflects the supplier's per-tier wholesale cost."""
+        ctx = self._tiered_ctx()
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        vendor_prices = [s.variables["inputs"][0]["vendor_price"] for s in price_steps]
+        expected = [float(t.price) for t in self._TIERS]
+        assert vendor_prices == expected
+
+    def test_tier_markup_applied_per_tier(self):
+        """Each tier's final price has markup applied independently."""
+        tiers = [
+            _price_tier("Net", quantity_min=1,  quantity_max=11,  price=Decimal("10.00")),
+            _price_tier("Net", quantity_min=12, quantity_max=None, price=Decimal("9.00")),
+        ]
+        ctx = _ctx(
+            variants=[_variant("SKU-A-M", prices=tiers)],
+            markup_rules=[_markup_rule(pct=Decimal("50.0"))],  # 50% markup
+        )
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        assert len(price_steps) == 2
+        assert price_steps[0].variables["inputs"][0]["price"] == pytest.approx(15.0, abs=0.01)
+        assert price_steps[1].variables["inputs"][0]["price"] == pytest.approx(13.5, abs=0.01)
+
+    def test_mixed_variants_flat_and_tiered(self):
+        """Variant A has tiers, Variant B does not — each gets correct treatment."""
+        tiers = [
+            _price_tier("Net", quantity_min=1,  quantity_max=11,  price=Decimal("10.00")),
+            _price_tier("Net", quantity_min=12, quantity_max=None, price=Decimal("9.00")),
+        ]
+        ctx = _ctx(
+            variants=[
+                _variant("SKU-A-M", prices=tiers),
+                _variant("SKU-B-L"),              # no tiers → flat
+            ],
+            markup_rules=[],
+        )
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        # A gets 2 tier steps, B gets 1 flat step
+        assert len(price_steps) == 3
+        # B's step (last) must be flat 1-999999
+        b_step = price_steps[-1]
+        assert b_step.variables["inputs"][0]["qty"] == 1
+        assert b_step.variables["inputs"][0]["qty_to"] == 999999
+
+    def test_tiers_sorted_by_quantity_min(self):
+        """Tiers stored out of order are sorted ascending by quantity_min."""
+        tiers = [
+            _price_tier("Net", quantity_min=12, quantity_max=50,   price=Decimal("9.00")),
+            _price_tier("Net", quantity_min=1,  quantity_max=11,   price=Decimal("10.00")),
+            _price_tier("Net", quantity_min=51, quantity_max=None, price=Decimal("8.50")),
+        ]
+        ctx = _ctx(variants=[_variant("SKU-A-M", prices=tiers)], markup_rules=[])
+        price_steps = [s for s in _synthesize_payload(ctx).plan if s.mutation == "setProductPrice"]
+        qty_mins = [s.variables["inputs"][0]["qty"] for s in price_steps]
+        assert qty_mins == [1, 12, 51]

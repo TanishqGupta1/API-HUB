@@ -24,6 +24,8 @@ import {
   CheckCircle2,
   RefreshCw,
   Zap,
+  Tags,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -271,6 +273,67 @@ export default function CustomerSettingsPage() {
                   category is set. Without this, OPS hides products from the
                   default browse view. Create the category in OPS admin first,
                   then enter the numeric category_id here.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[#888894]">
+                  Associated Category IDs
+                </label>
+                <div className="relative">
+                  <Tags className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888894]" />
+                  <input
+                    type="text"
+                    value={currentCustomer.ops_associated_category_ids ?? ""}
+                    placeholder="e.g. 265,543,538"
+                    onChange={(e) => setCustomer(prev => prev ? {
+                      ...prev,
+                      ops_associated_category_ids: e.target.value || null,
+                    } : null)}
+                    className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#cfccc8] text-sm font-bold font-mono focus:border-[#1e4d92] outline-none transition-all"
+                  />
+                </div>
+                <p className="text-[11px] text-[#888894] leading-relaxed">
+                  Comma-separated OPS category IDs. Products pushed for this
+                  storefront will appear under all listed categories in addition
+                  to the default category above.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[#888894]">
+                  Product Section
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCustomer(prev => prev ? { ...prev, ops_predefined_product_type: 0 } : null)}
+                    className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border-2 text-xs font-black uppercase tracking-wider transition-all ${
+                      (currentCustomer.ops_predefined_product_type ?? 0) === 0
+                        ? "border-[#1e4d92] bg-[#1e4d92] text-white shadow-md shadow-blue-900/15"
+                        : "border-[#cfccc8] text-[#888894] hover:border-[#1e4d92] hover:text-[#1e4d92]"
+                    }`}
+                  >
+                    <Layers className="w-4 h-4" />
+                    Print Products
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomer(prev => prev ? { ...prev, ops_predefined_product_type: 1 } : null)}
+                    className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border-2 text-xs font-black uppercase tracking-wider transition-all ${
+                      (currentCustomer.ops_predefined_product_type ?? 0) === 1
+                        ? "border-[#1e4d92] bg-[#1e4d92] text-white shadow-md shadow-blue-900/15"
+                        : "border-[#cfccc8] text-[#888894] hover:border-[#1e4d92] hover:text-[#1e4d92]"
+                    }`}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                    Ready to Buy
+                  </button>
+                </div>
+                <p className="text-[11px] text-[#888894] leading-relaxed">
+                  Where pushed products land in OPS. <strong className="text-[#1e1e24]">Print Products</strong> are
+                  for custom design / embroidery orders. <strong className="text-[#1e1e24]">Ready to Buy</strong> are
+                  standard retail products available immediately.
                 </p>
               </div>
 
