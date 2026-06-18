@@ -857,16 +857,17 @@ def check_category_resolvable(ctx: _PreflightContext) -> CheckResult:
     """7b. A category_id must resolve for this (customer, product).
 
     OPS marks `category_id` as Required on ProductInput (client Postman,
-    2026-06-15). The payload builder resolves it from, in order:
+    2026-06-15). Resolution order at push time:
       1. product_storefront_configs.ops_category_id  (per-product override)
       2. customer.default_ops_category_id            (per-customer fallback)
-    If neither yields a valid integer, setProduct goes out with NO category
-    and OPS silently rejects it mid-push. Block here so the operator gets a
-    clear, fixable message before any mutation fires — this is the #1 thing
-    that breaks onboarding a brand-new customer (Phase 4 zero-code goal).
+      3. product.category auto-resolution — the gateway calls
+         _resolve_ops_category which creates-or-reuses an OPS category from
+         the product's category name and caches it in ops_category_mappings.
 
-    Mirrors `_build_setProduct_step`'s resolution byte-for-byte so preflight
-    and the builder never disagree.
+    Preflight runs before the gateway's auto-resolver, so we must not block
+    when path 3 is available — blocking here would defeat the zero-config
+    onboarding goal (Phase 4) by requiring manual category setup even when
+    the product already has a category name the gateway can resolve.
     """
     raw = (
         (ctx.storefront_config.ops_category_id if ctx.storefront_config else None)
@@ -879,31 +880,46 @@ def check_category_resolvable(ctx: _PreflightContext) -> CheckResult:
         except (TypeError, ValueError):
             resolved = None
 
-    if resolved is None:
+    if resolved is not None:
+        source = (
+            "product storefront config"
+            if (ctx.storefront_config and ctx.storefront_config.ops_category_id)
+            else "customer default"
+        )
         return CheckResult(
             "category_resolvable",
-            False,
+            True,
+            f"category_id={resolved} (from {source})",
+        )
+
+    # No explicit category configured — check whether the gateway can auto-resolve
+    # from the product's category name via _resolve_ops_category.
+    product_category = (getattr(ctx.product, "category", None) or "").strip()
+    if product_category:
+        return CheckResult(
+            "category_resolvable",
+            True,
             (
-                f"no OPS category resolves for customer '{ctx.customer.name}' "
-                f"× product '{ctx.product.supplier_sku}' — category_id is "
-                f"required by OPS"
-            ),
-            field="customer.default_ops_category_id",
-            suggestion=(
-                f"Set a default OPS category for customer "
-                f"'{ctx.customer.name}' (Customer Settings → default_ops_category_id), "
-                f"or map a per-product category in its storefront config."
+                f"category will be auto-resolved from product.category="
+                f"'{product_category}' at push time"
             ),
         )
-    source = (
-        "product storefront config"
-        if (ctx.storefront_config and ctx.storefront_config.ops_category_id)
-        else "customer default"
-    )
+
     return CheckResult(
         "category_resolvable",
-        True,
-        f"category_id={resolved} (from {source})",
+        False,
+        (
+            f"no OPS category resolves for customer '{ctx.customer.name}' "
+            f"× product '{ctx.product.supplier_sku}' — category_id is "
+            f"required by OPS and product has no category name for auto-resolution"
+        ),
+        field="customer.default_ops_category_id",
+        suggestion=(
+            f"Set a default OPS category for customer "
+            f"'{ctx.customer.name}' (Customer Settings → default_ops_category_id), "
+            f"map a per-product category in its storefront config, "
+            f"or ensure the product has a category name set."
+        ),
     )
 
 

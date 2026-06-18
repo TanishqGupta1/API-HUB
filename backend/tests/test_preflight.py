@@ -657,11 +657,22 @@ def test_category_resolvable_pass_from_storefront_config():
     assert "storefront config" in r.detail
 
 
-def test_category_resolvable_fail_when_no_category_anywhere():
-    # New customer with no default + no per-product config → blocker.
+def test_category_resolvable_pass_via_product_category():
+    # No explicit category config, but product.category is set → gateway can
+    # auto-resolve via _resolve_ops_category; preflight must not block.
     cust = _customer()
     cust.default_ops_category_id = None
     ctx = _ctx(customer=cust, storefront_config=None)
+    r = check_category_resolvable(ctx)
+    assert r.ok is True
+    assert "auto-resolved" in r.detail
+
+
+def test_category_resolvable_fail_when_no_category_anywhere():
+    # No explicit config AND no product.category → genuine blocker.
+    cust = _customer()
+    cust.default_ops_category_id = None
+    ctx = _ctx(customer=cust, storefront_config=None, product=_product(category=None))
     r = check_category_resolvable(ctx)
     assert r.ok is False
     assert "required by OPS" in r.detail
@@ -671,7 +682,7 @@ def test_category_resolvable_fail_when_no_category_anywhere():
 def test_category_resolvable_fail_when_value_not_int():
     cust = _customer()
     cust.default_ops_category_id = "not-a-number"
-    ctx = _ctx(customer=cust, storefront_config=None)
+    ctx = _ctx(customer=cust, storefront_config=None, product=_product(category=None))
     r = check_category_resolvable(ctx)
     assert r.ok is False
 
