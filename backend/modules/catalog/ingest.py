@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,7 @@ from .models import (
     ProductOption,
     ProductOptionAttribute,
     ProductVariant,
+    VariantPrice,
 )
 from .schemas import (
     CategoryIngest,
@@ -371,14 +372,32 @@ async def ingest_pricing(
         product_id = sku_to_product_id.get(item.supplier_sku)
         if product_id is None:
             continue
-        await db.execute(
+        # Update base_price and capture the variant_id in one round-trip.
+        # RETURNING lets us save tiers without a separate SELECT.
+        res = await db.execute(
             update(ProductVariant)
             .where(
                 ProductVariant.product_id == product_id,
                 ProductVariant.sku == item.part_id,
             )
             .values(base_price=item.base_price)
+            .returning(ProductVariant.id)
         )
+        variant_id = res.scalar_one_or_none()
+
+        if variant_id and item.tiers:
+            # Replace all tiers for this variant atomically.
+            await db.execute(
+                delete(VariantPrice).where(VariantPrice.variant_id == variant_id)
+            )
+            for t in item.tiers:
+                db.add(VariantPrice(
+                    variant_id=variant_id,
+                    price_type=t.price_type,
+                    quantity_min=t.quantity_min,
+                    quantity_max=t.quantity_max,
+                    price=t.price,
+                ))
 
     await _finish_sync_job(db, job, len(batch))
     return IngestResult(

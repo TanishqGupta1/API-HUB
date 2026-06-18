@@ -24,7 +24,12 @@ class Customer(Base):
     # _build_setProduct_step when a product has no storefront-config category.
     # Without this, products land in OPS with category_id=0 and are hidden
     # from the admin's default browse view (Phase 2 of the OPS push audit).
-    default_ops_category_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Comma-separated OPS category IDs for the Associated Category field
+    # (ProductInput.multiple_category). Products pushed for this customer
+    # will appear under all listed categories in addition to the default one.
+    ops_associated_category_ids: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # 0 = Print Products section, 1 = Ready to Buy (OPS predefined_product_type). Defaults to 0.
+    ops_predefined_product_type: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
