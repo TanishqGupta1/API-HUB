@@ -69,3 +69,75 @@ def _distinct(
     items = list(seen.values())
     items.sort(key=sort_key if sort_key else (lambda s: s.casefold()))
     return items
+
+
+def _build_option(
+    option_key: str,
+    title: str,
+    options_type: str,
+    raw_titles: Iterable[Optional[str]],
+    sort_order: int,
+    sort_key: Optional[Callable[[str], object]] = None,
+) -> tuple[OptionIngest, int]:
+    distinct = _distinct(raw_titles, sort_key=sort_key)
+    attrs = [
+        OptionAttributeIngest(title=t, attribute_key=_slug(t), sort_order=i)
+        for i, t in enumerate(distinct)
+    ]
+    opt = OptionIngest(
+        option_key=option_key,
+        title=title,
+        options_type=options_type,
+        sort_order=sort_order,
+        required=bool(distinct),
+        enabled=True,
+        attributes=attrs,
+    )
+    return opt, len(distinct)
+
+
+async def derive_options(db: AsyncSession, product_id: UUID) -> CollapseResult:
+    """Read variants, (re)build Color/Size options, prune emptied axes. Commits."""
+    rows = (
+        await db.execute(
+            select(ProductVariant.color, ProductVariant.size)
+            .where(ProductVariant.product_id == product_id)
+        )
+    ).all()
+
+    color_opt, n_colors = _build_option(
+        "color", "Color", "swatch", (r.color for r in rows), sort_order=0
+    )
+    size_opt, n_sizes = _build_option(
+        "size", "Size", "dropdown", (r.size for r in rows),
+        sort_order=1, sort_key=_size_sort_key,
+    )
+
+    payload: list[OptionIngest] = []
+    built: set[str] = set()
+    if n_colors:
+        payload.append(color_opt)
+        built.add("color")
+    if n_sizes:
+        payload.append(size_opt)
+        built.add("size")
+
+    if payload:
+        await _upsert_options(db, product_id, payload)
+
+    stale = [k for k in DERIVED_OPTION_KEYS if k not in built]
+    if stale:
+        await db.execute(
+            delete(ProductOption).where(
+                ProductOption.product_id == product_id,
+                ProductOption.option_key.in_(stale),
+            )
+        )
+
+    await db.commit()
+    return CollapseResult(
+        colors=1 if n_colors else 0,
+        sizes=1 if n_sizes else 0,
+        color_attrs=n_colors,
+        size_attrs=n_sizes,
+    )
