@@ -1126,3 +1126,32 @@ class TestStockManagementSkuTypeAlignment:
         assert inp["enable_stock_management"] == "1"
         sku_steps = [s for s in payload.plan if s.mutation == "setProductSku"]
         assert all(s.variables["inputs"][0]["sku_type"] == "size_wise" for s in sku_steps)
+
+
+# ===========================================================================
+# AI-8 — OPS product_type (sale-type): apparel sold from stock → "15"
+# ===========================================================================
+
+
+class TestOpsProductType:
+    """setProduct.product_type is the OPS *sale-type* (15 = Add to cart for
+    stock apparel; 1 = Custom Design). It is NOT our Product.product_type
+    ('apparel'/'print')."""
+
+    def test_apparel_product_type_is_15(self):
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], product=_product())  # default product_type="apparel"
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["product_type"] == "15"
+
+    def test_non_apparel_product_type_is_1(self):
+        prod = _product()
+        prod.product_type = "print"
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], product=prod)
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["product_type"] == "1"
+
+    def test_product_type_is_string(self):
+        """OPS product_type is a String, not an Int — must be sent as "15"."""
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], product=_product())
+        inp = _synthesize_payload(ctx).plan[0].variables["inputs"][0]
+        assert isinstance(inp["product_type"], str)

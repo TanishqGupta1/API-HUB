@@ -451,6 +451,17 @@ def _variant_sort_key(v: ProductVariant) -> tuple[int, str, str, str]:
     )
 
 
+def _ops_product_type(product: Product) -> str:
+    """Map our Product.product_type to the OPS setProduct `product_type`
+    (sale-type) String (AI-8).
+
+    Apparel is sold from stock → "15" (Add to cart). Everything else (print /
+    custom) keeps "1" (Custom Design). OPS accepts a comma-separated list, but
+    a plain stock product needs only "15".
+    """
+    return "15" if (product.product_type or "").strip().lower() == "apparel" else "1"
+
+
 def _customer_prefix(customer: Customer, supplier: Supplier) -> str:
     """Customer-prefixed title rule: prefer supplier.push_name_prefix
     (already configured per supplier in current DB), fall back to
@@ -514,13 +525,21 @@ def _build_setProduct_step(
         #     (0 None / 1 Only Size / 2 Size with Product Option); MUST match
         #     setProductSku.sku_type (AI-3) or SKUs stay unregistered for
         #     stock → "Invalid Product SKU".
-        #   * product_type — working OPS products always have this set;
-        #     null may hide the product from some admin UI filters
+        #   * product_type — OPS sale-type, comma-separated String (1 Custom
+        #     Design · 2 Upload Center · 3 Browse Design · 7 Quote · 8 Hire
+        #     Designer · 15 Add to cart). Apparel sold from stock → "15";
+        #     anything else keeps "1" (Custom Design). NOTE: distinct from our
+        #     Product.product_type ("apparel"/"print"). See _ops_product_type.
+        #   * price_defining_method — "1" (qty-based) verified working on
+        #     staging.visualgraphx. AI-8 TODO: confirm the right value for a
+        #     stock apparel product by mirroring a known-good LIVE product via
+        #     productsDetails before flipping it (the collection template shows
+        #     "3", but that's not a verified apparel-from-stock product).
         "predefined_product_type": "1",
         "price_defining_method": "1",
         "measurement_unit_id": 1,
         "enable_stock_management": enable_stock_management,
-        "product_type": "1",
+        "product_type": _ops_product_type(ctx.product),
         # product_service_type is a REQUIRED ProductInput field per the OPS
         # setProduct docs ("Must be 1 always"). OPS currently tolerates its
         # absence, but the contract marks it required — send "1" explicitly
