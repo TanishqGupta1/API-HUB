@@ -78,3 +78,73 @@ async def build_supplier_product(db: AsyncSession, product_id: UUID) -> dict:
             for v in (p.variants or [])
         ],
     }
+
+
+async def _post(
+    url: str,
+    secret: str,
+    supplier_key: str,
+    tenant_slug: str,
+    products: list[dict],
+) -> dict:
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.post(
+            url,
+            headers={"x-ingest-secret": secret},
+            json={
+                "supplier_key": supplier_key,
+                "tenant_slug": tenant_slug,
+                "products": products,
+            },
+        )
+        body = None
+        if r.headers.get("content-type", "").startswith("application/json"):
+            try:
+                body = r.json()
+            except Exception:
+                body = None
+        return {"status": r.status_code, "body": body}
+
+
+async def push_products_to_graphx(
+    db: AsyncSession,
+    supplier_id: Optional[UUID] = None,
+    tenant_slug: str = "vg",
+    batch: int = 50,
+) -> dict:
+    """Push products (optionally one supplier's) to graphx in batches.
+
+    Products without any options are skipped — they need ``derive_options``
+    to be run first. Env: ``GRAPHX_INGEST_URL`` + ``GRAPHX_INGEST_SECRET``.
+    """
+    url = os.environ["GRAPHX_INGEST_URL"]
+    secret = os.environ["GRAPHX_INGEST_SECRET"]
+
+    sup = await db.get(Supplier, supplier_id) if supplier_id else None
+
+    q = select(Product.id).where(Product.archived_at.is_(None))
+    if supplier_id is not None:
+        q = q.where(Product.supplier_id == supplier_id)
+    ids = (await db.execute(q)).scalars().all()
+
+    sent = 0
+    skipped = 0
+    batches: list[dict] = []
+    buf: list[dict] = []
+
+    for pid in ids:
+        prod = await build_supplier_product(db, pid)
+        if not prod["options"]:  # needs derive_options first
+            skipped += 1
+            continue
+        buf.append(prod)
+        if len(buf) >= batch:
+            batches.append(await _post(url, secret, sup.slug if sup else "", tenant_slug, buf))
+            sent += len(buf)
+            buf = []
+
+    if buf:
+        batches.append(await _post(url, secret, sup.slug if sup else "", tenant_slug, buf))
+        sent += len(buf)
+
+    return {"sent": sent, "skipped": skipped, "batches": batches}
