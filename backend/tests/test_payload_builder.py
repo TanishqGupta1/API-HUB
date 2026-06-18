@@ -961,6 +961,23 @@ class TestSetProductVariables:
         set_product = payload.plan[0]
         assert set_product.variables["inputs"][0]["products_internal_title"] == "PC61"
 
+    def test_main_sku_is_supplier_sku(self):
+        """setProduct.input.main_sku must equal supplier_sku.
+
+        main_sku is OPS's product-level SKU (set via setProduct at size_id=0).
+        We pin it to supplier_sku so the product carries a stable,
+        supplier-traceable identity in OPS. (Dedup-by-main_sku is tracked
+        separately; getProductBySku is not a real OPS query — see
+        docs/ops/SOURCE.md.)
+        """
+        ctx = _ctx(
+            variants=[_variant("PC61-WHT-M")],
+            product=_product(sku="PC61"),
+        )
+        payload = _synthesize_payload(ctx)
+        set_product = payload.plan[0]
+        assert set_product.variables["inputs"][0]["main_sku"] == "PC61"
+
     def test_set_product_price_vendor_price_nonzero(self):
         """B6: vendor_price (wholesale cost) must be > 0.
 
