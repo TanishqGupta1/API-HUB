@@ -267,3 +267,29 @@ async def test_route_derive_bulk(client, db, seed_supplier):
     r = await client.post(f"/api/products/derive-options?supplier_id={seed_supplier.id}")
     assert r.status_code == 200
     assert r.json()["products"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_no_dup_options_or_attrs_on_resync(db, seed_supplier):
+    """Regression for Issue B (product 602 dup-sizes report).
+
+    Full re-ingest cycle: ingest → derive → re-ingest variants → re-derive.
+    Must produce one Color option, one Size option, with one attribute per
+    distinct value — no duplicates.
+    """
+    from modules.catalog.option_collapse import derive_options
+
+    colors = ["Red", "Navy"]
+    sizes = ["S", "M", "L"]
+    p = await _mk_product(db, seed_supplier, _matrix(colors, sizes))
+    await derive_options(db, p.id)
+
+    # Simulate re-ingest: variants survive (ON CONFLICT upsert in persistence)
+    # → derive again from the same variants
+    await derive_options(db, p.id)
+    await derive_options(db, p.id)  # third time for good measure
+
+    opts = await _options(db, p.id)
+    assert set(opts) == {"color", "size"}
+    assert len(await _attrs(db, opts["color"].id)) == 2
+    assert len(await _attrs(db, opts["size"].id)) == 3
