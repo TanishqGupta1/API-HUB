@@ -258,6 +258,69 @@ async def get_product_by_sku(
     return OpsResult(ok=True, data=payload, raw=result.raw)
 
 
+# ── get_product_sku_matrix (AI-2 — valid size/option combos before setProductSku) ─
+#
+# OPS docs: "Use it to get valid size and option combinations before calling
+# setProductSku." Returns the authoritative list of assignable variant slots
+# for a product:
+#   * No prod_add_opt_ids ("")  → size-wise matrix (one row per size).
+#   * With prod_add_opt_ids     → size × option-attribute matrix.
+#
+# This is the supported replacement for the invented getProductBySku (AI-1):
+# it tells us which (size_id, prod_add_opt_ids, attribute_ids) combinations
+# OPS will actually accept, so the setProductSku batch only assigns SKUs to
+# real slots and stock (updateProductStock) can find them later.
+#
+# `prod_add_opt_ids` is declared String! (required) in the live schema, so the
+# size-wise call passes an empty string rather than omitting the variable.
+
+_GET_PRODUCT_SKU_MATRIX = """
+query getProductSkuMatrix($products_id: Int!, $prod_add_opt_ids: String!) {
+  getProductSkuMatrix(products_id: $products_id, prod_add_opt_ids: $prod_add_opt_ids) {
+    matrix {
+      size_id
+      prod_add_opt_ids
+      attribute_ids
+    }
+    totalRecords
+  }
+}
+""".strip()
+
+
+async def get_product_sku_matrix(
+    *,
+    client: OpsGraphQLClient,
+    products_id: int,
+    prod_add_opt_ids: str = "",
+) -> OpsResult:
+    """Return the valid size/option combinations OPS will accept for a product.
+
+    On success ``OpsResult.data = {"matrix": [...], "totalRecords": int}``
+    (``matrix`` possibly empty). The "Data not found" error OPS returns for a
+    product with no configured combinations yet is mapped to an empty matrix so
+    callers don't need to special-case the error path (mirrors
+    ``get_product_stocks``).
+    """
+    result = await client.execute(
+        _GET_PRODUCT_SKU_MATRIX,
+        variables={"products_id": products_id, "prod_add_opt_ids": prod_add_opt_ids},
+    )
+    if not result.ok:
+        if (result.ops_error_code or "") == "DATA_NOT_FOUND":
+            return OpsResult(ok=True, data={"matrix": [], "totalRecords": 0}, raw=result.raw)
+        return result
+    payload = (result.data or {}).get("getProductSkuMatrix") or {}
+    return OpsResult(
+        ok=True,
+        data={
+            "matrix": payload.get("matrix") or [],
+            "totalRecords": payload.get("totalRecords") or 0,
+        },
+        raw=result.raw,
+    )
+
+
 # ── get_product_stocks (Phase 6 — stock_id read-back) ───────────────────────
 #
 # OPS's updateProductStock requires either stock_id or product_sku to identify

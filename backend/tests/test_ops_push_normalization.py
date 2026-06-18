@@ -354,3 +354,124 @@ class TestResolveStockIdForSize:
         result = await get_product_stocks(client=client, product_id=544)
         assert result.ok is True
         assert result.data["productStocks"] == []
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# AI-2 — getProductSkuMatrix (valid size/option combos before setProductSku)
+# ───────────────────────────────────────────────────────────────────────────
+
+
+class TestGetProductSkuMatrix:
+    """The getProductSkuMatrix query wrapper — OPS's authoritative list of
+    assignable (size, option) slots, fetched before setProductSku so we don't
+    assign SKUs OPS will reject."""
+
+    @pytest.mark.asyncio
+    async def test_unwraps_matrix_and_total(self):
+        from modules.ops_client.mutations import get_product_sku_matrix
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"getProductSkuMatrix": {
+                "matrix": [
+                    {"size_id": 611, "prod_add_opt_ids": "6557", "attribute_ids": "11481"},
+                    {"size_id": 508, "prod_add_opt_ids": "6557", "attribute_ids": "11481"},
+                ],
+                "totalRecords": 2,
+            }},
+        ))
+        result = await get_product_sku_matrix(client=client, products_id=288, prod_add_opt_ids="6557")
+        assert result.ok is True
+        assert result.data["totalRecords"] == 2
+        assert {r["size_id"] for r in result.data["matrix"]} == {611, 508}
+
+    @pytest.mark.asyncio
+    async def test_size_wise_passes_empty_opt_ids(self):
+        """Size-wise call (no options) must still send prod_add_opt_ids — it's
+        String! (required) in the live schema — as an empty string."""
+        from modules.ops_client.mutations import get_product_sku_matrix
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True, data={"getProductSkuMatrix": {"matrix": [], "totalRecords": 0}},
+        ))
+        await get_product_sku_matrix(client=client, products_id=350)
+        _, kwargs = client.execute.call_args
+        assert kwargs["variables"]["prod_add_opt_ids"] == ""
+        assert kwargs["variables"]["products_id"] == 350
+
+    @pytest.mark.asyncio
+    async def test_data_not_found_treated_as_empty(self):
+        """A product with no configured combinations returns DATA_NOT_FOUND;
+        map to an empty matrix so callers don't crash (mirrors stocks)."""
+        from modules.ops_client.mutations import get_product_sku_matrix
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=False, ops_error_code="DATA_NOT_FOUND", ops_error_message="Data not found!",
+        ))
+        result = await get_product_sku_matrix(client=client, products_id=544)
+        assert result.ok is True
+        assert result.data == {"matrix": [], "totalRecords": 0}
+
+
+class TestFetchValidSkuSizeIds:
+    """The gateway helper that turns the matrix into a set of valid size_ids
+    used to validate the setProductSku batch before sending."""
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_product_id_missing(self):
+        from modules.ops_push.gateway import _fetch_valid_sku_size_ids
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock()
+        assert await _fetch_valid_sku_size_ids(client, product_id=None) is None
+        client.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dry_run_fake_skips_query(self):
+        """The Fake (is_dry_run) has no real product to describe — return
+        None ('skip validation') without querying."""
+        from modules.ops_push.gateway import _fetch_valid_sku_size_ids, FakeOpsClient
+        assert await _fetch_valid_sku_size_ids(FakeOpsClient(), product_id=540) is None
+
+    @pytest.mark.asyncio
+    async def test_collects_size_ids_and_caches(self):
+        from modules.ops_push.gateway import _fetch_valid_sku_size_ids, _clear_sku_matrix_cache
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True,
+            data={"getProductSkuMatrix": {
+                "matrix": [{"size_id": 611}, {"size_id": 508}], "totalRecords": 2,
+            }},
+        ))
+        _clear_sku_matrix_cache(288)
+        ids = await _fetch_valid_sku_size_ids(client, product_id=288)
+        assert ids == {611, 508}
+        # Second call for same product is cached — no extra query.
+        ids2 = await _fetch_valid_sku_size_ids(client, product_id=288)
+        assert ids2 == {611, 508}
+        assert client.execute.call_count == 1
+        _clear_sku_matrix_cache(288)
+
+    @pytest.mark.asyncio
+    async def test_empty_matrix_is_advisory_none(self):
+        """An empty matrix (OPS may not have indexed new sizes yet) → None so
+        we DON'T drop every variant; validation is advisory this pass."""
+        from modules.ops_push.gateway import _fetch_valid_sku_size_ids, _clear_sku_matrix_cache
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=True, data={"getProductSkuMatrix": {"matrix": [], "totalRecords": 0}},
+        ))
+        _clear_sku_matrix_cache(999)
+        assert await _fetch_valid_sku_size_ids(client, product_id=999) is None
+        _clear_sku_matrix_cache(999)
+
+    @pytest.mark.asyncio
+    async def test_query_error_returns_none(self):
+        """A non-OK matrix query must not block the push — return None."""
+        from modules.ops_push.gateway import _fetch_valid_sku_size_ids, _clear_sku_matrix_cache
+        client = OpsGraphQLClient(OpsAuth(base_url="x", token_url="y", client_id="a", client_secret="b"))
+        client.execute = AsyncMock(return_value=OpsResult(
+            ok=False, ops_error_code="OPS_ERROR", ops_error_message="boom",
+        ))
+        _clear_sku_matrix_cache(777)
+        assert await _fetch_valid_sku_size_ids(client, product_id=777) is None
+        _clear_sku_matrix_cache(777)

@@ -77,6 +77,11 @@ class FakeOpsClient:
             return OpsResult(ok=True, data={"setProductsImageGallery": {"result": True, "message": "dry-run"}})
         if name == "UpdateProductStock":
             return OpsResult(ok=True, data={"updateProductStock": {"id": self._allocate_id(), "result": True}})
+        if name == "getProductSkuMatrix":
+            # Dry-run: report no configured matrix. The gateway treats the
+            # Fake (is_dry_run) as "skip matrix validation" anyway, so the
+            # exact rows don't matter — just return the well-formed shape.
+            return OpsResult(ok=True, data={"getProductSkuMatrix": {"matrix": [], "totalRecords": 0}})
         if name == "GetProductBySku":
             sku = (variables or {}).get("products_sku")
             existing = self.existing_products_by_sku.get(sku)
