@@ -1,6 +1,6 @@
 """Create ops_category_mappings table.
 
-Revision ID: 0015_create_ops_category_mappings
+Revision ID: 0015_ops_category_mappings
 Revises: 0014_customer_ops_fields
 Create Date: 2026-06-18
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 
-revision = "0015_create_ops_category_mappings"
+revision = "0015_ops_category_mappings"
 down_revision = "0014_customer_ops_fields"
 branch_labels = None
 depends_on = None
