@@ -258,6 +258,7 @@ class OptionIngest(BaseModel):
     master_option_id: Optional[int] = None
     ops_option_id: Optional[int] = None
     required: bool = False
+    enabled: bool = False
     # OPS sometimes returns this as a JSON string; ingest normalizes in ingest.py.
     attributes: list[OptionAttributeIngest] | str | None = None
 
