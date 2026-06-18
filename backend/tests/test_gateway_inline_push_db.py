@@ -170,10 +170,21 @@ async def test_inline_push_persists_variants_and_runs_mutation_sequence(client, 
     assert image_count == 1, f"expected 1 image persisted, got {image_count}"
 
     # (b) The push actually ran the mutation chain (not just an upsert).
+    # Phase 8 apparel rewrite (grouped model, live OPS 81-op collection):
+    # per-variant setProductSize/setProductPrice collapses to one placeholder
+    # size + 6-tier prices; colors and sizes become setAdditionalOptionAttributes
+    # under parent groups; per-size pricing via setProductsAttributePrice.
     steps = push_log.step_results or []
     mutations = [s.get("mutation") for s in steps if isinstance(s, dict)]
     assert "setProduct" in mutations, f"setProduct not in sequence: {mutations}"
-    assert mutations.count("setProductSize") >= 2, f"expected >=2 setProductSize: {mutations}"
-    assert mutations.count("setProductPrice") >= 2, f"expected >=2 setProductPrice: {mutations}"
+    assert mutations.count("setProductSize") == 1, f"expected 1 placeholder setProductSize: {mutations}"
+    assert mutations.count("setProductPrice") == 6, \
+        f"expected 6 setProductPrice tiers (APPAREL_VOLUME_TIERS): {mutations}"
+    assert mutations.count("setAdditionalOption") == 2, \
+        f"expected 2 group options (Color+Size): {mutations}"
+    assert "setAdditionalOptionAttributes" in mutations, \
+        f"grouped model: expected attribute children: {mutations}"
+    assert "setProductsAttributePrice" in mutations, \
+        f"expected per-size pricing via setProductsAttributePrice: {mutations}"
     assert all(s.get("status") == "ok" for s in steps if isinstance(s, dict)), \
         f"some dry-run steps not ok: {steps}"
