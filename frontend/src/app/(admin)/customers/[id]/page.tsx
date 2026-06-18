@@ -52,18 +52,6 @@ export default function CustomerSettingsPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // V1G-01 — OPS connection test + category dropdown
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<
-    | { ok: true; tokenEndpoint: string }
-    | { ok: false; errorCode: string; httpStatus?: number }
-    | null
-  >(null);
-  type OpsCategory = { id: number; name: string; parent_id: number | null; status: number | null };
-  const [opsCategories, setOpsCategories] = useState<OpsCategory[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(false);
-  const [categoriesError, setCategoriesError] = useState<string | null>(null);
-
   useEffect(() => {
     if (isInvalidId) return;
     async function load() {
@@ -126,71 +114,6 @@ export default function CustomerSettingsPage() {
       toast.error("Failed to delete storefront");
       setDeleting(false);
       setConfirmDelete(false);
-    }
-  };
-
-  const loadOpsCategories = async () => {
-    setLoadingCategories(true);
-    setCategoriesError(null);
-    try {
-      const res = await api<{
-        ok: boolean;
-        error_code?: string;
-        message?: string;
-        categories: OpsCategory[];
-      }>(`/api/customers/${id}/ops-categories`);
-      if (!res.ok) {
-        setCategoriesError(res.message || res.error_code || "Could not load categories");
-        setOpsCategories([]);
-      } else {
-        setOpsCategories(res.categories || []);
-      }
-    } catch (e) {
-      log.error("ops-categories load failed", e);
-      setCategoriesError("Network error loading categories");
-      setOpsCategories([]);
-    } finally {
-      setLoadingCategories(false);
-    }
-  };
-
-  // Auto-load OPS categories once the customer is in hand (creds may be set).
-  useEffect(() => {
-    if (!customer) return;
-    if (!customer.ops_base_url) return;
-    loadOpsCategories();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customer?.id]);
-
-  const handleTestConnection = async () => {
-    setTestingConnection(true);
-    setConnectionStatus(null);
-    try {
-      const res = await api<{
-        ok: boolean;
-        token_endpoint: string;
-        http_status?: number;
-        error_code?: string;
-      }>(`/api/customers/${id}/test`, { method: "POST" });
-      if (res.ok) {
-        setConnectionStatus({ ok: true, tokenEndpoint: res.token_endpoint });
-        toast.success("OPS connection OK — token issued");
-        // Refresh categories now that we've confirmed creds work
-        loadOpsCategories();
-      } else {
-        setConnectionStatus({
-          ok: false,
-          errorCode: res.error_code || "UNKNOWN",
-          httpStatus: res.http_status,
-        });
-        toast.error(`Connection failed: ${res.error_code || "unknown error"}`);
-      }
-    } catch (e) {
-      log.error("test connection failed", e);
-      setConnectionStatus({ ok: false, errorCode: "NETWORK_ERROR" });
-      toast.error("Network error — could not reach api-hub");
-    } finally {
-      setTestingConnection(false);
     }
   };
 
@@ -322,102 +245,33 @@ export default function CustomerSettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-[#888894]">
-                    Default OPS Category
-                  </label>
-                  <button
-                    type="button"
-                    onClick={loadOpsCategories}
-                    disabled={loadingCategories}
-                    className="text-[10px] font-bold uppercase tracking-wider text-[#1e4d92] hover:text-[#163a73] flex items-center gap-1 disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${loadingCategories ? "animate-spin" : ""}`} />
-                    {loadingCategories ? "Loading…" : "Refresh"}
-                  </button>
-                </div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-[#888894]">
+                  Default OPS Category ID
+                </label>
                 <div className="relative">
-                  <LayoutGrid className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888894] pointer-events-none" />
-                  {opsCategories.length > 0 ? (
-                    <select
-                      value={currentCustomer.default_ops_category_id ?? ""}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setCustomer(prev => prev ? {
-                          ...prev,
-                          default_ops_category_id: v === "" ? null : Number(v),
-                        } : null);
-                      }}
-                      className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#cfccc8] text-sm font-bold focus:border-[#1e4d92] outline-none transition-all bg-white appearance-none"
-                    >
-                      <option value="">— No default category —</option>
-                      {opsCategories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} (id {c.id})
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      value={currentCustomer.default_ops_category_id ?? ""}
-                      placeholder={categoriesError ? "Fallback: enter category id" : "Loading from OPS…"}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setCustomer(prev => prev ? {
-                          ...prev,
-                          default_ops_category_id: v === "" ? null : Number(v),
-                        } : null);
-                      }}
-                      className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#cfccc8] text-sm font-bold font-mono focus:border-[#1e4d92] outline-none transition-all"
-                    />
-                  )}
+                  <LayoutGrid className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888894]" />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={currentCustomer.default_ops_category_id ?? ""}
+                    placeholder="e.g. 539"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setCustomer(prev => prev ? {
+                        ...prev,
+                        default_ops_category_id: v === "" ? null : Number(v),
+                      } : null);
+                    }}
+                    className="w-full h-12 pl-12 pr-4 rounded-xl border border-[#cfccc8] text-sm font-bold font-mono focus:border-[#1e4d92] outline-none transition-all"
+                  />
                 </div>
-                {categoriesError && (
-                  <p className="text-[11px] text-[#b93232] leading-relaxed font-mono">
-                    Could not load categories from OPS: {categoriesError}. Falling back to manual id entry.
-                  </p>
-                )}
-                {!categoriesError && opsCategories.length > 0 && (
-                  <p className="text-[11px] text-[#247a52] leading-relaxed">
-                    {opsCategories.length} categories loaded from {currentCustomer.ops_base_url}. Picked as fallback when no per-product category is set.
-                  </p>
-                )}
-                {!categoriesError && opsCategories.length === 0 && !loadingCategories && (
-                  <p className="text-[11px] text-[#888894] leading-relaxed">
-                    No categories loaded. Click <strong>Test Connection</strong> below to verify OPS credentials, then Refresh.
-                  </p>
-                )}
-              </div>
-
-              {/* V1G-01 — Test Connection */}
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleTestConnection}
-                    disabled={testingConnection}
-                    className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-[#1e4d92] text-white text-[12px] font-bold uppercase tracking-wider hover:bg-[#163a73] disabled:opacity-50 transition-colors"
-                  >
-                    <Zap className={`w-3.5 h-3.5 ${testingConnection ? "animate-pulse" : ""}`} />
-                    {testingConnection ? "Testing…" : "Test Connection"}
-                  </button>
-                  {connectionStatus?.ok === true && (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-[#247a52]">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Connected — token issued
-                    </span>
-                  )}
-                  {connectionStatus?.ok === false && (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-[#b93232]">
-                      <X className="w-3.5 h-3.5" />
-                      Failed: {connectionStatus.errorCode}
-                      {connectionStatus.httpStatus ? ` (HTTP ${connectionStatus.httpStatus})` : ""}
-                    </span>
-                  )}
-                </div>
+                <p className="text-[11px] text-[#888894] leading-relaxed">
+                  Fallback category for product pushes when no per-product
+                  category is set. Without this, OPS hides products from the
+                  default browse view. Create the category in OPS admin first,
+                  then enter the numeric category_id here.
+                </p>
               </div>
 
             </div>
