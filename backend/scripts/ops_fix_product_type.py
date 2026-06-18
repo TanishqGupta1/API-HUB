@@ -1,4 +1,7 @@
-"""One-off: set product_type="1" on an existing OPS product to remove Designer section.
+"""One-off: set product_type="15" on an existing OPS product (Add to cart / stock apparel).
+
+Per the live OPS legend: 1=Custom Design, 2=Upload Center, 3=Browse Design,
+7=Quote, 8=Hire Designer, 15=Add to cart. Stock apparel products must be "15".
 
 Usage (from backend/):
     python scripts/ops_fix_product_type.py --product-id 603
@@ -51,13 +54,13 @@ async def _load_client() -> OpsGraphQLClient:
 
 
 async def main(product_id: int, dry_run: bool) -> None:
-    print(f"Target: products_id={product_id}, product_type='1'")
+    print(f"Target: products_id={product_id}, product_type='15'")
     if dry_run:
         print("[dry-run] Would call setProduct — skipping.")
         return
 
     client = await _load_client()
-    payload = {"inputs": [{"products_id": product_id, "product_type": "1"}]}
+    payload = {"inputs": [{"products_id": product_id, "product_type": "15"}]}
     r = await client.execute(_SET_PRODUCT, variables=payload)
 
     if not r.ok:

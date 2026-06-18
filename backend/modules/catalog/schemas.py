@@ -36,20 +36,8 @@ class ProductImageRead(BaseModel):
     color: Optional[str] = None
     sort_order: int
     checksum: Optional[str] = None
-    ops_filename: Optional[str] = None  # set after manual OPS admin upload
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class ProductImageOpsFilenameUpdate(BaseModel):
-    ops_filename: Optional[str] = Field(
-        default=None,
-        max_length=255,
-        description=(
-            "Bare filename assigned by OPS after manually uploading the image "
-            "via OPS admin UI (e.g. 'bg77-black-front.jpg'). Null clears the value."
-        ),
-    )
 
 
 class ProductOptionAttributeRead(BaseModel):
