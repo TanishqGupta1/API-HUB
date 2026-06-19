@@ -28,7 +28,8 @@ export default function ProductPreviewPage() {
   useEffect(() => {
     async function load() {
       try {
-        const p = await api<ProductPreview>(`/api/products/${id}/preview`);
+        const qs = selectedCustomerId ? `?customer_id=${selectedCustomerId}` : "";
+        const p = await api<ProductPreview>(`/api/products/${id}/preview${qs}`);
         setPreview(p);
 
         // fetch full product just for supplier info
@@ -46,7 +47,7 @@ export default function ProductPreviewPage() {
       }
     }
     load();
-  }, [id]);
+  }, [id, selectedCustomerId]);
 
   const imageTabs = useMemo(() => {
     if (!preview) return [];
@@ -96,7 +97,13 @@ export default function ProductPreviewPage() {
     ...(priceMissing > 0 ? [`price missing on ${priceMissing} variant${priceMissing !== 1 ? "s" : ""}`] : []),
     ...(inventoryMissing > 0 ? [`inventory missing on ${inventoryMissing} variant${inventoryMissing !== 1 ? "s" : ""}`] : []),
   ];
-  const isReady = summaryFields.length === 0;
+
+  const readiness = preview.push_readiness;
+  const pushBlockerChecks = readiness?.checks.filter((c) => !c.ok) ?? [];
+  const pushWarningChecks = readiness?.warnings ?? [];
+  const isReady =
+    summaryFields.length === 0 &&
+    (readiness ? readiness.ok : true);
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8">
@@ -139,23 +146,76 @@ export default function ProductPreviewPage() {
           <div>
             <div className="text-[13px] font-bold text-[#1a5c3a]">Ready to push</div>
             <div className="text-[12px] text-[#247a52]/80 mt-0.5">
-              All product fields are present. Click <span className="font-semibold">Push to OPS</span> to send this product to your storefront.
+              {readiness
+                ? "All product fields and OPS push checks are green. Click Push to OPS to send this product to your storefront."
+                : "All product fields are present. Select a customer to verify OPS push readiness."}
             </div>
           </div>
         </div>
       ) : (
-        <div className="mb-6 bg-[#fffbf0] border border-[#e8c840] rounded-xl px-5 py-3 flex items-start gap-3">
-          <AlertTriangle className="w-4 h-4 text-[#b8860b] shrink-0 mt-0.5" />
-          <div>
-            <div className="text-[12px] font-semibold text-[#7a6000] mb-1.5">
-              {summaryFields.length} field{summaryFields.length !== 1 ? "s" : ""} incomplete — push may be blocked
+        summaryFields.length > 0 && (
+          <div className="mb-4 bg-[#fffbf0] border border-[#e8c840] rounded-xl px-5 py-3 flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-[#b8860b] shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[12px] font-semibold text-[#7a6000] mb-1.5">
+                {summaryFields.length} field{summaryFields.length !== 1 ? "s" : ""} incomplete — push may be blocked
+              </div>
+              <ul className="flex flex-wrap gap-x-5 gap-y-0.5">
+                {summaryFields.map((f) => (
+                  <li key={f} className="text-[11px] text-[#8a7000] font-mono">· {f}</li>
+                ))}
+              </ul>
             </div>
-            <ul className="flex flex-wrap gap-x-5 gap-y-0.5">
-              {summaryFields.map((f) => (
-                <li key={f} className="text-[11px] text-[#8a7000] font-mono">· {f}</li>
+          </div>
+        )
+      )}
+
+      {/* ── Push readiness blockers (customer-scoped preflight) ── */}
+      {pushBlockerChecks.length > 0 && (
+        <div className="mb-4 bg-[#fdf0ef] border-2 border-[#b93232] rounded-xl px-5 py-3 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-[#b93232] shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-[12px] font-bold text-[#7a1f1f] mb-2">
+              {pushBlockerChecks.length} OPS push blocker{pushBlockerChecks.length !== 1 ? "s" : ""} — push will be rejected
+            </div>
+            <ul className="flex flex-col gap-1.5">
+              {pushBlockerChecks.map((c) => (
+                <li key={c.name} className="text-[11px] text-[#7a1f1f]">
+                  <span className="font-mono font-bold">{c.name}</span>
+                  <span className="ml-2 font-medium">— {c.detail}</span>
+                  {c.suggestion && (
+                    <div className="ml-4 mt-0.5 text-[10.5px] text-[#a04040] italic">↳ {c.suggestion}</div>
+                  )}
+                </li>
               ))}
             </ul>
           </div>
+        </div>
+      )}
+
+      {/* ── Push readiness warnings (non-blocking, still surfaced) ── */}
+      {pushWarningChecks.length > 0 && (
+        <div className="mb-6 bg-[#fffbf0] border border-[#e8c840] rounded-xl px-5 py-3 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-[#b8860b] shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-[12px] font-semibold text-[#7a6000] mb-1.5">
+              {pushWarningChecks.length} push warning{pushWarningChecks.length !== 1 ? "s" : ""} — push will succeed but review first
+            </div>
+            <ul className="flex flex-col gap-1">
+              {pushWarningChecks.map((c) => (
+                <li key={c.name} className="text-[11px] text-[#8a7000]">
+                  <span className="font-mono font-bold">{c.name}</span>
+                  <span className="ml-2">— {c.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {!readiness && (
+        <div className="mb-6 text-[11px] text-[#888894] italic px-1">
+          ↳ Select a customer from the top bar to see OPS push readiness checks (markup rule, OPS credentials, push mappings, category).
         </div>
       )}
 

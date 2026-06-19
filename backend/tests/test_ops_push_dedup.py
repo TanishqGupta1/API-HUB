@@ -26,6 +26,47 @@ pytestmark = [pytest.mark.no_db, pytest.mark.asyncio]
 
 
 # ---------------------------------------------------------------------------
+# FakeOpsClient `products` dedup scan
+# ---------------------------------------------------------------------------
+
+
+async def test_fake_client_products_returns_seeded_catalog():
+    c = FakeOpsClient(existing_products_by_sku={"PC61": 42})
+    r = await c.execute(
+        "query products ($limit: Int, $offset: Int) { products (limit: $limit, offset: $offset) { products { product_id main_sku external_ref } totalProducts currentCount } }",
+        variables={"limit": 200, "offset": 0},
+    )
+    assert r.ok is True
+    block = r.data["products"]
+    assert block["totalProducts"] == 1
+    row = block["products"][0]
+    assert row["product_id"] == 42
+    assert row["external_ref"] == "PC61"
+    assert row["main_sku"] == "PC61"
+
+
+async def test_fake_client_products_empty_when_not_seeded():
+    c = FakeOpsClient()  # no existing_products_by_sku
+    r = await c.execute(
+        "query products ($limit: Int, $offset: Int) { products (limit: $limit, offset: $offset) { products { product_id } totalProducts } }",
+        variables={"limit": 200, "offset": 0},
+    )
+    assert r.ok is True
+    assert r.data["products"]["products"] == []
+    assert r.data["products"]["totalProducts"] == 0
+
+
+async def test_fake_client_products_paginates():
+    """offset/limit are honored so the dedup scan's pagination is exercised."""
+    c = FakeOpsClient(existing_products_by_sku={"A": 1, "B": 2, "C": 3})
+    page1 = await c.execute("query products{x}", variables={"limit": 2, "offset": 0})
+    page2 = await c.execute("query products{x}", variables={"limit": 2, "offset": 2})
+    assert len(page1.data["products"]["products"]) == 2
+    assert len(page2.data["products"]["products"]) == 1
+    assert page1.data["products"]["totalProducts"] == 3
+
+
+# ---------------------------------------------------------------------------
 # find_product_id_by_main_sku (AI-1 — replaces the invented getProductBySku)
 # ---------------------------------------------------------------------------
 
