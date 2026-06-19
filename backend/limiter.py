@@ -1,9 +1,15 @@
+import os
 import time
 from collections import deque
 from threading import Lock
 
 from fastapi import HTTPException, status
 from slowapi import Limiter
+
+# Rate limiting (per-IP slowapi limits + the per-email login cap below) is a
+# production brute-force defense. It only gets in the way during local dev,
+# so it's disabled outside production. Set ENVIRONMENT=production to enable.
+RATE_LIMITING_ENABLED = os.getenv("ENVIRONMENT", "development").lower() == "production"
 
 
 def _client_ip(request) -> str:
@@ -21,7 +27,7 @@ def _client_ip(request) -> str:
     return request.client.host if request.client else "127.0.0.1"
 
 
-limiter = Limiter(key_func=_client_ip)
+limiter = Limiter(key_func=_client_ip, enabled=RATE_LIMITING_ENABLED)
 
 
 # ── Per-email login limiter ────────────────────────────────────────────────
@@ -44,7 +50,12 @@ def enforce_email_login_limit(email: str) -> None:
     Call BEFORE the password verify. Both wrong-password attempts and
     nonexistent emails count, so an attacker can't use the endpoint to
     probe valid emails while also exhausting the bucket.
+
+    Disabled outside production (see RATE_LIMITING_ENABLED) so local dev
+    logins never lock out.
     """
+    if not RATE_LIMITING_ENABLED:
+        return
     now = time.monotonic()
     key = email.strip().lower()
     cutoff = now - _EMAIL_WINDOW_SECONDS

@@ -383,33 +383,25 @@ class TestMutationPlanOrder:
         last_two = payload.plan[-2:]
         assert all(s.mutation == "updateProductStock" for s in last_two)
 
-    def test_inventory_action_is_add(self, monkeypatch):
-        # action=Add increments existing stock. Phase 6: OPS has no per-size
-        # SKU field anywhere in its schema, so updateProductStock identifies
-        # the variant by stock_id. The stock_id is resolved at execute time
-        # by the gateway from a productStocks(product_id) read-back.
-        #
-        # The plan step does NOT carry stock_id directly — it carries a
-        # gateway-only sentinel `_size_id_ref` (a placeholder) that the
-        # gateway uses to look up the stock_id for that variant's size.
+    def test_inventory_targets_variant_by_product_sku(self, monkeypatch):
+        # updateProductStock now identifies the variant by product_sku — the
+        # same SKU setProductSku assigns in OPS — so the old stock_id read-back
+        # (_size_id_ref hint) is gone. action="Reset" sets the absolute stock
+        # quantity, keeping re-pushes idempotent (re-pushes now go through
+        # update mode, so Add/Remove would drift the count).
         # Stock steps are opt-in (OPS_PUSH_INCLUDE_STOCK); enable to assert shape.
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         ctx = _ctx(variants=[_variant("PC61-WHT-M", inventory=42)])
         payload = _synthesize_payload(ctx)
         stock_step = next(s for s in payload.plan if s.mutation == "updateProductStock")
-        assert stock_step.variables["action"] == "Add"
+        assert stock_step.variables["action"] == "Reset"
+        assert stock_step.variables["product_sku"] == "PC61-WHT-M"
         assert stock_step.variables["input"]["stock_quantity"] == 42
-        # _size_id_ref is the gateway lookup hint — must reference a
-        # setProductSize step's size_id response.
-        assert stock_step.variables["_size_id_ref"].startswith("$step")
-        assert stock_step.variables["_size_id_ref"].endswith(".size_id")
-        # product_sku is gone — OPS can't match it without a per-size SKU
-        # field, so threading it does nothing useful and is misleading.
-        assert "product_sku" not in stock_step.variables
-        assert "stock_id" not in stock_step.variables  # filled by gateway
+        # The obsolete gateway-resolution sentinel and stock_id must be gone.
+        assert "_size_id_ref" not in stock_step.variables
+        assert "stock_id" not in stock_step.variables
         # action must NOT be nested inside input
         assert "action" not in stock_step.variables["input"]
-        assert "product_sku" not in stock_step.variables["input"]
 
     def test_no_setProductCategory_step(self):
         # Old spec had a separate setProductCategory step; new spec does not.
@@ -813,10 +805,10 @@ class TestSetProductVariables:
         """setProduct.input.main_sku must equal supplier_sku.
 
         main_sku is OPS's product-level SKU (set via setProduct per OPS docs)
-        and is the field getProductBySku matches on. If it's missing or wrong,
-        the gateway's pre-push dedup can't find a product we created, so a
-        re-push without a local push_mapping creates a duplicate in OPS instead
-        of replacing the existing product.
+        and is the field find_product_id_by_main_sku matches on. If it's missing
+        or wrong, the gateway's pre-push dedup can't find a product we created,
+        so a re-push without a local push_mapping creates a duplicate in OPS
+        instead of replacing the existing product.
         """
         ctx = _ctx(
             variants=[_variant("PC61-WHT-M")],
@@ -879,6 +871,15 @@ class TestSetProductVariables:
         assert "product_description" in inp
         for forbidden in ("category_name", "brand", "products_image", "products_description"):
             assert forbidden not in inp, f"{forbidden} is not a valid ProductInput field"
+
+    def test_product_service_type_present(self):
+        """setProduct.input must include product_service_type — a REQUIRED
+        ProductInput field per the OPS docs ("Must be 1 always"). It's a String
+        in the schema, so we send "1" (not int 1)."""
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")])
+        payload = _synthesize_payload(ctx)
+        inp = payload.plan[0].variables["inputs"][0]
+        assert inp["product_service_type"] == "1"
 
     def test_category_id_present_when_mapped(self):
         """setProduct.input.category_id is the mapped OPS category id (Int).
@@ -1067,3 +1068,90 @@ class TestStorefrontOverridesInPush:
         # If a refactor moves one but not the other, this import breaks.
         assert push_helper.apply_pricing_overrides is not None
         assert hasattr(quote_path, "_apply_storefront_override")
+
+
+# ===========================================================================
+# AI-3 — enable_stock_management ↔ setProductSku.sku_type alignment
+# ===========================================================================
+
+
+class TestStockManagementSkuTypeAlignment:
+    """OPS leaves SKUs unregistered for stock ("Invalid Product SKU") unless
+    setProduct.enable_stock_management matches every setProductSku.sku_type:
+        1 (Only Size)             ↔ size_wise
+        2 (Size with Product Opt) ↔ size_option_wise
+    The mode is decided ONCE per product (OPS allows one method per product)."""
+
+    def test_size_wise_product_sets_stock_management_1(self, monkeypatch):
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_SKU", "1")
+        ctx = _ctx(variants=[_variant("PC61-WHT-M"), _variant("PC61-WHT-L", size="L")])
+        payload = _synthesize_payload(ctx)
+        inp = payload.plan[0].variables["inputs"][0]
+        assert inp["enable_stock_management"] == "1"
+        sku_steps = [s for s in payload.plan if s.mutation == "setProductSku"]
+        assert sku_steps, "expected setProductSku steps with OPS_PUSH_INCLUDE_SKU=1"
+        assert all(s.variables["inputs"][0]["sku_type"] == "size_wise" for s in sku_steps)
+
+    def test_size_option_wise_product_sets_stock_management_2(self, monkeypatch):
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_SKU", "1")
+        # Local "color" option whose attributes cover EVERY variant's color.
+        opt = _option("color", attributes=[_option_attribute("Red"), _option_attribute("Navy")])
+        ctx = _ctx(
+            variants=[_variant("T-RED-M", color="Red"), _variant("T-NAV-M", color="Navy")],
+            options=[opt],
+        )
+        payload = _synthesize_payload(ctx, OptionStrategy.PRODUCT_LOCAL_OPTION_CREATE)
+        inp = payload.plan[0].variables["inputs"][0]
+        assert inp["enable_stock_management"] == "2"
+        sku_steps = [s for s in payload.plan if s.mutation == "setProductSku"]
+        assert sku_steps
+        for s in sku_steps:
+            si = s.variables["inputs"][0]
+            assert si["sku_type"] == "size_option_wise"
+            # size_option_wise inputs MUST carry the option/attribute ids.
+            assert "prod_add_opt_ids" in si and "attribute_ids" in si
+
+    def test_partial_color_match_stays_size_wise(self, monkeypatch):
+        """If only SOME variant colors map to a local option attribute, going
+        size_option_wise would leave the unmatched variants without ids and
+        mix modes — forbidden. Stay size_wise / enable_stock_management=1."""
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_SKU", "1")
+        opt = _option("color", attributes=[_option_attribute("Red")])  # no Navy
+        ctx = _ctx(
+            variants=[_variant("T-RED-M", color="Red"), _variant("T-NAV-M", color="Navy")],
+            options=[opt],
+        )
+        payload = _synthesize_payload(ctx, OptionStrategy.PRODUCT_LOCAL_OPTION_CREATE)
+        inp = payload.plan[0].variables["inputs"][0]
+        assert inp["enable_stock_management"] == "1"
+        sku_steps = [s for s in payload.plan if s.mutation == "setProductSku"]
+        assert all(s.variables["inputs"][0]["sku_type"] == "size_wise" for s in sku_steps)
+
+
+# ===========================================================================
+# AI-8 — OPS product_type (sale-type): apparel sold from stock → "15"
+# ===========================================================================
+
+
+class TestOpsProductType:
+    """setProduct.product_type is the OPS *sale-type* (15 = Add to cart for
+    stock apparel; 1 = Custom Design). It is NOT our Product.product_type
+    ('apparel'/'print')."""
+
+    def test_apparel_product_type_is_15(self):
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], product=_product())  # default product_type="apparel"
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["product_type"] == "15"
+
+    def test_non_apparel_product_type_is_1(self):
+        prod = _product()
+        prod.product_type = "print"
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], product=prod)
+        payload = _synthesize_payload(ctx)
+        assert payload.plan[0].variables["inputs"][0]["product_type"] == "1"
+
+    def test_product_type_is_string(self):
+        """OPS product_type is a String, not an Int — must be sent as "15"."""
+        ctx = _ctx(variants=[_variant("PC61-WHT-M")], product=_product())
+        inp = _synthesize_payload(ctx).plan[0].variables["inputs"][0]
+        assert isinstance(inp["product_type"], str)
