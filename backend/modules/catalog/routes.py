@@ -14,7 +14,7 @@ from .option_collapse import derive_options, derive_options_bulk
 
 from modules.push_log.models import ProductPushLog
 from .models import Category, Product, ProductOption, ProductOptionAttribute, ProductVariant
-from .exporter import build_supplier_product, push_products_to_graphx
+from .exporter import build_supplier_product, push_products_to_graphx, _post, _graphx_env
 from .option_collapse import derive_options, derive_options_bulk
 from .schemas import (
     ProductListRead,
@@ -176,33 +176,16 @@ async def push_one_product_to_graphx(
     tenant_slug: str = Query(default="vg"),
 ):
     """Push a single product to graphx as IMPORTED_FROM_SUPPLIER."""
-    import os
-    import httpx
     payload = await build_supplier_product(db, product_id)
     if not payload["options"]:
         raise HTTPException(400, "Product has no options — run derive-options first")
     product = await db.get(Product, product_id)
     supplier = await db.get(Supplier, product.supplier_id) if product else None
 
-    url = os.environ["GRAPHX_INGEST_URL"]
-    secret = os.environ["GRAPHX_INGEST_SECRET"]
-    async with httpx.AsyncClient(timeout=60) as c:
-        r = await c.post(
-            url,
-            headers={"x-ingest-secret": secret},
-            json={
-                "supplier_key": supplier.slug if supplier else "",
-                "tenant_slug": tenant_slug,
-                "products": [payload],
-            },
-        )
-        body = None
-        if r.headers.get("content-type", "").startswith("application/json"):
-            try:
-                body = r.json()
-            except Exception:
-                body = None
-    return {"status": r.status_code, "body": body}
+    # Reuse exporter._post (status-checked, raises 502 on non-2xx) + the shared
+    # 503-guarded env helper rather than re-implementing the httpx call here.
+    url, secret = _graphx_env()
+    return await _post(url, secret, supplier.slug if supplier else "", tenant_slug, [payload])
 
 
 @router.post("/{product_id}/archive")
