@@ -22,8 +22,8 @@ class FakeOpsClient:
 
     • Allocates monotonic synthetic IDs starting at 1000.
     • Records every call on ``self.calls`` for test assertions.
-    • ``existing_products_by_sku``: pre-seed the simulated OPS catalog so
-      GetProductBySku returns a match (dedup path testing).
+    • ``existing_products_by_sku``: pre-seed the simulated OPS catalog (sku ->
+      products_id) so the `products` dedup query returns a match (AI-1 path).
     • ``is_dry_run = True``: sentinel read by _resolve_stock_id_for_size to
       return a synthetic stock_id instead of querying OPS.
     """
@@ -71,18 +71,29 @@ class FakeOpsClient:
             return OpsResult(ok=True, data={"setAdditionalOptionAttributes": {"id": self._allocate_id()}})
         if name == "SetProductsAttributePrice":
             return OpsResult(ok=True, data={"setProductsAttributePrice": {"ok": True}})
+        if name == "SetProductSku":
+            return OpsResult(ok=True, data={"setProductSku": {"id": self._allocate_id(), "result": True}})
         if name == "SetProductsImageGallery":
             return OpsResult(ok=True, data={"setProductsImageGallery": {"result": True, "message": "dry-run"}})
         if name == "UpdateProductStock":
             return OpsResult(ok=True, data={"updateProductStock": {"id": self._allocate_id(), "result": True}})
-        if name == "GetProductBySku":
-            sku = (variables or {}).get("products_sku")
-            existing = self.existing_products_by_sku.get(sku)
-            if existing is None:
-                return OpsResult(ok=True, data={"getProductBySku": {}})
-            return OpsResult(ok=True, data={"getProductBySku": {
-                "products_id": existing,
-                "products_sku": sku,
+        if name == "getProductSkuMatrix":
+            # Dry-run: report no configured matrix. The gateway treats the
+            # Fake (is_dry_run) as "skip matrix validation" anyway, so the
+            # exact rows don't matter — just return the well-formed shape.
+            return OpsResult(ok=True, data={"getProductSkuMatrix": {"matrix": [], "totalRecords": 0}})
+        if name == "products":
+            # Dedup path (AI-1): find_product_id_by_main_sku pages this query
+            # and matches main_sku client-side. Surface the seeded catalog as
+            # products rows so the dedup helper resolves a programmed match.
+            rows = [
+                {"product_id": pid, "main_sku": sku}
+                for sku, pid in self.existing_products_by_sku.items()
+            ]
+            return OpsResult(ok=True, data={"products": {
+                "products": rows,
+                "totalProducts": len(rows),
+                "currentCount": len(rows),
             }})
         return OpsResult(
             ok=False,
@@ -117,6 +128,9 @@ class FakeOpsClient:
         return {"id": self._allocate_id()}
 
     async def set_products_attribute_price(self, variables: dict) -> dict:
+        return {"id": self._allocate_id()}
+
+    async def set_product_sku(self, variables: dict) -> dict:
         return {"id": self._allocate_id()}
 
     async def set_products_image_gallery(self, variables: dict) -> dict:

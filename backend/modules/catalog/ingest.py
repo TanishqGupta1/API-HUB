@@ -133,6 +133,7 @@ async def _upsert_options(
                 master_option_id=opt.master_option_id,
                 ops_option_id=opt.ops_option_id,
                 required=opt.required,
+                enabled=opt.enabled,
                 status=1,
             )
             .on_conflict_do_update(
@@ -144,6 +145,11 @@ async def _upsert_options(
                     "master_option_id": opt.master_option_id,
                     "ops_option_id": opt.ops_option_id,
                     "required": opt.required,
+                    # `enabled` is intentionally set on INSERT only (above), never
+                    # on conflict: the OPS re-sync path leaves OptionIngest.enabled
+                    # at its False default, so updating it here would silently
+                    # disable a previously-enabled option on every routine re-sync.
+                    # It is owned by the derive path / explicit user toggle.
                 },
             )
             .returning(ProductOption.id)

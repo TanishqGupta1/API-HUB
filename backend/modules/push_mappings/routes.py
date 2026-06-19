@@ -44,6 +44,20 @@ async def list_mappings(
     return await service.get_push_mappings(db, customer_id, source_product_id)
 
 
+@router.get("/{id}", response_model=PushMappingRead)
+async def get_mapping(
+    id: UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify a mapping was saved — returns full mapping with nested options."""
+    mapping = await service.get_push_mapping_by_id(db, id)
+    if mapping is None:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    require_customer_access(mapping.customer_id, current_user)
+    return mapping
+
+
 @router.delete("/{id}")
 async def delete_mapping(
     id: UUID,
