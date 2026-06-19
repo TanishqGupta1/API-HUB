@@ -67,6 +67,51 @@ async def test_fake_client_products_paginates():
 
 
 # ---------------------------------------------------------------------------
+# find_product_id_by_main_sku (AI-1 — replaces the invented getProductBySku)
+# ---------------------------------------------------------------------------
+
+
+async def test_find_by_main_sku_returns_match_when_sku_pre_seeded():
+    from modules.ops_client.mutations import find_product_id_by_main_sku
+
+    c = FakeOpsClient(existing_products_by_sku={"PC61": 42})
+    r = await find_product_id_by_main_sku(client=c, main_sku="PC61")
+    assert r.ok is True
+    assert r.data["products_id"] == 42
+
+
+async def test_find_by_main_sku_returns_empty_when_sku_not_seeded():
+    from modules.ops_client.mutations import find_product_id_by_main_sku
+
+    c = FakeOpsClient(existing_products_by_sku={"OTHER": 99})
+    r = await find_product_id_by_main_sku(client=c, main_sku="PC61")
+    assert r.ok is True
+    # No match → empty data; caller treats absence of products_id as 'not found'
+    assert r.data == {}
+
+
+async def test_find_by_main_sku_matches_correct_product_among_many():
+    """Client-side scan must pick the row whose main_sku matches, not the first."""
+    from modules.ops_client.mutations import find_product_id_by_main_sku
+
+    c = FakeOpsClient(existing_products_by_sku={"AAA": 1, "PC61": 77, "ZZZ": 9})
+    r = await find_product_id_by_main_sku(client=c, main_sku="PC61")
+    assert r.data["products_id"] == 77
+
+
+async def test_find_by_main_sku_propagates_query_error():
+    """A failing page query surfaces as a non-OK result (caller logs + skips)."""
+    from modules.ops_client.mutations import find_product_id_by_main_sku
+
+    client = AsyncMock()
+    client.execute = AsyncMock(return_value=OpsResult(
+        ok=False, ops_error_code="AUTH_FAILED", ops_error_message="bad creds",
+    ))
+    r = await find_product_id_by_main_sku(client=client, main_sku="PC61")
+    assert r.ok is False
+
+
+# ---------------------------------------------------------------------------
 # _dedup_lookup_in_ops
 # ---------------------------------------------------------------------------
 
@@ -87,26 +132,6 @@ async def test_dedup_returns_none_when_ops_has_no_product():
     assert discovered is None
 
 
-async def test_get_product_by_sku_paginates_to_find_match():
-    """Target on a later page is still found — proves the scan pages through
-    the catalog (page_size=1 forces one product per page)."""
-    from modules.ops_client import mutations as _m
-
-    client = FakeOpsClient(existing_products_by_sku={"A": 1, "B": 2, "PC61": 9000})
-    result = await _m.get_product_by_sku(client=client, products_sku="PC61", page_size=1)
-    assert result.ok is True
-    assert result.data["products_id"] == 9000
-
-
-async def test_get_product_by_sku_returns_empty_when_absent():
-    from modules.ops_client import mutations as _m
-
-    client = FakeOpsClient(existing_products_by_sku={"A": 1, "B": 2})
-    result = await _m.get_product_by_sku(client=client, products_sku="MISSING", page_size=1)
-    assert result.ok is True
-    assert result.data == {}
-
-
 async def test_dedup_swallows_query_exceptions(caplog):
     """Defensive: if the OPS query raises (e.g. transport error or
     schema-mismatch parse failure), dedup must not block the push."""
@@ -116,7 +141,7 @@ async def test_dedup_swallows_query_exceptions(caplog):
     bad_client.execute = AsyncMock(side_effect=RuntimeError("boom"))
 
     with patch(
-        "modules.ops_client.mutations.get_product_by_sku",
+        "modules.ops_client.mutations.find_product_id_by_main_sku",
         AsyncMock(side_effect=RuntimeError("boom")),
     ):
         with caplog.at_level(logging.ERROR):
@@ -135,7 +160,7 @@ async def test_dedup_returns_none_on_ops_error_result(caplog):
         ok=False, ops_error_code="AUTH_FAILED", ops_error_message="bad creds"
     )
     with patch(
-        "modules.ops_client.mutations.get_product_by_sku",
+        "modules.ops_client.mutations.find_product_id_by_main_sku",
         AsyncMock(return_value=bad_result),
     ):
         with caplog.at_level(logging.WARNING):
@@ -151,7 +176,7 @@ async def test_dedup_handles_non_numeric_products_id(caplog):
 
     weird_result = OpsResult(ok=True, data={"products_id": "not-a-number"})
     with patch(
-        "modules.ops_client.mutations.get_product_by_sku",
+        "modules.ops_client.mutations.find_product_id_by_main_sku",
         AsyncMock(return_value=weird_result),
     ):
         with caplog.at_level(logging.WARNING):
@@ -174,7 +199,7 @@ async def test_verify_noop_when_env_flag_unset(monkeypatch, caplog):
 
     mock_query = AsyncMock()
     with patch(
-        "modules.ops_client.mutations.get_product_by_sku", mock_query
+        "modules.ops_client.mutations.find_product_id_by_main_sku", mock_query
     ):
         await _verify_post_push(object(), "PC61", "12345")
 
@@ -188,7 +213,7 @@ async def test_verify_logs_match_when_ids_align(monkeypatch, caplog):
 
     matching = OpsResult(ok=True, data={"products_id": 12345})
     with patch(
-        "modules.ops_client.mutations.get_product_by_sku",
+        "modules.ops_client.mutations.find_product_id_by_main_sku",
         AsyncMock(return_value=matching),
     ):
         with caplog.at_level(logging.INFO):
@@ -205,7 +230,7 @@ async def test_verify_warns_on_id_mismatch(monkeypatch, caplog):
 
     drifted = OpsResult(ok=True, data={"products_id": 99999})
     with patch(
-        "modules.ops_client.mutations.get_product_by_sku",
+        "modules.ops_client.mutations.find_product_id_by_main_sku",
         AsyncMock(return_value=drifted),
     ):
         with caplog.at_level(logging.WARNING):
@@ -224,7 +249,7 @@ async def test_verify_warns_when_ops_returns_no_products_id(monkeypatch, caplog)
 
     empty = OpsResult(ok=True, data={})
     with patch(
-        "modules.ops_client.mutations.get_product_by_sku",
+        "modules.ops_client.mutations.find_product_id_by_main_sku",
         AsyncMock(return_value=empty),
     ):
         with caplog.at_level(logging.WARNING):
@@ -240,7 +265,7 @@ async def test_verify_swallows_exceptions(monkeypatch, caplog):
     monkeypatch.setenv("OPS_POST_PUSH_VERIFY", "1")
 
     with patch(
-        "modules.ops_client.mutations.get_product_by_sku",
+        "modules.ops_client.mutations.find_product_id_by_main_sku",
         AsyncMock(side_effect=RuntimeError("transport")),
     ):
         with caplog.at_level(logging.ERROR):

@@ -66,13 +66,13 @@ async def _dedup_lookup_in_ops(
     Returns the OPS products_id when a match exists, else None.
     """
     try:
-        result = await _m.get_product_by_sku(client=client, products_sku=supplier_sku)
+        result = await _m.find_product_id_by_main_sku(client=client, main_sku=supplier_sku)
     except Exception:  # noqa: BLE001 — defensive
-        logger.exception("dedup: get_product_by_sku raised for sku=%s", supplier_sku)
+        logger.exception("dedup: find_product_id_by_main_sku raised for sku=%s", supplier_sku)
         return None
     if not result.ok:
         logger.warning(
-            "dedup: get_product_by_sku not OK for sku=%s: %s",
+            "dedup: find_product_id_by_main_sku not OK for sku=%s: %s",
             supplier_sku, result.ops_error_message,
         )
         return None
@@ -100,13 +100,13 @@ async def _verify_post_push(
     if _os.getenv("OPS_POST_PUSH_VERIFY", "0") != "1":
         return
     try:
-        result = await _m.get_product_by_sku(client=client, products_sku=supplier_sku)
+        result = await _m.find_product_id_by_main_sku(client=client, main_sku=supplier_sku)
     except Exception:  # noqa: BLE001
-        logger.exception("verify: get_product_by_sku raised for sku=%s", supplier_sku)
+        logger.exception("verify: find_product_id_by_main_sku raised for sku=%s", supplier_sku)
         return
     if not result.ok:
         logger.warning(
-            "verify: get_product_by_sku not OK after push sku=%s: %s",
+            "verify: find_product_id_by_main_sku not OK after push sku=%s: %s",
             supplier_sku, result.ops_error_message,
         )
         return
@@ -158,6 +158,118 @@ async def _verify_b7_readback(ops: Any, ops_product_id: Any) -> None:
             )
     except Exception:
         logger.exception("verify[B7]: raised for products_id=%s", pid)
+
+
+# Per-product cache of (size_id -> stock_id) maps. Populated lazily on the
+# first updateProductStock call of a product so we only query OPS once per
+# product per push (not once per variant).
+_stock_lookup_cache: dict[int, dict[int, int]] = {}
+
+
+async def _resolve_stock_id_for_size(
+    client: Any, *, product_id: Optional[int], size_id: int
+) -> Optional[int]:
+    """Find the OPS stock_id for a given (product_id, size_id) pair.
+
+    Phase 6: OPS's updateProductStock requires a stock_id but provides no
+    API to create initial stock entries — those must be initialized via
+    the OPS admin UI. This helper queries OPS once per product for its
+    existing stock entries, caches the size_id -> stock_id map, and
+    returns the matching stock_id (or None when no entry exists yet).
+
+    Defensive: returns None on any error so the caller records an
+    actionable warning instead of aborting the push.
+    """
+    if product_id is None:
+        return None
+    # Dry-run path: FakeOpsClient doesn't model productStocks rows — detect via
+    # the is_dry_run sentinel instead of duck-typing.
+    if getattr(client, "is_dry_run", False):
+        return 99000 + int(size_id)  # stable fake id, distinct per variant
+    cache_key = product_id
+    if cache_key not in _stock_lookup_cache:
+        try:
+            r = await _m.get_product_stocks(client=client, product_id=product_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("stock-lookup: get_product_stocks raised for product_id=%s", product_id)
+            return None
+        if not r.ok:
+            logger.warning(
+                "stock-lookup: get_product_stocks not OK for product_id=%s: %s",
+                product_id, r.ops_error_message,
+            )
+            return None
+        entries = (r.data or {}).get("productStocks") or []
+        _stock_lookup_cache[cache_key] = {
+            int(e["size_id"]): int(e["stock_id"])
+            for e in entries
+            if e.get("size_id") is not None and e.get("stock_id") is not None
+        }
+    return _stock_lookup_cache[cache_key].get(int(size_id))
+
+
+def _clear_stock_lookup_cache(product_id: int) -> None:
+    """Forget the cached stock map for a product. Call after the push so a
+    later push for the same product sees freshly-initialized entries."""
+    _stock_lookup_cache.pop(product_id, None)
+
+
+# Per-product cache of the set of valid size_ids from getProductSkuMatrix.
+# Populated lazily on the first setProductSku step of a product (one query
+# per product per push, not per variant). `None` value = "no matrix /
+# unavailable", which the caller treats as "skip validation".
+_sku_matrix_cache: dict[int, Optional[set[int]]] = {}
+
+
+async def _fetch_valid_sku_size_ids(
+    client: Any, *, product_id: Optional[int]
+) -> Optional[set[int]]:
+    """Return the set of size_ids OPS will accept for setProductSku on this
+    product, per getProductSkuMatrix (AI-2). Used to validate the SKU batch
+    before sending so we don't assign SKUs to slots OPS rejects ("Invalid
+    Product SKU"), which would later break updateProductStock.
+
+    Returns None — meaning "skip validation" — when:
+      * product_id is unknown,
+      * the client is the dry-run Fake (no real matrix to fetch),
+      * the matrix query errors, or
+      * OPS reports an empty matrix (product not yet indexed; advisory only).
+
+    Defensive: never raises. A flaky matrix query must not block a push.
+    """
+    if product_id is None:
+        return None
+    # Dry-run path: FakeOpsClient has no real product to describe — skip.
+    if getattr(client, "is_dry_run", False):
+        return None
+    if product_id not in _sku_matrix_cache:
+        try:
+            r = await _m.get_product_sku_matrix(client=client, products_id=product_id)
+        except Exception:  # noqa: BLE001 — defensive
+            logger.exception("sku-matrix: get_product_sku_matrix raised for product_id=%s", product_id)
+            _sku_matrix_cache[product_id] = None
+            return None
+        if not r.ok:
+            logger.warning(
+                "sku-matrix: get_product_sku_matrix not OK for product_id=%s: %s",
+                product_id, r.ops_error_message,
+            )
+            _sku_matrix_cache[product_id] = None
+            return None
+        rows = (r.data or {}).get("matrix") or []
+        size_ids = {
+            int(row["size_id"]) for row in rows if row.get("size_id") is not None
+        }
+        # An empty matrix is advisory-only: OPS may not have indexed the
+        # just-created sizes yet. Treat as "skip validation" rather than
+        # dropping every variant.
+        _sku_matrix_cache[product_id] = size_ids or None
+    return _sku_matrix_cache[product_id]
+
+
+def _clear_sku_matrix_cache(product_id: int) -> None:
+    """Forget the cached SKU matrix for a product after the push."""
+    _sku_matrix_cache.pop(product_id, None)
 
 
 async def _ensure_push_mapping_for_dedup(
@@ -382,7 +494,7 @@ class OpsClientAdapter:
 
     async def execute(self, query: str, *, variables: dict) -> OpsResult:
         """Raw GraphQL passthrough for read queries (dedup / post-push verify
-        call ``get_product_by_sku``, which calls ``client.execute``).
+        call ``find_product_id_by_main_sku``, which calls ``client.execute``).
 
         ``__getattr__`` only resolves the mutation method names, so without an
         explicit ``execute`` here every dedup/verify lookup raised
@@ -899,8 +1011,8 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             # wrote to OPS but crashed before persisting the mapping —
             # without this guard, the retry creates a duplicate row in OPS.
             #
-            # Skipped for dry-run (FakeOpsClient.GetProductBySku returns the
-            # programmed dict so tests can still exercise the dedup path).
+            # Dry-run uses FakeOpsClient, whose `products` query returns the
+            # programmed catalog so tests can still exercise the dedup path.
             if customer is not None and push_log.supplier_sku:
                 existing_mapping = (await db.execute(
                     select(PushMapping).where(
@@ -1076,6 +1188,53 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                             await client.execute(query=_del_mut, variables={"pid": _pid, "inp": {"image_arr": _del_arr}})
                             logger.info("gallery pre-clear: deleted %d existing images for product %d", len(_existing), _pid)
 
+                # setProductSku: prod_add_opt_ids / attribute_ids are String! in
+                # the OPS schema, but placeholders resolve them to ints (the
+                # setAdditionalOption*/attribute ids). Coerce each input's
+                # option/attribute id fields back to comma-joined strings.
+                if mutation == "setProductSku":
+                    def _coerce_ids(item: dict) -> dict:
+                        out = dict(item)
+                        for f in ("prod_add_opt_ids", "attribute_ids"):
+                            v = out.get(f)
+                            if v is None:
+                                continue
+                            if isinstance(v, (list, tuple)):
+                                out[f] = ",".join(str(x) for x in v)
+                            else:
+                                out[f] = str(v)
+                        return out
+                    _inputs = variables.get("inputs")
+                    if isinstance(_inputs, list):
+                        variables = dict(variables, inputs=[_coerce_ids(i) for i in _inputs])
+
+                    # AI-2: validate the SKU batch against getProductSkuMatrix
+                    # — OPS's authoritative list of assignable (size, option)
+                    # slots — before sending. Assigning a SKU to a size OPS
+                    # doesn't recognize returns "Invalid Product SKU" and
+                    # leaves the variant un-stockable. Advisory for now: we
+                    # log mismatches but still send (the matrix may lag the
+                    # just-created sizes); flip to drop-invalid once verified
+                    # live against staging product 602.
+                    raw_client = getattr(client, "_client", client)
+                    valid_size_ids = await _fetch_valid_sku_size_ids(
+                        raw_client,
+                        product_id=int(ops_product_id) if ops_product_id else None,
+                    )
+                    if valid_size_ids is not None:
+                        for _i in (variables.get("inputs") or []):
+                            _sid = _i.get("size_id")
+                            try:
+                                _sid_int = int(_sid)
+                            except (TypeError, ValueError):
+                                continue
+                            if _sid_int not in valid_size_ids:
+                                logger.warning(
+                                    "sku-matrix: size_id=%s for sku=%s not in OPS valid "
+                                    "matrix for product_id=%s — SKU may be rejected",
+                                    _sid_int, _i.get("sku"), ops_product_id,
+                                )
+
                 fingerprint = hashlib.sha256(
                     _json.dumps({"mutation": mutation, "variables": variables}, sort_keys=True).encode()
                 ).hexdigest()[:16]
@@ -1112,6 +1271,49 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 if step_num > 1 and not push_log.dry_run:
                     await asyncio.sleep(0.1)
 
+                # ── Phase 6: updateProductStock stock_id resolution ──
+                # Strip the gateway-only `_size_id_ref` sentinel (it's not
+                # a real OPS arg), then look up the stock_id for that size.
+                # OPS's updateProductStock needs stock_id — there is no
+                # per-size SKU field anywhere in OPS's schema, so the only
+                # way to identify a variant for stock is via stock_id from
+                # an existing stock entry. If no entry exists for the size,
+                # we skip the step with a clear warning so the operator
+                # knows to initialize stock in OPS admin first.
+                if mutation == "updateProductStock":
+                    size_id_for_lookup = variables.pop("_size_id_ref", None)
+                    if size_id_for_lookup is not None:
+                        raw_client = getattr(client, "_client", client)
+                        stock_id = await _resolve_stock_id_for_size(
+                            raw_client,
+                            product_id=int(ops_product_id) if ops_product_id else None,
+                            size_id=int(size_id_for_lookup),
+                        )
+                        if stock_id is None:
+                            # Initial stock entry doesn't exist in OPS for
+                            # this size — record an actionable warning and
+                            # move on. OPS API has no way to create one;
+                            # admin must initialize via the OPS UI.
+                            step_results.append({
+                                "step": step_num,
+                                "mutation": mutation,
+                                "source_key": source_key,
+                                "status": "warning",
+                                "ops_ids": {},
+                                "attempted_at": t_start.isoformat(),
+                                "request_fingerprint": fingerprint,
+                                "error": (
+                                    f"No OPS stock entry exists for size_id={size_id_for_lookup}. "
+                                    "Initialize stock for this variant in OPS admin (Stock "
+                                    "Management → Add Initial Stock) before re-pushing — OPS's "
+                                    "updateProductStock API can only update existing entries."
+                                ),
+                            })
+                            continue
+                        # Use the resolved stock_id; drop product_sku if any
+                        variables["stock_id"] = stock_id
+                        variables.pop("product_sku", None)
+
                 # Retry loop: attempt the mutation up to _MAX_STEP_ATTEMPTS times.
                 # OPS staging sometimes returns a transient empty-error (no message,
                 # no status code info) on high-mutation pushes — a short backoff and
@@ -1140,8 +1342,8 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                         # in OPS from a prior partial push. Fall back to a SKU lookup.
                         if mutation == "setProduct" and not resp.get("products_id"):
                             raw_client = getattr(client, "_client", client)
-                            sku_result = await _m.get_product_by_sku(
-                                client=raw_client, products_sku=push_log.supplier_sku
+                            sku_result = await _m.find_product_id_by_main_sku(
+                                client=raw_client, main_sku=push_log.supplier_sku
                             )
                             if sku_result.ok and sku_result.data.get("products_id"):
                                 pid = sku_result.data["products_id"]
@@ -1265,6 +1467,15 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             push_log.step_results = _redact_auth(step_results)
             push_log.status = final_status
             push_log.cleanup_targets = cleanup_targets
+            # Clear the per-product stock-lookup cache so a later push for
+            # the same product sees freshly-initialized stock entries
+            # (Phase 6 — admin may have run "Add Initial Stock" between pushes).
+            if ops_product_id:
+                try:
+                    _clear_stock_lookup_cache(int(ops_product_id))
+                    _clear_sku_matrix_cache(int(ops_product_id))
+                except (TypeError, ValueError):
+                    pass
             # Save ops_product_id for both success and partial_failure so
             # retries can use update mode instead of creating a duplicate product.
             if ops_product_id and final_status in ("pushed", "partial_failure"):
@@ -1372,25 +1583,16 @@ _MUTATION_ID_ALIAS: dict[str, str] = {
     "setAdditionalOption":           "prod_add_opt_id",
     "setAdditionalOptionAttributes": "attribute_id",
     "setProductsAttributePrice":     "attribute_id",
+    "setProductSku":                 "sku_id",
     "updateProductStock":            "stock_id",
 }
 
 
 def _normalize_mutation_response(mutation: str, resp: dict) -> dict:
-    """Add a named alias for the `id` field returned by OPS array-input mutations.
-
-    OPS GraphQL sometimes returns numeric IDs as JSON strings instead of
-    integers (schema is loosely typed in PHP). We coerce numeric string `id`
-    values to int here so downstream mutations that declare ``products_id: Int!``
-    (e.g. setAdditionalOption) don't get a GraphQL type-error.
-    """
+    """Add a named alias for the `id` field returned by OPS array-input mutations."""
     alias = _MUTATION_ID_ALIAS.get(mutation)
     if alias and "id" in resp and alias not in resp:
-        id_val = resp["id"]
-        if isinstance(id_val, str) and id_val.lstrip("-").isdigit():
-            id_val = int(id_val)
-            resp = dict(resp, id=id_val)
-        resp = dict(resp, **{alias: id_val})
+        resp = dict(resp, **{alias: resp["id"]})
     return resp
 
 
@@ -1405,6 +1607,7 @@ def _mutation_to_method(mutation: str) -> str:
         "setAdditionalOptionAttributes": "set_additional_option_attributes",
         "setProductsAttributePrice":     "set_products_attribute_price",
         "setProductsImageGallery":       "set_products_image_gallery",
+        "setProductSku":                 "set_product_sku",
         "updateProductStock":            "update_product_stock",
     }
     return mapping.get(mutation, mutation)

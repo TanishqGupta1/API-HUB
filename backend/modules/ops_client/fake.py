@@ -22,8 +22,9 @@ class FakeOpsClient:
 
     • Allocates monotonic synthetic IDs starting at 1000.
     • Records every call on ``self.calls`` for test assertions.
-    • ``existing_products_by_sku``: pre-seed the simulated OPS catalog so the
-      paginated `products` dedup scan finds a match (dedup path testing).
+    • ``existing_products_by_sku``: pre-seed the simulated OPS catalog (sku ->
+      products_id) so the paginated `products` dedup scan
+      (find_product_id_by_main_sku) finds a match (dedup path testing).
     • ``is_dry_run = True``: sentinel read by _resolve_stock_id_for_size to
       return a synthetic stock_id instead of querying OPS.
     """
@@ -77,14 +78,22 @@ class FakeOpsClient:
             return OpsResult(ok=True, data={"setAdditionalOptionAttributes": {"id": self._allocate_id()}})
         if name == "SetProductsAttributePrice":
             return OpsResult(ok=True, data={"setProductsAttributePrice": {"ok": True}})
+        if name == "SetProductSku":
+            return OpsResult(ok=True, data={"setProductSku": {"id": self._allocate_id(), "result": True}})
         if name == "SetProductsImageGallery":
             return OpsResult(ok=True, data={"setProductsImageGallery": {"result": True, "message": "dry-run"}})
         if name == "UpdateProductStock":
             return OpsResult(ok=True, data={"updateProductStock": {"id": self._allocate_id(), "result": True}})
+        if name == "getProductSkuMatrix":
+            # Dry-run: report no configured matrix. The gateway treats the
+            # Fake (is_dry_run) as "skip matrix validation" anyway, so the
+            # exact rows don't matter — just return the well-formed shape.
+            return OpsResult(ok=True, data={"getProductSkuMatrix": {"matrix": [], "totalRecords": 0}})
         if name == "products":
             # Dedup lookup paginates this query and matches external_ref/main_sku
-            # client-side. Simulate the catalog from existing_products_by_sku,
-            # honoring limit/offset so pagination logic is exercised in tests.
+            # client-side (find_product_id_by_main_sku). Simulate the catalog
+            # from existing_products_by_sku, honoring limit/offset so the
+            # pagination logic is exercised in tests.
             limit = int((variables or {}).get("limit", 200))
             offset = int((variables or {}).get("offset", 0))
             rows = [
@@ -140,6 +149,9 @@ class FakeOpsClient:
         return {"id": self._allocate_id()}
 
     async def set_products_attribute_price(self, variables: dict) -> dict:
+        return {"id": self._allocate_id()}
+
+    async def set_product_sku(self, variables: dict) -> dict:
         return {"id": self._allocate_id()}
 
     async def set_products_image_gallery(self, variables: dict) -> dict:
