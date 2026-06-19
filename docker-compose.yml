@@ -42,6 +42,7 @@ services:
       - SEED_ADMIN=${SEED_ADMIN:-0}
       - REDIS_URL=redis://redis:6379/0
       - OPS_PUSH_DURABLE_QUEUE=${OPS_PUSH_DURABLE_QUEUE:-1}
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./backend:/app
     depends_on:

@@ -25,6 +25,7 @@ def _make_ctx(*urls: str) -> _PreflightContext:
         push_mapping=None,
         push_mapping_options=[],
         decoration_options=[],
+        storefront_config=None,
     )
 
 

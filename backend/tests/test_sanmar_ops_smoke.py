@@ -110,6 +110,9 @@ async def smoke_scaffold():
             ops_client_id="smoke-client",
             ops_auth_config={"client_secret": "smoke-secret"},
             is_active=True,
+            # category_id is required by OPS; preflight now blocks pushes for
+            # customers with no resolvable category (check_category_resolvable).
+            default_ops_category_id=46,
         )
         s.add(customer)
         await s.flush()
@@ -183,6 +186,170 @@ async def test_dry_run_push_returns_dry_run_pushed(client, smoke_scaffold, smoke
     assert body["status"] == "dry_run_pushed", body
     assert body["dry_run"] is True
     assert body["supplier_sku"] == "PC61-SMOKE"
+
+
+@pytest.mark.asyncio
+async def test_stale_mapping_auto_recovery(smoke_scaffold):
+    """A live push whose push_mapping points to a now-deleted OPS product
+    must auto-clear the stale mapping and recreate the product, instead of
+    failing forever with 'Product with id N not found, skipping update'."""
+    from modules.ops_client.fake import FakeOpsClient
+    from modules.ops_push.gateway import execute_push
+
+    product = smoke_scaffold["product"]
+    customer = smoke_scaffold["customer"]
+    STALE_OPS_ID = 556
+
+    # Seed a stale mapping (product -> deleted OPS id) + an accepted live push.
+    async with async_session() as s:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        s.add(PushMapping(
+            source_system="api-hub",
+            source_product_id=product.id,
+            source_supplier_sku=product.supplier_sku,
+            customer_id=customer.id,
+            target_ops_base_url=customer.ops_base_url or "",
+            target_ops_product_id=STALE_OPS_ID,
+            pushed_at=now, updated_at=now, status="active",
+        ))
+        push_log = ProductPushLog(
+            product_id=product.id,
+            customer_id=customer.id,
+            status="accepted",
+            pushed_at=now,
+            supplier_slug=smoke_scaffold["supplier"].slug,
+            supplier_sku=product.supplier_sku,
+            dry_run=False,
+            callback_status="not_requested",
+        )
+        s.add(push_log)
+        await s.commit()
+        push_log_id = push_log.id
+
+    # Live push, but inject a Fake client that rejects updates to 556 (deleted).
+    fake = FakeOpsClient(deleted_ops_ids={STALE_OPS_ID})
+    from modules.ops_push import gateway as _gw
+
+    class _Adapter:
+        is_dry_run = False
+        def __init__(self, c): self._client = c
+        async def aclose(self): pass
+        def __getattr__(self, n): return getattr(self._client, n)
+
+    with patch.object(_gw, "_build_live_client", return_value=_Adapter(fake)):
+        await execute_push(push_log_id)
+
+    # Push recovered: status pushed, stale mapping replaced with a fresh id.
+    async with async_session() as s:
+        pl = await s.get(ProductPushLog, push_log_id)
+        assert pl.status == "pushed", pl.step_results
+        step1 = pl.step_results[0]
+        assert step1["mutation"] == "setProduct"
+        assert step1["status"] == "ok"
+        assert "recreated after stale-mapping cleanup" in step1.get("note", "")
+
+        mapping = (await s.execute(
+            select(PushMapping).where(PushMapping.source_product_id == product.id)
+        )).scalar_one()
+        assert mapping.target_ops_product_id != STALE_OPS_ID  # recreated, not the dead id
+
+
+@pytest.mark.asyncio
+async def test_auto_category_creates_and_reuses(smoke_scaffold):
+    """Auto-category creates an OPS category for the product's category name on
+    first push and reuses the cached mapping on the second (no duplicate)."""
+    from modules.ops_client.fake import FakeOpsClient
+    from modules.ops_push.gateway import _resolve_ops_category
+    from modules.ops_config.models import OpsCategoryMapping
+
+    product = smoke_scaffold["product"]   # category="T-Shirts"
+    customer = smoke_scaffold["customer"]
+    fake = FakeOpsClient()
+
+    async with async_session() as s:
+        cust = await s.get(Customer, customer.id)
+        prod = await s.get(Product, product.id)
+        # First call: no mapping → creates the OPS category + caches it.
+        first = await _resolve_ops_category(s, fake, cust, prod, dry_run=False)
+        await s.commit()
+        assert first is not None
+
+        rows = (await s.execute(
+            select(OpsCategoryMapping).where(OpsCategoryMapping.customer_id == customer.id)
+        )).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].category_key == "t-shirts"  # normalized from "T-Shirts "
+
+    async with async_session() as s:
+        cust = await s.get(Customer, customer.id)
+        prod = await s.get(Product, product.id)
+        # Second call: reuses the cached id, creates no duplicate mapping.
+        second = await _resolve_ops_category(s, fake, cust, prod, dry_run=False)
+        assert second == first
+        rows = (await s.execute(
+            select(OpsCategoryMapping).where(OpsCategoryMapping.customer_id == customer.id)
+        )).scalars().all()
+        assert len(rows) == 1
+
+    # Cleanup
+    async with async_session() as s:
+        await s.execute(
+            delete(OpsCategoryMapping).where(OpsCategoryMapping.customer_id == customer.id)
+        )
+        await s.commit()
+
+
+@pytest.mark.asyncio
+async def test_auto_category_mapping_survives_caller_rollback(smoke_scaffold):
+    """Regression (review HIGH): the OPS category is a LIVE side-effect, so its
+    mapping must be durable even if the caller's transaction later aborts —
+    otherwise a rolled-back mapping orphans the OPS category and the retry creates
+    a DUPLICATE. Simulates execute_push failing after _resolve_ops_category:
+    resolve (which now commits the mapping in its own transaction), roll the caller
+    session back, then assert the mapping persists and a second resolve reuses it.
+
+    This test FAILS against the old bare-`db.flush()` behaviour and passes with the
+    own-transaction commit."""
+    from modules.ops_client.fake import FakeOpsClient
+    from modules.ops_push.gateway import _resolve_ops_category
+    from modules.ops_config.models import OpsCategoryMapping
+
+    product = smoke_scaffold["product"]   # category="T-Shirts"
+    customer = smoke_scaffold["customer"]
+    fake = FakeOpsClient()
+
+    async with async_session() as s:
+        cust = await s.get(Customer, customer.id)
+        prod = await s.get(Product, product.id)
+        first = await _resolve_ops_category(s, fake, cust, prod, dry_run=False)
+        assert first is not None
+        # Caller's transaction aborts AFTER the OPS category was created. The old
+        # flush-only behaviour would lose the mapping right here.
+        await s.rollback()
+
+    async with async_session() as s:
+        rows = (await s.execute(
+            select(OpsCategoryMapping).where(OpsCategoryMapping.customer_id == customer.id)
+        )).scalars().all()
+        assert len(rows) == 1               # mapping survived the rollback
+        assert rows[0].ops_category_id == first
+
+        # Retry path: a second resolve reuses the cached mapping — no duplicate.
+        cust = await s.get(Customer, customer.id)
+        prod = await s.get(Product, product.id)
+        second = await _resolve_ops_category(s, fake, cust, prod, dry_run=False)
+        assert second == first
+        rows = (await s.execute(
+            select(OpsCategoryMapping).where(OpsCategoryMapping.customer_id == customer.id)
+        )).scalars().all()
+        assert len(rows) == 1
+
+    async with async_session() as s:
+        await s.execute(
+            delete(OpsCategoryMapping).where(OpsCategoryMapping.customer_id == customer.id)
+        )
+        await s.commit()
 
 
 @pytest.mark.asyncio

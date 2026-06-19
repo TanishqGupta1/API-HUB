@@ -129,6 +129,34 @@ The plumbing is half-built. The work is wiring it into the main payload builder 
 
 ---
 
+## Per-variant SKUs via `setProductSku` (deferred — depends on this same decision)
+
+**Added 2026-06-15.** The client's Postman collection confirms a `setProductSku`
+GraphQL mutation exists for **per-variant SKUs** (it does work via GraphQL — an
+earlier team note claiming "per-size SKUs are PHP-admin-only" was looking at the
+legacy admin page, not this documented API).
+
+What we DO send today (done, separate from this backlog):
+- `ProductInput.main_sku` on `setProduct` — the **product-level** SKU (the supplier
+  style number, e.g. `PC61`). Sufficient for product identity + dedup.
+- `ProductInput.external_ref` — same supplier SKU as a third-party back-reference.
+
+What `setProductSku` would add (the per-variant codes, e.g. `PC61-NAVY-S`):
+- `size_wise` mode → one SKU per OPS `size_id`. Blocked: we push only ONE "Default"
+  placeholder size today.
+- `size_option_wise` mode → one SKU per (size × option-attribute) combo. Needs
+  `prod_add_opt_ids` + `attribute_ids` — i.e. the **option+attributes hierarchy**
+  this backlog is about. Our current flat-option model has no attribute IDs to send.
+- Companion read query `getProductSkuMatrix(products_id)` returns the valid combos
+  to fill — call it before `setProductSku`.
+
+**Conclusion:** per-variant SKUs are a pure ADD-ON. Doing the product-level `main_sku`
+now does NOT block them. They become wireable once the variant model below moves to
+`setAdditionalOption` + `setAdditionalOptionAttributes` (so the attribute IDs exist).
+Matrix example + full field list saved in the OPS schema memory.
+
+---
+
 ## Related findings (same investigation)
 
 - `predefined_product_type` is an enum-like string (e.g. `ap-polos`, `ap-t-shirts`, `ap-hoodies-sweatshirts`), not a number. We send `"1"` as a placeholder; should map SanMar product categories to real OPS templates. Tracked separately — same Christian question.

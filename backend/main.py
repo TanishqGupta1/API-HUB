@@ -15,6 +15,9 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response as StarletteResponse
 
 from limiter import limiter
 
@@ -256,8 +259,62 @@ _cors_kwargs: dict = dict(
 if not _IS_PRODUCTION:
     _cors_kwargs["allow_origin_regex"] = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
 
+def _pna_origin_allowed(origin: str) -> bool:
+    """Whether a Private-Network-Access preflight Origin may receive a credentialed
+    PNA grant. Mirrors the CORS policy: the explicit allow-list always, plus
+    localhost/127.0.0.1 over http in non-production only (dev convenience)."""
+    if origin in ALLOWED_ORIGINS:
+        return True
+    if not _IS_PRODUCTION and "://" in origin:
+        scheme, _, hostport = origin.partition("://")
+        host = hostport.split(":", 1)[0]
+        if scheme == "http" and host in ("localhost", "127.0.0.1"):
+            return True
+    return False
+
+
+class _PrivateNetworkAccessMiddleware(BaseHTTPMiddleware):
+    """Chrome 98+ sends Access-Control-Request-Private-Network: true on
+    localhost-to-localhost preflights. Starlette's CORSMiddleware returns 400
+    for these requests because it doesn't recognise the header. We intercept
+    them here and return the correct 200 + Access-Control-Allow-Private-Network
+    response so Chrome allows the actual request through.
+    """
+    _ALLOW_HEADERS = (
+        "Accept, Accept-Language, Authorization, Content-Language, "
+        "Content-Type, Idempotency-Key, X-Ingest-Secret, X-Orchestrator-Key"
+    )
+    _ALLOW_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        if (
+            request.method == "OPTIONS"
+            and request.headers.get("Access-Control-Request-Private-Network") == "true"
+        ):
+            origin = request.headers.get("Origin", "")
+            # Only grant PNA (with credentials) to origins we actually allow.
+            # Reflecting an arbitrary Origin alongside Allow-Credentials:true would
+            # let any site make credentialed requests to the user's localhost.
+            # Disallowed origins fall through to CORSMiddleware, which rejects them.
+            if origin and _pna_origin_allowed(origin):
+                return StarletteResponse(
+                    status_code=200,
+                    headers={
+                        "Access-Control-Allow-Origin": origin,
+                        "Access-Control-Allow-Credentials": "true",
+                        "Access-Control-Allow-Private-Network": "true",
+                        "Access-Control-Allow-Methods": self._ALLOW_METHODS,
+                        "Access-Control-Allow-Headers": self._ALLOW_HEADERS,
+                        "Access-Control-Max-Age": "600",
+                        "Vary": "Origin",
+                    },
+                )
+        return await call_next(request)
+
+
 app.add_middleware(CORSMiddleware, **_cors_kwargs)
 app.add_middleware(AuditLogMiddleware)
+app.add_middleware(_PrivateNetworkAccessMiddleware)  # outermost — handles Chrome PNA before CORS sees it
 
 # Public routers — no JWT cookie required
 app.include_router(auth_router)                # /api/auth/{login,logout,me,setup}
@@ -307,7 +364,7 @@ app.include_router(integrations_admin_router, dependencies=_auth)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "api-hub"}
+    return {"status": "ok", "service": "graphx-connect"}
 
 
 @app.get("/api/stats")

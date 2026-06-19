@@ -20,6 +20,8 @@ from .schemas import (
     ProductListRead,
     ProductRead,
     ProductPreview,
+    PreflightCheckPreview,
+    PushReadiness,
     VariantPreview,
     OPSCategoryInput,
     OptionUpdate,
@@ -339,7 +341,11 @@ async def export_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{product_id}/preview", response_model=ProductPreview)
-async def get_product_preview(product_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_product_preview(
+    product_id: UUID,
+    customer_id: Optional[UUID] = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
         select(Product)
         .where(Product.id == product_id)
@@ -380,6 +386,28 @@ async def get_product_preview(product_id: UUID, db: AsyncSession = Depends(get_d
             inventory=v.inventory,
         ))
 
+    push_readiness: Optional[PushReadiness] = None
+    if customer_id is not None:
+        # dry_run=True skips live OAuth2 + image HEAD network calls so the
+        # preview page renders fast and doesn't fail on stub dev credentials.
+        # Config-gap checks (creds present, markup rule, push mappings,
+        # category resolvable, required fields) all still run — those are
+        # the blockers operators need to see BEFORE clicking Push.
+        from modules.ops_push.preflight import run_preflight
+        try:
+            pf = await run_preflight(db, customer_id, product_id, dry_run=True)
+            push_readiness = PushReadiness(
+                customer_id=customer_id,
+                ok=pf.ok,
+                blockers=pf.blockers,
+                warnings=[PreflightCheckPreview(**w.to_dict()) for w in pf.warnings],
+                checks=[PreflightCheckPreview(**c.to_dict()) for c in pf.checks],
+            )
+        except ValueError:
+            # Customer not found (or product mismatch) — surface nothing rather
+            # than 500ing the preview. The operator sees "select a customer".
+            push_readiness = None
+
     return ProductPreview(
         id=product.id,
         title=product.product_name,
@@ -389,6 +417,7 @@ async def get_product_preview(product_id: UUID, db: AsyncSession = Depends(get_d
         images=product.images,
         variants=variants,
         missing_fields=missing,
+        push_readiness=push_readiness,
     )
 
 

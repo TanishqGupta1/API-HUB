@@ -6,6 +6,9 @@ Configurable via env vars — works with AWS S3 or Cloudflare R2 (S3-compatible)
   S3_REGION              — region (default: auto, for R2 use "auto")
   S3_ENDPOINT_URL        — custom endpoint (R2: https://<account>.r2.cloudflarestorage.com)
   S3_PRODUCT_IMAGES_BUCKET — bucket name (default: product-images-dev)
+  S3_OBJECT_ACL          — per-object ACL, e.g. "public-read" for buckets that
+                           gate public access per-object (unset = bucket default;
+                           R2 does not support ACLs, leave unset there)
   CDN_BASE_URL           — public CDN prefix returned in URLs
 """
 
@@ -61,17 +64,38 @@ async def upload_image(data: bytes, key: str, content_type: str = "image/webp") 
     bucket = S3_BUCKET
 
     def _put():
-        client.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=data,
-            ContentType=content_type,
-            CacheControl="public, max-age=31536000, immutable",
-        )
+        kwargs: dict = {
+            "Bucket": bucket,
+            "Key": key,
+            "Body": data,
+            "ContentType": content_type,
+            "CacheControl": "public, max-age=31536000, immutable",
+        }
+        acl = os.getenv("S3_OBJECT_ACL")
+        if acl:
+            kwargs["ACL"] = acl
+        client.put_object(**kwargs)
 
     await asyncio.to_thread(_put)
     log.debug("Uploaded %d bytes to s3://%s/%s", len(data), bucket, key)
     return f"{CDN_BASE_URL}/{key}"
+
+
+async def get_object_bytes(key: str) -> Optional[bytes]:
+    """Fetch an object's bytes from S3/R2. Returns None when unconfigured or missing."""
+    if not _is_configured():
+        return None
+
+    client = _build_client()
+    bucket = S3_BUCKET
+
+    def _get() -> Optional[bytes]:
+        try:
+            return client.get_object(Bucket=bucket, Key=key)["Body"].read()
+        except Exception:
+            return None
+
+    return await asyncio.to_thread(_get)
 
 
 async def key_exists(key: str) -> bool:
@@ -88,6 +112,27 @@ async def key_exists(key: str) -> bool:
             return True
         except Exception:
             return False
+
+    return await asyncio.to_thread(_head)
+
+
+async def get_object_size(key: str) -> Optional[int]:
+    """Return the byte size of an S3 object, or None if missing/unconfigured.
+
+    Used to filter out tiny supplier images (color-swatch chips ~60-100b)
+    that aren't real product photos and would clutter the OPS gallery.
+    """
+    if not _is_configured():
+        return None
+
+    client = _build_client()
+    bucket = S3_BUCKET
+
+    def _head() -> Optional[int]:
+        try:
+            return client.head_object(Bucket=bucket, Key=key)["ContentLength"]
+        except Exception:
+            return None
 
     return await asyncio.to_thread(_head)
 

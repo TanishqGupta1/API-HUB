@@ -480,6 +480,7 @@ def _build_setProduct_step(
     existing_ops_id: Optional[int],
     primary_image_url: Optional[str],
     enable_stock_management: str = "1",
+    category_id_override: Optional[int] = None,
 ) -> OPSMutationStep:
     """setProduct is always step 1 (no more separate setProductCategory).
 
@@ -547,11 +548,15 @@ def _build_setProduct_step(
         # (String in the schema, despite the docs showing an Int example.)
         "product_service_type": "1",
     }
-    # Category resolution: per-product storefront override wins; if absent,
-    # fall back to the per-customer default_ops_category_id (Phase 2 of the
-    # OPS push audit). Without a category, OPS hides the product from the
-    # admin's default browse view, so we want a sensible fallback.
-    _cat = (ctx.storefront_config.ops_category_id if ctx.storefront_config else None) \
+    # Category resolution order:
+    #   1. category_id_override — the gateway's auto-category resolver created/
+    #      looked up the OPS category matching this product's category name.
+    #   2. per-product storefront override.
+    #   3. per-customer default_ops_category_id (Phase 2 of the OPS push audit).
+    # Without a category, OPS hides the product from the admin's default browse
+    # view, so we want a sensible fallback.
+    _cat = category_id_override \
+        or (ctx.storefront_config.ops_category_id if ctx.storefront_config else None) \
         or getattr(ctx.customer, "default_ops_category_id", None)
     if _cat:
         try:
@@ -851,20 +856,27 @@ async def build_push_payload(
     product_id: UUID,
     *,
     option_strategy: OptionStrategy = OptionStrategy.MASTER_OPTION_ATTACH,
+    category_id_override: Optional[int] = None,
 ) -> OPSPushPayload:
     """Async DB wrapper. Loads context, then calls `_synthesize_payload`.
 
     Splitting the DB load from the pure synthesis lets unit tests build
     the payload without a live session by constructing a `_PushContext`
     directly (see test_payload_builder.py).
+
+    category_id_override: when set, this OPS category_id wins over the
+    storefront-config / customer-default resolution. The gateway's auto-category
+    resolver passes the id it created/looked up for the product's category name.
     """
     ctx = await _load_context(db, customer_id, product_id)
-    return _synthesize_payload(ctx, option_strategy)
+    return _synthesize_payload(ctx, option_strategy, category_id_override=category_id_override)
 
 
 def _synthesize_payload(
     ctx: _PushContext,
     option_strategy: OptionStrategy = OptionStrategy.MASTER_OPTION_ATTACH,
+    *,
+    category_id_override: Optional[int] = None,
 ) -> OPSPushPayload:
     """Pure synthesis from a loaded `_PushContext`.
 
@@ -981,6 +993,7 @@ def _synthesize_payload(
     plan.append(_build_setProduct_step(
         ctx, push_mode, existing_ops_id, primary_image_url,
         enable_stock_management=enable_stock_management,
+        category_id_override=category_id_override,
     ))
 
     # Steps 2..1+N: setProductSize × N

@@ -27,6 +27,7 @@ from modules.ops_push.preflight import (
     _TokenCache,
     check_base_price_set,
     check_customer_ops_creds_present,
+    check_category_resolvable,
     check_decoration_attached,
     check_image_urls_reachable,
     check_markup_rule_resolves,
@@ -67,6 +68,7 @@ def _customer(
         ops_client_id=ops_client_id,
         ops_auth_config={"client_secret": client_secret} if client_secret else {},
         is_active=True,
+        default_ops_category_id=539,
     )
 
 
@@ -180,6 +182,7 @@ def _ctx(
     push_mapping=None,
     push_mapping_options=_UNSET,
     decoration_options=_UNSET,
+    storefront_config=None,
 ) -> _PreflightContext:
     return _PreflightContext(
         customer=customer or _customer(),
@@ -192,6 +195,7 @@ def _ctx(
         push_mapping=push_mapping,
         push_mapping_options=[] if push_mapping_options is _UNSET else push_mapping_options,
         decoration_options=[] if decoration_options is _UNSET else decoration_options,
+        storefront_config=storefront_config,
     )
 
 
@@ -627,6 +631,60 @@ def test_required_fields_fail_when_no_variants():
 
 
 # Note: image presence is now check 5's job (image_urls_reachable), not 7.
+
+
+# ===========================================================================
+# 7b — category_resolvable
+# ===========================================================================
+
+
+def test_category_resolvable_pass_from_customer_default():
+    # _customer() defaults default_ops_category_id=539
+    ctx = _ctx()
+    r = check_category_resolvable(ctx)
+    assert r.ok is True
+    assert "539" in r.detail
+    assert "customer default" in r.detail
+
+
+def test_category_resolvable_pass_from_storefront_config():
+    # Per-product override wins over the customer default.
+    sf = SimpleNamespace(ops_category_id="46")
+    ctx = _ctx(storefront_config=sf)
+    r = check_category_resolvable(ctx)
+    assert r.ok is True
+    assert "46" in r.detail
+    assert "storefront config" in r.detail
+
+
+def test_category_resolvable_pass_via_product_category():
+    # No explicit category config, but product.category is set → gateway can
+    # auto-resolve via _resolve_ops_category; preflight must not block.
+    cust = _customer()
+    cust.default_ops_category_id = None
+    ctx = _ctx(customer=cust, storefront_config=None)
+    r = check_category_resolvable(ctx)
+    assert r.ok is True
+    assert "auto-resolved" in r.detail
+
+
+def test_category_resolvable_fail_when_no_category_anywhere():
+    # No explicit config AND no product.category → genuine blocker.
+    cust = _customer()
+    cust.default_ops_category_id = None
+    ctx = _ctx(customer=cust, storefront_config=None, product=_product(category=None))
+    r = check_category_resolvable(ctx)
+    assert r.ok is False
+    assert "required by OPS" in r.detail
+    assert r.field == "customer.default_ops_category_id"
+
+
+def test_category_resolvable_fail_when_value_not_int():
+    cust = _customer()
+    cust.default_ops_category_id = "not-a-number"
+    ctx = _ctx(customer=cust, storefront_config=None, product=_product(category=None))
+    r = check_category_resolvable(ctx)
+    assert r.ok is False
 
 
 # ===========================================================================
