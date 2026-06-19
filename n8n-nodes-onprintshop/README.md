@@ -88,6 +88,7 @@ Tested with:
 ## Resources
 
 - [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
+- **Authoritative OPS schema:** vendored live collection `docs/ops/OnPrintShop_GraphQL_API_live_2026-06-17.postman_collection.json` (81 ops) — see `docs/ops/SOURCE.md`. Verify field/mutation names against this file.
 - OnPrintShop Postman docs: https://documenter.getpostman.com/view/33263100/2sBXijHWys
 - [GitHub Repository](https://github.com/cderamos-2ct/n8n-nodes-onprintshop)
 
@@ -95,7 +96,7 @@ Tested with:
 
 ### 1.0.0
 - Initial release
-- Synced to the official Postman collection (2026-04-23)
+- Synced to the live OPS Postman collection (81 ops, vendored 2026-06-17 — supersedes the stale 75-op subset). See `docs/ops/SOURCE.md`.
 
 ## License
 
