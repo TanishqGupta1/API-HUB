@@ -288,7 +288,7 @@ export default function SidebarNav() {
   return (
     <nav className="sidebar">
       <div className="sidebar-header">
-        <div className="sidebar-brand">API-HUB</div>
+        <div className="sidebar-brand">GraphX Connect</div>
         <div className="sidebar-subtitle">Blueprint v0.3 | Universal Connector</div>
       </div>
 
