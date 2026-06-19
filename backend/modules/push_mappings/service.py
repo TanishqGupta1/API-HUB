@@ -70,6 +70,17 @@ async def upsert_push_mapping(db: AsyncSession, data: PushMappingUpsert) -> UUID
     return mapping_id
 
 
+async def get_push_mapping_by_id(
+    db: AsyncSession, mapping_id: UUID
+) -> PushMapping | None:
+    stmt = (
+        select(PushMapping)
+        .options(selectinload(PushMapping.options))
+        .where(PushMapping.id == mapping_id)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
 async def get_push_mappings(
     db: AsyncSession, customer_id: UUID = None, source_product_id: UUID = None
 ) -> list[PushMapping]:

@@ -64,12 +64,12 @@ async def ensure_default_admin(db: AsyncSession) -> None:
         # Write credentials to stderr ONLY in non-production — never to
         # structured loggers that ship to log aggregators.
         print(
-            f"\n[API-HUB] {'=' * 52}\n"
-            f"[API-HUB] Default admin created ({source})\n"
-            f"[API-HUB]   email:    {email}\n"
-            f"[API-HUB]   password: {password}\n"
-            f"[API-HUB] Change this password immediately after first login.\n"
-            f"[API-HUB] {'=' * 52}\n",
+            f"\n[GraphX Connect] {'=' * 48}\n"
+            f"[GraphX Connect] Default admin created ({source})\n"
+            f"[GraphX Connect]   email:    {email}\n"
+            f"[GraphX Connect]   password: {password}\n"
+            f"[GraphX Connect] Change this password immediately after first login.\n"
+            f"[GraphX Connect] {'=' * 48}\n",
             file=sys.stderr,
             flush=True,
         )

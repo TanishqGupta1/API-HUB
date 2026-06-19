@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
-from modules.auth.dependencies import CurrentUser
+from modules.auth.dependencies import CurrentUser, VGAdmin
 from modules.suppliers.models import Supplier
+from .option_collapse import derive_options, derive_options_bulk
 
 from modules.push_log.models import ProductPushLog
 from .models import Category, Product, ProductOption, ProductOptionAttribute, ProductVariant
@@ -519,60 +520,100 @@ async def update_attribute(
 
 @router.post("/{product_id}/options/bulk-save")
 async def bulk_save_options(
-    product_id: UUID, body: list[OptionIngest], db: AsyncSession = Depends(get_db)
+    product_id: UUID,
+    body: list[OptionIngest],
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
 ):
-    # Get existing options for this product
     existing_opts_res = await db.execute(
         select(ProductOption).where(ProductOption.product_id == product_id)
     )
     existing_opts = {opt.option_key: opt for opt in existing_opts_res.scalars().all()}
 
+    saved = 0
+    errors: list[dict] = []
+
     for opt_data in body:
-        if opt_data.option_key in existing_opts:
-            # Update existing option
-            opt = existing_opts[opt_data.option_key]
-            opt.title = opt_data.title
-            opt.sort_order = opt_data.sort_order
-            opt.enabled = True
-        else:
-            # Create new option
-            opt = ProductOption(
-                product_id=product_id,
-                option_key=opt_data.option_key,
-                title=opt_data.title,
-                options_type=opt_data.options_type,
-                sort_order=opt_data.sort_order,
-                required=opt_data.required,
-                enabled=True,
-            )
-            db.add(opt)
-        
-        await db.flush()
+        sp = await db.begin_nested()
+        try:
+            if opt_data.option_key in existing_opts:
+                opt = existing_opts[opt_data.option_key]
+                opt.title = opt_data.title
+                opt.sort_order = opt_data.sort_order
+                opt.enabled = True
+            else:
+                opt = ProductOption(
+                    product_id=product_id,
+                    option_key=opt_data.option_key,
+                    title=opt_data.title,
+                    options_type=opt_data.options_type,
+                    sort_order=opt_data.sort_order,
+                    required=opt_data.required,
+                    enabled=True,
+                )
+                db.add(opt)
 
-        # Update attributes for this option
-        if isinstance(opt_data.attributes, list):
-            existing_attrs_res = await db.execute(
-                select(ProductOptionAttribute).where(ProductOptionAttribute.product_option_id == opt.id)
-            )
-            existing_attrs = {attr.title: attr for attr in existing_attrs_res.scalars().all()}
+            await db.flush()
 
-            for attr_data in opt_data.attributes:
-                if attr_data.title in existing_attrs:
-                    # Update existing attribute
-                    attr = existing_attrs[attr_data.title]
-                    attr.price = attr_data.price
-                    attr.sort_order = attr_data.sort_order
-                    attr.enabled = True
-                else:
-                    # Create new attribute
-                    attr = ProductOptionAttribute(
-                        product_option_id=opt.id,
-                        title=attr_data.title,
-                        price=attr_data.price,
-                        sort_order=attr_data.sort_order,
-                        enabled=True,
+            if isinstance(opt_data.attributes, list):
+                existing_attrs_res = await db.execute(
+                    select(ProductOptionAttribute).where(
+                        ProductOptionAttribute.product_option_id == opt.id
                     )
-                    db.add(attr)
+                )
+                existing_attrs = {attr.title: attr for attr in existing_attrs_res.scalars().all()}
+
+                for attr_data in opt_data.attributes:
+                    if attr_data.title in existing_attrs:
+                        attr = existing_attrs[attr_data.title]
+                        attr.price = attr_data.price
+                        attr.sort_order = attr_data.sort_order
+                        attr.enabled = True
+                    else:
+                        db.add(ProductOptionAttribute(
+                            product_option_id=opt.id,
+                            title=attr_data.title,
+                            price=attr_data.price,
+                            sort_order=attr_data.sort_order,
+                            enabled=True,
+                        ))
+
+            await sp.commit()
+            saved += 1
+        except Exception as exc:
+            await sp.rollback()
+            errors.append({"option_key": opt_data.option_key, "error": str(exc)})
 
     await db.commit()
-    return {"success": True}
+    if errors:
+        return {"success": False, "saved": saved, "errors": errors}
+    return {"success": True, "saved": saved}
+
+
+# ─── Variant → Option collapse routes ────────────────────────────────────────
+
+@router.post("/derive-options")
+async def derive_all_product_options(
+    _admin: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+    supplier_id: Optional[UUID] = Query(default=None),
+):
+    """Backfill: (re)derive Color/Size options for all products (or one supplier)."""
+    return await derive_options_bulk(db, supplier_id)
+
+
+@router.post("/{product_id}/derive-options")
+async def derive_product_options(
+    product_id: UUID,
+    _admin: VGAdmin,
+    db: AsyncSession = Depends(get_db),
+):
+    """(Re)derive Color/Size options for one product from its variant matrix."""
+    res = await derive_options(db, product_id)
+    return {
+        "product_id": str(product_id),
+        "colors": res.colors,
+        "sizes": res.sizes,
+        "color_attrs": res.color_attrs,
+        "size_attrs": res.size_attrs,
+    }

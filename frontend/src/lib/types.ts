@@ -1,5 +1,5 @@
 /* ────────────────────────────────────────────────────────────────────────── *
- * API-HUB  —  Shared TypeScript Types                                       *
+ * GraphX Connect  —  Shared TypeScript Types                                *
  * Mirrors the Pydantic schemas in backend/modules/{module}/schemas.py       *
  * ────────────────────────────────────────────────────────────────────────── */
 
