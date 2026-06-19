@@ -14,6 +14,8 @@ from .option_collapse import derive_options, derive_options_bulk
 
 from modules.push_log.models import ProductPushLog
 from .models import Category, Product, ProductOption, ProductOptionAttribute, ProductVariant
+from .exporter import build_supplier_product, push_products_to_graphx, _post, _graphx_env
+from .option_collapse import derive_options, derive_options_bulk
 from .schemas import (
     ProductListRead,
     ProductRead,
@@ -137,6 +139,53 @@ async def list_products(
         data.supplier_name = supplier_map.get(prod.supplier_id)
         out.append(data)
     return out
+
+
+@router.post("/derive-options")
+async def derive_all_product_options(
+    _user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    supplier_id: Optional[UUID] = Query(default=None),
+):
+    """Backfill: (re)derive Color/Size options for all products (or one supplier)."""
+    return await derive_options_bulk(db, supplier_id)
+
+
+@router.post("/{product_id}/derive-options")
+async def derive_product_options(
+    product_id: UUID,
+    _user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """(Re)derive Color/Size options for one product from its variant matrix."""
+    res = await derive_options(db, product_id)
+    return {
+        "product_id": str(product_id),
+        "colors": res.colors,
+        "sizes": res.sizes,
+        "color_attrs": res.color_attrs,
+        "size_attrs": res.size_attrs,
+    }
+
+
+@router.post("/{product_id}/push-to-graphx")
+async def push_one_product_to_graphx(
+    product_id: UUID,
+    _user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    tenant_slug: str = Query(default="vg"),
+):
+    """Push a single product to graphx as IMPORTED_FROM_SUPPLIER."""
+    payload = await build_supplier_product(db, product_id)
+    if not payload["options"]:
+        raise HTTPException(400, "Product has no options — run derive-options first")
+    product = await db.get(Product, product_id)
+    supplier = await db.get(Supplier, product.supplier_id) if product else None
+
+    # Reuse exporter._post (status-checked, raises 502 on non-2xx) + the shared
+    # 503-guarded env helper rather than re-implementing the httpx call here.
+    url, secret = _graphx_env()
+    return await _post(url, secret, supplier.slug if supplier else "", tenant_slug, [payload])
 
 
 @router.post("/{product_id}/archive")
@@ -274,6 +323,18 @@ async def export_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
             "price_max": max(prices) if prices else None,
         },
         "images": [{"id": str(img.id), "url": img.url, "image_type": img.image_type, "color": img.color, "sort_order": img.sort_order} for img in (product.images or [])],
+        "options": [
+            {
+                "option_key": o.option_key,
+                "title": o.title,
+                "options_type": o.options_type,
+                "attributes": [
+                    {"title": a.title, "attribute_key": a.attribute_key, "sort_order": a.sort_order}
+                    for a in sorted(o.attributes or [], key=lambda a: a.sort_order)
+                ],
+            }
+            for o in sorted(product.options or [], key=lambda o: o.sort_order)
+        ],
     }
 
 

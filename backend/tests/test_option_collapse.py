@@ -1,6 +1,6 @@
 """Tests for the variant→option collapse pass."""
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from modules.catalog.models import (
     Product,
@@ -46,8 +46,6 @@ async def _attrs(db, option_id):
     ).scalars().all()
 
 
-# ─── Task 1 tests ─────────────────────────────────────────────────────────────
-
 @pytest.mark.asyncio
 async def test_optioningest_has_enabled_field():
     from modules.catalog.schemas import OptionIngest
@@ -76,11 +74,10 @@ async def test_upsert_options_persists_enabled(db, seed_supplier):
     assert opts["color"].enabled is True
 
 
-# ─── Task 2 tests — pure helpers ──────────────────────────────────────────────
-
 @pytest.mark.no_db
 def test_distinct_normalizes_and_dedups():
     from modules.catalog.option_collapse import _distinct
+    # "Red"/"RED "/"red" collapse to one; first display form wins; alpha sort
     assert _distinct(["Navy", "Red", "RED ", "red", None, "  "]) == ["Navy", "Red"]
 
 
@@ -98,8 +95,6 @@ def test_slug():
     assert _slug("  Heather/Grey ") == "heather-grey"
 
 
-# ─── Task 3 tests — derive_options ────────────────────────────────────────────
-
 def _matrix(colors, sizes):
     return [(c, s) for c in colors for s in sizes]
 
@@ -109,7 +104,7 @@ async def test_matrix_collapse(db, seed_supplier):
     from modules.catalog.option_collapse import derive_options
     colors = ["Red", "Navy", "Black", "White", "Royal", "Green", "Maroon", "Gold"]
     sizes = ["S", "M", "L", "XL", "2XL", "3XL"]
-    p = await _mk_product(db, seed_supplier, _matrix(colors, sizes))
+    p = await _mk_product(db, seed_supplier, _matrix(colors, sizes))  # 48 variants
 
     res = await derive_options(db, p.id)
 
@@ -121,6 +116,7 @@ async def test_matrix_collapse(db, seed_supplier):
     assert opts["size"].options_type == "dropdown"
     assert len(await _attrs(db, opts["color"].id)) == 8
     assert len(await _attrs(db, opts["size"].id)) == 6
+    # no product_sizes written
     from modules.catalog.models import ProductSize
     sizes_rows = (await db.execute(
         select(ProductSize).where(ProductSize.product_id == p.id)
@@ -154,7 +150,7 @@ async def test_normalize_then_dedup(db, seed_supplier):
     from modules.catalog.option_collapse import derive_options
     p = await _mk_product(db, seed_supplier, [("Red", "M"), ("RED ", "M"), ("red", "M")])
     res = await derive_options(db, p.id)
-    assert res.color_attrs == 1
+    assert res.color_attrs == 1  # one color, no uq_option_attribute_title violation
 
 
 @pytest.mark.asyncio
@@ -162,8 +158,8 @@ async def test_mixed_nulls(db, seed_supplier):
     from modules.catalog.option_collapse import derive_options
     p = await _mk_product(db, seed_supplier, [("Red", None), (None, "M"), ("Navy", "L")])
     res = await derive_options(db, p.id)
-    assert res.color_attrs == 2
-    assert res.size_attrs == 2
+    assert res.color_attrs == 2  # Red, Navy
+    assert res.size_attrs == 2   # M, L
 
 
 @pytest.mark.asyncio
@@ -197,11 +193,10 @@ async def test_idempotent(db, seed_supplier):
     assert len(await _attrs(db, opts["size"].id)) == 2
 
 
-# ─── Task 4 tests — prune ─────────────────────────────────────────────────────
-
 @pytest.mark.asyncio
 async def test_prune_removed_color(db, seed_supplier):
     """8 colors then 6 — the 2 dropped colors disappear."""
+    from sqlalchemy import delete as _delete
     from modules.catalog.option_collapse import derive_options
     eight = ["Red", "Navy", "Black", "White", "Royal", "Green", "Maroon", "Gold"]
     p = await _mk_product(db, seed_supplier, [(c, "M") for c in eight])
@@ -209,8 +204,9 @@ async def test_prune_removed_color(db, seed_supplier):
     opts = await _options(db, p.id)
     assert len(await _attrs(db, opts["color"].id)) == 8
 
+    # delete 2 colors' variants, re-derive
     await db.execute(
-        delete(ProductVariant).where(
+        _delete(ProductVariant).where(
             ProductVariant.product_id == p.id,
             ProductVariant.color.in_(["Maroon", "Gold"]),
         )
@@ -229,6 +225,7 @@ async def test_prune_axis_emptied(db, seed_supplier):
     await derive_options(db, p.id)
     assert "color" in await _options(db, p.id)
 
+    # null out all colors, re-derive → color option pruned, size stays
     await db.execute(
         ProductVariant.__table__.update()
         .where(ProductVariant.product_id == p.id)
@@ -240,8 +237,6 @@ async def test_prune_axis_emptied(db, seed_supplier):
     assert "color" not in opts
     assert "size" in opts
 
-
-# ─── Task 5 tests — derive_options_bulk ───────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_bulk_backfill_one_supplier(db, seed_supplier):
@@ -255,8 +250,6 @@ async def test_bulk_backfill_one_supplier(db, seed_supplier):
     assert totals["color_options"] == 2
     assert totals["size_options"] == 2
 
-
-# ─── Task 6 tests — trigger routes ────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_route_derive_single_product(client, db, seed_supplier):
@@ -274,3 +267,29 @@ async def test_route_derive_bulk(client, db, seed_supplier):
     r = await client.post(f"/api/products/derive-options?supplier_id={seed_supplier.id}")
     assert r.status_code == 200
     assert r.json()["products"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_no_dup_options_or_attrs_on_resync(db, seed_supplier):
+    """Regression for Issue B (product 602 dup-sizes report).
+
+    Full re-ingest cycle: ingest → derive → re-ingest variants → re-derive.
+    Must produce one Color option, one Size option, with one attribute per
+    distinct value — no duplicates.
+    """
+    from modules.catalog.option_collapse import derive_options
+
+    colors = ["Red", "Navy"]
+    sizes = ["S", "M", "L"]
+    p = await _mk_product(db, seed_supplier, _matrix(colors, sizes))
+    await derive_options(db, p.id)
+
+    # Simulate re-ingest: variants survive (ON CONFLICT upsert in persistence)
+    # → derive again from the same variants
+    await derive_options(db, p.id)
+    await derive_options(db, p.id)  # third time for good measure
+
+    opts = await _options(db, p.id)
+    assert set(opts) == {"color", "size"}
+    assert len(await _attrs(db, opts["color"].id)) == 2
+    assert len(await _attrs(db, opts["size"].id)) == 3

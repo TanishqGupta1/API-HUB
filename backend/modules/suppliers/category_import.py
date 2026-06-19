@@ -122,10 +122,13 @@ async def _run_category_import(
 
         try:
             client = PromoStandardsClient(wsdl_product, auth_config)
-            products = await client.get_products_by_category(
+            # Use the standard inline ProductData service. SanMar's
+            # getProductInfoByCategory extension (extension_wsdl_url) returns no
+            # inline rows for bulk categories — it queues a file to SanMar's
+            # SFTP server instead — so it can't drive a synchronous import.
+            products = await client.get_products_by_category_productdata(
                 category_name,
                 limit=limit,
-                extension_wsdl_url=extension_wsdl_url,
             )
 
             if job:

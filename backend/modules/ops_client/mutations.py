@@ -8,7 +8,9 @@ receives a raw OPS response dict and needs to detect application-level rejection
 (HTTP 200 + result:false) or unwrap array-input responses.
 
 Queries:
-  get_product_by_sku — dedup / post-push verify (called from gateway via _dedup_lookup_in_ops)
+  find_product_id_by_main_sku — dedup / post-push verify (gateway _dedup_lookup_in_ops)
+  get_product_sku_matrix — valid size/option combos before setProductSku
+  get_product_stocks — existing stock entries (stock_id read-back)
 """
 from __future__ import annotations
 
@@ -172,6 +174,25 @@ mutation SetProductsAttributePrice($inputs: [ProductsAttributePriceInput!]!) {
 """.strip()
 
 
+# ── set_product_sku ──────────────────────────────────────────────────────────
+# Assigns a per-variant SKU to an OPS product. sku_type drives which dimension
+# the SKU keys on: "size_wise" (size_id only) for products with no options, or
+# "size_option_wise" (size_id + prod_add_opt_ids + attribute_ids) when the
+# variant maps to option-attributes. prod_add_opt_ids / attribute_ids are
+# comma-joined strings; delete=0 to upsert, 1 to remove.
+
+_SET_PRODUCT_SKU = """
+mutation SetProductSku($inputs: [ProductSkuInput!]!) {
+  setProductSku(inputs: $inputs) {
+    index
+    result
+    message
+    id
+  }
+}
+""".strip()
+
+
 # ── update_product_stock ─────────────────────────────────────────────────────
 
 _UPDATE_PRODUCT_STOCK = """
@@ -198,45 +219,141 @@ mutation SetProductDesign($input: setProductDesign_input!) {
 """.strip()
 
 
-# ── get_product_by_sku (dedup / post-push verify) ────────────────────────────
+# ── find_product_id_by_main_sku (dedup / post-push verify) ───────────────────
+# AI-1: the prior getProductBySku(products_sku) query does NOT exist in OPS —
+# it was invented in api-hub and returns empty against the live API, so dedup
+# never actually fired in production. The supported way to find an existing
+# product by SKU is the `products` query (which exposes main_sku), scanned
+# client-side: OPS provides no server-side SKU filter on any query.
 #
-# Used pre-push (_dedup_lookup_in_ops) to ask OPS whether it already has a
-# product with this SKU, so a retry of a failed push doesn't create a duplicate.
-# Also used post-push by _verify_post_push to confirm the write persisted.
-#
-# Schema is PROVISIONAL — confirm against the OPS Postman collection when
-# Christian shares it. The function returns Optional[int] (products_id) so
-# the dedup caller never sees raw schema details.
+# Used pre-push (_dedup_lookup_in_ops) so a retry of a crashed push doesn't
+# create a duplicate, and post-push by _verify_post_push. Returns the same
+# OpsResult shape the old helper did — data={"products_id": <int>} on a match,
+# data={} on a clean not-found — so callers are unchanged.
 
-_GET_PRODUCT_BY_SKU = """
-query GetProductBySku($products_sku: String!) {
-  getProductBySku(products_sku: $products_sku) {
-    products_id
-    products_sku
+_PRODUCTS_LIST = """
+query products($products_id: Int, $limit: Int, $offset: Int) {
+  products(products_id: $products_id, limit: $limit, offset: $offset) {
+    products {
+      product_id
+      main_sku
+    }
+    totalProducts
+    currentCount
   }
 }
 """.strip()
 
 
-async def get_product_by_sku(
+async def find_product_id_by_main_sku(
     *,
     client: OpsGraphQLClient,
-    products_sku: str,
+    main_sku: str,
+    page_size: int = 100,
+    max_pages: int = 50,
 ) -> OpsResult:
-    """Look up an existing OPS product by SKU. Returns data dict containing
-    products_id when found, or an empty dict when not found.
+    """Find an OPS product whose ``main_sku`` equals ``main_sku``.
 
-    Callers must check result.ok AND result.data.get('products_id').
-    A missing products_id is a successful 'not found', not a failure.
+    OPS has no server-side SKU filter, so this pages the ``products`` query and
+    matches client-side. Bounded by ``max_pages`` (page_size × max_pages =
+    5,000 products by default) so a large catalog can't make a push hang; if the
+    SKU isn't found within the cap it's reported as a clean not-found and the
+    caller proceeds with create.
+
+    Returns:
+      * ``OpsResult(ok=True, data={"products_id": int})`` on a match,
+      * ``OpsResult(ok=True, data={})`` when not found (caller treats as create),
+      * the underlying error ``OpsResult`` if a page query fails.
+    """
+    if not main_sku:
+        return OpsResult(ok=True, data={})
+    target = str(main_sku)
+    offset = 0
+    for _ in range(max_pages):
+        result = await client.execute(
+            _PRODUCTS_LIST, variables={"limit": page_size, "offset": offset},
+        )
+        if not result.ok:
+            return result
+        payload = (result.data or {}).get("products") or {}
+        rows = payload.get("products") or []
+        if not rows:
+            break
+        for row in rows:
+            if str(row.get("main_sku") or "") == target:
+                return OpsResult(
+                    ok=True,
+                    data={"products_id": row.get("product_id")},
+                    raw=result.raw,
+                )
+        offset += len(rows)
+        total = payload.get("totalProducts")
+        if total is not None and offset >= int(total):
+            break
+    return OpsResult(ok=True, data={})
+
+
+# ── get_product_sku_matrix (AI-2 — valid size/option combos before setProductSku) ─
+#
+# OPS docs: "Use it to get valid size and option combinations before calling
+# setProductSku." Returns the authoritative list of assignable variant slots
+# for a product:
+#   * No prod_add_opt_ids ("")  → size-wise matrix (one row per size).
+#   * With prod_add_opt_ids     → size × option-attribute matrix.
+#
+# This is the supported replacement for the invented getProductBySku (AI-1):
+# it tells us which (size_id, prod_add_opt_ids, attribute_ids) combinations
+# OPS will actually accept, so the setProductSku batch only assigns SKUs to
+# real slots and stock (updateProductStock) can find them later.
+#
+# `prod_add_opt_ids` is declared String! (required) in the live schema, so the
+# size-wise call passes an empty string rather than omitting the variable.
+
+_GET_PRODUCT_SKU_MATRIX = """
+query getProductSkuMatrix($products_id: Int!, $prod_add_opt_ids: String!) {
+  getProductSkuMatrix(products_id: $products_id, prod_add_opt_ids: $prod_add_opt_ids) {
+    matrix {
+      size_id
+      prod_add_opt_ids
+      attribute_ids
+    }
+    totalRecords
+  }
+}
+""".strip()
+
+
+async def get_product_sku_matrix(
+    *,
+    client: OpsGraphQLClient,
+    products_id: int,
+    prod_add_opt_ids: str = "",
+) -> OpsResult:
+    """Return the valid size/option combinations OPS will accept for a product.
+
+    On success ``OpsResult.data = {"matrix": [...], "totalRecords": int}``
+    (``matrix`` possibly empty). The "Data not found" error OPS returns for a
+    product with no configured combinations yet is mapped to an empty matrix so
+    callers don't need to special-case the error path (mirrors
+    ``get_product_stocks``).
     """
     result = await client.execute(
-        _GET_PRODUCT_BY_SKU,
-        variables={"products_sku": products_sku},
+        _GET_PRODUCT_SKU_MATRIX,
+        variables={"products_id": products_id, "prod_add_opt_ids": prod_add_opt_ids},
     )
     if not result.ok:
+        if (result.ops_error_code or "") == "DATA_NOT_FOUND":
+            return OpsResult(ok=True, data={"matrix": [], "totalRecords": 0}, raw=result.raw)
         return result
-    payload = (result.data or {}).get("getProductBySku") or {}
-    return OpsResult(ok=True, data=payload, raw=result.raw)
+    payload = (result.data or {}).get("getProductSkuMatrix") or {}
+    return OpsResult(
+        ok=True,
+        data={
+            "matrix": payload.get("matrix") or [],
+            "totalRecords": payload.get("totalRecords") or 0,
+        },
+        raw=result.raw,
+    )
 
 
 # ── get_product_stocks (Phase 6 — stock_id read-back) ───────────────────────

@@ -411,6 +411,68 @@ class PromoStandardsClient:
         """
         return [PSCategoryData(name=c) for c in SANMAR_CATEGORIES]
 
+    async def get_products_by_category_productdata(
+        self,
+        category_name: str,
+        limit: int = 10,
+        scan_cap: int = 400,
+        concurrency: int = 8,
+        ws_version: str = "2.0.0",
+        localization_country: str = "us",
+        localization_language: str = "en",
+    ) -> list[PSProductData]:
+        """Fetch up to ``limit`` products in ``category_name`` using the standard
+        PromoStandards ProductData service (fully inline).
+
+        Avoids SanMar's ``getProductInfoByCategory`` extension, which for bulk
+        categories returns no inline rows and instead drops a file on SanMar's
+        SFTP server ("SanMarPI folder"). Here we pull the sellable product IDs
+        (inline), then fetch product detail and keep the ones whose
+        ``ProductCategoryArray`` matches ``category_name``. Scanning is bounded
+        by ``scan_cap`` getProduct lookups so a sparse category can't run away.
+
+        getProduct is one-at-a-time SOAP, so detail lookups run in waves of
+        ``concurrency`` with an early exit once ``limit`` matches are found.
+        """
+        ids = await self.get_sellable_product_ids(ws_version)
+
+        # getProductSellable returns one row per sellable part, so a style
+        # repeats many times. Dedupe to unique product IDs, preserving order.
+        seen: set[str] = set()
+        unique: list[str] = []
+        for pid in ids:
+            if pid not in seen:
+                seen.add(pid)
+                unique.append(pid)
+
+        target = category_name.strip().lower()
+        candidates = unique[:scan_cap]
+        out: list[PSProductData] = []
+
+        for i in range(0, len(candidates), concurrency):
+            if len(out) >= limit:
+                break
+            chunk = candidates[i : i + concurrency]
+            results = await asyncio.gather(
+                *[
+                    self.get_product(
+                        pid, ws_version, localization_country, localization_language
+                    )
+                    for pid in chunk
+                ]
+            )
+            for prod in results:
+                if prod and any(target in c.strip().lower() for c in prod.categories):
+                    out.append(prod)
+                    if len(out) >= limit:
+                        break
+
+        log.info(
+            "ProductData category fetch(%s): scanned up to %d styles, matched %d (limit=%d)",
+            category_name, min(len(candidates), len(unique)), len(out), limit,
+        )
+        return out[:limit]
+
     async def get_products_by_category(
         self,
         category_name: str,
