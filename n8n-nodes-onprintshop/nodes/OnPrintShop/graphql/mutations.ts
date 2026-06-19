@@ -1,29 +1,27 @@
 export const setProductMutation = `
-  mutation setProduct($inputs: [ProductInput!]!) {
-    setProduct(inputs: $inputs) {
-      result
-      message
+  mutation setProduct($input: ProductInput!) {
+    setProduct(input: $input) {
       id
+      title
+      status
     }
   }
 `;
 
 export const setProductPriceMutation = `
-  mutation setProductPrice($inputs: [ProductPriceInput!]!) {
-    setProductPrice(inputs: $inputs) {
-      result
+  mutation setProductPrice($input: ProductPriceInput!) {
+    setProductPrice(input: $input) {
+      status
       message
-      id
     }
   }
 `;
 
 export const setProductSizeMutation = `
-  mutation setProductSize($inputs: [ProductSizeInput!]!) {
-    setProductSize(inputs: $inputs) {
-      result
+  mutation setProductSize($input: ProductSizeInput!) {
+    setProductSize(input: $input) {
+      status
       message
-      id
     }
   }
 `;
@@ -38,11 +36,10 @@ export const setProductPagesMutation = `
 `;
 
 export const setProductCategoryMutation = `
-  mutation setProductCategory($inputs: [ProductCategoryInput!]!) {
-    setProductCategory(inputs: $inputs) {
-      result
+  mutation setProductCategory($input: ProductCategoryInput!) {
+    setProductCategory(input: $input) {
+      status
       message
-      id
     }
   }
 `;
@@ -57,95 +54,10 @@ export const setProductDesignMutation = `
 `;
 
 export const setAssignOptionsMutation = `
-  mutation setAssignOptions($inputs: [AssignOptionsInput!]!) {
-    setAssignOptions(inputs: $inputs) {
-      result
+  mutation setAssignOptions($input: AssignOptionsInput!) {
+    setAssignOptions(input: $input) {
+      status
       message
-      id
-    }
-  }
-`;
-
-export const setAdditionalOptionMutation = `
-  mutation setAdditionalOption($inputs: [AdditionalOptionInput!]!) {
-    setAdditionalOption(inputs: $inputs) {
-      index
-      result
-      message
-      id
-    }
-  }
-`;
-
-export const setAdditionalOptionAttributesMutation = `
-  mutation setAdditionalOptionAttributes($inputs: [AdditionalOptionAttributesInput!]!) {
-    setAdditionalOptionAttributes(inputs: $inputs) {
-      index
-      result
-      message
-      id
-    }
-  }
-`;
-
-export const setProductsAttributePriceMutation = `
-  mutation setProductsAttributePrice($inputs: [ProductsAttributePriceInput!]!) {
-    setProductsAttributePrice(inputs: $inputs) {
-      index
-      result
-      message
-      id
-    }
-  }
-`;
-
-export const setProductsImageGalleryMutation = `
-  mutation setProductsImageGallery(
-    $products_id: Int!
-    $optimizeimg: Int
-    $input: ProductsImageGalleryBulkInput!
-  ) {
-    setProductsImageGallery(
-      products_id: $products_id
-      optimizeimg: $optimizeimg
-      input: $input
-    ) {
-      index
-      result
-      message
-      id
-    }
-  }
-`;
-
-export const setProductSkuMutation = `
-  mutation setProductSku($inputs: [ProductSkuInput!]!) {
-    setProductSku(inputs: $inputs) {
-      index
-      result
-      message
-      id
-    }
-  }
-`;
-
-export const updateProductStockMutation = `
-  mutation updateProductStock(
-    $stock_id: Int
-    $product_sku: String
-    $action: UpdateProductStockActionEnum!
-    $input: UpdateProductStockInput!
-  ) {
-    updateProductStock(
-      stock_id: $stock_id
-      product_sku: $product_sku
-      action: $action
-      input: $input
-    ) {
-      result
-      message
-      id
-      stock_quantity
     }
   }
 `;
