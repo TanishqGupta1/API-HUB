@@ -732,7 +732,10 @@ class TestTitlePrefix:
 
 class TestPC61Smoke:
     def test_pc61_plan_shape(self, monkeypatch):
-        # Opt into stock + image steps so the smoke covers the full mutation shape.
+        # Opt into SKU + stock + image steps so the smoke covers the full
+        # mutation shape. All three are set explicitly (not inherited from
+        # .env) so the assertion holds in CI, which doesn't load .env.
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_SKU", "1")
         monkeypatch.setenv("OPS_PUSH_INCLUDE_STOCK", "1")
         monkeypatch.setenv("OPS_PUSH_INCLUDE_IMAGES", "1")
         # Match the SanMar PC61 contour: 56 variants, 1 mapped option
