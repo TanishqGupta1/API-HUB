@@ -110,7 +110,7 @@ const NAV_ITEMS = [
       },
       {
         href: "/sync",
-        label: "Data Updates",
+        label: "Sync Jobs",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -120,7 +120,7 @@ const NAV_ITEMS = [
       },
       {
         href: "/mappings",
-        label: "Data Configuration",
+        label: "Field Mapping",
         icon: (
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="16 18 22 12 16 6" />

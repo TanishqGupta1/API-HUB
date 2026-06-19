@@ -36,20 +36,13 @@ class ProductImageRead(BaseModel):
     color: Optional[str] = None
     sort_order: int
     checksum: Optional[str] = None
-    ops_filename: Optional[str] = None  # set after manual OPS admin upload
+    ops_filename: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ProductImageOpsFilenameUpdate(BaseModel):
-    ops_filename: Optional[str] = Field(
-        default=None,
-        max_length=255,
-        description=(
-            "Bare filename assigned by OPS after manually uploading the image "
-            "via OPS admin UI (e.g. 'bg77-black-front.jpg'). Null clears the value."
-        ),
-    )
+    ops_filename: Optional[str] = None
 
 
 class ProductOptionAttributeRead(BaseModel):
@@ -258,6 +251,7 @@ class OptionIngest(BaseModel):
     master_option_id: Optional[int] = None
     ops_option_id: Optional[int] = None
     required: bool = False
+    enabled: bool = False
     # OPS sometimes returns this as a JSON string; ingest normalizes in ingest.py.
     attributes: list[OptionAttributeIngest] | str | None = None
 
@@ -303,8 +297,9 @@ class PriceIngest(BaseModel):
     base_price: Decimal
     tiers: list["VariantPriceIngest"] = Field(default_factory=list)
     """Optional quantity-price tiers from the supplier's pricing API.
-    When present, saved to variant_prices and used by the OPS push gateway
-    to emit one setProductPrice step per tier instead of a flat 1-999999 row.
+    When present, each tier is saved to variant_prices by the price ingest
+    endpoint (POST /api/ingest/prices). The OPS push pipeline reads tiers via
+    ProductVariantIngest.prices on the product sync path, not this field.
     """
 
 

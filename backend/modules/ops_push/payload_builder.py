@@ -437,16 +437,54 @@ def _request_fingerprint(variables: dict[str, Any]) -> str:
     return hashlib.sha256(canon.encode("utf-8")).hexdigest()[:16]
 
 
-def _variant_sort_key(v: ProductVariant) -> tuple[int, str, str, str]:
-    """Sort variants by `sort_order` ASC, then lex `(color, size, sku)`.
+# Standard garment size ordering (alpha bucket = 0).
+# Ordering contract:
+#   bucket 0 — known alpha sizes by industry garment order (XS → 6XL)
+#   bucket 1 — numeric sizes (28, 30, 32 …) sorted numerically by leading digits
+#   bucket 2 — everything else, lexicographic
+# Within the same bucket, the raw lowercased string is used as a tiebreaker.
+_ALPHA_SIZE_RANK: dict[str, int] = {
+    "4xs": 0, "3xs": 1, "xxs": 2, "2xs": 2,
+    "xs": 3,
+    "s": 4, "sm": 4,
+    "m": 5, "med": 5,
+    "l": 6, "lg": 6,
+    "xl": 7,
+    "xxl": 8, "2xl": 8,
+    "xxxl": 9, "3xl": 9,
+    "xxxxl": 10, "4xl": 10,
+    "xxxxxl": 11, "5xl": 11,
+    "xxxxxxl": 12, "6xl": 12,
+}
 
-    `sort_order` is the new M0 column; we use `getattr(..., 0)` so this
-    code keeps working before the M0 migration lands.
+
+def _size_rank(size: str) -> tuple[int, float, str]:
+    """Return a 3-tuple that sorts sizes in standard apparel order.
+
+    Ordering contract:
+      (0, rank, s)  — known alpha size (XS < S < M < L < XL < 2XL … 6XL)
+      (1, n, s)     — numeric / inseam size (28 < 30 < 32 …), keyed by leading number
+      (2, 0.0, s)   — unknown token, lexicographic fallback
+    """
+    s = size.strip().lower()
+    if s in _ALPHA_SIZE_RANK:
+        return (0, float(_ALPHA_SIZE_RANK[s]), s)
+    m = re.match(r"^(\d+(?:\.\d+)?)", s)
+    if m:
+        return (1, float(m.group(1)), s)
+    return (2, 0.0, s)
+
+
+def _variant_sort_key(v: ProductVariant) -> tuple[int, tuple[int, float, str], str, str]:
+    """Sort variants by `sort_order` ASC, then size (apparel order), color, sku.
+
+    `sort_order` is the M0 column; `getattr(..., 0)` keeps this working
+    on duck-typed mocks and before the column migration lands.
     """
     return (
         getattr(v, "sort_order", 0) or 0,
+        _size_rank(v.size or ""),
         (v.color or "").lower(),
-        (v.size or "").lower(),
         (v.sku or "").lower(),
     )
 
@@ -516,11 +554,16 @@ def _build_setProduct_step(
         #     to find variants; without it, all stock writes fail
         #   * product_type — working OPS products always have this set;
         #     null may hide the product from some admin UI filters
-        "predefined_product_type": "1",
+        #   * predefined_product_type / product_type:
+        #     "1"  = Custom Design (customer uploads artwork)
+        #     "15" = Add to cart / Stock Apparel (ready-to-order blank)
+        #     All SanMar/PromoStandards apparel is stock, so "15" is correct.
+        #     Non-apparel products (print substrates, etc.) keep "1".
+        "predefined_product_type": "15" if ctx.product.product_type == "apparel" else "1",
         "price_defining_method": "1",
         "measurement_unit_id": 1,
         "enable_stock_management": "1",
-        "product_type": "1",
+        "product_type": "15" if ctx.product.product_type == "apparel" else "1",
     }
     # Category resolution: per-product storefront override wins; if absent,
     # fall back to the per-customer default_ops_category_id (Phase 2 of the
@@ -708,9 +751,10 @@ def _build_apparel_attribute_price_step(
 
     Uses setProductsAttributePrice (verified live in OPS 81-op collection).
     `attribute_id` comes from the matching setAdditionalOptionAttributes response.
-    `size_from=0, size_to=99999999` covers the entire print-size range — since
+    `size_from=1, size_to=99999999` covers the entire print-size range — since
     apparel uses a single placeholder OPS size (Default), this unconditionally
-    applies the per-size price for any print-size selection.
+    applies the per-size price for any print-size selection. 0 is avoided because
+    OPS PHP treats it as empty() and raises "Size From is required".
 
     This replaces the invalid `multiplier`/`multiplier_type` approach: those
     fields do not exist on AdditionalOptionInput per the live OPS schema.
@@ -722,7 +766,7 @@ def _build_apparel_attribute_price_step(
         variables={
             "inputs": [{
                 "attribute_id": _placeholder(attribute_step, "attribute_id"),
-                "size_from": 0,
+                "size_from": 1,
                 "size_to": 99999999,
                 "attributes_price": final_price,
                 "vendor_price": base_price,
@@ -814,6 +858,29 @@ def _build_setAssignOptions_step(
                 "products_id": _placeholder(1, "products_id"),
                 "master_option_id": mapping.target_ops_option_id,
                 "sort_order": getattr(mapping, "sort_order", 0) or 0,
+            }]
+        },
+        requires_response_from=[1],
+    )
+
+
+def _build_setAssignOptions_for_product_option(
+    step_num: int, po: ProductOption
+) -> OPSMutationStep:
+    """Attach a synced OPS master option to the product (options-config path).
+
+    Uses ProductOption.master_option_id (the OPS integer master_option_id from
+    the master_options sync) as the setAssignOptions input.
+    """
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setAssignOptions",
+        source_key=f"master_option:{po.master_option_id}",
+        variables={
+            "inputs": [{
+                "products_id": _placeholder(1, "products_id"),
+                "master_option_id": po.master_option_id,
+                "sort_order": po.sort_order or 0,
             }]
         },
         requires_response_from=[1],
@@ -1000,6 +1067,8 @@ def _synthesize_payload(
        next     : setAdditionalOption  (Size group)
        next+    : setAdditionalOptionAttributes × S  (each unique size)
        next+    : setProductsAttributePrice × S      (per-size sell price)
+       next+    : setAssignOptions × M               (enabled decoration master options)
+       [opt]    : setProductSku × N          (OPS_PUSH_INCLUDE_SKU=1)
        [opt]    : setProductsImageGallery   (OPS_PUSH_INCLUDE_IMAGES=1)
        [opt]    : updateProductStock × 1    (OPS_PUSH_INCLUDE_STOCK=1, total qty)
 
@@ -1007,8 +1076,10 @@ def _synthesize_payload(
     (verified against live schema — they do not exist). Per-size pricing is
     handled entirely by setProductsAttributePrice keyed on attribute_id.
 
-    The `option_strategy` parameter is retained for API back-compat but no
-    longer branches behavior — the apparel flow is the single canonical path.
+    The `option_strategy` parameter is retained for API back-compat. Color/Size
+    groups always use PRODUCT_LOCAL_OPTION_CREATE. Decoration master options
+    (Garment Brand, Decoration Method, etc.) are attached via setAssignOptions
+    for any enabled ProductOption row with master_option_id set (options-config).
     """
     customer_id = ctx.customer.id
     product_id = ctx.product.id
@@ -1174,6 +1245,16 @@ def _synthesize_payload(
         plan.append(_build_apparel_attribute_price_step(
             next_step, attr_step, size_val, base_p, final_p
         ))
+        next_step += 1
+
+    # Decoration master options (Garment Brand, Decoration Method, Print Location,
+    # etc.) configured via PUT /api/products/{id}/options-config. Each enabled
+    # ProductOption row with master_option_id references a synced OPS master option
+    # and is attached to the product after setProduct resolves.
+    for po in sorted(ctx.options, key=lambda x: x.sort_order or 0):
+        if po.master_option_id is None or not getattr(po, "enabled", False):
+            continue
+        plan.append(_build_setAssignOptions_for_product_option(next_step, po))
         next_step += 1
 
     # Image gallery — pushes product images via setProductsImageGallery.

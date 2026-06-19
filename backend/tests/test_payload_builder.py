@@ -37,6 +37,7 @@ from modules.ops_push.payload_builder import (
     _PushContext,
     _placeholder,
     _request_fingerprint,
+    _size_rank,
     _synthesize_payload,
     canonicalize_json,
     compute_payload_hash,
@@ -191,6 +192,25 @@ def _push_mapping_option(
         target_ops_attribute_id=target_ops_attribute_id,
         price=price,
         sort_order=0,
+    )
+
+
+def _master_product_option(
+    master_option_id: int,
+    option_key: str = "garmentBrand",
+    title: str = "Garment Brand",
+    enabled: bool = True,
+    sort_order: int = 0,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=uuid.uuid4(),
+        master_option_id=master_option_id,
+        option_key=option_key,
+        title=title,
+        options_type="combo",
+        sort_order=sort_order,
+        enabled=enabled,
+        attributes=[],
     )
 
 
@@ -612,8 +632,8 @@ class TestApparelAttributeFlow:
     per unique color and per unique size value (reference product 361 in
     visualgraphx OPS staging). No grouping, no attribute children."""
 
-    def test_no_setAssignOptions_emitted(self):
-        # setAssignOptions path is no longer wired into the apparel flow.
+    def test_no_setAssignOptions_emitted_when_options_empty(self):
+        # setAssignOptions is not emitted when ctx.options has no enabled master option rows.
         ctx = _ctx(
             variants=[_variant("v1", color="Red", size="S")],
             push_mapping_options=[
@@ -622,6 +642,22 @@ class TestApparelAttributeFlow:
         )
         payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
         assert not any(s.mutation == "setAssignOptions" for s in payload.plan)
+
+    def test_setAssignOptions_emitted_for_enabled_master_options(self):
+        # Enabled ProductOption rows with master_option_id emit setAssignOptions.
+        ctx = _ctx(
+            variants=[_variant("v1", color="Red", size="S")],
+            options=[
+                _master_product_option(297, option_key="garmentBrand", sort_order=10),
+                _master_product_option(310, option_key="decorationMethod", sort_order=20),
+                _master_product_option(999, option_key="disabled", enabled=False, sort_order=5),
+            ],
+        )
+        payload = _synthesize_payload(ctx)
+        ao_steps = [s for s in payload.plan if s.mutation == "setAssignOptions"]
+        assert len(ao_steps) == 2, "disabled row must be excluded"
+        ids = [s.variables["inputs"][0]["master_option_id"] for s in ao_steps]
+        assert ids == [297, 310], "must be sorted by sort_order"
 
     def test_option_group_keys_are_dimension_slugs(self):
         # Parent group option_key is "color" / "size"; human label is "Color" / "Size".
@@ -1216,3 +1252,77 @@ class TestStorefrontOverridesInPush:
         # If a refactor moves one but not the other, this import breaks.
         assert push_helper.apply_pricing_overrides is not None
         assert hasattr(quote_path, "_apply_storefront_override")
+
+
+# ===========================================================================
+# _size_rank ordering contract
+# ===========================================================================
+
+
+class TestSizeRank:
+    """_size_rank must produce stable industry-standard garment order."""
+
+    def _sorted_sizes(self, sizes: list[str]) -> list[str]:
+        return sorted(sizes, key=_size_rank)
+
+    def test_alpha_sizes_sorted_by_garment_convention(self):
+        shuffled = ["XL", "S", "3XL", "M", "XS", "2XL", "L"]
+        assert self._sorted_sizes(shuffled) == ["XS", "S", "M", "L", "XL", "2XL", "3XL"]
+
+    def test_numeric_sizes_sorted_numerically_not_lexicographically(self):
+        # Lexicographic order would put "10" before "2" — numeric must not.
+        shuffled = ["32", "10", "28", "2", "30"]
+        assert self._sorted_sizes(shuffled) == ["2", "10", "28", "30", "32"]
+
+    def test_alpha_before_numeric(self):
+        # Bucket 0 (alpha) < bucket 1 (numeric) regardless of values.
+        assert self._sorted_sizes(["30", "XS"]) == ["XS", "30"]
+
+    def test_unknown_sizes_sort_last_lexicographically(self):
+        sizes = ["M", "30", "Custom", "28"]
+        result = self._sorted_sizes(sizes)
+        assert result[-1] == "Custom"
+        assert result[0] == "M"
+
+    def test_known_aliases(self):
+        # SM and S share the same bucket+rank (both are "small"); raw string differs
+        assert _size_rank("sm")[:2] == _size_rank("s")[:2]
+        # 2XL and XXL share the same bucket+rank
+        assert _size_rank("2xl")[:2] == _size_rank("xxl")[:2]
+
+    def test_numeric_with_trailing_suffix(self):
+        # "32x32" inseam — leading number 32 used for sorting
+        assert _size_rank("32x32") == (1, 32.0, "32x32")
+        assert _size_rank("28w") == (1, 28.0, "28w")
+
+
+# ===========================================================================
+# product_type apparel gate in setProduct
+# ===========================================================================
+
+
+class TestProductTypeGating:
+    """setProduct must emit product_type='15' for apparel, '1' for everything else."""
+
+    def _get_product_type_fields(self, product_type_str: str) -> dict:
+        prod = _product()
+        prod.product_type = product_type_str
+        ctx = _ctx(variants=[_variant("v1")], product=prod)
+        payload = _synthesize_payload(ctx)
+        inp = payload.plan[0].variables["inputs"][0]
+        return inp
+
+    def test_apparel_emits_15(self):
+        inp = self._get_product_type_fields("apparel")
+        assert inp["product_type"] == "15", "stock apparel must be Add-to-Cart (15)"
+        assert inp["predefined_product_type"] == "15"
+
+    def test_non_apparel_emits_1(self):
+        inp = self._get_product_type_fields("print")
+        assert inp["product_type"] == "1"
+        assert inp["predefined_product_type"] == "1"
+
+    def test_unknown_type_emits_1(self):
+        inp = self._get_product_type_fields("custom")
+        assert inp["product_type"] == "1"
+        assert inp["predefined_product_type"] == "1"
