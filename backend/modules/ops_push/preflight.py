@@ -421,20 +421,24 @@ def check_markup_rule_resolves(ctx: _PreflightContext) -> CheckResult:
 def check_push_mappings_present(
     ctx: _PreflightContext, *, dry_run: bool = False
 ) -> CheckResult:
-    """3. Every ProductOption (and attribute) has a push_mapping_options row.
+    """3. Every ProductOption that needs external mapping has a push_mapping_options row.
+
+    Options with master_option_id set are handled via setAssignOptions using the
+    ProductOption.master_option_id directly (options-config path) — they need no
+    push_mapping_options row.  Only options WITHOUT master_option_id require a
+    mapping row with a non-null target_ops_option_id.
 
     Block when:
-      - the product has options BUT no mapping rows exist at all
+      - the product has unmapped options (no master_option_id) AND no mapping rows
       - mapping rows exist BUT target_ops_option_id (or _attribute_id) is null
 
     Pass when:
       - product has no options (nothing to map)
-      - every option has a non-null target_ops_option_id
+      - all options carry master_option_id (handled by setAssignOptions directly)
+      - every option without master_option_id has a non-null target_ops_option_id
 
     Soft-pass (dry_run only) when:
-      - product has options but NO mapping rows exist yet (first-time push).
-        The product will be pushed without option mapping — acceptable for a
-        dry-run / demo. A live push still requires full mapping.
+      - product has unmapped options but NO mapping rows exist yet (first-time push).
     """
     if not ctx.options:
         return CheckResult(
@@ -443,17 +447,33 @@ def check_push_mappings_present(
             "product has no options — nothing to map",
         )
 
-    # Soft-pass for dry_run when this is a brand-new product with no mapping yet
-    if dry_run and not ctx.push_mapping_options:
+    # Options whose OPS ID is stored directly on the ProductOption row (via
+    # options-config) don't need a push_mapping_options row — the payload builder
+    # emits setAssignOptions using ProductOption.master_option_id directly.
+    unmapped_options = [
+        opt for opt in ctx.options if getattr(opt, "master_option_id", None) is None
+    ]
+    master_linked_count = len(ctx.options) - len(unmapped_options)
+
+    if not unmapped_options:
         return CheckResult(
             "push_mappings_present",
             True,
-            f"no mapping yet for {len(ctx.options)} option(s) — "
-            "skipped in dry_run (product will push without option mapping). "
-            "Sync master options + resolve before live push.",
+            f"all {len(ctx.options)} option(s) have master_option_id "
+            f"— setAssignOptions path, no push_mapping_options required",
         )
 
-    expected_keys = {opt.option_key for opt in ctx.options}
+    # Soft-pass for dry_run when this is a brand-new product with no mapping yet
+    if dry_run and not ctx.push_mapping_options:
+        detail = (
+            f"no mapping yet for {len(unmapped_options)} option(s)"
+            + (f" ({master_linked_count} via master_option_id)" if master_linked_count else "")
+            + " — skipped in dry_run (product will push without option mapping). "
+            "Sync master options + resolve before live push."
+        )
+        return CheckResult("push_mappings_present", True, detail)
+
+    expected_keys = {opt.option_key for opt in unmapped_options}
     mapped_keys = {
         m.source_option_key
         for m in ctx.push_mapping_options
@@ -474,7 +494,7 @@ def check_push_mappings_present(
         )
 
     expected_attr_keys: set[tuple[str, str]] = set()
-    for opt in ctx.options:
+    for opt in unmapped_options:
         for attr in opt.attributes:
             if attr.attribute_key:
                 expected_attr_keys.add((opt.option_key, attr.attribute_key))

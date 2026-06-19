@@ -809,6 +809,27 @@ def _build_setAssignOptions_step(
     )
 
 
+def _build_setAssignOptions_for_product_option(
+    step_num: int, po: "ProductOption"
+) -> OPSMutationStep:
+    """Direct master_option path — one setAssignOptions per ProductOption
+    with master_option_id set. Does not require a push_mapping_options row;
+    preflight validates this. Only requires products_id (step 1)."""
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setAssignOptions",
+        source_key=f"master_option:{po.master_option_id}",
+        variables={
+            "inputs": [{
+                "products_id": _placeholder(1, "products_id"),
+                "master_option_id": po.master_option_id,
+                "sort_order": po.sort_order or 0,
+            }]
+        },
+        requires_response_from=[1],
+    )
+
+
 def _build_setAdditionalOption_step(
     step_num: int, opt: ProductOption
 ) -> OPSMutationStep:
@@ -1024,8 +1045,9 @@ def _synthesize_payload(
        step 1   : setProduct
        step 2   : setProductSize × 1  (placeholder "Default")
        steps 3-8: setProductPrice × 6 (APPAREL_VOLUME_TIERS qty-based curve)
-       step 9   : setAdditionalOption  (Color group)
-       steps 10+: setAdditionalOptionAttributes × C  (each unique color)
+       next+    : setAssignOptions × M (enabled options with master_option_id)
+       next     : setAdditionalOption  (Color group)
+       next+    : setAdditionalOptionAttributes × C  (each unique color)
        next     : setAdditionalOption  (Size group)
        next+    : setAdditionalOptionAttributes × S  (each unique size)
        next+    : setProductsAttributePrice × S      (per-size sell price)
@@ -1147,6 +1169,16 @@ def _synthesize_payload(
                 )
             )
             next_step += 1
+
+    # setAssignOptions for master decoration options (e.g. Embroidery, Screen Print).
+    # One step per enabled ProductOption with master_option_id set. Only needs
+    # products_id (step 1) — placed before color/size attribute groups so all
+    # decoration options are registered before per-size price rows are written.
+    for po in sorted(ctx.options, key=lambda x: x.sort_order or 0):
+        if getattr(po, "master_option_id", None) is None or not getattr(po, "enabled", False):
+            continue
+        plan.append(_build_setAssignOptions_for_product_option(next_step, po))
+        next_step += 1
 
     # ── Apparel option groups: Color + Size ───────────────────────────────────
     #

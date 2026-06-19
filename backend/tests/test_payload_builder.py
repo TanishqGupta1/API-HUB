@@ -122,14 +122,22 @@ def _image(url: str, image_type: str = "front", sort_order: int = 0) -> SimpleNa
     )
 
 
-def _option(option_key: str = "embroidery", attributes: list | None = None) -> SimpleNamespace:
+def _option(
+    option_key: str = "embroidery",
+    attributes: list | None = None,
+    master_option_id: int | None = None,
+    enabled: bool = False,
+    sort_order: int = 0,
+) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
         option_key=option_key,
         title=option_key.title(),
         options_type="combo",
         required=False,
-        sort_order=0,
+        sort_order=sort_order,
+        master_option_id=master_option_id,
+        enabled=enabled,
         attributes=attributes or [],
     )
 
@@ -612,16 +620,42 @@ class TestApparelAttributeFlow:
     per unique color and per unique size value (reference product 361 in
     visualgraphx OPS staging). No grouping, no attribute children."""
 
-    def test_no_setAssignOptions_emitted(self):
-        # setAssignOptions path is no longer wired into the apparel flow.
+    def test_no_setAssignOptions_when_no_master_option_id(self):
+        # Options without master_option_id (or disabled) do not emit setAssignOptions.
         ctx = _ctx(
             variants=[_variant("v1", color="Red", size="S")],
-            push_mapping_options=[
-                _push_mapping_option("embroidery", target_ops_option_id=42),
-            ],
+            options=[_option("embroidery", master_option_id=None, enabled=True)],
         )
         payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
         assert not any(s.mutation == "setAssignOptions" for s in payload.plan)
+
+    def test_setAssignOptions_emitted_for_enabled_master_options(self):
+        # Enabled options with master_option_id emit one setAssignOptions step each.
+        ctx = _ctx(
+            variants=[_variant("v1", color="Red", size="S")],
+            options=[
+                _option("embroidery", master_option_id=7, enabled=True, sort_order=0),
+                _option("screen_print", master_option_id=12, enabled=True, sort_order=1),
+                _option("dtg", master_option_id=3, enabled=False, sort_order=2),  # disabled
+            ],
+        )
+        payload = _synthesize_payload(ctx)
+        ao_steps = [s for s in payload.plan if s.mutation == "setAssignOptions"]
+        assert len(ao_steps) == 2  # dtg (disabled) excluded
+        master_ids = [s.variables["inputs"][0]["master_option_id"] for s in ao_steps]
+        assert master_ids == [7, 12]  # sorted by sort_order
+
+    def test_setAssignOptions_before_setAdditionalOption(self):
+        # setAssignOptions steps must precede color/size group steps.
+        ctx = _ctx(
+            variants=[_variant("v1", color="Red", size="S")],
+            options=[_option("embroidery", master_option_id=7, enabled=True)],
+        )
+        payload = _synthesize_payload(ctx)
+        mutations = [s.mutation for s in payload.plan]
+        last_ao = max(i for i, m in enumerate(mutations) if m == "setAssignOptions")
+        first_add_opt = min(i for i, m in enumerate(mutations) if m == "setAdditionalOption")
+        assert last_ao < first_add_opt
 
     def test_option_group_keys_are_dimension_slugs(self):
         # Parent group option_key is "color" / "size"; human label is "Color" / "Size".
