@@ -22,7 +22,12 @@ Uses `OnPrintShopApi` credentials:
 
 ## API Documentation
 
-https://documenter.getpostman.com/view/33263100/2sBXijHWys
+Authoritative OPS schema (single source of truth): the vendored live collection
+`docs/ops/OnPrintShop_GraphQL_API_live_2026-06-17.postman_collection.json`
+(81 operations) — see `docs/ops/SOURCE.md`. Verify any OPS field/mutation name
+against that file, not against memory.
+
+Published docs: https://documenter.getpostman.com/view/33263100/2sBXijHWys
 
 ## Usage Example
 
