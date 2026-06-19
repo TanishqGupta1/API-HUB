@@ -150,17 +150,25 @@ async def persist_product(
         v_res = await db.execute(variant_stmt)
         variant_id = v_res.scalar_one()
 
-        if v.prices:
-            # Delete old prices and reinsert new ones
-            await db.execute(delete(VariantPrice).where(VariantPrice.variant_id == variant_id))
-            for p in v.prices:
-                db.add(VariantPrice(
+        # Always replace price tiers so stale rows from a previous sync
+        # don't accumulate.  ON CONFLICT handles the (unlikely) case where
+        # this block is executed twice for the same variant in one session.
+        # Use __table__ (Core path) to bypass ORM relationship-sync, which
+        # would trigger async lazy-loading on the already-tracked ProductVariant.
+        await db.execute(delete(VariantPrice).where(VariantPrice.variant_id == variant_id))
+        for p in v.prices:
+            await db.execute(
+                pg_insert(VariantPrice.__table__).values(
                     variant_id=variant_id,
                     price_type=p.price_type,
                     quantity_min=p.quantity_min,
                     quantity_max=p.quantity_max,
-                    price=p.price
-                ))
+                    price=p.price,
+                ).on_conflict_do_update(
+                    constraint="uq_variant_price_type_qty",
+                    set_={"quantity_max": p.quantity_max, "price": p.price},
+                )
+            )
 
     # 5. Upsert Images
     for idx, img in enumerate(item.images or []):

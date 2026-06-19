@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
-from modules.auth.dependencies import VGAdmin
+from modules.auth.dependencies import CurrentUser, VGAdmin
 
 from .models import MasterOption, MasterOptionAttribute
 from .schemas import MasterOptionRead, OptionConfigItem, SyncStatus
@@ -230,6 +230,7 @@ async def get_product_options_config(product_id: UUID, db: AsyncSession = Depend
 async def put_product_options_config(
     product_id: UUID,
     body: list[OptionConfigItem],
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     from modules.catalog.models import Product
@@ -245,6 +246,7 @@ async def patch_product_option(
     product_id: UUID,
     master_option_id: UUID,
     body: OptionConfigItem,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     if body.master_option_id != master_option_id:
@@ -258,6 +260,7 @@ async def patch_product_option(
 async def delete_product_option_route(
     product_id: UUID,
     master_option_id: UUID,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     await delete_product_option(db, product_id, master_option_id)
@@ -268,6 +271,7 @@ async def delete_product_option_route(
 async def duplicate_from(
     product_id: UUID,
     src_product_id: UUID,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     from modules.catalog.models import Product
