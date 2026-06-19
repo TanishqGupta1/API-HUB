@@ -3,7 +3,7 @@ import { Outfit, Fira_Code } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "API-HUB",
+  title: "GraphX Connect",
   description: "Universal Connector",
 };
 

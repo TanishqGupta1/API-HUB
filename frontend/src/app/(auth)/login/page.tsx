@@ -100,7 +100,7 @@ function LoginForm() {
             letterSpacing: "0.1em",
             marginBottom: "6px",
           }}>
-            API-HUB
+            GraphX Connect
           </div>
           <h1 style={{ fontSize: "20px", fontWeight: 700, color: "var(--ink)", margin: "0 0 4px" }}>
             Sign in
