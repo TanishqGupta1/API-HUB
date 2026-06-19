@@ -133,6 +133,7 @@ async def _upsert_options(
                 master_option_id=opt.master_option_id,
                 ops_option_id=opt.ops_option_id,
                 required=opt.required,
+                enabled=opt.enabled,
                 status=1,
             )
             .on_conflict_do_update(
@@ -144,6 +145,7 @@ async def _upsert_options(
                     "master_option_id": opt.master_option_id,
                     "ops_option_id": opt.ops_option_id,
                     "required": opt.required,
+                    "enabled": opt.enabled,
                 },
             )
             .returning(ProductOption.id)
