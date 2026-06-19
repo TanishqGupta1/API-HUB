@@ -178,3 +178,53 @@ async def test_export_includes_options(client, db, seed_supplier):
     assert "options" in body
     keys = {o["option_key"] for o in body["options"]}
     assert keys == {"color", "size"}
+
+
+@pytest.mark.asyncio
+async def test_push_products_to_graphx_raises_on_non_2xx(db, seed_supplier, monkeypatch):
+    """Regression (review MEDIUM): a non-2xx from graphx is a FAILED push — it must
+    raise 502, not be silently returned and counted as `sent`."""
+    import httpx
+    from fastapi import HTTPException
+    from modules.catalog.exporter import push_products_to_graphx
+    from modules.catalog.option_collapse import derive_options
+
+    monkeypatch.setenv("GRAPHX_INGEST_URL", "http://graphx.test/api/ingest/supplier-products")
+    monkeypatch.setenv("GRAPHX_INGEST_SECRET", "s3cret")
+
+    p = await _mk_product_with_variants(db, seed_supplier, sku="ERR", name="Err")
+    await derive_options(db, p.id)
+
+    class _Resp500:
+        status_code = 500
+        headers = {"content-type": "application/json"}
+        def json(self):
+            return {"error": "boom"}
+
+    class _FakeClient:
+        def __init__(self, *a, **kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, url, *, headers, json):
+            return _Resp500()
+
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
+
+    with pytest.raises(HTTPException) as exc:
+        await push_products_to_graphx(db, supplier_id=seed_supplier.id)
+    assert exc.value.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_push_products_to_graphx_503_when_unconfigured(db, seed_supplier, monkeypatch):
+    """Regression (review LOW): missing GRAPHX_INGEST_URL/SECRET → clean 503, not a
+    KeyError/500."""
+    from fastapi import HTTPException
+    from modules.catalog.exporter import push_products_to_graphx
+
+    monkeypatch.delenv("GRAPHX_INGEST_URL", raising=False)
+    monkeypatch.delenv("GRAPHX_INGEST_SECRET", raising=False)
+
+    with pytest.raises(HTTPException) as exc:
+        await push_products_to_graphx(db, supplier_id=seed_supplier.id)
+    assert exc.value.status_code == 503

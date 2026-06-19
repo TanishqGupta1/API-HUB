@@ -1,6 +1,6 @@
 """Tests for the variant→option collapse pass."""
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from modules.catalog.models import (
     Product,
@@ -46,8 +46,6 @@ async def _attrs(db, option_id):
     ).scalars().all()
 
 
-# ─── Task 1 tests ─────────────────────────────────────────────────────────────
-
 @pytest.mark.asyncio
 async def test_optioningest_has_enabled_field():
     from modules.catalog.schemas import OptionIngest
@@ -76,8 +74,6 @@ async def test_upsert_options_persists_enabled(db, seed_supplier):
     assert opts["color"].enabled is True
 
 
-# ─── Task 2 tests — pure helpers ──────────────────────────────────────────────
-
 @pytest.mark.no_db
 def test_distinct_normalizes_and_dedups():
     from modules.catalog.option_collapse import _distinct
@@ -98,8 +94,6 @@ def test_slug():
     assert _slug("Forest Green") == "forest-green"
     assert _slug("  Heather/Grey ") == "heather-grey"
 
-
-# ─── Task 3 tests — derive_options ────────────────────────────────────────────
 
 def _matrix(colors, sizes):
     return [(c, s) for c in colors for s in sizes]
@@ -199,11 +193,10 @@ async def test_idempotent(db, seed_supplier):
     assert len(await _attrs(db, opts["size"].id)) == 2
 
 
-# ─── Task 4 tests — prune ─────────────────────────────────────────────────────
-
 @pytest.mark.asyncio
 async def test_prune_removed_color(db, seed_supplier):
     """8 colors then 6 — the 2 dropped colors disappear."""
+    from sqlalchemy import delete as _delete
     from modules.catalog.option_collapse import derive_options
     eight = ["Red", "Navy", "Black", "White", "Royal", "Green", "Maroon", "Gold"]
     p = await _mk_product(db, seed_supplier, [(c, "M") for c in eight])
@@ -213,7 +206,7 @@ async def test_prune_removed_color(db, seed_supplier):
 
     # delete 2 colors' variants, re-derive
     await db.execute(
-        delete(ProductVariant).where(
+        _delete(ProductVariant).where(
             ProductVariant.product_id == p.id,
             ProductVariant.color.in_(["Maroon", "Gold"]),
         )
@@ -245,8 +238,6 @@ async def test_prune_axis_emptied(db, seed_supplier):
     assert "size" in opts
 
 
-# ─── Task 5 tests — derive_options_bulk ───────────────────────────────────────
-
 @pytest.mark.asyncio
 async def test_bulk_backfill_one_supplier(db, seed_supplier):
     from modules.catalog.option_collapse import derive_options_bulk
@@ -259,8 +250,6 @@ async def test_bulk_backfill_one_supplier(db, seed_supplier):
     assert totals["color_options"] == 2
     assert totals["size_options"] == 2
 
-
-# ─── Task 6 tests — trigger routes ────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_route_derive_single_product(client, db, seed_supplier):

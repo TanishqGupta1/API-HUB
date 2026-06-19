@@ -21,6 +21,23 @@ from modules.suppliers.models import Supplier
 from .models import Product, ProductOption, ProductVariant
 
 
+def _graphx_env() -> tuple[str, str]:
+    """Return (ingest_url, ingest_secret) for graphx, or raise 503 if unconfigured.
+
+    Uses os.environ.get + an explicit 503 instead of os.environ[...] (which raises
+    KeyError → opaque 500) so a missing GRAPHX_INGEST_URL/SECRET surfaces as a
+    clean 'service not configured'.
+    """
+    url = os.environ.get("GRAPHX_INGEST_URL")
+    secret = os.environ.get("GRAPHX_INGEST_SECRET")
+    if not url or not secret:
+        raise HTTPException(
+            status_code=503,
+            detail="graphx ingest not configured (GRAPHX_INGEST_URL / GRAPHX_INGEST_SECRET unset)",
+        )
+    return url, secret
+
+
 async def build_supplier_product(db: AsyncSession, product_id: UUID) -> dict:
     """Serialize one product (variants + prices + images + options) for graphx.
 
@@ -103,6 +120,17 @@ async def _post(
                 body = r.json()
             except Exception:
                 body = None
+        # A non-2xx from graphx is a FAILED push, not a successful "sent" — surface
+        # it as a 502 instead of silently returning and counting the batch as sent.
+        if r.status_code >= 300:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "message": "graphx ingest rejected the batch",
+                    "upstream_status": r.status_code,
+                    "upstream_body": body,
+                },
+            )
         return {"status": r.status_code, "body": body}
 
 
@@ -117,8 +145,7 @@ async def push_products_to_graphx(
     Products without any options are skipped — they need ``derive_options``
     to be run first. Env: ``GRAPHX_INGEST_URL`` + ``GRAPHX_INGEST_SECRET``.
     """
-    url = os.environ["GRAPHX_INGEST_URL"]
-    secret = os.environ["GRAPHX_INGEST_SECRET"]
+    url, secret = _graphx_env()
 
     sup = await db.get(Supplier, supplier_id) if supplier_id else None
 
