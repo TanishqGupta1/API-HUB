@@ -277,7 +277,12 @@ async def get_product_by_sku(
     client: OpsGraphQLClient,
     products_sku: str,
     page_size: int = 200,
-    max_pages: int = 50,
+    # Hard safety ceiling only. The scan normally stops far earlier via the
+    # `totalProducts` early-exit below; this bound just stops a pathological/huge
+    # catalog from looping unboundedly. 1000 × 200 ≈ 200k products — comfortably
+    # above real customer catalogs, so a SKU is no longer silently missed (and
+    # re-created as a duplicate) at the old 50-page / 10k-product cutoff.
+    max_pages: int = 1000,
 ) -> OpsResult:
     """Find an existing OPS product whose external_ref or main_sku == products_sku.
 
@@ -315,12 +320,17 @@ async def get_product_by_sku(
         if total is not None and offset >= int(total):
             break
     else:
-        # Loop ran the full max_pages without a `break` → the catalog may be
-        # larger than we scanned, so a real match could have been missed.
-        # Surface it so a silent "not found" can't mask a truncated scan.
-        log.warning(
-            "dedup scan reached max_pages=%d (page_size=%d) without finding sku=%s",
-            max_pages, page_size, products_sku,
+        # Exhausted the hard max_pages ceiling WITHOUT the totalProducts early-exit
+        # firing → the catalog is larger than we scanned, so a real match may have
+        # been missed. Returning "not found" here makes the push CREATE the product,
+        # risking a duplicate — so log at error level: a truncated scan must never
+        # hide behind a silent "not found".
+        log.error(
+            "dedup scan hit hard ceiling max_pages=%d (page_size=%d, ~%d products) "
+            "without finding sku=%s — catalog may be larger than scanned; treating "
+            "as not-found may create a DUPLICATE. Raise max_pages or add a cached "
+            "external_ref→id map.",
+            max_pages, page_size, max_pages * page_size, products_sku,
         )
     return OpsResult(ok=True, data={})
 

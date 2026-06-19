@@ -11,6 +11,7 @@ from typing import Any, Optional
 import httpx
 from fastapi import HTTPException, status
 from sqlalchemy import delete, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -231,6 +232,61 @@ def _normalize_category_key(name: str) -> str:
     return re.sub(r"\s+", " ", name).strip().lower()[:150]
 
 
+async def _persist_category_mapping(
+    *,
+    customer_id: uuid_mod.UUID,
+    category_key: str,
+    category_name: str,
+    ops_category_id: int,
+    external_ref: str,
+) -> int:
+    """Persist the (customer, category_key) → ops_category_id mapping in its OWN
+    committed transaction, independent of the caller's request session.
+
+    The OPS category is created as a LIVE side-effect just before this is called.
+    The old behaviour added the row to the caller's session and only flushed; any
+    later failure in execute_push before its final commit would then roll the
+    mapping back while the OPS category persisted — so the next retry would create
+    a DUPLICATE category. Committing here makes the mapping durable the instant the
+    OPS category exists, so retries reuse it instead of recreating it.
+
+    Concurrency: two simultaneous first-pushes of the same new category can both
+    create an OPS category and race to insert the mapping. The unique constraint
+    (customer_id, category_key) lets only one row win; the loser catches the
+    IntegrityError and returns the winner's ops_category_id so the mapping — our
+    source of truth — stays single.
+    """
+    now = datetime.now(timezone.utc)
+    async with async_session() as own_db:
+        own_db.add(OpsCategoryMapping(
+            customer_id=customer_id,
+            category_key=category_key,
+            category_name=category_name,
+            ops_category_id=ops_category_id,
+            external_ref=external_ref,
+            created_at=now,
+            updated_at=now,
+        ))
+        try:
+            await own_db.commit()
+            return ops_category_id
+        except IntegrityError:
+            await own_db.rollback()
+            existing = (await own_db.execute(
+                select(OpsCategoryMapping.ops_category_id).where(
+                    OpsCategoryMapping.customer_id == customer_id,
+                    OpsCategoryMapping.category_key == category_key,
+                )
+            )).scalar_one_or_none()
+            if existing is not None:
+                logger.info(
+                    "auto-category: lost insert race for key=%s — reusing existing id=%s",
+                    category_key, existing,
+                )
+                return existing
+            raise
+
+
 async def _resolve_ops_category(
     db: AsyncSession,
     client: Any,
@@ -287,19 +343,17 @@ async def _resolve_ops_category(
         logger.warning("auto-category: non-numeric id for %r: %r", raw_name, result.data)
         return None
 
-    now = datetime.now(timezone.utc)
-    db.add(OpsCategoryMapping(
+    logger.info("auto-category: created OPS category %r → id=%s", raw_name, cat_id)
+    # Persist the mapping in its OWN transaction (not `db`) so it survives even
+    # if execute_push raises before its final commit — otherwise the rolled-back
+    # mapping would orphan the just-created OPS category → duplicate on retry.
+    return await _persist_category_mapping(
         customer_id=customer.id,
         category_key=key,
         category_name=raw_name,
         ops_category_id=cat_id,
         external_ref=external_ref,
-        created_at=now,
-        updated_at=now,
-    ))
-    await db.flush()
-    logger.info("auto-category: created OPS category %r → id=%s", raw_name, cat_id)
-    return cat_id
+    )
 
 
 _MUTATION_DISPATCH: dict[str, tuple[str, str]] = {

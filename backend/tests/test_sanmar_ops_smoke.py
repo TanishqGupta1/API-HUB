@@ -301,6 +301,58 @@ async def test_auto_category_creates_and_reuses(smoke_scaffold):
 
 
 @pytest.mark.asyncio
+async def test_auto_category_mapping_survives_caller_rollback(smoke_scaffold):
+    """Regression (review HIGH): the OPS category is a LIVE side-effect, so its
+    mapping must be durable even if the caller's transaction later aborts —
+    otherwise a rolled-back mapping orphans the OPS category and the retry creates
+    a DUPLICATE. Simulates execute_push failing after _resolve_ops_category:
+    resolve (which now commits the mapping in its own transaction), roll the caller
+    session back, then assert the mapping persists and a second resolve reuses it.
+
+    This test FAILS against the old bare-`db.flush()` behaviour and passes with the
+    own-transaction commit."""
+    from modules.ops_client.fake import FakeOpsClient
+    from modules.ops_push.gateway import _resolve_ops_category
+    from modules.ops_config.models import OpsCategoryMapping
+
+    product = smoke_scaffold["product"]   # category="T-Shirts"
+    customer = smoke_scaffold["customer"]
+    fake = FakeOpsClient()
+
+    async with async_session() as s:
+        cust = await s.get(Customer, customer.id)
+        prod = await s.get(Product, product.id)
+        first = await _resolve_ops_category(s, fake, cust, prod, dry_run=False)
+        assert first is not None
+        # Caller's transaction aborts AFTER the OPS category was created. The old
+        # flush-only behaviour would lose the mapping right here.
+        await s.rollback()
+
+    async with async_session() as s:
+        rows = (await s.execute(
+            select(OpsCategoryMapping).where(OpsCategoryMapping.customer_id == customer.id)
+        )).scalars().all()
+        assert len(rows) == 1               # mapping survived the rollback
+        assert rows[0].ops_category_id == first
+
+        # Retry path: a second resolve reuses the cached mapping — no duplicate.
+        cust = await s.get(Customer, customer.id)
+        prod = await s.get(Product, product.id)
+        second = await _resolve_ops_category(s, fake, cust, prod, dry_run=False)
+        assert second == first
+        rows = (await s.execute(
+            select(OpsCategoryMapping).where(OpsCategoryMapping.customer_id == customer.id)
+        )).scalars().all()
+        assert len(rows) == 1
+
+    async with async_session() as s:
+        await s.execute(
+            delete(OpsCategoryMapping).where(OpsCategoryMapping.customer_id == customer.id)
+        )
+        await s.commit()
+
+
+@pytest.mark.asyncio
 async def test_dry_run_step_results_shape(client, smoke_scaffold, smoke_key):
     """step_results entries must match OPSStepResult shape (T6 fix)."""
     with _patch_network_checks():
