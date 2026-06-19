@@ -412,3 +412,49 @@ class TestFetchValidSkuSizeIds:
         _clear_sku_matrix_cache(777)
         assert await _fetch_valid_sku_size_ids(client, product_id=777) is None
         _clear_sku_matrix_cache(777)
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# setProductSku execution-path coverage (review blocker: dry-run hard-fail)
+# ───────────────────────────────────────────────────────────────────────────
+
+
+class TestSetProductSkuExecutionPath:
+    """The canonical dry-run/test double (FakeOpsClient) must execute
+    setProductSku — it was missing set_product_sku, which hard-failed every
+    dry-run when OPS_PUSH_INCLUDE_SKU=1. These run the mutation through the
+    client + gateway dispatch so the path can't silently regress again."""
+
+    @pytest.mark.asyncio
+    async def test_fake_per_mutation_method_returns_id(self):
+        from modules.ops_client.fake import FakeOpsClient
+        fake = FakeOpsClient()
+        resp = await fake.set_product_sku({"inputs": [
+            {"products_id": 1, "size_id": 2, "sku_type": "size_wise", "sku": "PC61-WHT-M", "delete": 0}
+        ]})
+        assert resp.get("id"), "FakeOpsClient.set_product_sku must return an id"
+
+    @pytest.mark.asyncio
+    async def test_fake_execute_handles_setproductsku_query(self):
+        from modules.ops_client.fake import FakeOpsClient
+        fake = FakeOpsClient()
+        r = await fake.execute(
+            "mutation SetProductSku($inputs: [ProductSkuInput!]!) { setProductSku(inputs: $inputs) { index result id } }",
+            variables={"inputs": [{"products_id": 1, "size_id": 2, "sku_type": "size_wise", "sku": "X", "delete": 0}]},
+        )
+        assert r.ok and (r.data.get("setProductSku") or {}).get("id")
+
+    @pytest.mark.asyncio
+    async def test_gateway_dispatch_executes_set_product_sku(self):
+        """Proves the gateway's mutation->method dispatch actually runs
+        setProductSku through a client and normalizes id -> sku_id."""
+        from modules.ops_push.gateway import _mutation_to_method, _normalize_mutation_response
+        from modules.ops_client.fake import FakeOpsClient
+        fake = FakeOpsClient()
+        method = getattr(fake, _mutation_to_method("setProductSku"), None)
+        assert method is not None, "no client method resolved for setProductSku"
+        resp = await method({"inputs": [
+            {"products_id": 1, "size_id": 2, "sku_type": "size_wise", "sku": "X", "delete": 0}
+        ]})
+        resp = _normalize_mutation_response("setProductSku", resp)
+        assert resp.get("sku_id"), "setProductSku response must normalize id -> sku_id"
