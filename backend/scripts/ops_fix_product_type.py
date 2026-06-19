@@ -6,6 +6,7 @@ Per the live OPS legend: 1=Custom Design, 2=Upload Center, 3=Browse Design,
 Usage (from backend/):
     python scripts/ops_fix_product_type.py --product-id 603
     python scripts/ops_fix_product_type.py --product-id 603 --dry-run
+    python scripts/ops_fix_product_type.py --product-id 603 --base-url https://staging.visualgraphx.com
 """
 from __future__ import annotations
 
@@ -22,8 +23,6 @@ from database import async_session  # noqa: E402
 from modules.customers.models import Customer  # noqa: E402
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient  # noqa: E402
 
-STAGING_BASE_URL = "https://staging.visualgraphx.com"
-
 _SET_PRODUCT = """
 mutation SetProductType($inputs: [ProductInput!]!) {
   setProduct(inputs: $inputs) {
@@ -35,13 +34,15 @@ mutation SetProductType($inputs: [ProductInput!]!) {
 """.strip()
 
 
-async def _load_client() -> OpsGraphQLClient:
+async def _load_client(base_url: str | None) -> OpsGraphQLClient:
     async with async_session() as db:
-        cust = (await db.execute(
-            select(Customer).where(Customer.ops_base_url == STAGING_BASE_URL)
-        )).scalar_one_or_none()
+        query = select(Customer).where(Customer.is_active.is_(True))
+        if base_url:
+            query = query.where(Customer.ops_base_url == base_url)
+        cust = (await db.execute(query)).scalars().first()
     if cust is None:
-        raise SystemExit(f"No customer with ops_base_url={STAGING_BASE_URL!r} in DB.")
+        hint = f" with ops_base_url={base_url!r}" if base_url else " (active)"
+        raise SystemExit(f"No customer{hint} found in DB.")
     secret = (cust.ops_auth_config or {}).get("client_secret")
     if not secret:
         raise SystemExit(f"Customer {cust.name!r} has no client_secret.")
@@ -53,13 +54,13 @@ async def _load_client() -> OpsGraphQLClient:
     ))
 
 
-async def main(product_id: int, dry_run: bool) -> None:
+async def main(product_id: int, dry_run: bool, base_url: str | None) -> None:
     print(f"Target: products_id={product_id}, product_type='15'")
     if dry_run:
         print("[dry-run] Would call setProduct — skipping.")
         return
 
-    client = await _load_client()
+    client = await _load_client(base_url)
     payload = {"inputs": [{"products_id": product_id, "product_type": "15"}]}
     r = await client.execute(_SET_PRODUCT, variables=payload)
 
@@ -80,5 +81,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--product-id", type=int, required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--base-url", default=None, help="OPS base URL; uses first active customer if omitted")
     args = parser.parse_args()
-    asyncio.run(main(args.product_id, args.dry_run))
+    asyncio.run(main(args.product_id, args.dry_run, args.base_url))
