@@ -88,7 +88,7 @@ export default function SignupPage() {
               marginBottom: "8px",
             }}
           >
-            API-HUB
+            GraphX Connect
           </div>
           <h1 style={{ fontSize: "20px", fontWeight: 700, color: "var(--ink)", margin: 0 }}>
             Registration closed
@@ -111,7 +111,7 @@ export default function SignupPage() {
     <div className="w-full max-w-sm p-10 bg-[var(--paper)] border border-[var(--border)] rounded">
       <div className="mb-8">
         <p className="font-mono text-[11px] font-bold text-[var(--blue)] uppercase tracking-widest mb-2">
-          API-HUB
+          GraphX Connect
         </p>
         <h1 className="text-xl font-bold text-[var(--ink)] m-0">Create account</h1>
       </div>

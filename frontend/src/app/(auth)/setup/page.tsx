@@ -63,7 +63,7 @@ export default function SetupPage() {
             marginBottom: "8px",
           }}
         >
-          API-HUB
+          GraphX Connect
         </div>
         <h1
           style={{

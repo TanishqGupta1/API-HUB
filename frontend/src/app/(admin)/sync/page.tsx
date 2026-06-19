@@ -4,6 +4,20 @@ import React, { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { SyncJob } from "@/lib/types";
 
+// ─── types ───────────────────────────────────────────────────────────────────
+
+type SupplierHealth = {
+  supplier_id: string;
+  supplier_name: string;
+  is_active: boolean;
+  last_full_sync: string | null;
+  last_delta_sync: string | null;
+  last_sync_status: string | null;
+  last_sync_completed_at: string | null;
+  recent_error_count: number;
+  consecutive_failures: number;
+};
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function fmtDuration(startedAt: string, completedAt: string | null): string {
@@ -99,6 +113,16 @@ export default function SyncJobsPage() {
   const [filterJobType,  setFilterJobType]  = useState("");
   const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
 
+  // Supplier health from /api/sync-jobs/health
+  const [suppliers, setSuppliers] = useState<SupplierHealth[]>([]);
+
+  // Trigger state per supplier
+  const [triggering, setTriggering] = useState<Record<string, boolean>>({});
+  const [triggered,  setTriggered]  = useState<Set<string>>(new Set());
+  const [triggerErr, setTriggerErr] = useState<Record<string, string>>({});
+  const [openMenu,   setOpenMenu]   = useState<string | null>(null);
+
+  // Jobs polling
   useEffect(() => {
     let cancelled = false;
 
@@ -123,11 +147,55 @@ export default function SyncJobsPage() {
     return () => { cancelled = true; clearInterval(interval); };
   }, [filterStatus, filterJobType]);
 
-  // Supplier options derived from data
+  // Supplier health polling (slower — 30s)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHealth() {
+      try {
+        const data = await api<{ suppliers: SupplierHealth[] }>("/api/sync-jobs/health");
+        if (!cancelled) setSuppliers(data.suppliers.filter(s => s.is_active));
+      } catch {
+        // non-fatal — health strip stays empty if unavailable
+      }
+    }
+
+    loadHealth();
+    const interval = setInterval(loadHealth, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  // Trigger a sync for a supplier
+  async function triggerSync(supplierId: string, mode: "delta" | "inventory_only") {
+    setOpenMenu(null);
+    setTriggering(prev => ({ ...prev, [supplierId]: true }));
+    setTriggerErr(prev => { const n = { ...prev }; delete n[supplierId]; return n; });
+    try {
+      await api(`/api/suppliers/${supplierId}/import`, {
+        method: "POST",
+        body: JSON.stringify({ mode }),
+      });
+      setTriggered(prev => new Set([...prev, supplierId]));
+      setTimeout(() => {
+        setTriggered(prev => { const n = new Set(prev); n.delete(supplierId); return n; });
+      }, 3500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to trigger";
+      setTriggerErr(prev => ({ ...prev, [supplierId]: msg }));
+      setTimeout(() => {
+        setTriggerErr(prev => { const n = { ...prev }; delete n[supplierId]; return n; });
+      }, 4000);
+    } finally {
+      setTriggering(prev => { const n = { ...prev }; delete n[supplierId]; return n; });
+    }
+  }
+
+  // Supplier options derived from data (for filter dropdown)
   const supplierNames = Array.from(new Set(jobs.map((j) => j.supplier_name))).sort();
 
-  // Per-supplier health badges — derived from ALL jobs (unfiltered wouldn't matter since we load all)
+  // Per-supplier health badges — derived from job history (used as fallback when health endpoint unavailable)
   const perSupplierHealth = useMemo(() => {
+    if (suppliers.length > 0) return []; // health endpoint is available — use that instead
     const successMap = new Map<string, SyncJob>();
     const attemptMap = new Map<string, SyncJob>();
 
@@ -146,10 +214,8 @@ export default function SyncJobsPage() {
 
     const seen = new Set<string>();
     const entries: {
-      id: string;
-      name: string;
-      lastSuccessIso: string | null;
-      lastAttempt: SyncJob | null;
+      id: string; name: string;
+      lastSuccessIso: string | null; lastAttempt: SyncJob | null;
       health: HealthInfo;
     }[] = [];
 
@@ -164,22 +230,27 @@ export default function SyncJobsPage() {
     });
 
     return entries.sort((a, b) => a.name.localeCompare(b.name));
-  }, [jobs]);
+  }, [jobs, suppliers]);
 
   const STATUSES = ["completed", "running", "failed", "pending"];
   const JOB_TYPES = [
-    { value: "full_sync", label: "Full Refresh" },
-    { value: "full", label: "Full Refresh" },
-    { value: "delta", label: "Recent Changes" },
-    { value: "inventory", label: "Inventory" },
-    { value: "pricing", label: "Pricing" },
-    { value: "images", label: "Images" },
+    { value: "full_sync",        label: "Full Refresh" },
+    { value: "full",             label: "Full Refresh" },
+    { value: "delta",            label: "Recent Changes" },
+    { value: "inventory",        label: "Inventory" },
+    { value: "pricing",          label: "Pricing" },
+    { value: "images",           label: "Images" },
   ];
 
   return (
     <div>
+      {/* Invisible overlay — closes the open sync dropdown on outside click */}
+      {openMenu && (
+        <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
+      )}
+
       {/* Header row */}
-      <div className="flex justify-between items-start mb-5">
+      <div className="flex justify-between items-start mb-4">
         <div>
           <h1 className="text-3xl font-bold text-[#1e1e24]">Data Updates</h1>
           <p className="text-sm mt-1 text-[#484852]">Execution history of your data pipelines</p>
@@ -228,8 +299,110 @@ export default function SyncJobsPage() {
         </div>
       </div>
 
-      {/* Per-supplier health strip - Scrollable to prevent clutter */}
-      {perSupplierHealth.length > 0 && (
+      {/* Scheduler status bar */}
+      <div className="flex items-center gap-2.5 text-xs text-[#484852] mb-5 px-0.5">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-[#247a52] shadow-[0_0_5px_rgba(36,122,82,0.4)] animate-pulse shrink-0" />
+          <span className="font-semibold text-[#247a52]">Auto-sync running</span>
+        </span>
+        <span className="text-[#cfccc8]">·</span>
+        <span>Delta every <span className="font-mono font-bold text-[#1e1e24]">1h</span></span>
+        <span className="text-[#cfccc8]">·</span>
+        <span>Inventory every <span className="font-mono font-bold text-[#1e1e24]">15min</span></span>
+        <span className="text-[#cfccc8]">·</span>
+        <span className="text-[#888894]">Use Sync Now to run immediately</span>
+      </div>
+
+      {/* Per-supplier health strip — from health endpoint (preferred) */}
+      {suppliers.length > 0 && (
+        <div className="bg-[#f9f7f4]/50 border border-[#cfccc8] rounded-xl p-4 mb-6">
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[#888894] mb-3 px-1 flex items-center gap-2">
+            <div className="w-1 h-1 rounded-full bg-[#cfccc8]" />
+            Supplier Connectivity Status
+          </div>
+          <div className="flex flex-wrap gap-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar">
+            {suppliers.map((s) => {
+              const health = healthFor(s.last_delta_sync, s.last_sync_status ?? undefined);
+              const displayTime = s.last_delta_sync ? timeAgo(s.last_delta_sync) : null;
+              const isTriggering = !!triggering[s.supplier_id];
+              const isTriggered  = triggered.has(s.supplier_id);
+              const errMsg       = triggerErr[s.supplier_id];
+              const isMenuOpen   = openMenu === s.supplier_id;
+
+              return (
+                <div
+                  key={s.supplier_id}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#cfccc8] bg-white hover:border-[#1e4d92] hover:shadow-sm transition-all duration-200"
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${health.dot} ${health.label === "Fresh" ? "shadow-[0_0_5px_rgba(36,122,82,0.4)]" : ""}`}
+                  />
+                  <span className="text-[11px] font-bold text-[#1e1e24] whitespace-nowrap">{s.supplier_name}</span>
+                  <span
+                    className="text-[9px] font-black font-mono uppercase px-[5px] py-[1px] rounded"
+                    style={{ background: health.bgColor, color: health.color }}
+                  >
+                    {health.label}
+                  </span>
+                  {displayTime && (
+                    <span className="text-[9px] text-[#888894] font-mono">{displayTime}</span>
+                  )}
+
+                  {/* Sync Now control */}
+                  <div className="relative ml-0.5">
+                    {errMsg ? (
+                      <span className="text-[9px] font-bold text-[#b93232] px-2 py-0.5 rounded bg-[#fdeded]">
+                        Failed
+                      </span>
+                    ) : isTriggered ? (
+                      <span className="text-[9px] font-bold text-[#247a52] px-2 py-0.5 rounded bg-[#e6f3ec]">
+                        ✓ Triggered
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setOpenMenu(isMenuOpen ? null : s.supplier_id)}
+                        disabled={isTriggering}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-[#1e4d92] hover:bg-[#eef4fb] px-2 py-0.5 rounded border border-[#1e4d92]/40 hover:border-[#1e4d92] transition-all disabled:opacity-40"
+                      >
+                        {isTriggering ? (
+                          <span className="animate-spin inline-block w-2.5 h-2.5 border border-[#1e4d92] border-t-transparent rounded-full" />
+                        ) : (
+                          <span>↻</span>
+                        )}
+                        Sync Now
+                      </button>
+                    )}
+
+                    {/* Dropdown menu */}
+                    {isMenuOpen && (
+                      <div className="absolute left-0 top-[calc(100%+4px)] z-20 bg-white border border-[#cfccc8] rounded-lg shadow-lg min-w-[180px] overflow-hidden">
+                        <button
+                          onClick={() => triggerSync(s.supplier_id, "delta")}
+                          className="w-full text-left px-3 py-2.5 hover:bg-[#f2f0ed] transition-colors group"
+                        >
+                          <div className="text-xs font-semibold text-[#1e1e24] group-hover:text-[#1e4d92]">Sync changes</div>
+                          <div className="text-[10px] text-[#888894] mt-0.5">Catalog + pricing · delta mode</div>
+                        </button>
+                        <div className="border-t border-[#cfccc8]" />
+                        <button
+                          onClick={() => triggerSync(s.supplier_id, "inventory_only")}
+                          className="w-full text-left px-3 py-2.5 hover:bg-[#f2f0ed] transition-colors group"
+                        >
+                          <div className="text-xs font-semibold text-[#1e1e24] group-hover:text-[#1e4d92]">Sync stock levels</div>
+                          <div className="text-[10px] text-[#888894] mt-0.5">Inventory counts only · fast</div>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Fallback health strip — from job history (when health endpoint unavailable) */}
+      {suppliers.length === 0 && perSupplierHealth.length > 0 && (
         <div className="bg-[#f9f7f4]/50 border border-[#cfccc8] rounded-xl p-4 mb-6">
           <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[#888894] mb-3 px-1 flex items-center gap-2">
             <div className="w-1 h-1 rounded-full bg-[#cfccc8]" />
@@ -248,7 +421,7 @@ export default function SyncJobsPage() {
                   className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#cfccc8] bg-white hover:border-[#1e4d92] hover:shadow-sm transition-all duration-200 cursor-default"
                   title={`${name} — ${health.label}${displayTime ? ` · ${displayTime}` : ""}`}
                 >
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${health.dot} ${health.label === 'Fresh' ? 'shadow-[0_0_5px_rgba(36,122,82,0.4)]' : ''}`} />
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${health.dot} ${health.label === "Fresh" ? "shadow-[0_0_5px_rgba(36,122,82,0.4)]" : ""}`} />
                   <span className="text-[11px] font-bold text-[#1e1e24] whitespace-nowrap">{name}</span>
                   <span
                     className="text-[9px] font-black font-mono uppercase px-[5px] py-[1px] rounded"
@@ -302,8 +475,8 @@ export default function SyncJobsPage() {
 
                   {/* Job Type */}
                   <td className="px-5 py-4 text-[#484852] font-mono">
-                    {j.job_type === 'delta' ? 'Recent Changes' : 
-                     (j.job_type as string === 'full' || j.job_type as string === 'full_sync') ? 'Full Refresh' : 
+                    {j.job_type === "delta" ? "Recent Changes" :
+                     (j.job_type as string === "full" || j.job_type as string === "full_sync") ? "Full Refresh" :
                      j.job_type}
                   </td>
 
@@ -349,7 +522,7 @@ export default function SyncJobsPage() {
                   {/* Actions */}
                   <td className="px-5 py-4 text-right">
                     {j.status === "failed" && j.error_log && (
-                      <button 
+                      <button
                         onClick={() => setExpandedErrorId(expandedErrorId === j.id ? null : j.id)}
                         className="text-xs font-semibold text-[#b93232] hover:underline whitespace-nowrap"
                       >
@@ -390,7 +563,6 @@ export default function SyncJobsPage() {
           </tbody>
         </table>
       </div>
-
     </div>
   );
 }

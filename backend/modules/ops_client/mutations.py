@@ -373,7 +373,7 @@ async def get_product_sku_matrix(
 # warning so an operator can initialize them in OPS admin.
 
 _GET_PRODUCT_STOCKS = """
-query GetProductStocks($product_id: Int, $limit: Int, $offset: Int) {
+query GetProductStocks($product_id: Int!, $limit: Int, $offset: Int) {
   productStocks(product_id: $product_id, limit: $limit, offset: $offset) {
     productStocks {
       stock_id

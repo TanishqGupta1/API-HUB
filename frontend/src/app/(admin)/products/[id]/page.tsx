@@ -18,7 +18,7 @@ import { PushHistory } from "@/components/products/push-history";
 import { useSelectedCustomer } from "@/lib/customer-context";
 import { BrandingPanel } from "@/components/products/BrandingPanel";
 import type { Customer as CustomerType } from "@/lib/types";
-import { AlertTriangle, CheckCircle2, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Plus, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import type { ProductPreview } from "@/lib/types";
 
@@ -53,6 +53,8 @@ export default function ProductDetailPage() {
   const [customer, setCustomer] = useState<CustomerType | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [opsFilenameEdit, setOpsFilenameEdit] = useState<string>("");
+  const [opsFilenameSaving, setOpsFilenameSaving] = useState(false);
 
   useEffect(() => {
     if (selectedCustomerId) {
@@ -158,6 +160,35 @@ export default function ProductDetailPage() {
     if (activeImageTab === "front" && product.image_url) return product.image_url;
     return null;
   }, [product, activeImageTab]);
+
+  const activeImageRecord = useMemo(() => {
+    if (!product) return null;
+    return pickImageForTab(product.images ?? [], activeImageTab);
+  }, [product, activeImageTab]);
+
+  // Sync ops filename input when switching image tabs
+  useEffect(() => {
+    setOpsFilenameEdit(activeImageRecord?.ops_filename ?? "");
+  }, [activeImageRecord]);
+
+  const handleSaveOpsFilename = useCallback(async () => {
+    if (!activeImageRecord) return;
+    setOpsFilenameSaving(true);
+    try {
+      await api(`/api/images/${activeImageRecord.id}/ops-filename`, {
+        method: "PATCH",
+        body: JSON.stringify({ ops_filename: opsFilenameEdit.trim() || null }),
+      });
+      // Refresh product to get updated ops_filename
+      const updated = await api<typeof product>(`/api/catalog/products/${id}`);
+      setProduct(updated);
+      toast.success("OPS filename saved");
+    } catch {
+      toast.error("Failed to save OPS filename");
+    } finally {
+      setOpsFilenameSaving(false);
+    }
+  }, [activeImageRecord, opsFilenameEdit, id]);
 
   const dataSourceRows: Array<[string, string]> = useMemo(() => {
     const mappings = supplier?.field_mappings;
@@ -376,6 +407,43 @@ export default function ProductDetailPage() {
               );
             })}
           </div>
+
+          {/* OPS filename — Approach B manual image tagging */}
+          {activeImageRecord && (
+            <div className="mt-3 p-3 bg-[#f9f7f4] border border-[#cfccc8] rounded-lg">
+              <div className="text-[9px] uppercase font-bold tracking-[0.08em] text-[#484852] mb-1.5">
+                OPS Filename
+              </div>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={opsFilenameEdit}
+                  onChange={(e) => setOpsFilenameEdit(e.target.value)}
+                  placeholder="e.g. bg77-black-front.jpg"
+                  className="flex-1 text-[11px] font-mono bg-white border border-[#cfccc8]
+                             rounded px-2 py-1.5 text-[#1a1a2e] placeholder:text-[#b4b4bc]
+                             focus:outline-none focus:border-[#1e4d92]"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSaveOpsFilename}
+                  disabled={opsFilenameSaving}
+                  className="h-7 px-2 text-[10px] bg-[#1e4d92] hover:bg-[#163a6e] text-white"
+                >
+                  <Save className="w-3 h-3 mr-1" />
+                  {opsFilenameSaving ? "Saving…" : "Save"}
+                </Button>
+              </div>
+              <div className="text-[9px] text-[#888] mt-1">
+                Upload image via OPS admin → Media Library, then paste the assigned filename here.
+                {activeImageRecord.ops_filename && (
+                  <span className="ml-1 text-[#1e4d92] font-semibold">
+                    ✓ Tagged
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right — metadata */}
