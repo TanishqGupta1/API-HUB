@@ -446,3 +446,36 @@ async def test_ingest_pricing_updates_base_price(
         )
     ).scalar_one()
     assert Decimal(str(v.base_price)) == Decimal("14.25")
+
+
+@pytest.mark.asyncio
+async def test_option_enabled_survives_resync(client: AsyncClient, db, seed_supplier):
+    """Regression (review HIGH): a previously-enabled option must NOT be silently
+    disabled when re-ingested via the OPS path, which leaves OptionIngest.enabled
+    at its False default. `enabled` is set on INSERT and preserved on conflict."""
+    from modules.catalog.models import Product, ProductOption
+
+    base = {"supplier_sku": "ENOPT-1", "product_name": "Enabled Option Test"}
+
+    # 1) First ingest with the option ENABLED (as the derive path does).
+    p1 = [{**base, "options": [{"option_key": "color", "title": "Color", "enabled": True}]}]
+    r = await client.post(f"/api/ingest/{seed_supplier.id}/products", headers=SECRET, json=p1)
+    assert r.status_code == 200
+
+    prod = (await db.execute(select(Product).where(
+        Product.supplier_id == seed_supplier.id,
+        Product.supplier_sku == "ENOPT-1",
+    ))).scalar_one()
+    opt = (await db.execute(
+        select(ProductOption).where(ProductOption.product_id == prod.id)
+    )).scalar_one()
+    assert opt.enabled is True
+
+    # 2) Re-ingest via the OPS path: payload omits `enabled` (-> defaults False).
+    p2 = [{**base, "options": [{"option_key": "color", "title": "Color (resynced)"}]}]
+    r2 = await client.post(f"/api/ingest/{seed_supplier.id}/products", headers=SECRET, json=p2)
+    assert r2.status_code == 200
+
+    await db.refresh(opt)
+    assert opt.title == "Color (resynced)"  # routine fields still update on re-sync
+    assert opt.enabled is True              # but enabled is preserved, not clobbered

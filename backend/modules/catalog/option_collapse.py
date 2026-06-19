@@ -20,6 +20,7 @@ from .schemas import OptionAttributeIngest, OptionIngest
 
 DERIVED_OPTION_KEYS = ("color", "size")
 
+# Canonical apparel size order; lower = earlier. Unknown sizes sort after, alpha.
 _SIZE_ORDER = {
     "XS": 0, "S": 1, "M": 2, "L": 3, "XL": 4,
     "2XL": 5, "XXL": 5, "3XL": 6, "XXXL": 6,
@@ -29,10 +30,10 @@ _SIZE_ORDER = {
 
 @dataclass
 class CollapseResult:
-    colors: int
-    sizes: int
-    color_attrs: int
-    size_attrs: int
+    colors: int        # 1 if a color option was written, else 0
+    sizes: int         # 1 if a size option was written, else 0
+    color_attrs: int   # distinct color count
+    size_attrs: int    # distinct size count
 
 
 def _norm(value: str) -> str:

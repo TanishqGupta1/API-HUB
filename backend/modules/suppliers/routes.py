@@ -251,6 +251,17 @@ async def _probe_promostandards(code: str | None, auth_config: dict) -> dict:
     }
 
 
+@router.post("/{supplier_id}/push-to-graphx")
+async def push_supplier_to_graphx(
+    supplier_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    tenant_slug: str = "vg",
+):
+    """Push every non-archived product for this supplier to graphx in batches."""
+    from modules.catalog.exporter import push_products_to_graphx
+    return await push_products_to_graphx(db, supplier_id=supplier_id, tenant_slug=tenant_slug)
+
+
 @router.post("/test")
 async def test_supplier_connection(body: dict):
     """Test connection to a supplier before adding it.
