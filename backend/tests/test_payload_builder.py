@@ -186,6 +186,7 @@ def _push_mapping_option(
     return SimpleNamespace(
         id=uuid.uuid4(),
         source_option_key=source_option_key,
+        source_master_option_id=None,
         target_ops_option_id=target_ops_option_id,
         source_attribute_key=source_attribute_key,
         target_ops_attribute_id=target_ops_attribute_id,
@@ -227,6 +228,8 @@ def _ctx(
         markup_rules=([_markup_rule()] if markup_rules is _UNSET else markup_rules),
         push_mapping=push_mapping,
         push_mapping_options=([] if push_mapping_options is _UNSET else push_mapping_options),
+        master_option_attributes={},
+        master_option_titles={},
         decoration_options=([] if decoration_options is _UNSET else decoration_options),
         storefront_config=storefront_config,
     )
@@ -535,8 +538,9 @@ class TestOptionStrategies:
         )
         payload = _synthesize_payload(ctx, OptionStrategy.MASTER_OPTION_ATTACH)
         mutations = [s.mutation for s in payload.plan]
+        # Two-step pattern: setAdditionalOption (pre-create) + setAssignOptions (assign)
         assert "setAssignOptions" in mutations
-        assert "setAdditionalOption" not in mutations
+        assert mutations.count("setAdditionalOption") == 1
 
     def test_product_local_uses_setAdditionalOption(self):
         opt = _option(
@@ -760,15 +764,17 @@ class TestPC61Smoke:
         )
         payload = _synthesize_payload(ctx)
 
-        # 1 setProduct + 56 sizes + 56 prices + 56 SKUs + 1 option
-        # + 1 image gallery + 56 stock = 227 steps (default _ctx supplies one
+        # 1 setProduct + 56 sizes + 56 prices + 56 SKUs + 2 option steps
+        # (setAdditionalOption pre-create + setAssignOptions assign)
+        # + 1 image gallery + 56 stock = 228 steps (default _ctx supplies one
         # front image). setProductSku is one per variant — it assigns each
         # variant's SKU in OPS (size_wise / size_option_wise).
-        assert len(payload.plan) == 1 + 56 + 56 + 56 + 1 + 1 + 56
+        assert len(payload.plan) == 1 + 56 + 56 + 56 + 2 + 1 + 56
         mutations = [s.mutation for s in payload.plan]
         assert mutations.count("setProductSize") == 56
         assert mutations.count("setProductPrice") == 56
         assert mutations.count("setProductSku") == 56
+        assert mutations.count("setAdditionalOption") == 1
         assert mutations.count("setAssignOptions") == 1
         assert mutations.count("setProductsImageGallery") == 1
         assert mutations.count("updateProductStock") == 56

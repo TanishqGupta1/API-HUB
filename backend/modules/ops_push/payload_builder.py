@@ -60,6 +60,7 @@ from modules.ops_config.models import ProductStorefrontConfig
 from modules.pricing.overrides import apply_pricing_overrides
 from modules.pricing.resolvers import to_cents
 from modules.markup.models import MarkupRule
+from modules.master_options.models import MasterOption, MasterOptionAttribute
 from modules.push_mappings.models import PushMapping, PushMappingOption
 from modules.suppliers.models import Supplier
 
@@ -327,6 +328,10 @@ class _PushContext:
     markup_rules: list[MarkupRule]
     push_mapping: Optional[PushMapping]
     push_mapping_options: list[PushMappingOption]
+    # ops_master_option_id → sorted list of ops_attribute_ids for setAssignOptions
+    master_option_attributes: dict[int, list[int]]
+    # ops_master_option_id → title (used in setAdditionalOption pre-step)
+    master_option_titles: dict[int, str]
     decoration_options: list[dict]
     storefront_config: Optional[ProductStorefrontConfig]
 
@@ -380,6 +385,30 @@ async def _load_context(
     ).scalar_one_or_none()
     push_mapping_options = list(push_mapping.options) if push_mapping else []
 
+    # Load MasterOptionAttribute IDs for each mapped master option so
+    # _build_setAssignOptions_step can include attribute_ids (required by OPS).
+    master_option_attributes: dict[int, list[int]] = {}
+    master_option_titles: dict[int, str] = {}
+    mo_ids = {
+        mo.source_master_option_id
+        for mo in push_mapping_options
+        if mo.source_master_option_id is not None
+    }
+    if mo_ids:
+        attr_rows = (
+            await db.execute(
+                select(MasterOptionAttribute, MasterOption)
+                .join(MasterOption, MasterOption.id == MasterOptionAttribute.master_option_id)
+                .where(MasterOption.ops_master_option_id.in_(mo_ids))
+                .order_by(MasterOptionAttribute.sort_order)
+            )
+        ).all()
+        for attr, mo in attr_rows:
+            ops_mo_id = mo.ops_master_option_id
+            master_option_titles[ops_mo_id] = mo.title
+            if attr.ops_attribute_id is not None:
+                master_option_attributes.setdefault(ops_mo_id, []).append(attr.ops_attribute_id)
+
     decoration_row = (
         await db.execute(
             select(CustomerProductDecoration).where(
@@ -411,6 +440,8 @@ async def _load_context(
         markup_rules=list(markup_rules),
         push_mapping=push_mapping,
         push_mapping_options=push_mapping_options,
+        master_option_attributes=master_option_attributes,
+        master_option_titles=master_option_titles,
         decoration_options=decoration_options,
         storefront_config=storefront_config,
     )
@@ -517,6 +548,9 @@ def _build_setProduct_step(
         # ── Required OPS ProductInput fields for all products ──────────
         # Phase 1 audit findings (June 2026):
         #   * predefined_product_type — silent reject when null
+        #     0 = Print Products (default), 1 = Ready to Buy.
+        #     Driven by customer.ops_predefined_product_type (migration 0014).
+        #     Hardcoding "1" here caused K420 to land in Ready To Buy — fixed.
         #   * price_defining_method — silent reject of "qty" string;
         #     OPS expects a numeric string. "1" = qty-based pricing
         #     (verified against working products on staging.visualgraphx)
@@ -536,7 +570,9 @@ def _build_setProduct_step(
         #     stock apparel product by mirroring a known-good LIVE product via
         #     productsDetails before flipping it (the collection template shows
         #     "3", but that's not a verified apparel-from-stock product).
-        "predefined_product_type": "1",
+        "predefined_product_type": str(
+            getattr(ctx.customer, "ops_predefined_product_type", None) or 0
+        ),
         "price_defining_method": "1",
         "measurement_unit_id": 1,
         "enable_stock_management": enable_stock_management,
@@ -613,6 +649,172 @@ def _build_setProductSize_step(
     )
 
 
+def _extract_attribute_values(
+    variants: list[ProductVariant],
+) -> tuple[list[str], list[str]]:
+    """Pull unique apparel attribute values out of the flat variant list.
+
+    Apparel products from SanMar come as flat "Color/Size" combinations
+    (e.g. Black/S, Black/M, White/S). OPS's reference apparel model
+    (product 361 in visualgraphx staging) shows that EACH attribute value
+    is its own top-level `setAdditionalOption` row — not attributes under
+    a grouping option. So XS, S, M, L, XL... become 5 separate options.
+
+    Returns (colors, sizes) preserving sort_order. Colors first so the
+    UI renders Color choices above Size choices in the OPS storefront.
+    """
+    sorted_variants = sorted(variants, key=_variant_sort_key)
+
+    sizes: list[str] = []
+    seen_sizes: set[str] = set()
+    colors: list[str] = []
+    seen_colors: set[str] = set()
+    for v in sorted_variants:
+        size = (v.size or "").strip()
+        if size and size not in seen_sizes:
+            seen_sizes.add(size)
+            sizes.append(size)
+        color = (v.color or "").strip()
+        if color and color not in seen_colors:
+            seen_colors.add(color)
+            colors.append(color)
+
+    return colors, sizes
+
+
+def _build_apparel_option_group_step(
+    step_num: int, kind: str, title: str, sort_order: int
+) -> OPSMutationStep:
+    """Create one parent setAdditionalOption group for a Color or Size dimension.
+
+    Each apparel dimension (Color, Size) becomes a single top-level option group.
+    Actual values (Red, S, 2XL …) are added as setAdditionalOptionAttributes
+    children so that setProductsAttributePrice can attach per-attribute pricing.
+
+    Fields verified against the live OPS 81-op collection (2026-06-17):
+      - `multiplier` / `multiplier_type` do NOT exist on AdditionalOptionInput.
+        Per-size pricing is handled exclusively via setProductsAttributePrice.
+      - `apply_multiplication="1"` enables the OPS multiplication path for this
+        option group; the actual per-attribute price is set downstream.
+    """
+    key = re.sub(r"[^a-z0-9]+", "_", kind.lower()).strip("_") or "opt"
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setAdditionalOption",
+        source_key=f"apparel_group:{kind}",
+        variables={
+            "inputs": [{
+                "prod_add_opt_id": 0,           # 0 = create; OPS upserts on option_key
+                "products_id": _placeholder(1, "products_id"),
+                "option_key": key,
+                "title": title,
+                "description": "",
+                "options_type": "textmp",
+                "price_calculate_type": "0",
+                "apply_multiplication": "1",
+                "applicable_for": "0",
+                "status": "1",
+                "required": "1",
+                "hire_designer_option": "0",
+                "size_id": 0,
+                "master_option_id": 0,
+                "sort_order": sort_order,
+                "delete": 0,
+            }]
+        },
+        requires_response_from=[1],
+    )
+
+
+def _build_apparel_option_attribute_step(
+    step_num: int,
+    parent_option_step: int,
+    kind: str,
+    value: str,
+    sort_order: int,
+) -> OPSMutationStep:
+    """Create one attribute value under a parent apparel option group.
+
+    Input fields verified against live OPS collection (setAdditionalOptionAttributes,
+    AdditionalOptionAttributesInput). Returns attribute_id which is required by
+    _build_apparel_attribute_price_step for per-size pricing.
+
+    `kind` ("color" / "size") is local — used only for source_key uniqueness.
+    """
+    safe_key = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "val"
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setAdditionalOptionAttributes",
+        source_key=f"apparel_attr:{kind}/{safe_key}",
+        variables={
+            "inputs": [{
+                "attribute_id": 0,              # 0 = create
+                "prod_add_opt_id": _placeholder(parent_option_step, "prod_add_opt_id"),
+                "label": value,
+                "attribute_key": safe_key,
+                "status": "1",
+                "sort_order": sort_order,
+                "setup_cost": 0,
+                "default_attribute": "0",
+                "delete": 0,
+            }]
+        },
+        requires_response_from=[parent_option_step],
+    )
+
+
+def _build_apparel_attribute_price_step(
+    step_num: int,
+    attribute_step: int,
+    variant_sku: str,
+    base_price: float,
+    final_price: float,
+) -> OPSMutationStep:
+    """Set the per-size sell price for one apparel size attribute.
+
+    Uses setProductsAttributePrice. `attribute_id` from setAdditionalOptionAttributes.
+    `size_from=0, size_to=0` is the OPS "apply to all sizes" sentinel (verified
+    against the OPS n8n node default schema). OPS rejects non-zero size_to values
+    that reference sizes without configured print dimensions (e.g. placeholder
+    "Default"), but 0/0 unconditionally applies the attribute price.
+
+    This replaces the invalid `multiplier`/`multiplier_type` approach: those
+    fields do not exist on AdditionalOptionInput per the live OPS schema.
+    """
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setProductsAttributePrice",
+        source_key=f"attr_price:size/{variant_sku}",
+        variables={
+            "inputs": [{
+                "attribute_id": _placeholder(attribute_step, "attribute_id"),
+                "size_from": 0,
+                "size_to": 0,
+                "attributes_price": final_price,
+                "vendor_price": base_price,
+                "delete": 0,
+            }]
+        },
+        requires_response_from=[attribute_step],
+    )
+
+
+# Standard apparel volume-discount curve, applied to every push since SanMar
+# does NOT return quantity tiers via getConfigurationAndPricing — they only
+# give a single flat per-variant wholesale price. Mirrors reference product
+# 361's 6-row Price table shape (1-11, 12-50, 51-500, 501-1000, 1001-5000,
+# 5001-9999) with a typical apparel discount progression. Adjust per-customer
+# via markup rules in a later phase if needed.
+APPAREL_VOLUME_TIERS: tuple[tuple[int, int, float], ...] = (
+    (1, 11, 1.00),
+    (12, 50, 0.98),
+    (51, 500, 0.96),
+    (501, 1000, 0.94),
+    (1001, 5000, 0.92),
+    (5001, 9999, 0.90),
+)
+
+
 def _build_setProductPrice_step(
     step_num: int,
     size_step: int,
@@ -654,25 +856,63 @@ def _build_setProductPrice_step(
     )
 
 
-def _build_setAssignOptions_step(
-    step_num: int, mapping: PushMappingOption
+def _build_master_option_create_step(
+    step_num: int, mapping: PushMappingOption, title: str, sort_order: int
 ) -> OPSMutationStep:
-    """master_option_attach mode — one setAssignOptions per mapping row."""
+    """MASTER_OPTION_ATTACH pre-step — creates product_additional_option row with
+    hire_designer_option='0' so the following setAssignOptions UPDATE bypasses the
+    OPS staging bug where setAssignOptions INSERT fails with a hire_designer_option
+    NOT NULL constraint (the GraphQL schema omits the field so it can't be sent
+    directly; the UPDATE path leaves the value from this INSERT intact)."""
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setAdditionalOption",
+        source_key=f"master_option_create:{mapping.source_option_key}",
+        variables={
+            "inputs": [{
+                "prod_add_opt_id": 0,
+                "products_id": _placeholder(1, "products_id"),
+                "master_option_id": mapping.target_ops_option_id,
+                "title": title,
+                "options_type": "drop_down",
+                "hire_designer_option": "0",
+                "price_calculate_type": "0",
+                "sort_order": sort_order,
+                "status": "1",
+                "display_in_calculator": "1",
+            }]
+        },
+        requires_response_from=[1],
+    )
+
+
+def _build_setAssignOptions_step(
+    step_num: int, create_step: int, mapping: PushMappingOption, attribute_ids: list[int]
+) -> OPSMutationStep:
+    """MASTER_OPTION_ATTACH assign step — UPDATE mode using prod_add_opt_id from
+    the preceding _build_master_option_create_step.
+
+    OPS requires attribute_ids — array of objects each with "attrid" key (NOT
+    "master_attribute_id"). Confirmed from live Postman collection 2026-06-17.
+    product_option_id causes OPS to UPDATE the existing row rather than INSERT,
+    which avoids the hire_designer_option NOT NULL bug on the INSERT path."""
     return OPSMutationStep(
         step=step_num,
         mutation="setAssignOptions",
         source_key=(
-            f"option_key:{mapping.source_option_key}"
+            f"master_option_assign:{mapping.source_option_key}"
             + (f"/{mapping.source_attribute_key}" if mapping.source_attribute_key else "")
         ),
         variables={
             "inputs": [{
+                "product_option_id": _placeholder(create_step, "prod_add_opt_id"),
                 "products_id": _placeholder(1, "products_id"),
                 "master_option_id": mapping.target_ops_option_id,
                 "sort_order": getattr(mapping, "sort_order", 0) or 0,
+                "attribute_ids": [{"attrid": aid} for aid in attribute_ids],
             }]
         },
-        requires_response_from=[1],
+        requires_response_from=[1, create_step],
     )
 
 
@@ -1020,11 +1260,17 @@ def _synthesize_payload(
     # value (lowercased color/attr label) -> (option_step, attribute_step)
     attr_step_by_value: dict[str, tuple[int, int]] = {}
     if option_strategy is OptionStrategy.MASTER_OPTION_ATTACH:
-        for mapping in ctx.push_mapping_options:
+        for i, mapping in enumerate(ctx.push_mapping_options):
             if mapping.target_ops_option_id is None:
                 # Preflight should have caught this; skip defensively.
                 continue
-            plan.append(_build_setAssignOptions_step(next_step, mapping))
+            mo_key = mapping.source_master_option_id or mapping.target_ops_option_id
+            attr_ids = ctx.master_option_attributes.get(mo_key, [])
+            title = ctx.master_option_titles.get(mo_key) or (mapping.source_option_key or "Option")
+            create_step = next_step
+            plan.append(_build_master_option_create_step(create_step, mapping, title, sort_order=i))
+            next_step += 1
+            plan.append(_build_setAssignOptions_step(next_step, create_step, mapping, attr_ids))
             next_step += 1
     else:  # PRODUCT_LOCAL_OPTION_CREATE
         for opt in ctx.options:
@@ -1082,8 +1328,6 @@ def _synthesize_payload(
     # rows. The step is wired and ready; enable it once images are uploaded into
     # OPS media and we pass bare OPS filenames. Placed before stock so inventory
     # stays the final step (Rev 1 contract). Best-effort/warn-only in the gateway.
-    import os as _os
-
     if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") == "1":
         gallery_step = _build_setProductsImageGallery_step(next_step, ctx, products_id_step=1)
         if gallery_step is not None:
