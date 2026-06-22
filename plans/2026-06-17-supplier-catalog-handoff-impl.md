@@ -1,5 +1,10 @@
 # Supplier Catalog Handoff (api-hub → graphx) — Implementation Plan
 
+> ⚠️ **SUPERSEDED 2026-06-22 → see `2026-06-22-connect-manage-catalog-ingest.md`.**
+> Targeted graphx-platform-web (Supabase), now retired as the downstream in favor of
+> **GraphX-Manage** (Prisma/PG18, active). Do NOT execute this against graphx-platform-web.
+> Kept for history; the new plan re-targets the same design to GraphX-Manage.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax. **This plan spans TWO repos** — do Phase A+B in graphx, Phase C in api-hub, Phase D across both.
 
 **Goal:** Push normalized supplier products from api-hub (GraphX Connect) into graphx's Universal Catalog under the VG tenant, as `IMPORTED_FROM_SUPPLIER`, with Color/Size bound as shared master options.

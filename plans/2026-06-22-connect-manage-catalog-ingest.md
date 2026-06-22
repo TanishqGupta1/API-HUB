@@ -2,6 +2,7 @@
 
 **Status:** `pending approval` (planning only — no code, no execution until explicit go-ahead)
 **Date:** 2026-06-22
+**Supersedes:** `2026-06-17-supplier-catalog-handoff-{design,impl}.md` (those targeted **graphx-platform-web**, now retired as the downstream — last commit 7 days stale + Supabase-consolidation/AWS-migration winddown). **GraphX-Manage is the canonical downstream** (active: PRs #254–258 on 2026-06-21). Same design DNA (master-level options, namespaced sku, cost-not-price, idempotent upsert) re-targeted from graphx-platform-web/Supabase → GraphX-Manage/Prisma. Shared upstream producer = `2026-06-16/17-variant-option-collapse` (still valid).
 **Spans two repos:**
 - **Connect** (api-hub) — Python/FastAPI: `/Users/tanishq/Documents/project-files/api-hub/api-hub/backend`
 - **Manage** (GraphX-Manage) — TS/Prisma/PG18: `/Users/tanishq/Documents/project-files/GraphX-Manage`

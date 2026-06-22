@@ -1,5 +1,12 @@
 # Design — api-hub → graphx Supplier Catalog Handoff
 
+> ⚠️ **SUPERSEDED 2026-06-22 → see `2026-06-22-connect-manage-catalog-ingest.md`.**
+> Downstream target changed: graphx-platform-web (Supabase) is retired in favor of
+> **GraphX-Manage** (Prisma/PG18) — platform-web is 7 days stale (Supabase-consolidation /
+> AWS-migration winddown); GraphX-Manage is the active catalog-of-record (PRs #254–258,
+> 2026-06-21). The design DNA (master-level options, namespaced sku, cost-not-price,
+> idempotent upsert) carries over; only the target schema/endpoint differs. Kept for history.
+
 > Companion to the implementation plan `2026-06-17-supplier-catalog-handoff-impl.md`.
 > This is the design/spec (the "why" + contract + decisions); the impl plan is the "how".
 
