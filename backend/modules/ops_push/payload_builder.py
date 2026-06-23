@@ -709,40 +709,46 @@ def _build_setAdditionalOptionAttribute_from_values(
     )
 
 
+APPAREL_VOLUME_TIERS: tuple[tuple[int, int, float], ...] = (
+    (1, 11, 1.00),
+    (12, 50, 0.98),
+    (51, 500, 0.96),
+    (501, 1000, 0.94),
+    (1001, 5000, 0.92),
+    (5001, 9999, 0.90),
+)
+
+
 def _build_setProductPrice_step(
     step_num: int,
     size_step: int,
     variant_sku: str,
     base_price: float,
     final_price: float,
+    qty_from: int = 1,
+    qty_to: int = 999999,
+    source_key_suffix: str | None = None,
 ) -> OPSMutationStep:
-    """One setProductPrice per variant. Spec contract for beta:
-    qty=1, qty_to=999999, single visible price row. Depends on the
-    matching setProductSize step for `size_id`."""
+    """One setProductPrice row. For apparel, the synthesizer calls this once
+    per APPAREL_VOLUME_TIERS row, producing the 6-tier table shape that
+    matches reference product 361's pricing method."""
+    key = f"variant_sku:{variant_sku}"
+    if source_key_suffix:
+        key = f"{key}/{source_key_suffix}"
     return OPSMutationStep(
         step=step_num,
         mutation="setProductPrice",
-        source_key=f"variant_sku:{variant_sku}",
+        source_key=key,
         variables={
             "inputs": [{
                 "products_id": _placeholder(1, "products_id"),
-                # OPS returns `id` from setProductSize, normalized to `size_id` in gateway.
                 "size_id": _placeholder(size_step, "size_id"),
-                "qty": 1,
-                "qty_to": 999999,
+                "qty": qty_from,
+                "qty_to": qty_to,
                 "price": final_price,
                 "vendor_price": base_price,
-                "visible": "1",  # OPS ProductPriceInput.visible is String
-                # user_type_id is required by OPS. Without it OPS returns
-                # result:true with id:null and silently drops the price.
-                # "1" = default/all-users user type (matches existing OPS
-                # products). Verified live against staging.visualgraphx
-                # (a direct setProductPrice without this field returns
-                # id:null; adding "1" returns a real id).
+                "visible": "1",
                 "user_type_id": "1",
-                # price_defining_method MUST be set on each price too — not
-                # just on the parent product. OPS validation message:
-                # "Price Defining method is required."
                 "price_defining_method": "1",
             }]
         },
@@ -1163,17 +1169,25 @@ def _synthesize_payload(
         for v, price in zip(ordered_variants, computed_prices):
             size_step_by_sku[price.variant_sku] = default_size_step
 
-        # ONE setProductPrice for the Default canvas — base price from the
-        # first variant. Per-size price deltas can be added later via
-        # setProductsAttributePrice on the Size attributes.
+        # 6 setProductPrice rows for the standard apparel volume curve
+        # (APPAREL_VOLUME_TIERS). Mirrors reference product 361's 6-tier shape.
         if computed_prices:
-            base_price_obj = computed_prices[0]
-            plan.append(_build_setProductPrice_step(
-                next_step, default_size_step,
-                base_price_obj.variant_sku,
-                base_price_obj.base_price, base_price_obj.final_price,
-            ))
-            next_step += 1
+            base_final = min(p.final_price for p in computed_prices)
+            base_vendor = min(p.base_price for p in computed_prices)
+            for qty_from, qty_to, factor in APPAREL_VOLUME_TIERS:
+                plan.append(
+                    _build_setProductPrice_step(
+                        next_step,
+                        default_size_step,
+                        "placeholder",
+                        round(base_vendor * factor, 2),
+                        round(base_final * factor, 2),
+                        qty_from=qty_from,
+                        qty_to=qty_to,
+                        source_key_suffix=f"qty{qty_from}-{qty_to}",
+                    )
+                )
+                next_step += 1
 
         # Color Additional Option + one attribute per unique color
         color_option_step = next_step
