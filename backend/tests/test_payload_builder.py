@@ -1231,18 +1231,26 @@ class TestOsfaSingleSizeProducts:
         price_steps = [s for s in payload.plan if s.mutation == "setProductPrice"]
         assert len(price_steps) == 1
 
-    def test_canvas_price_is_minimum_when_colors_differ(self):
-        """Canvas price is the minimum variant price. Color upcharges are not
-        yet pushed as setup_cost on color attributes (size upcharges are)."""
+    def test_color_price_difference_becomes_color_upcharge(self):
+        """Canvas price is the cheapest variant; a pricier colour carries the
+        difference as a setProductsAttributePrice upcharge (dynamic per-axis
+        pricing — colours are no longer silently underpriced)."""
         variants = [
             _variant("BAG-BLK-OSFA", color="Black", size="OSFA", base_price=Decimal("10.00")),
             _variant("BAG-GLD-OSFA", color="Gold", size="OSFA", base_price=Decimal("15.00")),
         ]
         ctx = _ctx(variants=variants, markup_rules=[])
         payload = _synthesize_payload(ctx)
+        # Canvas is the cheapest variant (Black, 10.0).
         price_steps = [s for s in payload.plan if s.mutation == "setProductPrice"]
         assert len(price_steps) == 1
         assert price_steps[0].variables["inputs"][0]["price"] == 10.0
+        # Gold (15.0) now carries a +5.0 upcharge on its colour attribute.
+        upcharges = [
+            s.variables["inputs"][0]["attributes_price"]
+            for s in payload.plan if s.mutation == "setProductsAttributePrice"
+        ]
+        assert 5.0 in upcharges, f"expected a 5.0 colour upcharge, got {upcharges}"
 
     def test_sku_steps_keyed_on_color_only_for_osfa(self, monkeypatch):
         monkeypatch.setenv("OPS_PUSH_INCLUDE_SKU", "1")

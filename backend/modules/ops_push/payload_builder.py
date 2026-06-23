@@ -1189,10 +1189,13 @@ def _synthesize_payload(
         # showing a Size dropdown with one value is confusing and serves no
         # purpose for the customer. Skip the Size option in those cases.
         _SINGLE_SIZE_LABELS = {"osfa", "one size", "one size fits all", "os", "n/a", "default"}
-        _has_real_sizes = len(unique_sizes) > 1 or (
-            len(unique_sizes) == 1
-            and unique_sizes[0].strip().lower() not in _SINGLE_SIZE_LABELS
-        )
+        # Filter junk labels BEFORE counting so a product with two junk labels
+        # (e.g. OSFA + OS, or OSFA + N/A from dirty supplier data) is still
+        # treated as "no real size choice" and skips the pointless dropdown.
+        _real_size_vals = [
+            s for s in unique_sizes if s.strip().lower() not in _SINGLE_SIZE_LABELS
+        ]
+        _has_real_sizes = len(_real_size_vals) >= 1
 
         # ONE setProductSize "Default" — OPS requires at least one canvas to
         # render the storefront purchase panel. The user picks size via the
@@ -1205,30 +1208,44 @@ def _synthesize_payload(
         for v, price in zip(ordered_variants, computed_prices):
             size_step_by_sku[price.variant_sku] = default_size_step
 
-        # Per-size price upcharge calculation.
-        # Find the minimum final price per size (across all colors) — that's
-        # what SanMar actually charges for that size. The cheapest size becomes
-        # the base canvas price; larger sizes carry a setup_cost = their price
-        # minus the base. This is how OPS "Additional Options Price" works.
-        _size_final_price: dict[str, float] = {}   # size_lower → cheapest final price
-        _size_base_price: dict[str, float] = {}    # size_lower → matching vendor price
+        # Dynamic per-attribute price upcharge calculation.
+        # For EACH option axis (size AND color) find the cheapest variant
+        # carrying each attribute value. The canvas is the single globally
+        # cheapest variant; every attribute value that costs more than the
+        # canvas carries the difference as an OPS "Additional Options Price"
+        # upcharge. Whichever axis (or both) drives the price, the upcharge
+        # follows the data — no axis is hard-coded.
+        #
+        # NOTE (OPS limitation, not a bug): OPS adds option upcharges
+        # ADDITIVELY (size upcharge + color upcharge). That is exact when the
+        # price is driven by a single axis. When BOTH axes independently raise
+        # the price of the same variant, the additive sum can over-state that
+        # specific combo — OPS's per-attribute pricing model cannot express a
+        # per-(color×size) price through setProductsAttributePrice.
+        _size_final_price: dict[str, float] = {}   # size_lower  → cheapest final price
+        _size_base_price: dict[str, float] = {}    # size_lower  → matching vendor price
+        _color_final_price: dict[str, float] = {}  # color_lower → cheapest final price
+        _color_base_price: dict[str, float] = {}   # color_lower → matching vendor price
         for cp in computed_prices:
             sk = (cp.size or "").strip().lower()
-            if sk not in _size_final_price or cp.final_price < _size_final_price[sk]:
+            if sk and (sk not in _size_final_price or cp.final_price < _size_final_price[sk]):
                 _size_final_price[sk] = cp.final_price
                 _size_base_price[sk] = cp.base_price
+            ck = (cp.color or "").strip().lower()
+            if ck and (ck not in _color_final_price or cp.final_price < _color_final_price[ck]):
+                _color_final_price[ck] = cp.final_price
+                _color_base_price[ck] = cp.base_price
 
-        _canvas_final = min(_size_final_price.values()) if _size_final_price else (
-            computed_prices[0].final_price if computed_prices else 0.0
+        # Canvas = the single cheapest variant by final price. Taking cost AND
+        # price from the SAME variant keeps the published (vendor_price, price)
+        # pair consistent — two independent min()s could otherwise pull cost
+        # from one variant and price from another, understating the margin.
+        _canvas_cp = (
+            min(computed_prices, key=lambda cp: cp.final_price)
+            if computed_prices else None
         )
-        _canvas_base = min(_size_base_price.values()) if _size_base_price else (
-            computed_prices[0].base_price if computed_prices else 0.0
-        )
-        # Use the variant whose final price matches the canvas price for the step.
-        _canvas_cp = next(
-            (cp for cp in computed_prices if cp.final_price == _canvas_final),
-            computed_prices[0] if computed_prices else None,
-        )
+        _canvas_final = _canvas_cp.final_price if _canvas_cp else 0.0
+        _canvas_base = _canvas_cp.base_price if _canvas_cp else 0.0
 
         # ONE setProductPrice for the Default canvas — the cheapest size price.
         # Size upcharges are handled via setup_cost on the Size attributes below.
@@ -1255,6 +1272,24 @@ def _synthesize_payload(
             ))
             attr_step_by_value[color_val.lower()] = (color_option_step, attr_step)
             next_step += 1
+
+            # If this color costs more than the canvas (e.g. a premium colour),
+            # push the difference as an Additional Options Price upcharge so the
+            # pricier colour isn't silently sold at the cheapest colour's price.
+            ck = color_val.strip().lower()
+            _c_final_upcharge = round(
+                max(0.0, _color_final_price.get(ck, _canvas_final) - _canvas_final), 2
+            )
+            _c_vendor_upcharge = round(
+                max(0.0, _color_base_price.get(ck, _canvas_base) - _canvas_base), 2
+            )
+            if _c_final_upcharge > 0:
+                plan.append(_build_setProductsAttributePrice_step(
+                    next_step, attr_step, 1, default_size_step,
+                    attributes_price=_c_final_upcharge,
+                    vendor_price=_c_vendor_upcharge,
+                ))
+                next_step += 1
 
         # Size Additional Option + one attribute per unique physical size.
         # Skipped when there is no real size choice (OSFA / single-size products
