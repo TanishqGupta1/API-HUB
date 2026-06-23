@@ -709,6 +709,49 @@ def _build_setAdditionalOptionAttribute_from_values(
     )
 
 
+def _build_setProductsAttributePrice_step(
+    step_num: int,
+    attr_step: int,
+    product_step: int,
+    size_step: int,
+    *,
+    attributes_price: float,
+    vendor_price: float,
+) -> OPSMutationStep:
+    """Set a per-attribute price upcharge via setProductsAttributePrice.
+
+    This is the correct OPS mutation for "Additional Options Price" —
+    the page visible at /admin/product_additionalinfo_price.php.
+    OPS requires ALL of (product_id, attribute_id, size_id, size_from, size_to):
+      - product_id   ← setProduct response (product_step)
+      - attribute_id ← setAdditionalOptionAttributes response (attr_step)
+      - size_id      ← setProductSize response (size_step, the "Default" canvas)
+      - size_from / size_to ← the qty/size range; 1..999999 = any quantity.
+    Verified live on staging: omitting size_id → INVALID_OPERATION; omitting
+    size_from → "Size From is required"; omitting product_id → "Cannot read
+    properties of undefined (reading 'products_id')". All five are mandatory.
+    attributes_price = final (customer) upcharge; vendor_price = wholesale upcharge.
+    """
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setProductsAttributePrice",
+        source_key=f"attr_price:step{attr_step}",
+        variables={
+            "inputs": [{
+                "product_id": _placeholder(product_step, "products_id"),
+                "attribute_id": _placeholder(attr_step, "attribute_id"),
+                "size_id": _placeholder(size_step, "size_id"),
+                "size_from": 1,
+                "size_to": 999999,
+                "attributes_price": attributes_price,
+                "vendor_price": vendor_price,
+                "delete": 0,
+            }]
+        },
+        requires_response_from=[attr_step, product_step, size_step],
+    )
+
+
 def _build_setProductPrice_step(
     step_num: int,
     size_step: int,
@@ -1141,6 +1184,16 @@ def _synthesize_payload(
                 seen_c[c] = None
         unique_colors = list(seen_c.keys())
 
+        # Detect "no real size choice": single size or only OSFA-style labels.
+        # Bags, many caps, and other accessories have one universal size —
+        # showing a Size dropdown with one value is confusing and serves no
+        # purpose for the customer. Skip the Size option in those cases.
+        _SINGLE_SIZE_LABELS = {"osfa", "one size", "one size fits all", "os", "n/a", "default"}
+        _has_real_sizes = len(unique_sizes) > 1 or (
+            len(unique_sizes) == 1
+            and unique_sizes[0].strip().lower() not in _SINGLE_SIZE_LABELS
+        )
+
         # ONE setProductSize "Default" — OPS requires at least one canvas to
         # render the storefront purchase panel. The user picks size via the
         # Size Additional Option below, not via the canvas selector.
@@ -1152,13 +1205,38 @@ def _synthesize_payload(
         for v, price in zip(ordered_variants, computed_prices):
             size_step_by_sku[price.variant_sku] = default_size_step
 
-        # ONE setProductPrice for the Default canvas — supplier's actual price.
-        if computed_prices:
-            base_price_obj = computed_prices[0]
+        # Per-size price upcharge calculation.
+        # Find the minimum final price per size (across all colors) — that's
+        # what SanMar actually charges for that size. The cheapest size becomes
+        # the base canvas price; larger sizes carry a setup_cost = their price
+        # minus the base. This is how OPS "Additional Options Price" works.
+        _size_final_price: dict[str, float] = {}   # size_lower → cheapest final price
+        _size_base_price: dict[str, float] = {}    # size_lower → matching vendor price
+        for cp in computed_prices:
+            sk = (cp.size or "").strip().lower()
+            if sk not in _size_final_price or cp.final_price < _size_final_price[sk]:
+                _size_final_price[sk] = cp.final_price
+                _size_base_price[sk] = cp.base_price
+
+        _canvas_final = min(_size_final_price.values()) if _size_final_price else (
+            computed_prices[0].final_price if computed_prices else 0.0
+        )
+        _canvas_base = min(_size_base_price.values()) if _size_base_price else (
+            computed_prices[0].base_price if computed_prices else 0.0
+        )
+        # Use the variant whose final price matches the canvas price for the step.
+        _canvas_cp = next(
+            (cp for cp in computed_prices if cp.final_price == _canvas_final),
+            computed_prices[0] if computed_prices else None,
+        )
+
+        # ONE setProductPrice for the Default canvas — the cheapest size price.
+        # Size upcharges are handled via setup_cost on the Size attributes below.
+        if _canvas_cp is not None:
             plan.append(_build_setProductPrice_step(
                 next_step, default_size_step,
-                base_price_obj.variant_sku,
-                base_price_obj.base_price, base_price_obj.final_price,
+                _canvas_cp.variant_sku,
+                _canvas_base, _canvas_final,
             ))
             next_step += 1
 
@@ -1178,22 +1256,46 @@ def _synthesize_payload(
             attr_step_by_value[color_val.lower()] = (color_option_step, attr_step)
             next_step += 1
 
-        # Size Additional Option + one attribute per unique physical size
-        size_option_step = next_step
-        plan.append(_build_setAdditionalOption_from_values(
-            next_step, option_key="size", title="Size", sort_order=1,
-        ))
-        next_step += 1
+        # Size Additional Option + one attribute per unique physical size.
+        # Skipped when there is no real size choice (OSFA / single-size products
+        # like bags and many cap styles). This avoids a pointless "Size: OSFA"
+        # dropdown that confuses customers and adds no value.
+        # Each size carries setup_cost = (size_price - base_price) so OPS adds
+        # the correct upcharge automatically when the customer picks that size.
         size_attr_step_by_value: dict[str, tuple[int, int]] = {}
-        for i, size_val in enumerate(unique_sizes):
-            attr_step = next_step
-            plan.append(_build_setAdditionalOptionAttribute_from_values(
-                next_step, size_option_step,
-                attribute_key=size_val.lower().replace(" ", "_"),
-                label=size_val, sort_order=i,
+        if _has_real_sizes:
+            size_option_step = next_step
+            plan.append(_build_setAdditionalOption_from_values(
+                next_step, option_key="size", title="Size", sort_order=1,
             ))
-            size_attr_step_by_value[size_val.lower()] = (size_option_step, attr_step)
             next_step += 1
+            for i, size_val in enumerate(unique_sizes):
+                attr_step = next_step
+                sk = size_val.strip().lower()
+                plan.append(_build_setAdditionalOptionAttribute_from_values(
+                    next_step, size_option_step,
+                    attribute_key=size_val.lower().replace(" ", "_"),
+                    label=size_val, sort_order=i,
+                ))
+                size_attr_step_by_value[size_val.lower()] = (size_option_step, attr_step)
+                next_step += 1
+
+                # If this size costs more than the base, push a price upcharge
+                # via setProductsAttributePrice — the correct OPS mutation for
+                # "Additional Options Price". Only emitted when upcharge > 0.
+                _final_upcharge = round(
+                    max(0.0, _size_final_price.get(sk, _canvas_final) - _canvas_final), 2
+                )
+                _vendor_upcharge = round(
+                    max(0.0, _size_base_price.get(sk, _canvas_base) - _canvas_base), 2
+                )
+                if _final_upcharge > 0:
+                    plan.append(_build_setProductsAttributePrice_step(
+                        next_step, attr_step, 1, default_size_step,
+                        attributes_price=_final_upcharge,
+                        vendor_price=_vendor_upcharge,
+                    ))
+                    next_step += 1
 
     else:
         # Size-only / print mode: one setProductSize per variant (original behaviour)

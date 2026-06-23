@@ -1203,6 +1203,134 @@ class TestStockManagementSkuTypeAlignment:
 # ===========================================================================
 
 
+class TestOsfaSingleSizeProducts:
+    """Bags, many caps, and accessories have a single 'OSFA' size.
+    Showing a Size dropdown with one value (OSFA) confuses customers —
+    the builder skips the Size Additional Option for these products."""
+
+    def _osfa_ctx(self, colors=("Black", "Navy", "White")):
+        variants = [_variant(f"BAG-{c[:3].upper()}-OSFA", color=c, size="OSFA") for c in colors]
+        return _ctx(variants=variants)
+
+    def test_no_size_additional_option_for_osfa(self):
+        payload = _synthesize_payload(self._osfa_ctx())
+        size_options = [s for s in payload.plan if s.mutation == "setAdditionalOption"
+                        and "size" in s.source_key]
+        assert not size_options, "OSFA products should not emit a Size Additional Option"
+
+    def test_color_additional_option_still_created(self):
+        payload = _synthesize_payload(self._osfa_ctx())
+        color_options = [s for s in payload.plan if s.mutation == "setAdditionalOption"
+                         and "color" in s.source_key]
+        assert len(color_options) == 1
+        color_attrs = [s for s in payload.plan if s.mutation == "setAdditionalOptionAttributes"]
+        assert len(color_attrs) == 3  # Black, Navy, White
+
+    def test_single_price_step_when_all_same_price(self):
+        payload = _synthesize_payload(self._osfa_ctx())
+        price_steps = [s for s in payload.plan if s.mutation == "setProductPrice"]
+        assert len(price_steps) == 1
+
+    def test_canvas_price_is_minimum_when_colors_differ(self):
+        """Canvas price is the minimum variant price. Color upcharges are not
+        yet pushed as setup_cost on color attributes (size upcharges are)."""
+        variants = [
+            _variant("BAG-BLK-OSFA", color="Black", size="OSFA", base_price=Decimal("10.00")),
+            _variant("BAG-GLD-OSFA", color="Gold", size="OSFA", base_price=Decimal("15.00")),
+        ]
+        ctx = _ctx(variants=variants, markup_rules=[])
+        payload = _synthesize_payload(ctx)
+        price_steps = [s for s in payload.plan if s.mutation == "setProductPrice"]
+        assert len(price_steps) == 1
+        assert price_steps[0].variables["inputs"][0]["price"] == 10.0
+
+    def test_sku_steps_keyed_on_color_only_for_osfa(self, monkeypatch):
+        monkeypatch.setenv("OPS_PUSH_INCLUDE_SKU", "1")
+        payload = _synthesize_payload(self._osfa_ctx())
+        sku_steps = [s for s in payload.plan if s.mutation == "setProductSku"]
+        assert sku_steps
+        for s in sku_steps:
+            si = s.variables["inputs"][0]
+            # Must have option/attribute ids (color) but no size attribute
+            assert "prod_add_opt_ids" in si
+            # Only one pair per variant (Color only, no Size)
+            assert len(si["prod_add_opt_ids"]) == 1
+
+    def test_real_size_product_keeps_size_option(self):
+        """Caps with S/M, L/XL real size variants still get a Size dropdown."""
+        variants = [
+            _variant("CAP-BLK-SM", color="Black", size="S/M"),
+            _variant("CAP-BLK-LXL", color="Black", size="L/XL"),
+        ]
+        ctx = _ctx(variants=variants)
+        payload = _synthesize_payload(ctx)
+        size_options = [s for s in payload.plan if s.mutation == "setAdditionalOption"
+                        and "size" in s.source_key]
+        assert len(size_options) == 1
+
+
+class TestSizeUpcharges:
+    """SanMar charges more for 2XL/3XL/4XL. The upcharge is pushed as
+    setup_cost on the Size attribute so OPS adds it automatically at checkout."""
+
+    def _tee_ctx(self):
+        variants = [
+            _variant("TEE-WHT-S",   color="White", size="S",   base_price=Decimal("8.00")),
+            _variant("TEE-WHT-M",   color="White", size="M",   base_price=Decimal("8.00")),
+            _variant("TEE-WHT-XL",  color="White", size="XL",  base_price=Decimal("8.00")),
+            _variant("TEE-WHT-2XL", color="White", size="2XL", base_price=Decimal("10.00")),
+            _variant("TEE-WHT-3XL", color="White", size="3XL", base_price=Decimal("12.00")),
+            _variant("TEE-NAV-S",   color="Navy",  size="S",   base_price=Decimal("8.00")),
+            _variant("TEE-NAV-2XL", color="Navy",  size="2XL", base_price=Decimal("10.00")),
+        ]
+        return _ctx(variants=variants, markup_rules=[])
+
+    def test_canvas_price_is_cheapest_size(self):
+        payload = _synthesize_payload(self._tee_ctx())
+        price_steps = [s for s in payload.plan if s.mutation == "setProductPrice"]
+        assert len(price_steps) == 1
+        assert price_steps[0].variables["inputs"][0]["price"] == 8.0
+
+    def _attr_price_steps(self, payload):
+        """All setProductsAttributePrice steps."""
+        return [s for s in payload.plan if s.mutation == "setProductsAttributePrice"]
+
+    def test_base_sizes_have_no_price_step(self):
+        """S, M, XL all cost the same — no setProductsAttributePrice for them."""
+        payload = _synthesize_payload(self._tee_ctx())
+        price_steps = self._attr_price_steps(payload)
+        # Only 2XL and 3XL should have upcharge steps
+        assert len(price_steps) == 2
+
+    def test_large_sizes_have_upcharge(self):
+        payload = _synthesize_payload(self._tee_ctx())
+        price_steps = self._attr_price_steps(payload)
+        upcharges = sorted(s.variables["inputs"][0]["attributes_price"] for s in price_steps)
+        assert upcharges == [2.0, 4.0]
+
+    def test_upcharge_never_negative(self):
+        payload = _synthesize_payload(self._tee_ctx())
+        for s in self._attr_price_steps(payload):
+            assert s.variables["inputs"][0]["attributes_price"] >= 0.0
+
+    def test_upcharge_step_depends_on_attr_product_and_size_step(self):
+        """Each price step depends on the attribute step, setProduct (step 1),
+        and the Default setProductSize step — OPS keys the row on all three."""
+        payload = _synthesize_payload(self._tee_ctx())
+        for s in self._attr_price_steps(payload):
+            assert 1 in s.requires_response_from  # products_id from setProduct
+            assert len(s.requires_response_from) == 3
+
+    def test_upcharge_inputs_carry_all_required_keys(self):
+        """OPS requires product_id, attribute_id, size_id, size_from, size_to —
+        any missing one is a hard reject (verified live on staging)."""
+        payload = _synthesize_payload(self._tee_ctx())
+        for s in self._attr_price_steps(payload):
+            row = s.variables["inputs"][0]
+            for key in ("product_id", "attribute_id", "size_id", "size_from", "size_to"):
+                assert key in row, f"{key} missing from upcharge row"
+
+
 class TestOpsProductType:
     """All products are pushed as Print Products (product_type="1,2,3")
     matching the verified structure of product 600 on staging."""
