@@ -60,7 +60,6 @@ from modules.ops_config.models import ProductStorefrontConfig
 from modules.pricing.overrides import apply_pricing_overrides
 from modules.pricing.resolvers import to_cents
 from modules.markup.models import MarkupRule
-from modules.master_options.models import MasterOption, MasterOptionAttribute
 from modules.push_mappings.models import PushMapping, PushMappingOption
 from modules.suppliers.models import Supplier
 
@@ -328,10 +327,6 @@ class _PushContext:
     markup_rules: list[MarkupRule]
     push_mapping: Optional[PushMapping]
     push_mapping_options: list[PushMappingOption]
-    # ops_master_option_id → sorted list of ops_attribute_ids for setAssignOptions
-    master_option_attributes: dict[int, list[int]]
-    # ops_master_option_id → title (used in setAdditionalOption pre-step)
-    master_option_titles: dict[int, str]
     decoration_options: list[dict]
     storefront_config: Optional[ProductStorefrontConfig]
 
@@ -385,30 +380,6 @@ async def _load_context(
     ).scalar_one_or_none()
     push_mapping_options = list(push_mapping.options) if push_mapping else []
 
-    # Load MasterOptionAttribute IDs for each mapped master option so
-    # _build_setAssignOptions_step can include attribute_ids (required by OPS).
-    master_option_attributes: dict[int, list[int]] = {}
-    master_option_titles: dict[int, str] = {}
-    mo_ids = {
-        mo.source_master_option_id
-        for mo in push_mapping_options
-        if mo.source_master_option_id is not None
-    }
-    if mo_ids:
-        attr_rows = (
-            await db.execute(
-                select(MasterOptionAttribute, MasterOption)
-                .join(MasterOption, MasterOption.id == MasterOptionAttribute.master_option_id)
-                .where(MasterOption.ops_master_option_id.in_(mo_ids))
-                .order_by(MasterOptionAttribute.sort_order)
-            )
-        ).all()
-        for attr, mo in attr_rows:
-            ops_mo_id = mo.ops_master_option_id
-            master_option_titles[ops_mo_id] = mo.title
-            if attr.ops_attribute_id is not None:
-                master_option_attributes.setdefault(ops_mo_id, []).append(attr.ops_attribute_id)
-
     decoration_row = (
         await db.execute(
             select(CustomerProductDecoration).where(
@@ -440,8 +411,6 @@ async def _load_context(
         markup_rules=list(markup_rules),
         push_mapping=push_mapping,
         push_mapping_options=push_mapping_options,
-        master_option_attributes=master_option_attributes,
-        master_option_titles=master_option_titles,
         decoration_options=decoration_options,
         storefront_config=storefront_config,
     )
@@ -484,13 +453,12 @@ def _variant_sort_key(v: ProductVariant) -> tuple[int, str, str, str]:
 
 def _ops_product_type(product: Product) -> str:
     """Map our Product.product_type to the OPS setProduct `product_type`
-    (sale-type) String (AI-8).
+    (sale-type) String.
 
-    Apparel is sold from stock → "15" (Add to cart). Everything else (print /
-    custom) keeps "1" (Custom Design). OPS accepts a comma-separated list, but
-    a plain stock product needs only "15".
+    All products go to Print Products: "1,2,3" = Custom Design, Upload Centre,
+    Browse Design — matching the verified structure of product 600 on staging.
     """
-    return "15" if (product.product_type or "").strip().lower() == "apparel" else "1"
+    return "1,2,3"
 
 
 def _customer_prefix(customer: Customer, supplier: Supplier) -> str:
@@ -505,6 +473,14 @@ def _customer_prefix(customer: Customer, supplier: Supplier) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _desc_to_html(text: str) -> str:
+    """Convert newline-separated plain text description to an HTML list for OPS WYSIWYG editor."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if not lines:
+        return ""
+    return "<ul>" + "".join(f"<li>{l}</li>" for l in lines) + "</ul>"
+
+
 def _build_setProduct_step(
     ctx: _PushContext,
     push_mode: str,
@@ -512,6 +488,7 @@ def _build_setProduct_step(
     primary_image_url: Optional[str],
     enable_stock_management: str = "1",
     category_id_override: Optional[int] = None,
+    large_image_url: Optional[str] = None,
 ) -> OPSMutationStep:
     """setProduct is always step 1 (no more separate setProductCategory).
 
@@ -544,13 +521,19 @@ def _build_setProduct_step(
         # a duplicate in OPS instead of replacing the existing product.
         "main_sku": ctx.product.supplier_sku,
         "visible": 1,
+        # OPS has three description slots (verified against OPS Postman docs):
+        #   product_description    → "Short Description" (listings / cards)
+        #   long_description       → "Long Description"  (PDP body)
+        #   long_description_two   → "Long Description 2" (PDP secondary tab)
+        # Supplier feeds (e.g. SanMar PromoStandards) give us a single blob of
+        # marketing copy, so we mirror it into both Short and Long. Without
+        # long_description, the OPS storefront PDP shows an empty description tab
+        # even though Short is populated.
         "product_description": ctx.product.description or "",
+        "long_description": ctx.product.description or "",
         # ── Required OPS ProductInput fields for all products ──────────
         # Phase 1 audit findings (June 2026):
         #   * predefined_product_type — silent reject when null
-        #     0 = Print Products (default), 1 = Ready to Buy.
-        #     Driven by customer.ops_predefined_product_type (migration 0014).
-        #     Hardcoding "1" here caused K420 to land in Ready To Buy — fixed.
         #   * price_defining_method — silent reject of "qty" string;
         #     OPS expects a numeric string. "1" = qty-based pricing
         #     (verified against working products on staging.visualgraphx)
@@ -570,9 +553,7 @@ def _build_setProduct_step(
         #     stock apparel product by mirroring a known-good LIVE product via
         #     productsDetails before flipping it (the collection template shows
         #     "3", but that's not a verified apparel-from-stock product).
-        "predefined_product_type": str(
-            getattr(ctx.customer, "ops_predefined_product_type", None) or 0
-        ),
+        "predefined_product_type": "0",
         "price_defining_method": "1",
         "measurement_unit_id": 1,
         "enable_stock_management": enable_stock_management,
@@ -605,14 +586,14 @@ def _build_setProduct_step(
         # Sending a full URL like "https://cdnm.sanmar.com/.../PC61.jpg" causes
         # OPS to double-prefix it into garbage. Strip to the filename only.
         #
-        # NOTE: this only fixes the URL format. The image file must still
-        # exist on OPS's CDN — currently it doesn't, because we have no
-        # upload pipeline to push the bytes (Phase 3 partial fix). Customers
-        # see a clean broken-image link instead of a malformed URL. Full fix
-        # requires either: (a) Christian opens OPS's CDN to fetch from
-        # SanMar's IP, or (b) we add a media upload step via OPS's REST
-        # upload endpoint (no GraphQL mutation exists for binary upload).
+        # `imagename` → Description page "Small Image" slot
+        # `product_desc_image` → "Large Image" slot
+        # OPS requires two distinct filenames; if we send the same file for
+        # both, it stores only the small image. Use large_image_url (a second
+        # product image) when available, otherwise fall back to primary.
         inp["imagename"] = primary_image_url.rsplit("/", 1)[-1]
+        large_url = large_image_url if large_image_url else primary_image_url
+        inp["product_desc_image"] = large_url.rsplit("/", 1)[-1]
     variables: dict[str, Any] = {"inputs": [inp]}
 
     return OPSMutationStep(
@@ -649,170 +630,83 @@ def _build_setProductSize_step(
     )
 
 
-def _extract_attribute_values(
-    variants: list[ProductVariant],
-) -> tuple[list[str], list[str]]:
-    """Pull unique apparel attribute values out of the flat variant list.
-
-    Apparel products from SanMar come as flat "Color/Size" combinations
-    (e.g. Black/S, Black/M, White/S). OPS's reference apparel model
-    (product 361 in visualgraphx staging) shows that EACH attribute value
-    is its own top-level `setAdditionalOption` row — not attributes under
-    a grouping option. So XS, S, M, L, XL... become 5 separate options.
-
-    Returns (colors, sizes) preserving sort_order. Colors first so the
-    UI renders Color choices above Size choices in the OPS storefront.
+def _build_setProductSize_titled(step_num: int, size_title: str) -> OPSMutationStep:
+    """One setProductSize for a physical size title (apparel color+size mode).
+    Creates a designer canvas entry keyed by size name (e.g. "S", "M", "XL"),
+    not by the full color+size combo.
     """
-    sorted_variants = sorted(variants, key=_variant_sort_key)
-
-    sizes: list[str] = []
-    seen_sizes: set[str] = set()
-    colors: list[str] = []
-    seen_colors: set[str] = set()
-    for v in sorted_variants:
-        size = (v.size or "").strip()
-        if size and size not in seen_sizes:
-            seen_sizes.add(size)
-            sizes.append(size)
-        color = (v.color or "").strip()
-        if color and color not in seen_colors:
-            seen_colors.add(color)
-            colors.append(color)
-
-    return colors, sizes
-
-
-def _build_apparel_option_group_step(
-    step_num: int, kind: str, title: str, sort_order: int
-) -> OPSMutationStep:
-    """Create one parent setAdditionalOption group for a Color or Size dimension.
-
-    Each apparel dimension (Color, Size) becomes a single top-level option group.
-    Actual values (Red, S, 2XL …) are added as setAdditionalOptionAttributes
-    children so that setProductsAttributePrice can attach per-attribute pricing.
-
-    Fields verified against the live OPS 81-op collection (2026-06-17):
-      - `multiplier` / `multiplier_type` do NOT exist on AdditionalOptionInput.
-        Per-size pricing is handled exclusively via setProductsAttributePrice.
-      - `apply_multiplication="1"` enables the OPS multiplication path for this
-        option group; the actual per-attribute price is set downstream.
-    """
-    key = re.sub(r"[^a-z0-9]+", "_", kind.lower()).strip("_") or "opt"
     return OPSMutationStep(
         step=step_num,
-        mutation="setAdditionalOption",
-        source_key=f"apparel_group:{kind}",
+        mutation="setProductSize",
+        source_key=f"size:{size_title}",
         variables={
             "inputs": [{
-                "prod_add_opt_id": 0,           # 0 = create; OPS upserts on option_key
                 "products_id": _placeholder(1, "products_id"),
-                "option_key": key,
-                "title": title,
-                "description": "",
-                "options_type": "textmp",
-                "price_calculate_type": "0",
-                "apply_multiplication": "1",
-                "applicable_for": "0",
-                "status": "1",
-                "required": "1",
-                "hire_designer_option": "0",
-                "size_id": 0,
-                "master_option_id": 0,
-                "sort_order": sort_order,
-                "delete": 0,
+                "size_title": size_title,
+                "visible": "1",
             }]
         },
         requires_response_from=[1],
     )
 
 
-def _build_apparel_option_attribute_step(
+def _build_setAdditionalOption_from_values(
     step_num: int,
-    parent_option_step: int,
-    kind: str,
-    value: str,
-    sort_order: int,
+    *,
+    option_key: str,
+    title: str,
+    sort_order: int = 0,
 ) -> OPSMutationStep:
-    """Create one attribute value under a parent apparel option group.
+    """Build a setAdditionalOption step from raw values (no ORM object).
 
-    Input fields verified against live OPS collection (setAdditionalOptionAttributes,
-    AdditionalOptionAttributesInput). Returns attribute_id which is required by
-    _build_apparel_attribute_price_step for per-size pricing.
-
-    `kind` ("color" / "size") is local — used only for source_key uniqueness.
+    price_calculate_type="1" (Fixed) is required by OPS — omitting it causes
+    OPS_REJECTED: Price Calculation Type is required. "1" = fixed price adder,
+    which is correct for colour/size selectors that carry no extra cost.
     """
-    safe_key = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "val"
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setAdditionalOption",
+        source_key=f"option_key:{option_key}",
+        variables={
+            "inputs": [{
+                "products_id": _placeholder(1, "products_id"),
+                "option_key": option_key,
+                "title": title,
+                "options_type": "combo",
+                "sort_order": sort_order,
+                "price_calculate_type": "1",
+                "hire_designer_option": "0",
+                "status": "1",
+            }]
+        },
+        requires_response_from=[1],
+    )
+
+
+def _build_setAdditionalOptionAttribute_from_values(
+    step_num: int,
+    option_step: int,
+    *,
+    attribute_key: str,
+    label: str,
+    sort_order: int = 0,
+) -> OPSMutationStep:
+    """Build a setAdditionalOptionAttributes step from raw values (no ORM object)."""
     return OPSMutationStep(
         step=step_num,
         mutation="setAdditionalOptionAttributes",
-        source_key=f"apparel_attr:{kind}/{safe_key}",
+        source_key=f"attribute_key:color/{attribute_key}",
         variables={
             "inputs": [{
-                "attribute_id": 0,              # 0 = create
-                "prod_add_opt_id": _placeholder(parent_option_step, "prod_add_opt_id"),
-                "label": value,
-                "attribute_key": safe_key,
-                "status": "1",
-                "sort_order": sort_order,
-                "setup_cost": 0,
-                "default_attribute": "0",
-                "delete": 0,
+                "prod_add_opt_id": _placeholder(option_step, "prod_add_opt_id"),
+                "attribute_key": attribute_key,
+                "label": label,
+                "setup_cost": 0.0,
+                "multiplier": 1.0,
             }]
         },
-        requires_response_from=[parent_option_step],
+        requires_response_from=[option_step],
     )
-
-
-def _build_apparel_attribute_price_step(
-    step_num: int,
-    attribute_step: int,
-    variant_sku: str,
-    base_price: float,
-    final_price: float,
-) -> OPSMutationStep:
-    """Set the per-size sell price for one apparel size attribute.
-
-    Uses setProductsAttributePrice. `attribute_id` from setAdditionalOptionAttributes.
-    `size_from=0, size_to=0` is the OPS "apply to all sizes" sentinel (verified
-    against the OPS n8n node default schema). OPS rejects non-zero size_to values
-    that reference sizes without configured print dimensions (e.g. placeholder
-    "Default"), but 0/0 unconditionally applies the attribute price.
-
-    This replaces the invalid `multiplier`/`multiplier_type` approach: those
-    fields do not exist on AdditionalOptionInput per the live OPS schema.
-    """
-    return OPSMutationStep(
-        step=step_num,
-        mutation="setProductsAttributePrice",
-        source_key=f"attr_price:size/{variant_sku}",
-        variables={
-            "inputs": [{
-                "attribute_id": _placeholder(attribute_step, "attribute_id"),
-                "size_from": 0,
-                "size_to": 0,
-                "attributes_price": final_price,
-                "vendor_price": base_price,
-                "delete": 0,
-            }]
-        },
-        requires_response_from=[attribute_step],
-    )
-
-
-# Standard apparel volume-discount curve, applied to every push since SanMar
-# does NOT return quantity tiers via getConfigurationAndPricing — they only
-# give a single flat per-variant wholesale price. Mirrors reference product
-# 361's 6-row Price table shape (1-11, 12-50, 51-500, 501-1000, 1001-5000,
-# 5001-9999) with a typical apparel discount progression. Adjust per-customer
-# via markup rules in a later phase if needed.
-APPAREL_VOLUME_TIERS: tuple[tuple[int, int, float], ...] = (
-    (1, 11, 1.00),
-    (12, 50, 0.98),
-    (51, 500, 0.96),
-    (501, 1000, 0.94),
-    (1001, 5000, 0.92),
-    (5001, 9999, 0.90),
-)
 
 
 def _build_setProductPrice_step(
@@ -822,9 +716,8 @@ def _build_setProductPrice_step(
     base_price: float,
     final_price: float,
 ) -> OPSMutationStep:
-    """One setProductPrice per variant. Spec contract for beta:
-    qty=1, qty_to=999999, single visible price row. Depends on the
-    matching setProductSize step for `size_id`."""
+    """One setProductPrice per variant — sends the supplier's actual price
+    as-is (qty=1, qty_to=999999). No synthetic volume tiers."""
     return OPSMutationStep(
         step=step_num,
         mutation="setProductPrice",
@@ -832,23 +725,13 @@ def _build_setProductPrice_step(
         variables={
             "inputs": [{
                 "products_id": _placeholder(1, "products_id"),
-                # OPS returns `id` from setProductSize, normalized to `size_id` in gateway.
                 "size_id": _placeholder(size_step, "size_id"),
                 "qty": 1,
                 "qty_to": 999999,
                 "price": final_price,
                 "vendor_price": base_price,
-                "visible": "1",  # OPS ProductPriceInput.visible is String
-                # user_type_id is required by OPS. Without it OPS returns
-                # result:true with id:null and silently drops the price.
-                # "1" = default/all-users user type (matches existing OPS
-                # products). Verified live against staging.visualgraphx
-                # (a direct setProductPrice without this field returns
-                # id:null; adding "1" returns a real id).
+                "visible": "1",
                 "user_type_id": "1",
-                # price_defining_method MUST be set on each price too — not
-                # just on the parent product. OPS validation message:
-                # "Price Defining method is required."
                 "price_defining_method": "1",
             }]
         },
@@ -856,63 +739,25 @@ def _build_setProductPrice_step(
     )
 
 
-def _build_master_option_create_step(
-    step_num: int, mapping: PushMappingOption, title: str, sort_order: int
-) -> OPSMutationStep:
-    """MASTER_OPTION_ATTACH pre-step — creates product_additional_option row with
-    hire_designer_option='0' so the following setAssignOptions UPDATE bypasses the
-    OPS staging bug where setAssignOptions INSERT fails with a hire_designer_option
-    NOT NULL constraint (the GraphQL schema omits the field so it can't be sent
-    directly; the UPDATE path leaves the value from this INSERT intact)."""
-    return OPSMutationStep(
-        step=step_num,
-        mutation="setAdditionalOption",
-        source_key=f"master_option_create:{mapping.source_option_key}",
-        variables={
-            "inputs": [{
-                "prod_add_opt_id": 0,
-                "products_id": _placeholder(1, "products_id"),
-                "master_option_id": mapping.target_ops_option_id,
-                "title": title,
-                "options_type": "drop_down",
-                "hire_designer_option": "0",
-                "price_calculate_type": "0",
-                "sort_order": sort_order,
-                "status": "1",
-                "display_in_calculator": "1",
-            }]
-        },
-        requires_response_from=[1],
-    )
-
-
 def _build_setAssignOptions_step(
-    step_num: int, create_step: int, mapping: PushMappingOption, attribute_ids: list[int]
+    step_num: int, mapping: PushMappingOption
 ) -> OPSMutationStep:
-    """MASTER_OPTION_ATTACH assign step — UPDATE mode using prod_add_opt_id from
-    the preceding _build_master_option_create_step.
-
-    OPS requires attribute_ids — array of objects each with "attrid" key (NOT
-    "master_attribute_id"). Confirmed from live Postman collection 2026-06-17.
-    product_option_id causes OPS to UPDATE the existing row rather than INSERT,
-    which avoids the hire_designer_option NOT NULL bug on the INSERT path."""
+    """master_option_attach mode — one setAssignOptions per mapping row."""
     return OPSMutationStep(
         step=step_num,
         mutation="setAssignOptions",
         source_key=(
-            f"master_option_assign:{mapping.source_option_key}"
+            f"option_key:{mapping.source_option_key}"
             + (f"/{mapping.source_attribute_key}" if mapping.source_attribute_key else "")
         ),
         variables={
             "inputs": [{
-                "product_option_id": _placeholder(create_step, "prod_add_opt_id"),
                 "products_id": _placeholder(1, "products_id"),
                 "master_option_id": mapping.target_ops_option_id,
                 "sort_order": getattr(mapping, "sort_order", 0) or 0,
-                "attribute_ids": [{"attrid": aid} for aid in attribute_ids],
             }]
         },
-        requires_response_from=[1, create_step],
+        requires_response_from=[1],
     )
 
 
@@ -932,6 +777,9 @@ def _build_setAdditionalOption_step(
                 "title": opt.title or opt.option_key,
                 "options_type": getattr(opt, "options_type", "combo"),
                 "sort_order": opt.sort_order or 0,
+                "price_calculate_type": "1",
+                "hire_designer_option": "0",
+                "status": "1",
             }]
         },
         requires_response_from=[1],
@@ -969,8 +817,7 @@ def _build_setProductSku_step(
     variant_sku: str,
     *,
     sku_type: str,
-    option_step: Optional[int] = None,
-    attribute_step: Optional[int] = None,
+    option_attr_pairs: Optional[list[tuple[int, int]]] = None,
 ) -> OPSMutationStep:
     """Assign a per-variant SKU to the OPS product (setProductSku).
 
@@ -981,10 +828,11 @@ def _build_setProductSku_step(
 
     ``size_wise`` — the variant is keyed on size_id alone (every current SanMar
     product: colors aren't modeled as OPS options yet, each variant is a size).
-    ``size_option_wise`` — the variant also keys on a local option-attribute, so
-    prod_add_opt_ids / attribute_ids are placeholders resolved to the OPS ids at
-    execute time. setProductSku declares those two as String!, so the gateway
-    stringifies the resolved ints.
+    ``size_option_wise`` — the variant keys on one or more (option, attribute)
+    pairs (e.g. Color + Size). ``option_attr_pairs`` is a list of
+    (option_step, attribute_step) tuples; placeholders are resolved to OPS ids
+    and comma-joined by the gateway into prod_add_opt_ids / attribute_ids
+    strings (setProductSku declares both as String!).
     """
     inp: dict[str, Any] = {
         "products_id": _placeholder(1, "products_id"),
@@ -994,10 +842,15 @@ def _build_setProductSku_step(
         "sku_type": sku_type,
     }
     requires = [1, size_step]
-    if sku_type == "size_option_wise" and option_step is not None and attribute_step is not None:
-        inp["prod_add_opt_ids"] = _placeholder(option_step, "prod_add_opt_id")
-        inp["attribute_ids"] = _placeholder(attribute_step, "attribute_id")
-        requires += [option_step, attribute_step]
+    if sku_type == "size_option_wise" and option_attr_pairs:
+        inp["prod_add_opt_ids"] = [
+            _placeholder(opt_step, "prod_add_opt_id") for opt_step, _ in option_attr_pairs
+        ]
+        inp["attribute_ids"] = [
+            _placeholder(attr_step, "attribute_id") for _, attr_step in option_attr_pairs
+        ]
+        for opt_step, attr_step in option_attr_pairs:
+            requires += [opt_step, attr_step]
     return OPSMutationStep(
         step=step_num,
         mutation="setProductSku",
@@ -1042,7 +895,10 @@ def _build_updateProductStock_step(
 
 
 def _build_setProductsImageGallery_step(
-    step_num: int, ctx: _PushContext, products_id_step: int = 1
+    step_num: int,
+    ctx: _PushContext,
+    products_id_step: int = 1,
+    color_attr_steps: Optional[dict[str, tuple[int, int]]] = None,
 ) -> Optional[OPSMutationStep]:
     """One setProductsImageGallery for the whole product.
 
@@ -1053,13 +909,24 @@ def _build_setProductsImageGallery_step(
     returns that id as a string but this mutation needs a top-level Int!, so
     the gateway coerces it at execute time.
 
+    ``color_attr_steps`` (apparel mode only): mapping of lowercased color name
+    → (color_option_step, color_attribute_step). When an image carries a color
+    matching one of these keys, the row is tagged with ``option_id`` /
+    ``attribute_id`` (placeholders the gateway resolves to OPS ids), so the
+    OPS storefront swaps the main image when the customer picks that color.
+
     Returns None when the product has no usable image URLs (nothing to push).
     """
     if not ctx.images:
         return None
     title = ctx.product.product_name or ctx.product.supplier_sku
-    image_arr = [
-        {
+    color_attr_steps = color_attr_steps or {}
+    image_arr: list[dict[str, Any]] = []
+    extra_requires: set[int] = set()
+    for idx, img in enumerate(ctx.images):
+        if not img.url:
+            continue
+        row: dict[str, Any] = {
             "products_image_gallery_id": 0,  # 0 = create
             "delete": 0,
             "title": title,
@@ -1067,9 +934,14 @@ def _build_setProductsImageGallery_step(
             "sort_order": (img.sort_order or idx),
             "status": "1",
         }
-        for idx, img in enumerate(ctx.images)
-        if img.url
-    ]
+        color_key = (img.color or "").strip().lower()
+        pair = color_attr_steps.get(color_key) if color_key else None
+        if pair:
+            opt_step, attr_step = pair
+            row["option_id"] = _placeholder(opt_step, "prod_add_opt_id")
+            row["attribute_id"] = _placeholder(attr_step, "attribute_id")
+            extra_requires.update((opt_step, attr_step))
+        image_arr.append(row)
     if not image_arr:
         return None
     return OPSMutationStep(
@@ -1081,7 +953,7 @@ def _build_setProductsImageGallery_step(
             "optimizeimg": 1,
             "input": {"image_arr": image_arr},
         },
-        requires_response_from=[products_id_step],
+        requires_response_from=sorted({products_id_step, *extra_requires}),
     )
 
 
@@ -1186,159 +1058,246 @@ def _synthesize_payload(
         push_mode = "update"
 
     # ---- Image policy (beta = single primary front image) ----
+    # Selection order: `primary` (the authoritative catalog hero shot) →
+    # `front` (any front-facing image, but includes swatches & model shots)
+    # → first available. Without the `primary` preference, F236 et al. land
+    # the color-swatch (e.g. F236sw.jpg) as the small_image because it sorts
+    # first among the `front`-typed rows.
     primary_image_url: Optional[str] = None
     image_warnings: list[str] = []
+    primary_images = [img for img in ctx.images if (img.image_type or "") == "primary"]
     front_images = [img for img in ctx.images if (img.image_type or "front") == "front"]
-    if front_images:
+    if primary_images:
+        primary_image_url = primary_images[0].url
+    elif front_images:
         primary_image_url = front_images[0].url
-        if len(ctx.images) > 1:
-            image_warnings.append(
-                f"Beta sends only the primary front image. "
-                f"{len(ctx.images) - 1} additional image(s) ignored."
-            )
     elif ctx.images:
         primary_image_url = ctx.images[0].url
         image_warnings.append(
             "No front-type image found; using first available image."
         )
+    # Large image: pick the first image that differs from primary_image_url so
+    # OPS stores distinct filenames in the Small and Large image slots.
+    large_image_url: Optional[str] = None
+    for _img in ctx.images:
+        if _img.url and _img.url != primary_image_url:
+            large_image_url = _img.url
+            break
+    if not large_image_url and ctx.product.image_url and ctx.product.image_url != primary_image_url:
+        large_image_url = ctx.product.image_url
 
-    # ---- Product-level SKU/stock mode (AI-3) ----
-    # OPS allows ONE sku method per product, and setProduct.enable_stock_management
-    # MUST align with setProductSku.sku_type or the SKUs never register for stock
-    # ("Invalid Product SKU"):
-    #     1 (Only Size)             ↔ size_wise
-    #     2 (Size with Product Opt) ↔ size_option_wise
-    # We go size_option_wise only when we're creating local options AND EVERY
-    # color-bearing variant maps to one of their attributes — that guarantees no
-    # mode-mixing and that every SKU input carries its (prod_add_opt_ids,
-    # attribute_ids). Anything else stays size_wise (the current SanMar reality).
-    local_attr_values: set[str] = set()
-    if option_strategy is OptionStrategy.PRODUCT_LOCAL_OPTION_CREATE:
-        for opt in ctx.options:
-            for attr in opt.attributes:
-                for val in (attr.title, attr.attribute_key):
-                    if val:
-                        local_attr_values.add(val.strip().lower())
-    color_variants = [v for v in ordered_variants if (v.color or "").strip()]
-    all_colors_map = bool(local_attr_values) and bool(color_variants) and all(
-        (v.color or "").strip().lower() in local_attr_values for v in color_variants
-    )
-    sku_type = "size_option_wise" if all_colors_map else "size_wise"
-    enable_stock_management = "2" if sku_type == "size_option_wise" else "1"
+    if primary_image_url and len(ctx.images) > 1:
+        image_warnings.append(
+            f"Beta sends only the primary front image. "
+            f"{len(ctx.images) - 1} additional image(s) ignored."
+        )
+
+    # ---- Detect apparel (color+size) vs size-only/print mode ----
+    # When variants carry colors (apparel), OPS Additional Options must represent
+    # Color and Size separately. Previously the code created one setProductSize per
+    # color+size COMBO (e.g. "Blueberry / 6XL") which caused every combo to appear
+    # as a designer canvas template instead of appearing in Additional Options.
+    has_colors = any((v.color or "").strip() for v in ordered_variants)
 
     # ---- Compose the mutation plan ----
     plan: list[OPSMutationStep] = []
-
-    # Step 1: setProduct
-    plan.append(_build_setProduct_step(
-        ctx, push_mode, existing_ops_id, primary_image_url,
-        enable_stock_management=enable_stock_management,
-        category_id_override=category_id_override,
-    ))
-
-    # Steps 2..1+N: setProductSize × N
     next_step = 2
     size_step_by_sku: dict[str, int] = {}
-    for v, price in zip(ordered_variants, computed_prices):
-        plan.append(_build_setProductSize_step(next_step, v, price.variant_sku))
-        size_step_by_sku[price.variant_sku] = next_step
-        next_step += 1
-
-    # Steps 2+N..1+2N: setProductPrice × N (depends on matching size step)
-    for price in computed_prices:
-        size_step = size_step_by_sku[price.variant_sku]
-        plan.append(
-            _build_setProductPrice_step(
-                next_step, size_step, price.variant_sku, price.base_price, price.final_price
-            )
-        )
-        next_step += 1
-
-    # Option steps — strategy-dependent. Record per-attribute step numbers in
-    # local-create mode so the optional setProductSku stage below can reference
-    # each (option, attribute) OPS id via placeholder.
-    # value (lowercased color/attr label) -> (option_step, attribute_step)
     attr_step_by_value: dict[str, tuple[int, int]] = {}
-    if option_strategy is OptionStrategy.MASTER_OPTION_ATTACH:
-        for i, mapping in enumerate(ctx.push_mapping_options):
-            if mapping.target_ops_option_id is None:
-                # Preflight should have caught this; skip defensively.
-                continue
-            mo_key = mapping.source_master_option_id or mapping.target_ops_option_id
-            attr_ids = ctx.master_option_attributes.get(mo_key, [])
-            title = ctx.master_option_titles.get(mo_key) or (mapping.source_option_key or "Option")
-            create_step = next_step
-            plan.append(_build_master_option_create_step(create_step, mapping, title, sort_order=i))
+
+    if has_colors:
+        # Apparel mode: a SINGLE "Default" Designer canvas, both Color and Size
+        # exposed as Additional Option dropdowns. OPS requires at least one
+        # setProductSize entry for the storefront UI to render at all, so we
+        # send one "Default" canvas; the physical sizes (S/M/L/XL/...) live as
+        # Size attribute values instead, matching the apparel pattern where the
+        # customer picks both dropdowns at checkout.
+        # enable_stock_management=0 (None): decorated print apparel is made-to-order,
+        # no stock tracking — avoids "Invalid Product SKU or initial stock not added!"
+        # errors from updateProductStock for SKUs OPS hasn't initialized stock for.
+        enable_stock_management = "0"
+        sku_type = "size_option_wise"
+
+        plan.append(_build_setProduct_step(
+            ctx, push_mode, existing_ops_id, primary_image_url,
+            enable_stock_management=enable_stock_management,
+            category_id_override=category_id_override,
+            large_image_url=large_image_url,
+        ))
+
+        # Extract unique physical sizes in first-appearance order
+        seen_s: dict[str, None] = {}
+        for v in ordered_variants:
+            s = (v.size or "").strip()
+            if s:
+                seen_s[s] = None
+        unique_sizes = list(seen_s.keys()) or ["Default"]
+
+        # Extract unique colors in first-appearance order
+        seen_c: dict[str, None] = {}
+        for v in ordered_variants:
+            c = (v.color or "").strip()
+            if c:
+                seen_c[c] = None
+        unique_colors = list(seen_c.keys())
+
+        # ONE setProductSize "Default" — OPS requires at least one canvas to
+        # render the storefront purchase panel. The user picks size via the
+        # Size Additional Option below, not via the canvas selector.
+        default_size_step = next_step
+        plan.append(_build_setProductSize_titled(next_step, "Default"))
+        next_step += 1
+
+        # All variant SKUs key on the single "Default" canvas
+        for v, price in zip(ordered_variants, computed_prices):
+            size_step_by_sku[price.variant_sku] = default_size_step
+
+        # ONE setProductPrice for the Default canvas — supplier's actual price.
+        if computed_prices:
+            base_price_obj = computed_prices[0]
+            plan.append(_build_setProductPrice_step(
+                next_step, default_size_step,
+                base_price_obj.variant_sku,
+                base_price_obj.base_price, base_price_obj.final_price,
+            ))
             next_step += 1
-            plan.append(_build_setAssignOptions_step(next_step, create_step, mapping, attr_ids))
+
+        # Color Additional Option + one attribute per unique color
+        color_option_step = next_step
+        plan.append(_build_setAdditionalOption_from_values(
+            next_step, option_key="color", title="Color", sort_order=0,
+        ))
+        next_step += 1
+        for i, color_val in enumerate(unique_colors):
+            attr_step = next_step
+            plan.append(_build_setAdditionalOptionAttribute_from_values(
+                next_step, color_option_step,
+                attribute_key=color_val.lower().replace(" ", "_"),
+                label=color_val, sort_order=i,
+            ))
+            attr_step_by_value[color_val.lower()] = (color_option_step, attr_step)
             next_step += 1
-    else:  # PRODUCT_LOCAL_OPTION_CREATE
-        for opt in ctx.options:
-            option_step = next_step
-            plan.append(_build_setAdditionalOption_step(option_step, opt))
+
+        # Size Additional Option + one attribute per unique physical size
+        size_option_step = next_step
+        plan.append(_build_setAdditionalOption_from_values(
+            next_step, option_key="size", title="Size", sort_order=1,
+        ))
+        next_step += 1
+        size_attr_step_by_value: dict[str, tuple[int, int]] = {}
+        for i, size_val in enumerate(unique_sizes):
+            attr_step = next_step
+            plan.append(_build_setAdditionalOptionAttribute_from_values(
+                next_step, size_option_step,
+                attribute_key=size_val.lower().replace(" ", "_"),
+                label=size_val, sort_order=i,
+            ))
+            size_attr_step_by_value[size_val.lower()] = (size_option_step, attr_step)
             next_step += 1
-            for attr in opt.attributes:
-                attr_step = next_step
-                plan.append(
-                    _build_setAdditionalOptionAttributes_step(
-                        attr_step, option_step, opt.option_key, attr
-                    )
-                )
-                for val in (attr.title, attr.attribute_key):
-                    if val:
-                        attr_step_by_value.setdefault(val.strip().lower(), (option_step, attr_step))
+
+    else:
+        # Size-only / print mode: one setProductSize per variant (original behaviour)
+        sku_type = "size_wise"
+        enable_stock_management = "0"
+
+        plan.append(_build_setProduct_step(
+            ctx, push_mode, existing_ops_id, primary_image_url,
+            enable_stock_management=enable_stock_management,
+            category_id_override=category_id_override,
+            large_image_url=large_image_url,
+        ))
+
+        for v, price in zip(ordered_variants, computed_prices):
+            plan.append(_build_setProductSize_step(next_step, v, price.variant_sku))
+            size_step_by_sku[price.variant_sku] = next_step
+            next_step += 1
+
+        for price in computed_prices:
+            size_step = size_step_by_sku[price.variant_sku]
+            plan.append(_build_setProductPrice_step(
+                next_step, size_step, price.variant_sku,
+                price.base_price, price.final_price,
+            ))
+            next_step += 1
+
+        # Option steps — strategy-dependent (only applies in size-only/print mode)
+        if option_strategy is OptionStrategy.MASTER_OPTION_ATTACH:
+            for mapping in ctx.push_mapping_options:
+                if mapping.target_ops_option_id is None:
+                    continue
+                plan.append(_build_setAssignOptions_step(next_step, mapping))
                 next_step += 1
+        else:  # PRODUCT_LOCAL_OPTION_CREATE
+            for opt in ctx.options:
+                option_step = next_step
+                plan.append(_build_setAdditionalOption_step(option_step, opt))
+                next_step += 1
+                for attr in opt.attributes:
+                    attr_step = next_step
+                    plan.append(_build_setAdditionalOptionAttributes_step(
+                        attr_step, option_step, opt.option_key, attr
+                    ))
+                    for val in (attr.title, attr.attribute_key):
+                        if val:
+                            attr_step_by_value.setdefault(val.strip().lower(), (option_step, attr_step))
+                    next_step += 1
 
     import os as _os
 
     # Per-variant SKU assignment via setProductSku.
-    # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_SKU=1). Maps each
-    # variant's supplier SKU to its OPS size_id — and, when the variant's color
-    # matches a local option-attribute, to that (prod_add_opt_id, attribute_id)
-    # via size_option_wise. Placed after option/attribute steps so their ids are
-    # resolvable, and before stock so inventory stays the final stage.
-    if _os.getenv("OPS_PUSH_INCLUDE_SKU", "0") == "1":
+    # Always included for color products (size_option_wise) — OPS can't track
+    # apparel stock without SKUs keyed on (size_id, color attribute). For size-only
+    # products, opt in with OPS_PUSH_INCLUDE_SKU=1.
+    if has_colors or _os.getenv("OPS_PUSH_INCLUDE_SKU", "0") == "1":
         for v, price in zip(ordered_variants, computed_prices):
             size_step = size_step_by_sku[price.variant_sku]
             # sku_type is the product-level decision above; option/attribute
-            # placeholders are only meaningful in size_option_wise mode.
-            opt_attr = (
-                attr_step_by_value.get((v.color or "").strip().lower())
-                if sku_type == "size_option_wise" and v.color
-                else None
-            )
+            # placeholders are only meaningful in size_option_wise mode. In
+            # apparel mode the variant maps to BOTH Color and Size additional-
+            # option attributes — comma-joined by the gateway at execute time.
+            pairs: list[tuple[int, int]] = []
+            if sku_type == "size_option_wise":
+                color_pair = (
+                    attr_step_by_value.get((v.color or "").strip().lower())
+                    if v.color else None
+                )
+                if color_pair:
+                    pairs.append(color_pair)
+                if has_colors:
+                    size_pair = size_attr_step_by_value.get((v.size or "").strip().lower())
+                    if size_pair:
+                        pairs.append(size_pair)
             plan.append(
                 _build_setProductSku_step(
                     next_step,
                     size_step,
                     price.variant_sku,
                     sku_type=sku_type,
-                    option_step=opt_attr[0] if opt_attr else None,
-                    attribute_step=opt_attr[1] if opt_attr else None,
+                    option_attr_pairs=pairs or None,
                 )
             )
             next_step += 1
 
-    # Image gallery — pushes product images via setProductsImageGallery.
-    # DEFERRED by default (opt in with OPS_PUSH_INCLUDE_IMAGES=1): OPS does NOT
-    # fetch external URLs — it treats `products_large_image_name` as a filename
-    # inside its own media library and prepends its CDN path, so passing a
-    # supplier/CDN URL produces a broken path (verified via
-    # scripts/ops_image_readback.py on #547) and pollutes the gallery with dead
-    # rows. The step is wired and ready; enable it once images are uploaded into
-    # OPS media and we pass bare OPS filenames. Placed before stock so inventory
-    # stays the final step (Rev 1 contract). Best-effort/warn-only in the gateway.
-    if _os.getenv("OPS_PUSH_INCLUDE_IMAGES", "0") == "1":
-        gallery_step = _build_setProductsImageGallery_step(next_step, ctx, products_id_step=1)
-        if gallery_step is not None:
-            plan.append(gallery_step)
-            next_step += 1
+    # Image gallery — pushes product images via setProductsImageGallery with
+    # optimizeimg=1. OPS fetches and optimizes the images server-side from the
+    # full supplier URLs (verified live against staging, scripts/ops_image_spike.py).
+    # Always included when the product has images.
+    # In apparel mode, hand the gallery step the Color attr-step map so each
+    # color-tagged image gets option_id/attribute_id placeholders — OPS swaps
+    # the storefront hero image when the customer picks that color.
+    gallery_step = _build_setProductsImageGallery_step(
+        next_step, ctx, products_id_step=1,
+        color_attr_steps=(attr_step_by_value if has_colors else None),
+    )
+    if gallery_step is not None:
+        plan.append(gallery_step)
+        next_step += 1
 
-    # Final N steps: updateProductStock × N (action=Reset, by product_sku —
-    # see _build_updateProductStock_step). Identifies each variant by the SKU
-    # setProductSku assigned, so it relies on the setProductSku stage above.
-    # Deferred by default: opt in with OPS_PUSH_INCLUDE_STOCK=1.
-    if _os.getenv("OPS_PUSH_INCLUDE_STOCK", "0") == "1":
+    # Final N steps: updateProductStock × N (action=Reset, by product_sku).
+    # Skipped when enable_stock_management="0" (decorated print apparel is
+    # made-to-order, no stock tracking) — OPS would reject these with
+    # "Invalid Product SKU or initial stock not added!" anyway.
+    if enable_stock_management != "0" and _os.getenv("OPS_PUSH_INCLUDE_STOCK", "0") == "1":
         for v, price in zip(ordered_variants, computed_prices):
             plan.append(
                 _build_updateProductStock_step(

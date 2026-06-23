@@ -25,6 +25,7 @@ from modules.ops_client import mutations as _m
 from modules.ops_client.client import OpsAuth, OpsGraphQLClient, OpsResult
 from modules.ops_client.fake import FakeOpsClient
 from modules.ops_config.models import OpsCategoryMapping
+from modules.ops_push.image_uploader import upload_gallery_image, upload_product_image
 from modules.ops_push.payload_builder import build_push_payload, compute_payload_hash
 from modules.ops_push.preflight import run_preflight
 from modules.ops_push.verify import verify_pushed_product
@@ -1055,6 +1056,13 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
             )
             plan = [step.model_dump(mode="json") for step in payload.plan]
 
+            _uploaded_product_images: dict[str, str] = {}
+            if product and not push_log.dry_run:
+                for _pi in (product.images or []):
+                    if _pi.url:
+                        _fname = _pi.url.rsplit("/", 1)[-1].split("?")[0]
+                        _uploaded_product_images[_fname] = _pi.url
+
             # ── Idempotent re-push: clear existing children before re-adding ──
             # On an UPDATE of a product that already exists in OPS, delete its
             # current options/sizes/gallery first so this push REPLACES them
@@ -1155,12 +1163,31 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     final_status = "partial_failure" if ops_product_id else "failed"
                     break
 
-                # setProductsImageGallery takes products_id as a top-level Int!
-                # arg; OPS returns the setProduct id as a string, which the
-                # GraphQL layer rejects for Int!. Coerce numeric strings to int.
-                # Also clear any existing gallery images first so re-pushes don't
-                # accumulate duplicates (each setProductsImageGallery with id=0
-                # creates a new entry; we must delete the old ones first).
+                if mutation == "setProduct" and not push_log.dry_run:
+                    _inputs = variables.get("inputs") or []
+                    for _inp in _inputs:
+                        # imagename → Small Image; product_desc_image → Large Image.
+                        # Cache by source filename so the same file isn't re-uploaded
+                        # twice, but different filenames each get their own upload.
+                        _img_upload_cache: dict[str, str] = {}
+                        for _field in ("imagename", "product_desc_image"):
+                            _imgname = _inp.get(_field, "")
+                            if not _imgname or _imgname.startswith("http"):
+                                continue
+                            if _imgname in _img_upload_cache:
+                                _inp[_field] = _img_upload_cache[_imgname]
+                                continue
+                            _src_url = _uploaded_product_images.get(_imgname)
+                            if not _src_url:
+                                continue
+                            try:
+                                _bare = await upload_product_image(_src_url)
+                                _img_upload_cache[_imgname] = _bare
+                                _inp[_field] = _bare
+                                logger.info("product image s3 upload: %s -> %s", _src_url[:60], _bare)
+                            except Exception as _ue:
+                                logger.warning("product image s3 upload failed for %s: %s", _imgname, _ue)
+
                 if mutation == "setProductsImageGallery":
                     _pid = variables.get("products_id")
                     if isinstance(_pid, str) and _pid.lstrip("-").isdigit():
@@ -1187,6 +1214,20 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                             )
                             await client.execute(query=_del_mut, variables={"pid": _pid, "inp": {"image_arr": _del_arr}})
                             logger.info("gallery pre-clear: deleted %d existing images for product %d", len(_existing), _pid)
+
+                    if not push_log.dry_run:
+                        _inp = variables.get("input", {})
+                        _arr = _inp.get("image_arr", [])
+                        for _img_item in _arr:
+                            _url = _img_item.get("products_large_image_name", "")
+                            if _url and _url.startswith("http"):
+                                try:
+                                    _bare = await upload_gallery_image(_url)
+                                    _img_item["products_large_image_name"] = _bare
+                                    logger.info("gallery s3 upload: %s -> %s", _url[:60], _bare)
+                                except Exception as _ue:
+                                    logger.warning("gallery s3 upload failed for %s: %s", _url[:60], _ue)
+                        variables = dict(variables, optimizeimg=0)
 
                 # setProductSku: prod_add_opt_ids / attribute_ids are String! in
                 # the OPS schema, but placeholders resolve them to ints (the
@@ -1663,7 +1704,16 @@ def _resolve_placeholders(value: Any, step_responses: dict[int, dict]) -> Any:
             raise ValueError(
                 f"placeholder {value!r}: step {step_num} response missing field {field!r}"
             )
-        return resp[field]
+        resolved = resp[field]
+        # OPS returns IDs as strings (e.g. "8513") but downstream mutations
+        # declare them as Int!. Coerce numeric strings to int so GraphQL
+        # doesn't reject them as "non-integer value".
+        if isinstance(resolved, str):
+            try:
+                return int(resolved)
+            except ValueError:
+                pass
+        return resolved
     if isinstance(value, dict):
         return {k: _resolve_placeholders(v, step_responses) for k, v in value.items()}
     if isinstance(value, list):
