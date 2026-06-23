@@ -67,6 +67,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - OPS_PUSH_CONCURRENCY=${OPS_PUSH_CONCURRENCY:-4}
       - OPS_PUSH_JOB_TIMEOUT_SECS=${OPS_PUSH_JOB_TIMEOUT_SECS:-300}
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
     volumes:
       - ./backend:/app
     depends_on:

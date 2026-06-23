@@ -38,6 +38,15 @@ from typing import Any
 
 from arq.connections import RedisSettings
 
+# Configure root logger so gateway/ops_client INFO logs reach stdout in the
+# worker container. Without this, Python's default WARNING level silently
+# drops every ``logger.info(...)`` call, leaving the worker output looking
+# hung even when it's mid-push.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+
 
 log = logging.getLogger(__name__)
 
