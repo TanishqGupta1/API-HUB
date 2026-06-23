@@ -373,35 +373,24 @@ class TestMutationPlanOrder:
         ]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        # Step 1=setProduct, step 2=single "Default" size canvas
+        # Step 1=setProduct, step 2=single "Default" size canvas, step 3=price for it
         assert payload.plan[1].mutation == "setProductSize"
         assert payload.plan[1].variables["inputs"][0]["size_title"] == "Default"
-        # Steps 3-8: 6 setProductPrice rows (APPAREL_VOLUME_TIERS)
-        price_steps = [s for s in payload.plan if s.mutation == "setProductPrice"]
-        assert len(price_steps) == 6
-        assert price_steps[0].source_key.endswith("/qty1-11")
-        assert price_steps[5].source_key.endswith("/qty5001-9999")
-        # First step after prices is the Color Additional Option
-        first_option_idx = next(i for i, s in enumerate(payload.plan) if s.mutation == "setAdditionalOption")
-        assert first_option_idx == 8  # 1 setProduct + 1 size + 6 prices
+        assert payload.plan[2].mutation == "setProductPrice"
+        # Step 4 is the Color Additional Option (physical sizes are option attrs)
+        assert payload.plan[3].mutation == "setAdditionalOption"
 
     def test_prices_follow_sizes(self):
-        # Apparel mode: 6 APPAREL_VOLUME_TIERS price rows for the Default canvas.
+        # Apparel mode: ONE setProductPrice for the Default canvas (all variants share it).
         variants = [
             _variant("PC61-WHT-S", color="White", size="S"),
             _variant("PC61-WHT-M", color="White", size="M"),
         ]
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
-        # setProduct(0) → "Default" size(1) → 6 prices(2-7) → Color option(8)
-        price_steps = [s for s in payload.plan if s.mutation == "setProductPrice"]
-        assert len(price_steps) == 6
-        # Prices decrease with volume (factor applied)
-        prices = [s.variables["inputs"][0]["price"] for s in price_steps]
-        assert prices == sorted(prices, reverse=True)
-        # First option comes after prices
-        first_option_idx = next(i for i, s in enumerate(payload.plan) if s.mutation == "setAdditionalOption")
-        assert payload.plan[first_option_idx].mutation == "setAdditionalOption"
+        # setProduct(0) → "Default" size(1) → one price(2) → Color option(3)
+        assert payload.plan[2].mutation == "setProductPrice"
+        assert payload.plan[3].mutation == "setAdditionalOption"
 
     def test_inventory_is_last(self, monkeypatch):
         # enable_stock_management="0" for all products — no updateProductStock steps.
@@ -518,16 +507,12 @@ class TestMarkupApplied:
         assert price_step.variables["inputs"][0]["price"] == pytest.approx(15.00)
         assert price_step.variables["inputs"][0]["vendor_price"] == pytest.approx(10.00)
 
-    def test_apparel_volume_tiers(self):
+    def test_qty_to_is_999999(self):
         ctx = _ctx(variants=[_variant("PC61-WHT-M")])
         payload = _synthesize_payload(ctx)
-        price_steps = [s for s in payload.plan if s.mutation == "setProductPrice"]
-        assert len(price_steps) == 6
-        # First tier: qty 1-11, last tier: qty 5001-9999
-        assert price_steps[0].variables["inputs"][0]["qty"] == 1
-        assert price_steps[0].variables["inputs"][0]["qty_to"] == 11
-        assert price_steps[5].variables["inputs"][0]["qty"] == 5001
-        assert price_steps[5].variables["inputs"][0]["qty_to"] == 9999
+        price_step = next(s for s in payload.plan if s.mutation == "setProductPrice")
+        assert price_step.variables["inputs"][0]["qty"] == 1
+        assert price_step.variables["inputs"][0]["qty_to"] == 999999
 
     def test_no_markup_rule_passthrough(self):
         ctx = _ctx(
@@ -834,15 +819,15 @@ class TestPC61Smoke:
         ctx = _ctx(variants=variants)
         payload = _synthesize_payload(ctx)
 
-        # Apparel mode (has colors): one "Default" canvas (1), 6 volume tier prices (6),
+        # Apparel mode (has colors): one "Default" canvas (1), one price for it (1),
         # Color option (1) + 7 color attrs, Size option (1) + 8 size attrs,
         # setProductSku per variant (56), gallery (1).
         # enable_stock_management="0" → no updateProductStock steps.
-        # Total: 1 + 1 + 6 + 1 + 7 + 1 + 8 + 56 + 1 = 82
-        assert len(payload.plan) == 1 + 1 + 6 + 1 + 7 + 1 + 8 + 56 + 1
+        # Total: 1 + 1 + 1 + 1 + 7 + 1 + 8 + 56 + 1 = 77
+        assert len(payload.plan) == 1 + 1 + 1 + 1 + 7 + 1 + 8 + 56 + 1
         mutations = [s.mutation for s in payload.plan]
         assert mutations.count("setProductSize") == 1      # single "Default" canvas
-        assert mutations.count("setProductPrice") == 6     # 6 APPAREL_VOLUME_TIERS
+        assert mutations.count("setProductPrice") == 1     # one price for Default canvas
         assert mutations.count("setAdditionalOption") == 2  # Color + Size options
         assert mutations.count("setAdditionalOptionAttributes") == 7 + 8  # 7 colors + 8 sizes
         assert mutations.count("setProductSku") == 56
