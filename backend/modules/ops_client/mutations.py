@@ -203,7 +203,7 @@ mutation UpdateProductStock($stock_id: Int, $product_sku: String, $action: Updat
   updateProductStock(stock_id: $stock_id, product_sku: $product_sku, action: $action, input: $input) {
     result
     message
-    id
+    stock_id
     stock_quantity
   }
 }
