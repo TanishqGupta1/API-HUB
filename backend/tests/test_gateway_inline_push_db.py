@@ -173,7 +173,11 @@ async def test_inline_push_persists_variants_and_runs_mutation_sequence(client, 
     steps = push_log.step_results or []
     mutations = [s.get("mutation") for s in steps if isinstance(s, dict)]
     assert "setProduct" in mutations, f"setProduct not in sequence: {mutations}"
-    assert mutations.count("setProductSize") >= 2, f"expected >=2 setProductSize: {mutations}"
-    assert mutations.count("setProductPrice") >= 2, f"expected >=2 setProductPrice: {mutations}"
+    # Apparel mode (color+size variants) emits ONE "Default" setProductSize canvas
+    # with Color/Size exposed as Additional Options; per-variant identity is carried
+    # by setProductSku (one per variant). See the payload_builder apparel rewrite.
+    assert mutations.count("setProductSize") >= 1, f"expected >=1 setProductSize: {mutations}"
+    assert mutations.count("setProductSku") >= 2, f"expected >=2 setProductSku (one per variant): {mutations}"
+    assert mutations.count("setProductPrice") >= 1, f"expected >=1 setProductPrice: {mutations}"
     assert all(s.get("status") == "ok" for s in steps if isinstance(s, dict)), \
         f"some dry-run steps not ok: {steps}"
