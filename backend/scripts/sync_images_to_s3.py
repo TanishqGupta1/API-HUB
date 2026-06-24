@@ -13,12 +13,20 @@ Usage:
     python /app/scripts/sync_images_to_s3.py --sku L420 --dry-run
 """
 import argparse, asyncio, hashlib, io, mimetypes, os, sys
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 import httpx
 import boto3
 from PIL import Image
+from dotenv import load_dotenv
 
-sys.path.insert(0, '/app')
+# Support running from repo root or backend/ dir
+_here = Path(__file__).resolve()
+for _candidate in (_here.parent.parent.parent / ".env", _here.parent.parent / ".env"):
+    if _candidate.exists():
+        load_dotenv(_candidate)
+        break
+
+sys.path.insert(0, str(_here.parent.parent))
 
 S3_BUCKET    = os.environ.get("S3_PRODUCT_IMAGES_BUCKET", "ctmediaimg")
 S3_REGION    = os.environ.get("S3_REGION", "us-west-1")
@@ -129,7 +137,7 @@ async def main(sku: str, dry_run: bool) -> None:
                 thumb_data = _make_thumb(data)
                 _upload(s3, main_key, data)
                 _upload(s3, thumb_key, thumb_data)
-                print(f"         ✓ {len(data)//1024}KB + {len(thumb_data)//1024}KB thumb")
+                print(f"         OK {len(data)//1024}KB + {len(thumb_data)//1024}KB thumb")
             except Exception as e:
                 print(f"         ERR: {e}")
                 continue
@@ -146,7 +154,7 @@ async def main(sku: str, dry_run: bool) -> None:
             if img is primary_img:
                 product_key = f"ctmediaon_staging/images/product/{ops_name_jpg}"
                 _upload(s3, product_key, data)
-                print(f"         ✓ also uploaded to product/ path for setProduct imagename")
+                print(f"         OK also uploaded to product/ path for setProduct imagename")
 
             uploaded += 1
 
