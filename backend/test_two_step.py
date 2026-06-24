@@ -58,4 +58,7 @@ async def main():
         if isinstance(resp2, list): resp2 = resp2[0]
         print('Step2 setAssignOptions:', resp2)
 
-asyncio.run(main())
+# Guard import-time execution: ad-hoc OPS-staging investigation script (not a pytest test).
+# Without the guard, pytest collection runs main() against a live DB/OPS and crashes CI.
+if __name__ == "__main__":
+    asyncio.run(main())

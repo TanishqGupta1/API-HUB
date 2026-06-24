@@ -56,4 +56,8 @@ async def main():
             if isinstance(resp2, list): resp2 = resp2[0]
             print(f'  setAssignOptions:    result={resp2.get("result")} id={resp2.get("id")} msg={resp2.get("message")}')
 
-asyncio.run(main())
+# Guard import-time execution: this is an ad-hoc OPS-staging investigation script (not a
+# pytest test). Without the guard, pytest's collection imports it and runs main() against a
+# live DB/OPS — which crashes CI's empty DB ('NoneType' has no ops_base_url).
+if __name__ == "__main__":
+    asyncio.run(main())
