@@ -192,4 +192,4 @@ class WorkerSettings:
     # A truly-failed job lands in the configured dead-letter list (added
     # by P2.1.4) rather than disappearing silently.
     max_tries = 3
-    job_timeout = int(os.getenv("OPS_PUSH_JOB_TIMEOUT_SECS", "300"))  # 5 min default
+    job_timeout = int(os.getenv("OPS_PUSH_JOB_TIMEOUT_SECS", "900"))  # 15 min; gallery uploads run concurrently but boto3 puts are sync
