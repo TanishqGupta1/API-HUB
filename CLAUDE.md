@@ -10,6 +10,14 @@ Extracted connector fabric (ex-API-HUB). The Automate canvas + connector contrac
 > Do not make or defend an architecture decision from a doc in this repo. Escalate to the spec, not to local docs.
 <!-- /GRAPHX-CANONICAL-AUTHORITY -->
 
+<!-- GRAPHX-DOCS-FRESHNESS -->
+## ⚠️ Docs must stay current — verify against CODE, not docs
+
+**A stale doc is a DEFECT, not a reference.** Before asserting anything is built / unbuilt / done / migrated / blocked, **verify against the actual code** — `git ls-remote` for branches, the schema, the migrations, the tests — **never from a doc.** **Any change that alters build state, architecture, status, or a count MUST update the doc that describes it, in the same commit.** Reconciliation / status / audit docs are DATED + PROVISIONAL (carry date + commit SHA + repo) and are **STALE until re-verified**. Fix stale docs on sight with a dated note — `CORRECTED (YYYY-MM-DD): … verified against <repo>@<sha>`. Every count/status must be reproducible from the code. Full rule: `graphx-docs/_CANONICAL-AUTHORITY.md` -> "Docs must stay current."
+
+> **The code is truth; docs must chase it; a stale doc is a bug you fix, not a source you trust.**
+<!-- /GRAPHX-DOCS-FRESHNESS -->
+
 ---
 
 # CLAUDE.md / GEMINI.md
