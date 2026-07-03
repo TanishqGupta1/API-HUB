@@ -19,6 +19,7 @@ from modules.ops_push.gateway import (
     _EXISTING_OPTIONS_Q,
     _EXISTING_SIZES_Q,
     _clear_existing_children,
+    _verify_gallery_persisted,
 )
 
 _EXISTENCE_QUERIES = {_EXISTING_OPTIONS_Q, _EXISTING_SIZES_Q, _EXISTING_GALLERY_Q}
@@ -63,7 +64,9 @@ class _FakeRawClient:
 @pytest.mark.no_db
 @pytest.mark.asyncio
 async def test_clear_existing_children_issues_deletes_for_planned_types():
-    """camelCase plan → existing children are actually deleted, not silently skipped."""
+    """camelCase plan → existing options/sizes are actually deleted, not silently
+    skipped. Gallery is NOT cleared here (the gallery step owns clear-and-re-add
+    inline — see _clear_existing_children), even when the plan re-adds it."""
     client = _FakeRawClient({"options": [11, 22], "sizes": [101], "gallery": [7, 8, 9]})
     plan_mutations = {
         "setProduct",
@@ -74,12 +77,14 @@ async def test_clear_existing_children_issues_deletes_for_planned_types():
 
     deleted = await _clear_existing_children(client, 555, plan_mutations)
 
-    # Counts: 2 options + 1 size + 3 gallery images cleared.
-    assert deleted == {"options": 2, "sizes": 1, "gallery": 3}
+    # Counts: 2 options + 1 size cleared; gallery deliberately left to the
+    # inline gallery step, so 0 here.
+    assert deleted == {"options": 2, "sizes": 1, "gallery": 0}
 
-    # Deletes were really issued: 2 option deletes + 1 size delete + 1 batched
-    # gallery delete (gallery batches all image ids into a single mutation).
-    assert len(client.delete_calls) == 4
+    # Deletes were really issued: 2 option deletes + 1 size delete. No gallery
+    # delete, and the gallery existence query is never even run.
+    assert len(client.delete_calls) == 3
+    assert _EXISTING_GALLERY_Q not in [q for q, _ in client.calls]
 
     # Every option/size delete carries delete:1 against the right product.
     flat_inputs = [
@@ -92,13 +97,10 @@ async def test_clear_existing_children_issues_deletes_for_planned_types():
     assert all(i["delete"] == 1 for i in flat_inputs)
     assert all(i["products_id"] == 555 for i in flat_inputs)
 
-    # Gallery delete batches all three image ids with delete:1.
-    gallery_call = next(
+    # No gallery delete mutation was issued at all.
+    assert not [
         v for (_q, v) in client.delete_calls if v and "image_arr" in (v.get("input") or {})
-    )
-    image_arr = gallery_call["input"]["image_arr"]
-    assert {g["products_image_gallery_id"] for g in image_arr} == {7, 8, 9}
-    assert all(g["delete"] == 1 for g in image_arr)
+    ]
 
 
 @pytest.mark.no_db
@@ -127,6 +129,64 @@ async def test_clear_guards_match_payload_builder_casing():
 
     guard_src = inspect.getsource(_clear_existing_children)
     builder_src = inspect.getsource(payload_builder)
-    for name in ("setAdditionalOption", "setProductSize", "setProductsImageGallery"):
+    # Options/sizes are cleared by _clear_existing_children, so their guards must
+    # match the camelCase names the builder emits.
+    for name in ("setAdditionalOption", "setProductSize"):
         assert f'"{name}"' in guard_src, f"{name} guard missing from _clear_existing_children"
         assert f'mutation="{name}"' in builder_src, f"{name} not emitted by payload_builder"
+    # Gallery is intentionally NOT guarded here (the gallery step clears it
+    # inline). The guard pattern checks the quoted mutation name against
+    # plan_mutations; that quoted form must be absent for gallery (prose
+    # mentions in the docstring don't count).
+    assert '"setProductsImageGallery"' not in guard_src, (
+        "gallery should not be cleared by _clear_existing_children — the gallery "
+        "step owns clear-and-re-add inline"
+    )
+    assert 'mutation="setProductsImageGallery"' in builder_src
+
+
+class _GalleryReadbackClient:
+    """Returns `count` gallery rows for the existence read-back query."""
+
+    def __init__(self, count: int):
+        self.count = count
+
+    async def execute(self, query, variables=None):
+        rows = [{"products_image_gallery_id": i} for i in range(self.count)]
+        return _Resp(data={"productsImageGallery": {"productsImageGallery": rows}})
+
+
+def _gallery_step_result(status: str = "ok") -> dict:
+    return {"step": 276, "mutation": "setProductsImageGallery", "status": status, "ops_ids": {}}
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_verify_gallery_persisted_flags_zero_rows():
+    """OPS acked success but stored 0 rows → note returned, step flipped to warning."""
+    steps = [_gallery_step_result()]
+    note = await _verify_gallery_persisted(_GalleryReadbackClient(0), 636, expected=77, step_results=steps)
+
+    assert note is not None
+    assert "persisted 0/77" in note
+    assert steps[0]["status"] == "warning"
+    assert steps[0]["error"] == note
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_verify_gallery_persisted_ok_when_rows_match():
+    """All expected rows present → no note, step untouched."""
+    steps = [_gallery_step_result()]
+    note = await _verify_gallery_persisted(_GalleryReadbackClient(77), 636, expected=77, step_results=steps)
+
+    assert note is None
+    assert steps[0]["status"] == "ok"
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_verify_gallery_persisted_noop_when_no_images_expected():
+    """Push sent no images → read-back is skipped entirely."""
+    note = await _verify_gallery_persisted(_GalleryReadbackClient(0), 636, expected=0, step_results=[])
+    assert note is None

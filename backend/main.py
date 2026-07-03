@@ -60,6 +60,7 @@ from modules.ps_directory.routes import router as ps_router
 from modules.promostandards.routes import router as promostandards_sync_router
 from modules.sync_jobs.routes import router as sync_jobs_router
 from modules.ops_push.routes import router as ops_push_router
+from modules.manage_push.routes import router as manage_push_router
 from modules.push_candidates.routes import router as push_candidates_router
 from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
@@ -336,6 +337,7 @@ app.include_router(master_options_router, dependencies=_auth)
 app.include_router(master_options_product_config_router, dependencies=_auth)
 app.include_router(sync_jobs_router, dependencies=_auth)
 app.include_router(ops_push_router, dependencies=_auth)
+app.include_router(manage_push_router, dependencies=_auth)
 app.include_router(push_candidates_router, dependencies=_auth)
 app.include_router(push_mappings_router, dependencies=_auth)
 app.include_router(ops_config_router, dependencies=_auth)

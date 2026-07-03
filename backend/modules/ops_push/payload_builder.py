@@ -461,6 +461,37 @@ def _ops_product_type(product: Product) -> str:
     return "1,2,3"
 
 
+def _ops_product_type_for_context(product: Product, customer: Customer) -> str:
+    """OPS sale-type driven by the storefront's predefined_product_type.
+
+    Print Products (predefined_product_type=0) → "1,2,3" (Custom Design etc).
+    Ready To Buy  (predefined_product_type=1) → "15" (Add to cart).
+    Verified against TST655 (product 634) on staging.
+    """
+    predefined = int(getattr(customer, "ops_predefined_product_type", None) or 0)
+    if predefined == 1:
+        return "15"
+    return _ops_product_type(product)
+
+
+def _build_description_fields(description: Optional[str]) -> dict[str, str]:
+    """Split supplier description into OPS short + long description fields.
+
+    OPS has two description slots:
+      product_description  — short description shown in product listings
+      long_description     — full PDP body
+
+    Supplier feeds give a single blob. First paragraph becomes the short
+    description; the full text goes into long_description.
+    """
+    full = (description or "").strip()
+    if "\n" in full:
+        short = full.split("\n")[0].strip()
+    else:
+        short = full
+    return {"product_description": short, "long_description": full}
+
+
 def _customer_prefix(customer: Customer, supplier: Supplier) -> str:
     """Customer-prefixed title rule: prefer supplier.push_name_prefix
     (already configured per supplier in current DB), fall back to
@@ -529,8 +560,7 @@ def _build_setProduct_step(
         # marketing copy, so we mirror it into both Short and Long. Without
         # long_description, the OPS storefront PDP shows an empty description tab
         # even though Short is populated.
-        "product_description": ctx.product.description or "",
-        "long_description": ctx.product.description or "",
+        **_build_description_fields(ctx.product.description),
         # ── Required OPS ProductInput fields for all products ──────────
         # Phase 1 audit findings (June 2026):
         #   * predefined_product_type — silent reject when null
@@ -553,11 +583,13 @@ def _build_setProduct_step(
         #     stock apparel product by mirroring a known-good LIVE product via
         #     productsDetails before flipping it (the collection template shows
         #     "3", but that's not a verified apparel-from-stock product).
-        "predefined_product_type": "0",
+        "predefined_product_type": str(
+            getattr(ctx.customer, "ops_predefined_product_type", None) or 0
+        ),
         "price_defining_method": "1",
         "measurement_unit_id": 1,
         "enable_stock_management": enable_stock_management,
-        "product_type": _ops_product_type(ctx.product),
+        "product_type": _ops_product_type_for_context(ctx.product, ctx.customer),
         # product_service_type is a REQUIRED ProductInput field per the OPS
         # setProduct docs ("Must be 1 always"). OPS currently tolerates its
         # absence, but the contract marks it required — send "1" explicitly
