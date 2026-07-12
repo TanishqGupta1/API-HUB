@@ -1,11 +1,14 @@
 <!-- GRAPHX-CANONICAL-AUTHORITY -->
-# ⚠️ Canonical source of truth: GraphXCPI/graphx-docs
+# GraphX Connect implementation guide
 
-**Build, design, and architecture decisions for GraphX live in `GraphXCPI/graphx-docs` (`product-scoping/`), NOT in this repo.** Docs inside this repo are **legacy / reference only** — valuable for historical logic and understanding, but **not authoritative**. On any conflict, **graphx-docs wins.** Read the precedence rule first: **`graphx-docs/product-scoping/_CANONICAL-AUTHORITY.md`**.
+Product decisions live in `GraphXCPI/graphx-docs`; read
+`graphx-docs/_CANONICAL-AUTHORITY.md` and `atomic-specs/connect.md`. Root `AGENTS.md` defines the
+mandatory safety and runtime boundary. Verify the implementation/status detail below against code.
 
 **This repo is governed by:** `atomic-specs/connect.md`.
 
-Extracted connector fabric (ex-API-HUB). The Automate canvas + connector contracts are specced in `connect.md`.
+This repository is the extracted FastAPI connector service; it is not yet proven wired to the
+canonical Platform Connect floor.
 
 > Do not make or defend an architecture decision from a doc in this repo. Escalate to the spec, not to local docs.
 <!-- /GRAPHX-CANONICAL-AUTHORITY -->
@@ -72,7 +75,9 @@ docker compose up -d n8n                      # n8n editor on :5678
 - `backend/` — FastAPI (Python 3.12). All routes under `/api/`. Async SQLAlchemy + asyncpg. Handles SOAP/REST fetch, normalization, storage, markup rules.
 - `frontend/` — Next.js 15 (App Router). Blueprint design system (Outfit + Fira Code fonts, paper palette #f2f0ed, blueprint blue #1e4d92, dot-grid). Uses shadcn/ui + Tailwind.
 - n8n (Docker, port 5678) — orchestrates sync schedules via HTTP triggers to FastAPI. Triggers the FastAPI Integration Gateway via webhooks for OPS push; no longer calls OPS directly.
-- `n8n-nodes-onprintshop/` — TypeScript custom n8n node for OnPrintShop GraphQL API. OAuth2 auth. Implements **40/40 approved mutations** per `OPS-NODE-GAP-ANALYSIS.md` (mutation coverage only; queries are tracked separately in that doc). Available for legacy flows.
+- `n8n-nodes-onprintshop/` — TypeScript custom n8n node for OnPrintShop GraphQL API. OAuth2 auth.
+  The historical gap analysis claims 40/40 approved mutations; rederive that count from current code
+  before relying on it. Available for legacy flows pending consumer verification.
 
 **Backend module pattern:** Each module in `backend/modules/` has `models.py`, `schemas.py`, `routes.py`, `__init__.py`. Some have `service.py`. Modules: `suppliers`, `catalog`, `customers`, `markup`, `push_log`, `ps_directory`, `sync_jobs`.
 
@@ -118,4 +123,7 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
   - V1f: Frontend UX overhaul (simplified supplier form, OPS product config, terminology)
 - **Code review:** `docs/code_review_all_tasks.md` — 3 critical, 3 moderate, 3 minor issues
 
-Current Status (April 16, 2026): V0 is 19/21 done. n8n running in Docker with OnPrintShop node loaded. V1 pipeline plan approved. Waiting on Christian for SanMar API credentials and OPS Postman collection export.
+CORRECTED (2026-07-12): the former April completion counts, live n8n state, credential blocker, and
+V1 approval statement were not reverified against `graphx-connect@5afa7b82`. Treat the plan list
+as historical scope only; use root `RESTART.md` and rederive current status from code, tests, open
+work, and inspected live state before acting.
