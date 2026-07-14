@@ -1,0 +1,57 @@
+<svg viewBox="0 0 980 470" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="980" height="470" fill="#ffffff"/>
+  <text x="490" y="34" text-anchor="middle" font-size="20" font-weight="700" fill="#0f172a">GraphX Connect — Agnostic Integration Architecture</text>
+  <text x="490" y="56" text-anchor="middle" font-size="13" fill="#64748b">Connect serves any consumer — Manage is just the first one</text>
+
+  <!-- Suppliers -->
+  <rect x="30" y="100" width="240" height="210" rx="12" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="150" y="130" text-anchor="middle" font-size="16" font-weight="700" fill="#3730a3">SUPPLIERS</text>
+  <text x="150" y="160" text-anchor="middle" font-size="13" fill="#1e293b">SanMar</text>
+  <text x="150" y="184" text-anchor="middle" font-size="13" fill="#1e293b">S&amp;S Activewear</text>
+  <text x="150" y="208" text-anchor="middle" font-size="13" fill="#1e293b">4Over &#183; Alphabroder</text>
+  <text x="150" y="232" text-anchor="middle" font-size="13" fill="#1e293b">994+ PromoStandards</text>
+  <text x="150" y="280" text-anchor="middle" font-size="11" fill="#64748b">wholesale catalog source</text>
+
+  <!-- Connect -->
+  <rect x="370" y="88" width="240" height="234" rx="12" fill="#ecfeff" stroke="#0891b2" stroke-width="2.5"/>
+  <text x="490" y="116" text-anchor="middle" font-size="16" font-weight="700" fill="#155e75">GraphX CONNECT</text>
+  <text x="490" y="136" text-anchor="middle" font-size="11" fill="#64748b">(API-Hub &#183; FastAPI + PG)</text>
+  <text x="490" y="166" text-anchor="middle" font-size="12.5" fill="#1e293b">canonical field model</text>
+  <text x="490" y="190" text-anchor="middle" font-size="12.5" fill="#1e293b">central SKU &#8596; combo map</text>
+  <text x="490" y="214" text-anchor="middle" font-size="12.5" fill="#1e293b">cost only (no markup)</text>
+  <text x="490" y="238" text-anchor="middle" font-size="12.5" fill="#1e293b">per-target adapters</text>
+  <text x="490" y="262" text-anchor="middle" font-size="12.5" fill="#1e293b">documented in Postman</text>
+  <text x="490" y="300" text-anchor="middle" font-size="11" fill="#64748b">the agnostic hub</text>
+
+  <!-- Consumers -->
+  <rect x="710" y="100" width="240" height="210" rx="12" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+  <text x="830" y="130" text-anchor="middle" font-size="16" font-weight="700" fill="#166534">CONSUMERS</text>
+  <text x="830" y="160" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">GraphX Manage (first)</text>
+  <text x="830" y="184" text-anchor="middle" font-size="13" fill="#1e293b">OnPrintShop (OPS)</text>
+  <text x="830" y="208" text-anchor="middle" font-size="13" fill="#1e293b">Shopify &#183; WooCommerce</text>
+  <text x="830" y="232" text-anchor="middle" font-size="13" fill="#1e293b">n8n workflows</text>
+  <text x="830" y="280" text-anchor="middle" font-size="11" fill="#64748b">own sell price + storefront</text>
+
+  <!-- Suppliers <-> Connect -->
+  <line x1="272" y1="180" x2="366" y2="180" stroke="#475569" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="366" y1="212" x2="272" y2="212" stroke="#475569" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="319" y="168" text-anchor="middle" font-size="11" fill="#475569">SOAP / REST</text>
+  <text x="319" y="230" text-anchor="middle" font-size="10.5" fill="#94a3b8">fetch + normalize</text>
+
+  <!-- Connect <-> Consumers -->
+  <line x1="612" y1="180" x2="706" y2="180" stroke="#475569" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="706" y1="212" x2="612" y2="212" stroke="#475569" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="659" y="168" text-anchor="middle" font-size="11" fill="#475569">HTTP &#183; canonical</text>
+  <text x="659" y="230" text-anchor="middle" font-size="10.5" fill="#94a3b8">Postman &#8594; n8n node</text>
+
+  <!-- Seam legend -->
+  <rect x="30" y="352" width="920" height="92" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="50" y="380" font-size="13" font-weight="700" fill="#0f172a">Seams</text>
+  <text x="50" y="404" font-size="12.5" fill="#166534">Connect &#8594; consumer:  S1 Catalog &#183; S2 Inventory &#183; S5 Order Status &#183; S6 Images &#183; S7 Supplier Directory</text>
+  <text x="50" y="426" font-size="12.5" fill="#b45309">consumer &#8594; Connect:  S3 Live Pricing Quote &#183; S4 Order Fulfillment Submit</text>
+</svg>

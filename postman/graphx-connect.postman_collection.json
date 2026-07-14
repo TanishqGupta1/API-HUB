@@ -1,0 +1,243 @@
+{
+  "info": {
+    "name": "GraphX Connect API",
+    "_postman_id": "graphx-connect-api-0001",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "# GraphX Connect API\n\nGraphX Connect (API-Hub) is the **agnostic integration hub** between wholesale suppliers (SanMar, S&S, 4Over, 994+ PromoStandards) and any consumer platform (GraphX Manage, OnPrintShop, Shopify, WooCommerce, n8n).\n\nConnect **serves** everything it knows about suppliers — catalog, inventory, images, live cost, fulfillment status — and **accepts** orders to place with suppliers. It is platform-neutral: the same endpoints work for any consumer. **Manage is just the first consumer.**\n\n## Getting Started\n1. Set the collection variables: `base_url` (e.g. `http://localhost:8000` dev, or your prod host) and `orch_key` (your integration key).\n2. Every request sends the header `X-Orchestrator-Key: {{orch_key}}`.\n3. All bodies are JSON (`Content-Type: application/json`).\n\n## Authentication\nMachine callers authenticate with the **`X-Orchestrator-Key`** header, backed by the `integration_keys` table. (A Bearer-token layer is planned/optional — not the current mechanism.)\n\n## Errors & Response Codes\nNon-2xx responses use a uniform envelope: `{ \"error\": \"<code>\", \"detail\": \"<reason>\", \"request_id\": \"req_...\" }`.\n\n| Status | Meaning |\n|---|---|\n| 401 | Missing / invalid `X-Orchestrator-Key` |\n| 403 | Key lacks the required scope |\n| 404 | Unknown supplier / product / order |\n| 422 | Payload failed validation |\n| 502 / 504 | Upstream supplier API error / timeout |\n\n## Rate Limiting\nRequests are rate-limited per integration key. On exceed, the API returns **429** with a `Retry-After` header.\n\n## Pagination\nList endpoints use `page` + `page_size` (default 50) and return `{ rows, total, page, page_size }`.\n\n> **Status legend in this collection:** requests tagged **[LIVE]** exist today (use as-is). Requests tagged **[PLANNED]** are the agreed canonical contract to be built per the integration plan — they will 404 until implemented.",
+    "variable": []
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000", "type": "string" },
+    { "key": "orch_key", "value": "", "type": "string" }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level tests: run after EVERY request so the Runner shows pass/fail.",
+          "pm.test('Server reachable (got a response)', function () {",
+          "    pm.expect(pm.response.code).to.be.above(0);",
+          "});",
+          "",
+          "pm.test('No server error (status < 500)', function () {",
+          "    pm.expect(pm.response.code).to.be.below(500);",
+          "});",
+          "",
+          "var name = pm.info.requestName || '';",
+          "if (name.indexOf('[LIVE]') !== -1) {",
+          "    pm.test('LIVE endpoint responded (200 OK, or 401/403 if auth needed)', function () {",
+          "        pm.expect([200, 201, 401, 403]).to.include(pm.response.code);",
+          "    });",
+          "} else if (name.indexOf('[PLANNED]') !== -1) {",
+          "    pm.test('PLANNED endpoint not built yet (expected 404)', function () {",
+          "        pm.expect(pm.response.code).to.eql(404);",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "Connect's admin endpoints authenticate with the **`auth_token` session cookie** (set by login). Postman stores this cookie automatically after a successful Login and sends it on every later request.\n\n> **Note for consumers / n8n:** a session cookie is fine for interactive use, but machine consumers need a stable key. The agnostic-API plan is to also accept `X-Orchestrator-Key` on these routes — see question bank Q4.",
+      "item": [
+        {
+          "name": "Login  [LIVE]",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api", "auth", "login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"\",\n  \"password\": \"\"\n}" },
+            "description": "Authenticates a user and sets the `auth_token` cookie. Fill in your Connect email + password, then Send. After 200, every other request in this collection is authenticated automatically (Postman re-sends the cookie). Returns the current user."
+          },
+          "response": [
+            {
+              "name": "200 OK", "status": "OK", "code": 200, "_postman_previewlanguage": "json",
+              "header": [ { "key": "Set-Cookie", "value": "auth_token=...; HttpOnly" }, { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{ \"id\": \"...\", \"email\": \"you@printdeed.com\", \"role\": \"vg_admin\" }"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Supplier Directory",
+      "description": "List the suppliers Connect is connected to, with capabilities. (Seam S7.)",
+      "item": [
+        {
+          "name": "List suppliers  [LIVE]",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-Orchestrator-Key", "value": "{{orch_key}}" } ],
+            "url": { "raw": "{{base_url}}/api/suppliers", "host": ["{{base_url}}"], "path": ["api", "suppliers"] },
+            "description": "Returns connected suppliers. The canonical `/api/suppliers/directory` (with `supports_dropship` / `supports_realtime_pricing` capability flags) is **[PLANNED]**."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": { "method": "GET", "url": { "raw": "{{base_url}}/api/suppliers", "host": ["{{base_url}}"], "path": ["api", "suppliers"] } },
+              "status": "OK", "code": 200, "_postman_previewlanguage": "json",
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "[\n  { \"slug\": \"sanmar\", \"name\": \"SanMar\", \"active\": true, \"categories\": [\"Apparel\"], \"supports_dropship\": true, \"supports_realtime_pricing\": true }\n]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "description": "Read the supplier catalog in canonical (platform-neutral) shape. (Seam S1.)",
+      "item": [
+        {
+          "name": "List products  [LIVE]",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-Orchestrator-Key", "value": "{{orch_key}}" } ],
+            "url": {
+              "raw": "{{base_url}}/api/products?supplier_slug=sanmar&page=1&page_size=50",
+              "host": ["{{base_url}}"], "path": ["api", "products"],
+              "query": [
+                { "key": "supplier_slug", "value": "sanmar" },
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "50" }
+              ]
+            },
+            "description": "Paged product list. Canonical alias `/api/catalog/products` is **[PLANNED]**."
+          },
+          "response": []
+        },
+        {
+          "name": "Get one product  [LIVE]",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-Orchestrator-Key", "value": "{{orch_key}}" } ],
+            "url": { "raw": "{{base_url}}/api/products/{{product_id}}", "host": ["{{base_url}}"], "path": ["api", "products", "{{product_id}}"] },
+            "description": "One product in full canonical shape (options, variants, cost, images). Keyed by UUID today; the `/{supplier_slug}/{supplier_sku}` lookup is **[PLANNED]**. See the example response for the canonical product shape."
+          },
+          "response": [
+            {
+              "name": "200 OK (canonical product)",
+              "originalRequest": { "method": "GET", "url": { "raw": "{{base_url}}/api/products/{{product_id}}", "host": ["{{base_url}}"], "path": ["api", "products", "{{product_id}}"] } },
+              "status": "OK", "code": 200, "_postman_previewlanguage": "json",
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{\n  \"supplier_slug\": \"sanmar\",\n  \"supplier_sku\": \"K420\",\n  \"product_name\": \"Port Authority Heavyweight Cotton Pique Polo\",\n  \"brand\": \"Port Authority\",\n  \"product_type\": \"apparel\",\n  \"category_path\": [\"Apparel\", \"Polos\"],\n  \"options\": [\n    { \"option_key\": \"color\", \"title\": \"Color\", \"options_type\": \"swatch\", \"attributes\": [ { \"title\": \"Black\", \"attribute_key\": \"black\", \"sort_order\": 0 } ] },\n    { \"option_key\": \"size\", \"title\": \"Size\", \"options_type\": \"dropdown\", \"attributes\": [ { \"title\": \"M\", \"attribute_key\": \"m\", \"sort_order\": 1 } ] }\n  ],\n  \"variants\": [ { \"part_id\": \"K420-Black-M\", \"color_key\": \"black\", \"size_key\": \"m\", \"sku\": \"K420BLACKM\" } ],\n  \"cost\": { \"currency\": \"USD\", \"base_cost\": \"8.42\", \"tiers\": [ { \"qty_from\": 1, \"qty_to\": 71, \"vendor_price\": \"8.42\" } ] },\n  \"images\": [ { \"url\": \"https://.../K420_Black_front.jpg\", \"sort_order\": 0, \"color_key\": \"black\" } ],\n  \"availability\": { \"discontinued\": false },\n  \"provenance\": { \"source\": \"CONNECT\", \"connect_ref\": \"sanmar:K420\" }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "description": "Stock levels + discontinued flags per variant. (Seam S2 — [PLANNED].)",
+      "item": [
+        {
+          "name": "Get inventory  [PLANNED]",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-Orchestrator-Key", "value": "{{orch_key}}" } ],
+            "url": { "raw": "{{base_url}}/api/inventory/sanmar/K420", "host": ["{{base_url}}"], "path": ["api", "inventory", "sanmar", "K420"] },
+            "description": "**[PLANNED]** — returns per-variant `quantity_available` + `discontinued`."
+          },
+          "response": [
+            {
+              "name": "200 OK", "status": "OK", "code": 200, "_postman_previewlanguage": "json",
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{\n  \"supplier_slug\": \"sanmar\", \"connect_ref\": \"sanmar:K420\",\n  \"variants\": [ { \"part_id\": \"K420-Black-M\", \"quantity_available\": 2400, \"discontinued\": false } ],\n  \"synced_at\": \"2026-06-24T10:00:00Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Live Pricing Quote",
+      "description": "Real-time wholesale cost for a SKU + quantity. Cost only — no markup. (Seam S3 — [PLANNED].)",
+      "item": [
+        {
+          "name": "Quote price  [PLANNED]",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "X-Orchestrator-Key", "value": "{{orch_key}}" }, { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{base_url}}/api/pricing/quote", "host": ["{{base_url}}"], "path": ["api", "pricing", "quote"] },
+            "body": { "mode": "raw", "raw": "{\n  \"supplier_slug\": \"sanmar\",\n  \"supplier_sku\": \"K420\",\n  \"part_id\": \"K420-Black-M\",\n  \"quantity\": 48\n}" },
+            "description": "**[PLANNED]** — returns wholesale net cost. Falls back to stored cost on supplier timeout (`source`)."
+          },
+          "response": [
+            {
+              "name": "200 OK", "status": "OK", "code": 200, "_postman_previewlanguage": "json",
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{ \"net_cost\": \"8.42\", \"currency\": \"USD\", \"valid_until\": \"2026-06-24T10:15:00Z\", \"source\": \"live\" }"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Fulfillment",
+      "description": "Submit a confirmed order to the supplier + track status. (Seams S4 + S5 — [PLANNED].)",
+      "item": [
+        {
+          "name": "Submit order  [PLANNED]",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "X-Orchestrator-Key", "value": "{{orch_key}}" }, { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{base_url}}/api/fulfillment/submit", "host": ["{{base_url}}"], "path": ["api", "fulfillment", "submit"] },
+            "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"MGR-1042\",\n  \"connect_ref\": \"sanmar:K420\",\n  \"line_items\": [ { \"part_id\": \"K420-Black-M\", \"sku\": \"K420BLACKM\", \"quantity\": 48 } ],\n  \"shipping_address\": { \"name\": \"...\", \"street1\": \"...\", \"city\": \"...\", \"state\": \"TX\", \"postcode\": \"75001\", \"country\": \"US\" },\n  \"callback_url\": \"https://consumer.example.com/integration/connect/order-status\"\n}" },
+            "description": "**[PLANNED]** — places the order with the supplier. Idempotent on `order_id`. Optional `callback_url` pushes status changes back."
+          },
+          "response": [
+            {
+              "name": "200 OK", "status": "OK", "code": 200, "_postman_previewlanguage": "json",
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{ \"supplier_order_id\": \"SM-998877\", \"confirmed_at\": \"2026-06-24T10:20:00Z\", \"status\": \"ACCEPTED\" }"
+            }
+          ]
+        },
+        {
+          "name": "Get order status  [PLANNED]",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-Orchestrator-Key", "value": "{{orch_key}}" } ],
+            "url": { "raw": "{{base_url}}/api/fulfillment/status/SM-998877", "host": ["{{base_url}}"], "path": ["api", "fulfillment", "status", "SM-998877"] },
+            "description": "**[PLANNED]** — poll status. Flow: SENT → ACCEPTED → IN_PRODUCTION → SHIPPED. If `callback_url` was supplied on submit, Connect also POSTs these changes there."
+          },
+          "response": [
+            {
+              "name": "200 OK", "status": "OK", "code": 200, "_postman_previewlanguage": "json",
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{ \"supplier_order_id\": \"SM-998877\", \"status\": \"SHIPPED\", \"tracking_number\": \"1Z...\", \"carrier\": \"UPS\" }"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Target Adapters",
+      "description": "Example adapter that pushes the catalog to a specific consumer. In the agnostic model these are driven by n8n (read canonical Catalog -> adapter -> push to target).",
+      "item": [
+        {
+          "name": "Push supplier to Manage  [LIVE]",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "X-Orchestrator-Key", "value": "{{orch_key}}" }, { "key": "Content-Type", "value": "application/json" } ],
+            "url": {
+              "raw": "{{base_url}}/api/manage-push/{{supplier_id}}?sku=K420&limit=50",
+              "host": ["{{base_url}}"], "path": ["api", "manage-push", "{{supplier_id}}"],
+              "query": [ { "key": "sku", "value": "K420" }, { "key": "limit", "value": "50" } ]
+            },
+            "description": "**[LIVE]** — pushes a supplier's products into GraphX Manage (cost-only, overlay-safe, idempotent). One consumer/adapter example."
+          },
+          "response": [
+            {
+              "name": "200 OK", "status": "OK", "code": 200, "_postman_previewlanguage": "json",
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{ \"supplier\": \"sanmar\", \"pushed\": 1, \"failed\": 0, \"results\": [ { \"supplier_sku\": \"K420\", \"ok\": true, \"status\": 200 } ] }"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

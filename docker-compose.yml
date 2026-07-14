@@ -84,7 +84,7 @@ services:
       target: deps
     command: sh -c "npm install --no-audit --no-fund && npm run dev"
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       # Server-side fetch from Next.js API routes (uses Docker DNS, not the
