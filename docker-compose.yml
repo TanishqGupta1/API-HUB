@@ -91,6 +91,8 @@ services:
       # browser-visible URL).
       - API_BASE_URL=${API_BASE_URL:-http://api:8000}
       - INGEST_SHARED_SECRET=${INGEST_SHARED_SECRET:-}
+      - NEXT_PUBLIC_PHASE8_LIVE=true
+      - NEXT_PUBLIC_PHASE8_ADMIN_PROXY=true
       - WATCHPACK_POLLING=true
     volumes:
       - ./frontend:/app

@@ -589,7 +589,15 @@ def _build_setProduct_step(
         "price_defining_method": "1",
         "measurement_unit_id": 1,
         "enable_stock_management": enable_stock_management,
-        "product_type": _ops_product_type_for_context(ctx.product, ctx.customer),
+        # Create mode: use product_type "15" (Add to Cart) to bypass OPS's
+        # "At least one size is required" validation for Custom Design products.
+        # A final setProduct update step switches to the real product_type
+        # after sizes have been added.
+        "product_type": (
+            _ops_product_type_for_context(ctx.product, ctx.customer)
+            if push_mode == "update"
+            else "15"
+        ),
         # product_service_type is a REQUIRED ProductInput field per the OPS
         # setProduct docs ("Must be 1 always"). OPS currently tolerates its
         # absence, but the contract marks it required — send "1" explicitly
@@ -653,9 +661,13 @@ def _build_setProductSize_step(
         source_key=f"variant_sku:{variant_sku}",
         variables={
             "inputs": [{
+                "size_id": 0,
                 "products_id": _placeholder(1, "products_id"),
                 "size_title": size_title,
+                "size_width": 0,
+                "size_height": 0,
                 "visible": "1",  # OPS ProductSizeInput.visible is String
+                "delete": 0,
             }]
         },
         requires_response_from=[1],
@@ -673,9 +685,13 @@ def _build_setProductSize_titled(step_num: int, size_title: str) -> OPSMutationS
         source_key=f"size:{size_title}",
         variables={
             "inputs": [{
+                "size_id": 0,
                 "products_id": _placeholder(1, "products_id"),
                 "size_title": size_title,
+                "size_width": 0,
+                "size_height": 0,
                 "visible": "1",
+                "delete": 0,
             }]
         },
         requires_response_from=[1],
@@ -701,6 +717,8 @@ def _build_setAdditionalOption_from_values(
         source_key=f"option_key:{option_key}",
         variables={
             "inputs": [{
+                "prod_add_opt_id": 0,
+                "delete": 0,
                 "products_id": _placeholder(1, "products_id"),
                 "option_key": option_key,
                 "title": title,
@@ -730,11 +748,14 @@ def _build_setAdditionalOptionAttribute_from_values(
         source_key=f"attribute_key:color/{attribute_key}",
         variables={
             "inputs": [{
+                "attribute_id": 0,
                 "prod_add_opt_id": _placeholder(option_step, "prod_add_opt_id"),
                 "attribute_key": attribute_key,
                 "label": label,
+                "sort_order": sort_order,
+                "status": "1",
                 "setup_cost": 0.0,
-                "multiplier": 1.0,
+                "delete": 0,
             }]
         },
         requires_response_from=[option_step],
@@ -799,6 +820,7 @@ def _build_setProductPrice_step(
         source_key=f"variant_sku:{variant_sku}",
         variables={
             "inputs": [{
+                "product_price_id": 0,
                 "products_id": _placeholder(1, "products_id"),
                 "size_id": _placeholder(size_step, "size_id"),
                 "qty": 1,
@@ -808,6 +830,7 @@ def _build_setProductPrice_step(
                 "visible": "1",
                 "user_type_id": "1",
                 "price_defining_method": "1",
+                "delete": 0,
             }]
         },
         requires_response_from=[1, size_step],
@@ -847,6 +870,8 @@ def _build_setAdditionalOption_step(
         source_key=f"option_key:{opt.option_key}",
         variables={
             "inputs": [{
+                "prod_add_opt_id": 0,
+                "delete": 0,
                 "products_id": _placeholder(1, "products_id"),
                 "option_key": opt.option_key,
                 "title": opt.title or opt.option_key,
@@ -874,12 +899,14 @@ def _build_setAdditionalOptionAttributes_step(
         source_key=f"attribute_key:{opt_key}/{attr.attribute_key}",
         variables={
             "inputs": [{
-                # OPS setAdditionalOption returns `id`, normalized to `prod_add_opt_id` in gateway.
+                "attribute_id": 0,
                 "prod_add_opt_id": _placeholder(option_step, "prod_add_opt_id"),
                 "attribute_key": attr.attribute_key,
                 "label": attr.title or attr.attribute_key,
+                "sort_order": getattr(attr, "sort_order", 0) or 0,
+                "status": "1",
                 "setup_cost": _to_float(getattr(attr, "setup_cost", None)) or 0.0,
-                "multiplier": _to_float(getattr(attr, "multiplier", None)) or 1.0,
+                "delete": 0,
             }]
         },
         requires_response_from=[option_step],
@@ -966,6 +993,29 @@ def _build_updateProductStock_step(
             },
         },
         requires_response_from=[],
+    )
+
+
+def _build_setProduct_type_update_step(
+    step_num: int,
+    product_type: str,
+    predefined_product_type: str,
+) -> OPSMutationStep:
+    """Final setProduct to switch product_type from the create-safe "15" to
+    the real target type (e.g. "1,2,3" for Custom Design). Runs after sizes
+    are in place so OPS's "At least one size is required" gate passes."""
+    return OPSMutationStep(
+        step=step_num,
+        mutation="setProduct",
+        source_key="product_type_update",
+        variables={
+            "inputs": [{
+                "products_id": _placeholder(1, "products_id"),
+                "product_type": product_type,
+                "predefined_product_type": predefined_product_type,
+            }]
+        },
+        requires_response_from=[1],
     )
 
 
@@ -1460,6 +1510,20 @@ def _synthesize_payload(
     )
     if gallery_step is not None:
         plan.append(gallery_step)
+        next_step += 1
+
+    # Product-type update: in create mode, step 1 used product_type "15" to
+    # bypass OPS's "At least one size is required" validation. Now that sizes
+    # are in place, switch to the real product_type.
+    real_product_type = _ops_product_type_for_context(ctx.product, ctx.customer)
+    if push_mode == "create" and real_product_type != "15":
+        plan.append(_build_setProduct_type_update_step(
+            next_step,
+            product_type=real_product_type,
+            predefined_product_type=str(
+                getattr(ctx.customer, "ops_predefined_product_type", None) or 0
+            ),
+        ))
         next_step += 1
 
     # Final N steps: updateProductStock × N (action=Reset, by product_sku).

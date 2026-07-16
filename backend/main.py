@@ -169,11 +169,14 @@ async def lifespan(app: FastAPI):
             # Also check whether alembic_version exists using the async engine
             # so we don't need a second sync engine inside _run_alembic_upgrade.
             async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
                 result = await conn.execute(
                     text("SELECT to_regclass('public.alembic_version')")
                 )
                 _has_alembic_table = result.scalar() is not None
+
+            if not _has_alembic_table:
+                async with engine.begin() as conn:
+                    await conn.run_sync(Base.metadata.create_all)
 
             # Step 2: apply Alembic migrations (column additions, index changes, etc.).
             # Runs in a thread pool since Alembic uses a synchronous SQLAlchemy engine.
