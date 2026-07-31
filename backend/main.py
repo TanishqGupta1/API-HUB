@@ -60,6 +60,7 @@ from modules.ps_directory.routes import router as ps_router
 from modules.promostandards.routes import router as promostandards_sync_router
 from modules.sync_jobs.routes import router as sync_jobs_router
 from modules.ops_push.routes import router as ops_push_router
+from modules.manage_push.routes import router as manage_push_router
 from modules.push_candidates.routes import router as push_candidates_router
 from modules.push_mappings.routes import router as push_mappings_router
 from modules.ops_config.routes import router as ops_config_router
@@ -73,7 +74,6 @@ from modules.portal.routes import router as portal_router
 from modules.images.routes import router as images_router
 from modules.webhooks.routes import router as webhooks_router
 from modules.analytics.routes import router as analytics_router
-from modules.n8n_proxy.routes import router as n8n_proxy_router
 
 _PROD_REQUIRED_ENV_VARS = (
     "SECRET_KEY",
@@ -168,11 +168,14 @@ async def lifespan(app: FastAPI):
             # Also check whether alembic_version exists using the async engine
             # so we don't need a second sync engine inside _run_alembic_upgrade.
             async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
                 result = await conn.execute(
                     text("SELECT to_regclass('public.alembic_version')")
                 )
                 _has_alembic_table = result.scalar() is not None
+
+            if not _has_alembic_table:
+                async with engine.begin() as conn:
+                    await conn.run_sync(Base.metadata.create_all)
 
             # Step 2: apply Alembic migrations (column additions, index changes, etc.).
             # Runs in a thread pool since Alembic uses a synchronous SQLAlchemy engine.
@@ -336,6 +339,7 @@ app.include_router(master_options_router, dependencies=_auth)
 app.include_router(master_options_product_config_router, dependencies=_auth)
 app.include_router(sync_jobs_router, dependencies=_auth)
 app.include_router(ops_push_router, dependencies=_auth)
+app.include_router(manage_push_router, dependencies=_auth)
 app.include_router(push_candidates_router, dependencies=_auth)
 app.include_router(push_mappings_router, dependencies=_auth)
 app.include_router(ops_config_router, dependencies=_auth)
@@ -351,10 +355,6 @@ app.include_router(alerting_router, dependencies=_auth)
 app.include_router(customer_catalog_router, dependencies=_auth)
 app.include_router(webhooks_router, dependencies=_auth)
 app.include_router(analytics_router, dependencies=_auth)
-# n8n proxy exposes internal workflow URLs + can trigger any workflow → vg_admin only.
-# Mounting under blanket _auth would let any customer_admin enumerate/trigger flows
-# and leak N8N_API_BASE_URL / N8N_API_KEY values. See issue #153 / plan Task 11.
-app.include_router(n8n_proxy_router, dependencies=[Depends(_require_vg_admin)])
 # Customer self-service portal — requires customer_admin role (enforced inside routes)
 app.include_router(portal_router, dependencies=_auth)
 # Integration Gateway — X-Orchestrator-Key auth (handled inside routes, not _auth)

@@ -1,0 +1,277 @@
+<title>GraphX Connect API — Team Testing Guide</title>
+<style>
+  :root{
+    --paper:#f2f0ed; --card:#fbfaf8; --ink:#1b2433; --ink-soft:#5a6475;
+    --blue:#1e4d92; --blue-deep:#163a6e; --blue-line:#c4d0e2; --blue-wash:#e7ecf4;
+    --live:#1f7a4d; --live-wash:#e3f0e9; --live-line:#bfe0cd;
+    --planned:#9a6a18; --planned-wash:#f4ecdb; --planned-line:#e6d6b4;
+    --rule:rgba(27,36,51,.12); --rule-strong:rgba(27,36,51,.22);
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"Cascadia Code","Cascadia Mono",Consolas,"Fira Code",Menlo,monospace;
+    --maxw:940px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    line-height:1.62;-webkit-font-smoothing:antialiased;}
+  /* blueprint dot-grid ground */
+  .grid-bg{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:radial-gradient(var(--blue-line) 1px,transparent 1.4px);
+    background-size:24px 24px;opacity:.34;
+    -webkit-mask-image:linear-gradient(180deg,#000,#000);}
+  .wrap{position:relative;z-index:1;max-width:var(--maxw);margin:0 auto;padding:0 24px 96px;}
+
+  /* header */
+  header{padding:56px 0 28px;border-bottom:1.5px solid var(--blue);}
+  .eyebrow{font-family:var(--mono);font-size:.74rem;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--blue);display:flex;align-items:center;gap:9px;}
+  .eyebrow::before{content:"";width:26px;height:1.5px;background:var(--blue);display:inline-block;}
+  h1{font-size:clamp(1.9rem,5vw,2.6rem);line-height:1.08;margin:.5em 0 .25em;font-weight:680;
+    letter-spacing:-.02em;text-wrap:balance;}
+  .lede{color:var(--ink-soft);font-size:1.06rem;max-width:62ch;margin:0;}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px;}
+  .chip{font-family:var(--mono);font-size:.8rem;background:var(--card);border:1px solid var(--rule);
+    border-radius:6px;padding:6px 11px;display:inline-flex;gap:7px;align-items:center;}
+  .chip b{color:var(--blue-deep);font-weight:600;}
+
+  section{padding-top:46px;}
+  h2{font-size:1.32rem;margin:0 0 4px;letter-spacing:-.01em;font-weight:640;}
+  .sec-label{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-soft);}
+  .sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--rule);
+    padding-bottom:12px;margin-bottom:22px;}
+  .sec-head .n{font-family:var(--mono);color:var(--blue);font-size:1.05rem;font-weight:600;}
+  p{margin:0 0 14px;max-width:66ch;}
+
+  /* auth two-kind */
+  .auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .auth-card{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:20px 20px 18px;
+    border-top:3px solid var(--blue);}
+  .auth-card h3{margin:0 0 4px;font-size:1.02rem;}
+  .auth-card .who{font-family:var(--mono);font-size:.74rem;letter-spacing:.04em;color:var(--ink-soft);
+    text-transform:uppercase;margin-bottom:12px;}
+  .auth-card p{font-size:.94rem;margin:0;}
+  code,.k{font-family:var(--mono);font-size:.88em;background:var(--blue-wash);color:var(--blue-deep);
+    padding:1.5px 6px;border-radius:5px;border:1px solid var(--blue-line);white-space:nowrap;}
+
+  /* steps */
+  ol.steps{list-style:none;counter-reset:s;padding:0;margin:0;display:flex;flex-direction:column;gap:14px;}
+  ol.steps li{counter-increment:s;display:grid;grid-template-columns:34px 1fr;gap:14px;align-items:start;}
+  ol.steps li::before{content:counter(s,decimal-leading-zero);font-family:var(--mono);font-size:.82rem;
+    font-weight:600;color:var(--blue);background:var(--card);border:1px solid var(--blue-line);
+    border-radius:7px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;}
+  ol.steps li > div{padding-top:5px;}
+  ol.steps b{font-weight:620;}
+
+  /* endpoints */
+  .group-head{display:flex;align-items:center;gap:11px;margin:30px 0 14px;}
+  .group-head .dot{width:9px;height:9px;border-radius:50%;}
+  .group-head h3{margin:0;font-size:1.04rem;}
+  .group-head .count{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);}
+  .live .dot{background:var(--live);} .planned .dot{background:var(--planned);}
+
+  .ep{background:var(--card);border:1px solid var(--rule);border-left:3px solid transparent;
+    border-radius:9px;padding:15px 17px;margin-bottom:11px;}
+  .ep.is-live{border-left-color:var(--live);} .ep.is-planned{border-left-color:var(--planned);}
+  .ep-top{display:flex;align-items:center;gap:11px;flex-wrap:wrap;}
+  .method{font-family:var(--mono);font-size:.72rem;font-weight:700;letter-spacing:.05em;
+    padding:3px 8px;border-radius:5px;border:1px solid var(--rule-strong);color:var(--ink);background:#fff;}
+  .method.get{color:var(--blue-deep);border-color:var(--blue-line);background:var(--blue-wash);}
+  .method.post{color:#6a3da0;border-color:#d8c8ec;background:#efe7f7;}
+  .path{font-family:var(--mono);font-size:.92rem;color:var(--ink);overflow-wrap:anywhere;flex:1;min-width:200px;}
+  .path .var{color:var(--blue);} .path .q{color:var(--ink-soft);}
+  .status{font-family:var(--mono);font-size:.68rem;font-weight:700;letter-spacing:.08em;
+    padding:3px 9px;border-radius:20px;white-space:nowrap;}
+  .status.live{color:var(--live);background:var(--live-wash);border:1px solid var(--live-line);}
+  .status.planned{color:var(--planned);background:var(--planned-wash);border:1px solid var(--planned-line);}
+  .ep-desc{margin:9px 0 0;font-size:.92rem;color:var(--ink-soft);}
+  .ep-tag{font-family:var(--mono);font-size:.7rem;color:var(--ink-soft);text-transform:uppercase;
+    letter-spacing:.06em;}
+  .ep-desc .auth-note{color:var(--blue-deep);}
+
+  /* response codes */
+  .codes{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+  .codes .c{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:11px 13px;
+    display:flex;gap:11px;align-items:baseline;}
+  .codes .num{font-family:var(--mono);font-weight:700;color:var(--blue-deep);font-size:.92rem;
+    font-variant-numeric:tabular-nums;}
+  .codes .txt{font-size:.86rem;color:var(--ink-soft);}
+
+  .callout{background:var(--blue-wash);border:1px solid var(--blue-line);border-radius:9px;
+    padding:14px 16px;font-size:.92rem;display:flex;gap:11px;}
+  .callout .bar{width:3px;background:var(--blue);border-radius:3px;flex:none;}
+
+  footer{margin-top:54px;padding-top:18px;border-top:1px solid var(--rule);
+    font-family:var(--mono);font-size:.76rem;color:var(--ink-soft);display:flex;
+    justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+  a{color:var(--blue);text-underline-offset:2px;}
+  a:focus-visible,li:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:4px;}
+
+  @media (max-width:640px){
+    .auth-grid{grid-template-columns:1fr;}
+    header{padding-top:40px;}
+    .wrap{padding:0 18px 72px;}
+  }
+</style>
+
+<div class="grid-bg"></div>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">GraphX Connect · API-Hub</div>
+    <h1>Connect API — Team Testing Guide</h1>
+    <p class="lede">The agnostic integration hub between wholesale suppliers (SanMar, S&amp;S, 4Over, 994+ PromoStandards) and any consumer platform. Nine endpoints — five live today, four on the agreed roadmap. Here's how to authenticate and test them in Postman.</p>
+    <div class="meta">
+      <span class="chip"><b>Collection</b> GraphX Connect API</span>
+      <span class="chip"><b>base_url</b> http://localhost:8000</span>
+      <span class="chip"><b>Auth header</b> X-Orchestrator-Key</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="sec-head"><span class="n">01</span><h2>Authenticate</h2><span class="sec-label">two mechanisms</span></div>
+    <p>Connect uses different auth for machines vs. people. Most endpoints are machine-facing and take a header key; the admin <code>Login</code> uses a session cookie. Know which one you're hitting.</p>
+    <div class="auth-grid">
+      <div class="auth-card">
+        <div class="who">machine / consumer — most endpoints</div>
+        <h3>X-Orchestrator-Key header</h3>
+        <p>Every request sends <span class="k">X-Orchestrator-Key: {{orch_key}}</span>, validated against the <code>integration_keys</code> table. No key (or a bad one) → <b>401</b>. This is already wired on every request in the collection.</p>
+      </div>
+      <div class="auth-card">
+        <div class="who">admin / interactive — Login only</div>
+        <h3>auth_token session cookie</h3>
+        <p>Run <span class="k">POST /api/auth/login</span> with your email + password. On 200 it sets an <code>auth_token</code> cookie that Postman re-sends automatically on later requests.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="n">02</span><h2>One-time setup</h2><span class="sec-label">per teammate</span></div>
+    <ol class="steps">
+      <li><div>Open the collection → <b>Variables</b> tab.</div></li>
+      <li><div>Set <span class="k">base_url</span> → <code>http://localhost:8000</code> if you run the backend locally, or the shared/deployed host.</div></li>
+      <li><div>Set <span class="k">orch_key</span> → your <b>integration key</b>. It's blank by default — without it the machine endpoints return <b>401</b>. <span style="color:var(--blue-deep)">Ask the admin (or Sinchana) for a key.</span></div></li>
+    </ol>
+    <div class="callout" style="margin-top:18px;">
+      <div class="bar"></div>
+      <div>If <code>base_url</code> points at localhost, the backend must be running: <span class="k">docker compose up -d postgres</span> then <span class="k">uvicorn main:app --port 8000</span>. Against a deployed host, skip this.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="n">03</span><h2>Run a test</h2><span class="sec-label">smoke check → full run</span></div>
+    <ol class="steps">
+      <li><div>Hit a <b>live</b> endpoint first — <b>Supplier Directory → List suppliers</b>. Expect <b>200</b> with a JSON list. A <b>401</b> means your <code>orch_key</code> is wrong or missing.</div></li>
+      <li><div>(Optional) Run <b>Login</b> with email + password to unlock the cookie-based admin routes.</div></li>
+      <li><div>Use the <b>Runner</b> to fire the whole collection. The built-in tests pass <b>live = 200</b> and <b>planned = 404</b> (those aren't built yet, so 404 is the expected, correct result).</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="n">04</span><h2>All endpoints</h2><span class="sec-label">9 total</span></div>
+
+    <div class="group-head live"><span class="dot"></span><h3>Working now</h3><span class="count">5 endpoints</span></div>
+
+    <div class="ep is-live">
+      <div class="ep-top">
+        <span class="method post">POST</span>
+        <span class="path">/api/auth/login</span>
+        <span class="status live">LIVE</span>
+      </div>
+      <p class="ep-desc"><span class="ep-tag">Authentication</span> — Log in with email + password; sets the <span class="auth-note">auth_token cookie</span> for admin routes.</p>
+    </div>
+
+    <div class="ep is-live">
+      <div class="ep-top">
+        <span class="method get">GET</span>
+        <span class="path">/api/suppliers</span>
+        <span class="status live">LIVE</span>
+      </div>
+      <p class="ep-desc"><span class="ep-tag">Supplier Directory</span> — List the suppliers Connect is connected to. <span class="auth-note">(X-Orchestrator-Key)</span></p>
+    </div>
+
+    <div class="ep is-live">
+      <div class="ep-top">
+        <span class="method get">GET</span>
+        <span class="path">/api/products<span class="q">?supplier_slug=sanmar&amp;page=1&amp;page_size=50</span></span>
+        <span class="status live">LIVE</span>
+      </div>
+      <p class="ep-desc"><span class="ep-tag">Catalog</span> — Paged product list in canonical (platform-neutral) shape.</p>
+    </div>
+
+    <div class="ep is-live">
+      <div class="ep-top">
+        <span class="method get">GET</span>
+        <span class="path">/api/products/<span class="var">{product_id}</span></span>
+        <span class="status live">LIVE</span>
+      </div>
+      <p class="ep-desc"><span class="ep-tag">Catalog</span> — One product in full canonical shape: options, variants, cost, images.</p>
+    </div>
+
+    <div class="ep is-live">
+      <div class="ep-top">
+        <span class="method post">POST</span>
+        <span class="path">/api/manage-push/<span class="var">{supplier_id}</span><span class="q">?sku=K420&amp;limit=50</span></span>
+        <span class="status live">LIVE</span>
+      </div>
+      <p class="ep-desc"><span class="ep-tag">Target Adapters</span> — Push a supplier's products into GraphX Manage (cost-only, overlay-safe, idempotent).</p>
+    </div>
+
+    <div class="group-head planned"><span class="dot"></span><h3>Planned</h3><span class="count">4 endpoints · agreed contract · return 404 until built</span></div>
+
+    <div class="ep is-planned">
+      <div class="ep-top">
+        <span class="method get">GET</span>
+        <span class="path">/api/inventory/<span class="var">{supplier_slug}</span>/<span class="var">{sku}</span></span>
+        <span class="status planned">PLANNED</span>
+      </div>
+      <p class="ep-desc"><span class="ep-tag">Inventory</span> — Per-variant <code>quantity_available</code> + discontinued flags.</p>
+    </div>
+
+    <div class="ep is-planned">
+      <div class="ep-top">
+        <span class="method post">POST</span>
+        <span class="path">/api/pricing/quote</span>
+        <span class="status planned">PLANNED</span>
+      </div>
+      <p class="ep-desc"><span class="ep-tag">Live Pricing Quote</span> — Real-time wholesale net cost for a SKU + quantity. Cost only, no markup.</p>
+    </div>
+
+    <div class="ep is-planned">
+      <div class="ep-top">
+        <span class="method post">POST</span>
+        <span class="path">/api/fulfillment/submit</span>
+        <span class="status planned">PLANNED</span>
+      </div>
+      <p class="ep-desc"><span class="ep-tag">Fulfillment</span> — Submit a confirmed order to the supplier. Idempotent on <code>order_id</code>; optional <code>callback_url</code> for status pushes.</p>
+    </div>
+
+    <div class="ep is-planned">
+      <div class="ep-top">
+        <span class="method get">GET</span>
+        <span class="path">/api/fulfillment/status/<span class="var">{supplier_order_id}</span></span>
+        <span class="status planned">PLANNED</span>
+      </div>
+      <p class="ep-desc"><span class="ep-tag">Fulfillment</span> — Poll order status: SENT → ACCEPTED → IN_PRODUCTION → SHIPPED.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="n">05</span><h2>Response codes</h2><span class="sec-label">uniform error envelope</span></div>
+    <p>Non-2xx responses share one shape: <span class="k">{ "error", "detail", "request_id" }</span>. List endpoints page with <code>page</code> + <code>page_size</code> and return <code>{ rows, total, page, page_size }</code>.</p>
+    <div class="codes">
+      <div class="c"><span class="num">401</span><span class="txt">Missing / invalid X-Orchestrator-Key</span></div>
+      <div class="c"><span class="num">403</span><span class="txt">Key lacks the required scope</span></div>
+      <div class="c"><span class="num">404</span><span class="txt">Unknown resource (or a planned endpoint)</span></div>
+      <div class="c"><span class="num">422</span><span class="txt">Payload failed validation</span></div>
+      <div class="c"><span class="num">429</span><span class="txt">Rate-limited — see Retry-After</span></div>
+      <div class="c"><span class="num">502/504</span><span class="txt">Supplier upstream error / timeout</span></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>GraphX Connect · agnostic integration hub · Manage is just the first consumer</span>
+    <span>source: postman/graphx-connect.postman_collection.json</span>
+  </footer>
+
+</div>

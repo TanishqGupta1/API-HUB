@@ -161,6 +161,44 @@ async def _verify_b7_readback(ops: Any, ops_product_id: Any) -> None:
         logger.exception("verify[B7]: raised for products_id=%s", pid)
 
 
+async def _verify_gallery_persisted(
+    raw_client: Any, ops_product_id: Any, expected: int, step_results: list[dict]
+) -> Optional[str]:
+    """Confirm the gallery actually landed after a push that sent images.
+
+    setProductsImageGallery returns result=true even when OPS persists ZERO rows
+    (e.g. the referenced files aren't where OPS resolves them, or a later failed
+    re-push pre-cleared them) — so the mutation ack alone can't confirm the
+    gallery. This reads the real row count back. On a shortfall it flips the
+    gallery step result to a warning and returns a human-readable note; returns
+    None when the gallery is intact. Always-on and never raises — a flaky
+    read-back must not sink an otherwise-good push."""
+    if expected <= 0:
+        return None
+    try:
+        pid = int(ops_product_id)
+    except (TypeError, ValueError):
+        return None
+    try:
+        r = await raw_client.execute(_EXISTING_GALLERY_Q, variables={"id": pid})
+        rows = ((r.data or {}).get("productsImageGallery") or {}).get("productsImageGallery") or [] if r.ok else []
+        actual = len(rows)
+    except Exception:
+        logger.exception("gallery verify: read-back raised for ops_product=%s", pid)
+        return None
+    if actual >= expected:
+        logger.info("gallery verify: ops_product=%s persisted %d/%d images", pid, actual, expected)
+        return None
+    note = f"gallery read-back: OPS persisted {actual}/{expected} images"
+    logger.warning("%s for ops_product=%s", note, pid)
+    for s in step_results:
+        if isinstance(s, dict) and s.get("mutation") == "setProductsImageGallery":
+            s["status"] = "warning"
+            s["error"] = note
+            break
+    return note
+
+
 # Per-product cache of (size_id -> stock_id) maps. Populated lazily on the
 # first updateProductStock call of a product so we only query OPS once per
 # product per push (not once per variant).
@@ -841,9 +879,11 @@ async def prepare_push_intent(
 # 42 options / 2 sizes instead of 21 / 1). On an UPDATE push we therefore delete
 # the product's existing children first, then the plan re-creates them fresh.
 #
-# Only clears the child types the current plan will RE-ADD — e.g. an images-off
-# push (no setProductsImageGallery step) must NOT wipe the gallery, or it would
-# delete images without restoring them.
+# Only clears the child types the current plan will RE-ADD — e.g. an options-off
+# push (no setAdditionalOption step) must NOT wipe options, or it would delete
+# them without restoring them. Gallery is deliberately EXCLUDED: the gallery step
+# clears-and-re-adds inline, so clearing it here would only widen the data-loss
+# window to the whole plan (the K420 incident, 2026-06-24).
 _EXISTING_OPTIONS_Q = (
     "query($id:Int){ productAdditionalOptions(products_id:$id, limit:1000)"
     "{ productAdditionalOptions { prod_add_opt_id } } }"
@@ -861,9 +901,10 @@ _EXISTING_GALLERY_Q = (
 async def _clear_existing_children(
     raw_client: Any, ops_product_id: int, plan_mutations: set[str]
 ) -> dict:
-    """Delete a product's existing options/sizes/gallery before an update re-adds
-    them (idempotent re-push). Best-effort: logs and continues on any failure so
-    a cleanup hiccup never blocks the push itself."""
+    """Delete a product's existing options/sizes before an update re-adds them
+    (idempotent re-push). Gallery is NOT cleared here — the setProductsImageGallery
+    step owns gallery clear-and-re-add inline. Best-effort: logs and continues on
+    any failure so a cleanup hiccup never blocks the push itself."""
     deleted = {"options": 0, "sizes": 0, "gallery": 0}
 
     if "setAdditionalOption" in plan_mutations:
@@ -902,26 +943,10 @@ async def _clear_existing_children(
         except Exception as e:
             logger.warning("idempotent cleanup (sizes) failed for ops_product=%s: %s", ops_product_id, e)
 
-    if "setProductsImageGallery" in plan_mutations:
-        try:
-            r = await raw_client.execute(_EXISTING_GALLERY_Q, variables={"id": ops_product_id})
-            rows = ((r.data or {}).get("productsImageGallery") or {}).get("productsImageGallery") or [] if r.ok else []
-            gids = [g.get("products_image_gallery_id") for g in rows if g.get("products_image_gallery_id")]
-            if gids:
-                # Gallery deletes batch into one mutation via image_arr.
-                res = await raw_client.execute(
-                    _m._SET_PRODUCTS_IMAGE_GALLERY,
-                    variables={
-                        "products_id": ops_product_id,
-                        "optimizeimg": 0,
-                        "input": {"image_arr": [{"products_image_gallery_id": g, "delete": 1} for g in gids]},
-                    },
-                )
-                if res.ok:
-                    deleted["gallery"] = len(gids)
-        except Exception as e:
-            logger.warning("idempotent cleanup (gallery) failed for ops_product=%s: %s", ops_product_id, e)
-
+    # Gallery is intentionally NOT cleared here — see the module comment above.
+    # The setProductsImageGallery step clears-then-re-adds inline, bounding the
+    # window in which the gallery is deleted-but-not-yet-restored to that single
+    # step (rather than the whole plan).
     return deleted
 
 
@@ -1218,15 +1243,18 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                     if not push_log.dry_run:
                         _inp = variables.get("input", {})
                         _arr = _inp.get("image_arr", [])
-                        for _img_item in _arr:
-                            _url = _img_item.get("products_large_image_name", "")
+
+                        async def _upload_gallery_item(_item: dict) -> None:
+                            _url = _item.get("products_large_image_name", "")
                             if _url and _url.startswith("http"):
                                 try:
                                     _bare = await upload_gallery_image(_url)
-                                    _img_item["products_large_image_name"] = _bare
+                                    _item["products_large_image_name"] = _bare
                                     logger.info("gallery s3 upload: %s -> %s", _url[:60], _bare)
                                 except Exception as _ue:
                                     logger.warning("gallery s3 upload failed for %s: %s", _url[:60], _ue)
+
+                        await asyncio.gather(*(_upload_gallery_item(i) for i in _arr))
                         variables = dict(variables, optimizeimg=0)
 
                 # setProductSku: prod_add_opt_ids / attribute_ids are String! in
@@ -1275,6 +1303,26 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                                     "matrix for product_id=%s — SKU may be rejected",
                                     _sid_int, _i.get("sku"), ops_product_id,
                                 )
+
+                # setProductSku: prod_add_opt_ids / attribute_ids are String! in
+                # the OPS schema, but placeholders resolve them to ints (the
+                # setAdditionalOption*/attribute ids). Coerce each input's
+                # option/attribute id fields back to comma-joined strings.
+                if mutation == "setProductSku":
+                    def _coerce_ids(item: dict) -> dict:
+                        out = dict(item)
+                        for f in ("prod_add_opt_ids", "attribute_ids"):
+                            v = out.get(f)
+                            if v is None:
+                                continue
+                            if isinstance(v, (list, tuple)):
+                                out[f] = ",".join(str(x) for x in v)
+                            else:
+                                out[f] = str(v)
+                        return out
+                    _inputs = variables.get("inputs")
+                    if isinstance(_inputs, list):
+                        variables = dict(variables, inputs=[_coerce_ids(i) for i in _inputs])
 
                 fingerprint = hashlib.sha256(
                     _json.dumps({"mutation": mutation, "variables": variables}, sort_keys=True).encode()
@@ -1503,6 +1551,33 @@ async def execute_push(push_log_id: uuid_mod.UUID) -> None:
                 raw_client = getattr(client, "_client", client)
                 await _verify_post_push(raw_client, push_log.supplier_sku, ops_product_id)
                 await _verify_b7_readback(raw_client, ops_product_id)
+
+            # ── Gallery persistence check (always-on) ───────────────────
+            # setProductsImageGallery acks success even when OPS stores zero
+            # rows, so a clean "pushed" can hide an empty gallery. When the plan
+            # sent images, confirm they actually landed; an all-or-nothing miss
+            # downgrades to partial_failure (so retries + alerting fire) instead
+            # of masquerading as success.
+            if (
+                final_status == "pushed"
+                and ops_product_id
+                and not push_log.dry_run
+            ):
+                expected_gallery = sum(
+                    1
+                    for s in plan
+                    if s.get("mutation") == "setProductsImageGallery"
+                    for img in ((s.get("variables", {}) or {}).get("input", {}) or {}).get("image_arr", [])
+                    if not img.get("delete")
+                )
+                if expected_gallery:
+                    raw_client = getattr(client, "_client", client)
+                    note = await _verify_gallery_persisted(
+                        raw_client, ops_product_id, expected_gallery, step_results
+                    )
+                    if note and "persisted 0/" in note:
+                        final_status = "partial_failure"
+                        push_log.error = (push_log.error + "; " if push_log.error else "") + note
 
             # ── Persist results ──
             push_log.step_results = _redact_auth(step_results)
