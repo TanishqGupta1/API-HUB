@@ -29,7 +29,9 @@ This file provides guidance to AI coding agents (like Gemini CLI or Claude Code)
 
 ## Project
 
-API-HUB — middleware platform connecting 994+ PromoStandards wholesale suppliers to OnPrintShop (OPS) storefronts. Modular monolith: FastAPI backend + Next.js frontend + PostgreSQL, orchestrated by n8n.
+API-HUB — middleware platform connecting 994+ PromoStandards wholesale suppliers to OnPrintShop (OPS) storefronts. Modular monolith: FastAPI backend + Next.js frontend + PostgreSQL.
+
+CORRECTED (2026-07-21): n8n is dropped as a built tier (DECISIONS-LOG.md, LOCKED 2026-06-30). FastAPI's own Integration Gateway (`modules/integrations/`) + import/inventory schedulers (`modules/import_jobs/scheduler.py`, in-process asyncio + Redis lock) now own sync scheduling and OPS push directly — there is no live n8n orchestration in this repo. The former `n8n_proxy` module, `n8n-workflows/`, and `n8n-nodes-onprintshop/` were moved to `historical/2026-07/` (preserved, not deleted — they capture real logic per `_CANONICAL-AUTHORITY.md`) and are no longer mounted in `main.py`. n8n is at most a future integration *target* (a system Connect could integrate *to*, if a tenant already runs one) per `atomic-specs/connect.md` §4.1 — never a built engine here.
 
 ## Commands
 
@@ -58,26 +60,17 @@ cd frontend && npm run lint                   # ESLint
 
 ### Full stack (Docker)
 ```bash
-docker compose up -d                          # postgres + n8n (with OPS node)
-```
-
-### n8n
-```bash
-docker compose up -d n8n                      # n8n editor on :5678
-# OnPrintShop custom node auto-installed from ./n8n-nodes-onprintshop/
+docker compose up -d                          # postgres only
 ```
 
 ## Architecture
 
 **Modular monolith** — NOT microservices. All backend modules live in one FastAPI app. Suppliers are database configuration (protocol adapter pattern), not per-supplier code. Adding a supplier = creating a DB row, not writing code.
 
-**Four systems:**
-- `backend/` — FastAPI (Python 3.12). All routes under `/api/`. Async SQLAlchemy + asyncpg. Handles SOAP/REST fetch, normalization, storage, markup rules.
+**Three systems:**
+- `backend/` — FastAPI (Python 3.12). All routes under `/api/`. Async SQLAlchemy + asyncpg. Handles SOAP/REST fetch, normalization, storage, markup rules. Owns its own scheduling (`modules/import_jobs/scheduler.py`, in-process asyncio + Redis lock) and OPS push (`modules/ops_push/` + `modules/integrations/`) directly — no external orchestrator.
 - `frontend/` — Next.js 15 (App Router). Blueprint design system (Outfit + Fira Code fonts, paper palette #f2f0ed, blueprint blue #1e4d92, dot-grid). Uses shadcn/ui + Tailwind.
-- n8n (Docker, port 5678) — orchestrates sync schedules via HTTP triggers to FastAPI. Triggers the FastAPI Integration Gateway via webhooks for OPS push; no longer calls OPS directly.
-- `n8n-nodes-onprintshop/` — TypeScript custom n8n node for OnPrintShop GraphQL API. OAuth2 auth.
-  The historical gap analysis claims 40/40 approved mutations; rederive that count from current code
-  before relying on it. Available for legacy flows pending consumer verification.
+- `historical/2026-07/n8n-nodes-onprintshop/` — the former TypeScript custom n8n node for OnPrintShop GraphQL API. Preserved for reference only (dropped as a built tier, DECISIONS-LOG.md 2026-06-30); not mounted or run.
 
 **Backend module pattern:** Each module in `backend/modules/` has `models.py`, `schemas.py`, `routes.py`, `__init__.py`. Some have `service.py`. Modules: `suppliers`, `catalog`, `customers`, `markup`, `push_log`, `ps_directory`, `sync_jobs`.
 
@@ -100,7 +93,7 @@ docker compose up -d n8n                      # n8n editor on :5678
 ```
 POSTGRES_URL=postgresql+asyncpg://vg_user:vg_pass@localhost:5432/vg_hub
 SECRET_KEY=<fernet-key>
-INGEST_SHARED_SECRET=<random-32>    # n8n → FastAPI ingest auth header
+INGEST_SHARED_SECRET=<random-32>    # trusted service-to-service ingest auth header (X-Ingest-Secret)
 ```
 
 `frontend/.env.local`:
@@ -108,7 +101,7 @@ INGEST_SHARED_SECRET=<random-32>    # n8n → FastAPI ingest auth header
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
 
-- **FastAPI owns OPS push (M1).** Integration Gateway in `modules/integrations/` + `modules/ops_push/` runs preflight + payload build + mutation plan, then executes via `modules/ops_client/` (OPS GraphQL with OAuth2). n8n triggers the gateway through webhooks but no longer calls OPS directly. The n8n OnPrintShop node + `n8n-nodes-onprintshop/` remain available for legacy flows.
+- **FastAPI owns OPS push (M1) end-to-end.** Integration Gateway in `modules/integrations/` + `modules/ops_push/` runs preflight + payload build + mutation plan, then executes via `modules/ops_client/` (OPS GraphQL with OAuth2). No external orchestrator is involved — the former n8n OnPrintShop node is historical only (`historical/2026-07/n8n-nodes-onprintshop/`), not mounted or run.
 
 ## Plan & Progress
 

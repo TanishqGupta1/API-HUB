@@ -37,25 +37,26 @@ Middleware platform connecting 994+ PromoStandards wholesale suppliers to OnPrin
                                 └────────────────┬───────────────────────┘
                                                  │
 ┌────────────────────────────────────────────────┴────────────────────────┐
-│  n8n cron pipeline                                                       │
+│  In-process scheduler (modules/import_jobs/scheduler.py)                 │
+│  asyncio + Redis advisory lock — no external orchestrator                │
 │                                                                          │
-│  catalog-sync-weekly  ──▶ trigger /import?mode=full_sellable             │
-│  pricing-sync-daily   ──▶ trigger /import?mode=delta                     │
-│  inventory-sync-hourly──▶ trigger /import?mode=delta                     │
-│  closeouts-monthly    ──▶ trigger /import?mode=closeouts                 │
+│  catalog-sync-weekly  ──▶ /import?mode=full_sellable                     │
+│  pricing-sync-daily   ──▶ /import?mode=delta                             │
+│  inventory-sync-hourly──▶ /import?mode=delta                             │
+│  closeouts-monthly    ──▶ /import?mode=closeouts                        │
 │  ops-push             ──▶ apply markup + push to customer storefront    │
-│                                                                          │
-│  n8n-nodes-onprintshop (VisualGraphxLLC)                                 │
-│  OAuth2 GraphQL client for OnPrintShop — setProduct, setProductPrice    │
+│         via modules/ops_push/ + modules/integrations/ (Integration Gateway) │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+CORRECTED (2026-07-21): n8n is dropped as a built tier (DECISIONS-LOG.md, LOCKED 2026-06-30). FastAPI's own scheduler and Integration Gateway own scheduling and OPS push directly — there is no live n8n orchestration in this repo. The former `n8n-workflows/` and `n8n-nodes-onprintshop/` were moved to `historical/2026-07/` (preserved, not deleted) and are no longer referenced by any running code.
 
 **Key design decisions:**
 - **Suppliers are DB rows, not code.** Adding a supplier creates a `suppliers` row with `adapter_class` + encrypted `auth_config`. No per-supplier services.
 - **Adapter pattern.** `BaseAdapter` ABC with `discover()`, `hydrate_product()`, `discover_changed()`, `discover_closeouts()`. Adapters self-register via `register_adapter()`.
 - **Polymorphic catalog.** `product_type` ∈ {apparel, print}. Apparel uses tiered variant pricing; print uses formula `base × area × area_factor + setup`.
 - **All credentials managed through the UI.** Encrypted at rest via `EncryptedJSON` (Fernet AES-128) on `suppliers.auth_config` and `customers.ops_auth_config`.
-- **n8n owns external API calls.** FastAPI prepares data + applies markup; n8n calls OPS via `n8n-nodes-onprintshop`.
+- **FastAPI owns external API calls end-to-end.** The Integration Gateway (`modules/integrations/`) prepares data, applies markup, and calls OPS directly via `modules/ops_client/` — no external orchestrator in the loop.
 - **Modular monolith.** All backend modules in one FastAPI app. Split only if a hotspot demands it.
 
 ---
@@ -70,8 +71,8 @@ Middleware platform connecting 994+ PromoStandards wholesale suppliers to OnPrin
 | **Phase 4** | Pricing engine. Apparel `TieredVariantResolver` (Net > Sale > MSRP > Case). Print `FormulaResolver` with bounds. Customer markup + storefront overrides. `POST /api/pricing/quote`. | ✅ Done |
 | **Phase 5** | Polymorphic PDP. `ApparelDetailPanel` / `PrintDetailPanel` dispatch on `product_type`. `DimensionInput` with bounds, debounced live quote, breakdown disclosure. | ✅ Done |
 | **Phase 6** | Sync pipeline. `discovery_mode` + per-job counters (`total_products` / `success_count` / `failed_count`). `CustomerProductSelection` stale detection. `/api/sync-jobs/health` per supplier. | ✅ Done |
-| **Phase 7** | OPS push (n8n owns mutation; FastAPI applies markup). | In progress |
-| **Phase 9** | Scheduled n8n cron workflows: weekly catalog, daily pricing, hourly inventory, monthly closeouts. | ✅ Done (workflows ship `active: false`; activate manually after credential bind) |
+| **Phase 7** | OPS push (FastAPI's own Integration Gateway owns the mutation + applies markup — see 2026-07-21 correction below). | In progress |
+| **Phase 9** | Scheduled sync: weekly catalog, daily pricing, hourly inventory, monthly closeouts. | ✅ Done — originally shipped as n8n cron workflows; re-homed onto the in-process scheduler (`modules/import_jobs/scheduler.py`) per the 2026-06-30 LOCKED decision dropping n8n as a built tier |
 | **Phase 10** | `FourOverAdapter` (REST + HMAC). | Skeleton merged — sandbox creds pending |
 
 ---
@@ -88,7 +89,7 @@ Middleware platform connecting 994+ PromoStandards wholesale suppliers to OnPrin
 - **WSDL caching** — `PromoStandardsClient` caches the zeep service per instance; resolver returns highest-version endpoint from PS Directory.
 - **Stale detection** — when a product is re-synced after being pushed to a customer, `customer_product_selections.status` flips to `"stale"`.
 - **Per-supplier sync health** — `/api/sync-jobs/health` reports last sync time, recent error count, consecutive failures.
-- **Scheduled sync** — n8n cron workflows poll `/api/sync-jobs/{id}` until terminal, then Slack-alert on failure.
+- **Scheduled sync** — the in-process scheduler polls `/api/sync-jobs/{id}` until terminal, then Slack-alerts on failure.
 - **Fernet encryption** — all credentials encrypted transparently at the DB layer.
 - **Blueprint design system** — Outfit + Fira Code, paper palette `#f2f0ed`, blueprint blue `#1e4d92`, dot-grid background.
 
@@ -103,8 +104,8 @@ Middleware platform connecting 994+ PromoStandards wholesale suppliers to OnPrin
 | SOAP | `zeep` + `lxml` (hardened parser: `resolve_entities=False`, `no_network=True`) |
 | Encryption | `cryptography` — Fernet symmetric encryption (AES-128) |
 | Database | PostgreSQL 16, JSONB for endpoint cache + JSONB error logs |
-| Pipeline | n8n (Docker), custom PromoStandards adapter loaded at runtime |
-| OPS push | `n8n-nodes-onprintshop` (VisualGraphxLLC) — GraphQL mutations |
+| Pipeline | In-process scheduler (`modules/import_jobs/scheduler.py`), custom PromoStandards adapter loaded at runtime |
+| OPS push | `modules/ops_push/` + `modules/integrations/` — GraphQL mutations via `modules/ops_client/` |
 | Infrastructure | Docker Compose |
 
 ---
@@ -136,7 +137,6 @@ api-hub/
 │       ├── push_log/                  # OPS push audit trail
 │       ├── import_jobs/               # BaseAdapter, registry, service, scheduler
 │       ├── sync_jobs/                 # Job records + /health endpoint
-│       ├── n8n_proxy/                 # n8n workflow trigger pass-through
 │       └── auth/                      # Ingest secret, customer scoping
 ├── frontend/                          # Next.js 15 app
 │   ├── src/app/(admin)/               # Admin: suppliers, customers, sync, workflows
@@ -145,15 +145,11 @@ api-hub/
 │   ├── src/lib/use-debounced-quote.ts # 250ms debounced /api/pricing/quote
 │   ├── e2e/                           # Playwright specs (apparel + print PDP, catalog filter)
 │   └── docs/pdp-runbook.md            # Polymorphic PDP runbook
-├── n8n-workflows/
-│   ├── catalog-sync-weekly.json       # Sun 1 AM — full_sellable per supplier
-│   ├── pricing-sync-daily.json        # Daily — delta
-│   ├── inventory-sync-hourly.json     # Hourly — delta
-│   ├── closeouts-monthly.json         # 1st of month — closeouts mode
-│   ├── ops-push.json                  # Triggered: apply markup + push to customer
-│   ├── ops-master-options-pull.json   # Pull canonical option list from OPS
-│   └── README.md                      # Activation flow + env vars
-├── n8n-nodes-onprintshop/             # OnPrintShop GraphQL custom node (TypeScript)
+├── historical/2026-07/                # Preserved, not run — see 2026-07-21 correction above
+│   ├── n8n_proxy/                     # former n8n workflow trigger pass-through
+│   ├── n8n-workflows/                 # former n8n cron workflow JSONs
+│   ├── n8n-nodes-onprintshop/         # former OnPrintShop GraphQL custom node (TypeScript)
+│   └── n8n.Dockerfile
 ├── docs/
 │   └── superpowers/plans/             # Phase plans (status banners updated)
 ├── plans/
@@ -199,7 +195,7 @@ api-hub/
 | `GET /api/sync-jobs/health` | Per-supplier health: last sync, recent error count, consecutive failures. |
 | `POST /api/pricing/quote` | Public quote (base price, no markup). Body: `{ product_id, variant_id?, width?, height?, qty, selected_attribute_ids? }`. |
 | `POST /api/customers/{id}/pricing/quote` | Internal-only (gated by `X-Ingest-Secret`): marked-up + storefront-override price. |
-| `POST /api/n8n/workflows/{id}/trigger` | Trigger an n8n workflow from the admin UI. |
+| `GET/POST /api/integrations/v1/products[/{id}]` | Scoped catalog read via the Integration Gateway (`X-Orchestrator-Key`, per-key `allowed_supplier_slugs`). |
 
 ---
 
@@ -214,8 +210,8 @@ api-hub/
 ### Run locally
 
 ```bash
-# 1. Start PostgreSQL + n8n
-docker compose up -d postgres n8n
+# 1. Start PostgreSQL
+docker compose up -d postgres
 
 # 2. Backend
 cd backend
@@ -256,8 +252,8 @@ Copy `.env.example` to `.env` and fill in:
 ```
 POSTGRES_URL=postgresql+asyncpg://vg_user:vg_pass@localhost:5432/vg_hub
 SECRET_KEY=<python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())">
-INGEST_SHARED_SECRET=<random-32-char-string>      # n8n → FastAPI auth header
-API_BASE_URL=http://host.docker.internal:8000     # n8n container → FastAPI host
+INGEST_SHARED_SECRET=<random-32-char-string>      # trusted service-to-service ingest auth header
+API_BASE_URL=http://localhost:8000                # this service's own base URL, used by ops_push/merge.py + scripts/ingest_ops_master_options.py
 ```
 
 `frontend/.env.local`:
@@ -270,29 +266,19 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 
 ---
 
-## n8n Setup
+## n8n (historical, 2026-07-21)
 
-API-HUB delegates outbound integrations (OPS push, scheduled syncs) to n8n.
-The OnPrintShop node is a custom community node baked into our `n8n.Dockerfile`.
-
-**Supported n8n hosts:**
-- Self-hosted Docker — `docker build -f n8n.Dockerfile -t api-hub-n8n:latest .`
-- ECS Fargate (Phase 14d)
-- n8n.cloud Pro+ (manual community-node install)
-- Render, Fly, Railway, Hetzner — anywhere Docker runs
-
-**Not supported:** n8n.cloud Starter — community nodes are blocked on that tier.
-
-**Quick start (local dev):**
-1. `docker compose --profile dev up -d` — starts postgres + api + n8n
-2. Import workflow JSONs from `n8n-workflows/` via n8n editor → Workflow → Import from File
-3. Set `INGEST_SHARED_SECRET` and `API_BASE_URL` in `.env` (see `.env.example`)
-4. Configure OnPrintShop credentials per customer via the Customers UI
-
-See [docs/n8n-integration.md](docs/n8n-integration.md) for the full integration contract and [docs/external-n8n-setup.md](docs/external-n8n-setup.md) for using a hosted n8n instead of the bundled one.
+n8n was originally used to delegate outbound integrations (OPS push, scheduled syncs). It has been
+dropped as a built tier (`DECISIONS-LOG.md`, LOCKED 2026-06-30) — API-HUB's own scheduler and
+Integration Gateway now own that work directly, in-process. The former n8n workflows, the custom
+OnPrintShop node, and `n8n.Dockerfile` are preserved at `historical/2026-07/` for reference (they
+capture real logic per `_CANONICAL-AUTHORITY.md`) but are not run, built, or referenced by any live
+code path. n8n remains, at most, a possible future *integration target* — a system Connect could
+integrate *to* if a tenant already runs one — never a built engine in this repo
+(`atomic-specs/connect.md` §4.1).
 
 ---
 
-**Status:** V0 + Phases 2–6 + Phase 9 shipped. Phase 7 (OPS push) in progress. Phase 10 (4Over) skeleton merged, awaiting sandbox credentials.
+**Status:** V0 + Phases 2–6 + Phase 9 shipped (Phase 9's scheduling re-homed off n8n onto the in-process scheduler, 2026-07-21). Phase 7 (OPS push) in progress. Phase 10 (4Over) skeleton merged, awaiting sandbox credentials.
 
 **Maintained by:** VisualGraphx
